@@ -35,33 +35,35 @@ function initMagicEditor() {
         }
 
         // Check rune tap on circle edge
+        // Use labeled loops (not forEach) so the search stops at the first matching
+        // circle: `return` inside a forEach callback only exits that callback, which
+        // let later circles clobber hitC/hitRuneIndex when circles overlapped.
         let hitC = null;
         let hitRuneIndex = -1;
-        Magic.layers.forEach(l => {
-            if (!l.visible && !l.solo) return;
-            l.items.forEach(it => {
-                if (it.type === 'CIRCLE') {
-                    let c = it.data;
-                    // Check if clicking near the circle edge
-                    if (Math.abs(p.dist(c.center) - c.rad) < 20) {
-                        // Check if clicking on an existing rune
-                        for (let i = 0; i < c.runes.length; i++) {
-                            let rx = c.center.x + Math.cos(c.runes[i]) * c.rad;
-                            let ry = c.center.y + Math.sin(c.runes[i]) * c.rad;
-                            if (p.dist(new Vec2(rx, ry)) < 15) {
-                                hitC = c;
-                                hitRuneIndex = i;
-                                return;
-                            }
-                        }
-                        // Not on existing rune, can add new one
-                        if (hitRuneIndex === -1) {
+        circleSearch:
+        for (const l of Magic.layers) {
+            if (!l.visible && !l.solo) continue;
+            for (const it of l.items) {
+                if (it.type !== 'CIRCLE') continue;
+                let c = it.data;
+                // Check if clicking near the circle edge
+                if (Math.abs(p.dist(c.center) - c.rad) < 20) {
+                    // Check if clicking on an existing rune
+                    for (let i = 0; i < c.runes.length; i++) {
+                        let rx = c.center.x + Math.cos(c.runes[i]) * c.rad;
+                        let ry = c.center.y + Math.sin(c.runes[i]) * c.rad;
+                        if (p.dist(new Vec2(rx, ry)) < 15) {
                             hitC = c;
+                            hitRuneIndex = i;
+                            break circleSearch;
                         }
                     }
+                    // Not on an existing rune — add a new one to this circle
+                    hitC = c;
+                    break circleSearch;
                 }
-            });
-        });
+            }
+        }
 
         if (hitC) {
             saveUndoState();

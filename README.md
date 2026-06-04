@@ -32,7 +32,7 @@ stack layers into combos, and cast.
     ├── phaser.html    # Phaser.js edition
     ├── editor.html    # Chunk editor
     ├── README.md      # Magic-circle system documentation
-    └── static/        # css / js / assets (game logic, unmodified from source)
+    └── static/        # css / js / assets (game logic from source + minor bug-fixes)
 ```
 
 ## Notes

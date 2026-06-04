@@ -145,9 +145,15 @@ class MenuScene extends Phaser.Scene {
         const width = this.cameras.main.width;
         const height = this.cameras.main.height;
 
+        // Track every object created for this overlay so cleanup removes exactly
+        // these (the old cleanup destroyed all Text below a y-threshold, which could
+        // delete unrelated menu UI such as the subtitle).
+        this.howToPlayElements = [];
+
         // Overlay
         const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.8);
         overlay.setInteractive();
+        this.howToPlayElements.push(overlay);
 
         // Content panel
         const panel = this.add.graphics();
@@ -155,6 +161,7 @@ class MenuScene extends Phaser.Scene {
         panel.fillRoundedRect(width / 2 - 300, height / 2 - 250, 600, 500, 20);
         panel.lineStyle(3, 0x6666aa);
         panel.strokeRoundedRect(width / 2 - 300, height / 2 - 250, 600, 500, 20);
+        this.howToPlayElements.push(panel);
 
         // Title
         const title = this.add.text(width / 2, height / 2 - 200, 'HOW TO PLAY', {
@@ -162,6 +169,7 @@ class MenuScene extends Phaser.Scene {
             fontSize: '32px',
             color: '#ffffff'
         }).setOrigin(0.5);
+        this.howToPlayElements.push(title);
 
         // Instructions
         const instructions = [
@@ -174,26 +182,26 @@ class MenuScene extends Phaser.Scene {
 
         let yPos = height / 2 - 120;
         instructions.forEach(inst => {
-            this.add.text(width / 2 - 100, yPos, inst.key, {
+            this.howToPlayElements.push(this.add.text(width / 2 - 100, yPos, inst.key, {
                 fontFamily: 'Arial',
                 fontSize: '18px',
                 color: '#aaaaff'
-            });
-            this.add.text(width / 2 + 50, yPos, inst.action, {
+            }));
+            this.howToPlayElements.push(this.add.text(width / 2 + 50, yPos, inst.action, {
                 fontFamily: 'Arial',
                 fontSize: '18px',
                 color: '#ffffff'
-            });
+            }));
             yPos += 35;
         });
 
         // Elements info
         yPos += 20;
-        this.add.text(width / 2, yPos, 'ELEMENTS', {
+        this.howToPlayElements.push(this.add.text(width / 2, yPos, 'ELEMENTS', {
             fontFamily: 'Arial Black',
             fontSize: '20px',
             color: '#ffffff'
-        }).setOrigin(0.5);
+        }).setOrigin(0.5));
 
         yPos += 35;
         const elements = [
@@ -204,27 +212,25 @@ class MenuScene extends Phaser.Scene {
         ];
 
         elements.forEach(el => {
-            this.add.text(width / 2 - 100, yPos, el.element, {
+            this.howToPlayElements.push(this.add.text(width / 2 - 100, yPos, el.element, {
                 fontFamily: 'Arial',
                 fontSize: '16px',
                 color: el.color
-            });
-            this.add.text(width / 2 + 20, yPos, el.effect, {
+            }));
+            this.howToPlayElements.push(this.add.text(width / 2 + 20, yPos, el.effect, {
                 fontFamily: 'Arial',
                 fontSize: '16px',
                 color: '#cccccc'
-            });
+            }));
             yPos += 28;
         });
 
         // Close button
         const closeBtn = this.createButton(width / 2, height / 2 + 200, 'BACK', () => {
-            overlay.destroy();
-            panel.destroy();
-            title.destroy();
+            // Destroy exactly the objects created for this overlay, then the button
+            this.howToPlayElements.forEach(obj => obj.destroy());
+            this.howToPlayElements = [];
             closeBtn.destroy();
-            // Destroy all instruction texts (simplified cleanup)
-            this.children.list.filter(c => c.type === 'Text' && c.y > height / 2 - 150).forEach(t => t.destroy());
         });
     }
 

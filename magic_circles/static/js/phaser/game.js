@@ -95,6 +95,8 @@ const GameState = {
     },
 
     getCurrentItem() {
-        return this.inventory[this.selectedSlot];
+        // Inventory is owned by inventorySystem (assigned on GameScene create);
+        // GameState has no `inventory` array, so delegate and guard early calls.
+        return this.inventorySystem ? this.inventorySystem.getCurrentItem() : null;
     }
 };

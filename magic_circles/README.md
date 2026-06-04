@@ -183,7 +183,8 @@ scroll stores its own spell, saved when you close the editor.
 ## Conversion notes (Flask → static)
 
 This build is a faithful port of the Flask blueprint. The game logic under `static/` is
-**byte-for-byte identical** to the source; only the HTML entry points changed.
+copied from the source unchanged **except for three small upstream bug-fixes** (listed
+below); the HTML entry points are the only other change.
 
 - **Template calls removed.** Every `{{ url_for('rpg.static', filename='X') }}` became the
   relative path `static/X`. The Phaser page's `window.STATIC_URL` is now the literal
@@ -204,6 +205,21 @@ This build is a faithful port of the Flask blueprint. The game logic under `stat
   don't exist in `static/assets/`; the canvas game therefore renders programmatically. This
   matches the original behavior and was intentionally left unchanged. (The Phaser edition uses
   the 18 real PNGs in `static/assets/`.)
+
+### Upstream bug-fixes applied
+
+Three latent bugs (present identically in the `mysite` source, surfaced by an automated PR
+review) were fixed here. They're worth back-porting upstream:
+
+- **`static/js/ui/MagicEditor.js`** — the rune hit-test used nested `forEach` callbacks where
+  `return` only exits the callback, so overlapping circles could clobber the result. Rewritten
+  with labeled loops that stop at the first matching circle.
+- **`static/js/phaser/game.js`** — `GameState.getCurrentItem()` read a non-existent
+  `this.inventory` (inventory lives in `inventorySystem`). Now delegates to
+  `inventorySystem.getCurrentItem()` with a null guard.
+- **`static/js/phaser/scenes/MenuScene.js`** — closing the How-To-Play overlay destroyed *all*
+  `Text` below a y-threshold (could delete other menu text). Now tracks and destroys only the
+  overlay's own objects.
 
 ### Running locally
 
