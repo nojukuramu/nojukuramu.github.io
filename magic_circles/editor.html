@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chunk Editor - TTS</title>
+    <link rel="stylesheet" href="static/css/editor.css">
+</head>
+
+<body>
+    <div class="editor-container">
+        <header class="editor-header">
+            <h1>🗺️ Chunk Editor</h1>
+            <p>Design 8×8 chunk layouts for the game world</p>
+        </header>
+
+        <main class="editor-main">
+            <!-- Grid Section -->
+            <section class="grid-section">
+                <div class="grid-container">
+                    <div id="chunk-grid" class="chunk-grid"></div>
+                </div>
+                <div class="grid-coords" id="grid-coords">Hover over grid</div>
+            </section>
+
+            <!-- Controls Section -->
+            <section class="controls-section">
+                <!-- Object Palette -->
+                <div class="control-group">
+                    <h3>Object Palette</h3>
+                    <div class="palette" id="object-palette"></div>
+                    <div class="current-selection">
+                        Selected: <span id="current-object">..</span>
+                    </div>
+                </div>
+
+                <!-- Chunk Settings -->
+                <div class="control-group">
+                    <h3>Chunk Settings</h3>
+                    <label>
+                        Biome:
+                        <select id="biome-select">
+                            <option value="Forest">Forest</option>
+                            <option value="Ruins">Ruins</option>
+                            <option value="Rocky">Rocky</option>
+                            <option value="Cave">Cave</option>
+                            <option value="Village">Village</option>
+                            <option value="Camp">Camp</option>
+                            <option value="Graveyard">Graveyard</option>
+                            <option value="Swamp">Swamp</option>
+                            <option value="Desert">Desert</option>
+                            <option value="Lake">Lake</option>
+                            <option value="Pathway">Pathway</option>
+                            <option value="Clearing">Clearing</option>
+                        </select>
+                    </label>
+                    <label>
+                        Preset Name:
+                        <input type="text" id="preset-name" placeholder="my_chunk" pattern="[a-z_]+" />
+                    </label>
+                </div>
+
+                <!-- Actions -->
+                <div class="control-group">
+                    <h3>Actions</h3>
+                    <div class="action-buttons">
+                        <button id="btn-clear" class="btn btn-danger">🗑️ Clear Grid</button>
+                        <button id="btn-export" class="btn btn-primary">📋 Export Code</button>
+                    </div>
+                </div>
+
+                <!-- Right-click info -->
+                <div class="control-group info">
+                    <p>💡 <strong>Left-click</strong> to place object</p>
+                    <p>💡 <strong>Right-click</strong> to erase</p>
+                    <p>💡 <strong>Drag</strong> to paint multiple</p>
+                </div>
+            </section>
+        </main>
+
+        <!-- Export Output -->
+        <section class="export-section">
+            <h3>Export Code</h3>
+            <textarea id="export-output" readonly
+                placeholder="Click 'Export Code' to generate JavaScript..."></textarea>
+            <button id="btn-copy" class="btn btn-secondary">📋 Copy to Clipboard</button>
+        </section>
+    </div>
+
+    <script src="static/js/editor/ChunkEditor.js"></script>
+</body>
+
+</html>

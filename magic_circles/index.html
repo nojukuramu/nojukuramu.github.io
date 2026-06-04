@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magic Circles — A Certain RPG Game</title>
+    <meta name="description"
+        content="A magic-based RPG prototype. Draw elemental magic circles — polygons become elements, circles become spell containers — then cast layered, combo spells.">
+    <meta name="theme-color" content="#16213e">
+    <style>
+        :root {
+            --air: #A0E0E0;
+            --fire: #E06060;
+            --earth: #80C060;
+            --water: #4080E0;
+            --bg0: #0c0d16;
+            --bg1: #16213e;
+            --ink: #e7e9f3;
+            --muted: #9aa0b8;
+            --panel: rgba(255, 255, 255, 0.04);
+            --line: rgba(255, 255, 255, 0.10);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(1200px 600px at 50% -10%, rgba(64, 128, 224, 0.18), transparent 60%),
+                radial-gradient(900px 500px at 90% 10%, rgba(224, 96, 96, 0.10), transparent 55%),
+                linear-gradient(160deg, var(--bg0) 0%, var(--bg1) 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .wrap {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 56px 22px 80px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 14px;
+        }
+
+        .eyebrow {
+            letter-spacing: 4px;
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        h1 {
+            font-size: clamp(34px, 6vw, 58px);
+            font-weight: 800;
+            letter-spacing: 1px;
+            margin: 8px 0 6px;
+            background: linear-gradient(90deg, var(--air), var(--water) 40%, var(--fire) 75%, var(--earth));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 0 38px rgba(120, 150, 255, 0.18);
+        }
+
+        .tagline {
+            color: var(--muted);
+            font-size: clamp(15px, 2.4vw, 18px);
+            max-width: 640px;
+            margin: 0 auto;
+        }
+
+        .glyph {
+            width: 132px;
+            height: 132px;
+            margin: 26px auto 6px;
+            display: block;
+            opacity: 0.95;
+            filter: drop-shadow(0 0 14px rgba(120, 150, 255, 0.35));
+            animation: spin 60s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        section {
+            margin-top: 46px;
+        }
+
+        h2 {
+            font-size: 13px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--muted);
+            border-bottom: 1px solid var(--line);
+            padding-bottom: 10px;
+            margin-bottom: 22px;
+        }
+
+        /* Launch cards */
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+        }
+
+        a.card {
+            display: block;
+            text-decoration: none;
+            color: inherit;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 22px;
+            transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+        }
+
+        a.card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(160, 180, 255, 0.55);
+            background: rgba(255, 255, 255, 0.07);
+        }
+
+        .card .ico {
+            font-size: 28px;
+        }
+
+        .card h3 {
+            margin: 10px 0 6px;
+            font-size: 19px;
+        }
+
+        .card p {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .card .go {
+            margin-top: 14px;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--air);
+        }
+
+        .card.primary {
+            border-color: rgba(64, 128, 224, 0.5);
+            background: linear-gradient(180deg, rgba(64, 128, 224, 0.10), var(--panel));
+        }
+
+        /* Elements */
+        .elements {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+        }
+
+        .el {
+            border: 1px solid var(--line);
+            border-left-width: 4px;
+            border-radius: 10px;
+            padding: 14px 16px;
+            background: var(--panel);
+        }
+
+        .el .sides {
+            font-size: 12px;
+            color: var(--muted);
+            letter-spacing: 1px;
+        }
+
+        .el .name {
+            font-weight: 800;
+            font-size: 18px;
+            margin: 2px 0;
+        }
+
+        .el .role {
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .el.air {
+            border-left-color: var(--air);
+        }
+
+        .el.air .name {
+            color: var(--air);
+        }
+
+        .el.fire {
+            border-left-color: var(--fire);
+        }
+
+        .el.fire .name {
+            color: var(--fire);
+        }
+
+        .el.earth {
+            border-left-color: var(--earth);
+        }
+
+        .el.earth .name {
+            color: var(--earth);
+        }
+
+        .el.water {
+            border-left-color: var(--water);
+        }
+
+        .el.water .name {
+            color: var(--water);
+        }
+
+        /* How it works steps */
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+
+        .step {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 18px;
+        }
+
+        .step .n {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: rgba(160, 224, 224, 0.15);
+            color: var(--air);
+            font-weight: 800;
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+
+        .step h4 {
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+
+        .step p {
+            font-size: 13.5px;
+            color: var(--muted);
+        }
+
+        .note {
+            margin-top: 16px;
+            font-size: 13.5px;
+            color: var(--muted);
+            background: rgba(224, 96, 96, 0.06);
+            border: 1px solid rgba(224, 96, 96, 0.18);
+            border-radius: 10px;
+            padding: 12px 14px;
+        }
+
+        kbd {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--line);
+            border-bottom-width: 2px;
+            border-radius: 5px;
+            padding: 1px 6px;
+            color: var(--ink);
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 8px 24px;
+        }
+
+        .controls .row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            border-bottom: 1px dashed var(--line);
+            padding: 7px 0;
+            font-size: 14px;
+        }
+
+        .controls .row span:last-child {
+            color: var(--muted);
+            text-align: right;
+        }
+
+        footer {
+            margin-top: 56px;
+            padding-top: 20px;
+            border-top: 1px solid var(--line);
+            text-align: center;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        footer a {
+            color: var(--air);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <header>
+            <div class="eyebrow">Prototype Release #1</div>
+            <h1>Magic Circles</h1>
+            <!-- Decorative magic-circle glyph: 12-node ring + nested polygons -->
+            <svg class="glyph" viewBox="0 0 200 200" fill="none" aria-hidden="true">
+                <circle cx="100" cy="100" r="86" stroke="#A0E0E0" stroke-opacity="0.35" />
+                <circle cx="100" cy="100" r="66" stroke="#4080E0" stroke-opacity="0.5" />
+                <polygon points="100,40 152,130 48,130" stroke="#E06060" stroke-opacity="0.8" />
+                <polygon points="100,52 142,100 100,148 58,100" stroke="#80C060" stroke-opacity="0.7" />
+                <g fill="#ffffff" fill-opacity="0.85">
+                    <!-- 12 nodes -->
+                    <circle cx="100" cy="14" r="3" />
+                    <circle cx="143" cy="26" r="3" />
+                    <circle cx="174" cy="57" r="3" />
+                    <circle cx="186" cy="100" r="3" />
+                    <circle cx="174" cy="143" r="3" />
+                    <circle cx="143" cy="174" r="3" />
+                    <circle cx="100" cy="186" r="3" />
+                    <circle cx="57" cy="174" r="3" />
+                    <circle cx="26" cy="143" r="3" />
+                    <circle cx="14" cy="100" r="3" />
+                    <circle cx="26" cy="57" r="3" />
+                    <circle cx="57" cy="26" r="3" />
+                </g>
+            </svg>
+            <p class="tagline">A magic-based RPG prototype where you <strong>draw</strong> your spells.
+                Trace polygons on a ring of nodes to forge elements, wrap them in circles, stack layers
+                into combos, and cast.</p>
+        </header>
+
+        <section>
+            <h2>Launch</h2>
+            <div class="cards">
+                <a class="card primary" href="play.html">
+                    <div class="ico">🜨</div>
+                    <h3>Play — Canvas Prototype</h3>
+                    <p>The original build. Roam a procedural world and open the magic editor with
+                        <kbd>M</kbd> to draw and cast spells in real time.</p>
+                    <div class="go">ENTER ▸</div>
+                </a>
+                <a class="card" href="phaser.html">
+                    <div class="ico">🎮</div>
+                    <h3>Phaser Edition</h3>
+                    <p>A Phaser.js re-implementation with sprites, chunked world streaming, a minimap,
+                        and a full-scene magic editor.</p>
+                    <div class="go">ENTER ▸</div>
+                </a>
+                <a class="card" href="editor.html">
+                    <div class="ico">🗺️</div>
+                    <h3>Chunk Editor</h3>
+                    <p>A standalone tool to design 8×8 world chunks and export them as game-ready
+                        JavaScript presets.</p>
+                    <div class="go">ENTER ▸</div>
+                </a>
+            </div>
+        </section>
+
+        <section>
+            <h2>The Magic-Circle System</h2>
+            <p class="tagline" style="margin:0 0 22px; max-width:none; text-align:left;">
+                There are no spell menus. A spell is a <strong>drawing</strong>. Inside the editor you trace
+                shapes across a ring of <strong>12 nodes</strong> — and the number of sides decides the element.
+            </p>
+            <div class="elements">
+                <div class="el air">
+                    <div class="sides">3 SIDES · TRIANGLE</div>
+                    <div class="name">Air</div>
+                    <div class="role">Speed &amp; knockback — sends targets flying.</div>
+                </div>
+                <div class="el fire">
+                    <div class="sides">4 SIDES · SQUARE</div>
+                    <div class="name">Fire</div>
+                    <div class="role">Damage &amp; burn (damage over time).</div>
+                </div>
+                <div class="el earth">
+                    <div class="sides">5 SIDES · PENTAGON</div>
+                    <div class="name">Earth</div>
+                    <div class="role">Impact &amp; force — bulldozes through.</div>
+                </div>
+                <div class="el water">
+                    <div class="sides">6 SIDES · HEXAGON</div>
+                    <div class="name">Water</div>
+                    <div class="role">Slow &amp; control.</div>
+                </div>
+            </div>
+
+            <div class="steps" style="margin-top:18px;">
+                <div class="step">
+                    <div class="n">1</div>
+                    <h4>Trace elements</h4>
+                    <p>Click node to node to draw a closed polygon. 3/4/5/6 sides → Air/Fire/Earth/Water.
+                        Each shape is the spell's <em>fuel</em>.</p>
+                </div>
+                <div class="step">
+                    <div class="n">2</div>
+                    <h4>Drag circles</h4>
+                    <p>Drag on empty space to make a circle — the spell's <em>container</em>. Big = blunt/heavy,
+                        small = sharp/precise.</p>
+                </div>
+                <div class="step">
+                    <div class="n">3</div>
+                    <h4>Add runes</h4>
+                    <p>Tap a circle's edge to drop a rune. The first rune steers the spell's launch
+                        direction.</p>
+                </div>
+                <div class="step">
+                    <div class="n">4</div>
+                    <h4>Stack layers</h4>
+                    <p>Layers fire bottom-first; upper layers become <em>payloads</em> released on
+                        <kbd>Right-Click</kbd> — mid-flight combos and shape-shifts.</p>
+                </div>
+            </div>
+
+            <div class="note">
+                <strong>Power &amp; Spectrum.</strong> A power slider scales your first layer (more range &amp;
+                mana cost). The <em>power ÷ radius</em> ratio sorts each cast onto a spectrum — from a piercing
+                <strong>NEEDLE</strong> through <strong>DART</strong>, <strong>BOULDER</strong>, and a massive
+                <strong>NOVA</strong>. Elements also fight each other on cast: Water beats Fire, Fire beats
+                Earth, Earth beats Air, Air beats Water — overlapping opposites cancel out.
+            </div>
+        </section>
+
+        <section>
+            <h2>Controls</h2>
+            <div class="controls">
+                <div class="row"><span>Move</span><span>WASD / Arrows</span></div>
+                <div class="row"><span>Dash</span><span><kbd>Shift</kbd></span></div>
+                <div class="row"><span>Shoot / Cast</span><span>Left Click</span></div>
+                <div class="row"><span>Magic editor</span><span><kbd>M</kbd> or MAGIC button</span></div>
+                <div class="row"><span>Quick cast</span><span>Right Click</span></div>
+                <div class="row"><span>Remote trigger</span><span>Right Click</span></div>
+                <div class="row"><span>Undo (in editor)</span><span><kbd>Ctrl</kbd>+<kbd>Z</kbd></span></div>
+                <div class="row"><span>Close editor</span><span><kbd>Esc</kbd> / <kbd>M</kbd></span></div>
+            </div>
+            <p class="tagline" style="margin-top:14px; max-width:none; text-align:left; font-size:13.5px;">
+                Tip: in the Canvas Prototype you must have a <strong>scroll</strong> equipped to open the magic
+                editor — each scroll stores its own spell.
+            </p>
+        </section>
+
+        <footer>
+            <p>A Certain RPG Game · static build of the <code>a_certain_rpg_game</code> prototype.<br>
+                Phaser Edition loads Phaser 3.80.1 from a CDN. See the
+                <a href="https://github.com/nojukuramu/nojukuramu.github.io/tree/main/magic_circles">documentation on
+                    GitHub</a>.</p>
+        </footer>
+    </div>
+</body>
+
+</html>
