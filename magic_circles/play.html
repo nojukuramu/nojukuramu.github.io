@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Elemental RPG</title>
+    <link rel="stylesheet" href="static/css/styles.css">
+</head>
+
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="uiLayer">
+        <div id="statsPanel" class="hud-panel">
+            <div class="bar-container">HP
+                <div class="bar-bg">
+                    <div id="hpBar" class="bar-fill" style="background:#f44; width:100%"></div>
+                </div>
+            </div>
+            <div class="bar-container">ST
+                <div class="bar-bg">
+                    <div id="stBar" class="bar-fill" style="background:#fa0; width:100%"></div>
+                </div>
+            </div>
+        </div>
+        <div id="manaDiamond">
+            <div id="mAir" class="mana-quad"></div>
+            <div id="mFire" class="mana-quad"></div>
+            <div id="mWater" class="mana-quad"></div>
+            <div id="mEarth" class="mana-quad"></div>
+        </div>
+        <div id="btnToggleMagic">MAGIC</div>
+        <div id="inventoryBar"></div>
+    </div>
+
+    <div id="magicContainer">
+        <canvas id="magicCanvas"></canvas>
+        <div id="layerManager">
+            <div class="layer-header">
+                <span>LAYERS</span>
+                <div class="layer-header-btns">
+                    <button id="btnLayerUp" class="layer-btn" title="Move Up">▲</button>
+                    <button id="btnLayerDown" class="layer-btn" title="Move Down">▼</button>
+                    <button id="btnAddLayer" class="layer-btn" title="Add Layer">+</button>
+                    <button id="btnDelLayer" class="layer-btn" title="Delete Layer" style="color:#f66">✕</button>
+                </div>
+            </div>
+            <div id="layerList"></div>
+        </div>
+        <!-- Power Slider for First Layer Circles -->
+        <div id="powerPanel">
+            <div class="power-header">POWER</div>
+            <input type="range" id="powerSlider" min="1" max="10" value="1" step="1">
+            <div id="powerValue">×1</div>
+            <div id="powerCost" class="power-cost">Mana: ×1.0</div>
+            <div class="power-hint">Higher power = more range + mana cost</div>
+        </div>
+        <button id="btnCancel" class="mc-btn">CLOSE</button>
+        <button id="btnClear" class="mc-btn">RESET</button>
+        <button id="btnCast" class="mc-btn">CAST</button>
+    </div>
+
+    <!-- MAIN MENU -->
+    <div id="mainMenu">
+        <div class="menu-title">A CERTAIN RPG GAME<br><span style="font-size: 20px; letter-spacing: 2px;">[PROTOTYPE
+                RELEASE #1]</span></div>
+        <div class="menu-btn-container">
+            <button id="btnPlay" class="menu-btn">PLAY</button>
+            <button id="btnHowToPlay" class="menu-btn">HOW TO PLAY</button>
+        </div>
+    </div>
+
+    <!-- HOW TO PLAY SCREEN -->
+    <div id="howToPlay">
+        <div class="htp-content">
+            <h1>HOW TO PLAY</h1>
+
+            <div class="htp-section">
+                <h2>CONTROLS</h2>
+                <div class="key-value-pair"><span>MOVE</span> <span>WASD / Arrows</span></div>
+                <div class="key-value-pair"><span>DASH</span> <span>SHIFT</span></div>
+                <div class="key-value-pair"><span>SHOOT</span> <span>LEFT CLICK</span></div>
+                <div class="key-value-pair"><span>MAGIC MENU</span> <span>'M' or Button</span></div>
+                <div class="key-value-pair"><span>QUICK CAST</span> <span>RIGHT CLICK</span></div>
+            </div>
+
+            <div class="htp-section">
+                <h2>ELEMENTAL SHAPES</h2>
+                <div class="key-value-pair"><span style="color:#A0E0E0">3 SIDES (AIR)</span> <span>Speed & Push</span>
+                </div>
+                <div class="key-value-pair"><span style="color:#E06060">4 SIDES (FIRE)</span> <span>Damage & Burn</span>
+                </div>
+                <div class="key-value-pair"><span style="color:#80C060">5 SIDES (EARTH)</span> <span>Impact &
+                        Force</span></div>
+                <div class="key-value-pair"><span style="color:#4080E0">6 SIDES (WATER)</span> <span>Slow &
+                        Control</span></div>
+            </div>
+
+            <div class="htp-section">
+                <h2>SPELL CRAFTING</h2>
+                <p><strong>Drag Anywhere</strong> to create magic circles.</p>
+                <div class="key-value-pair"><span>BIG CIRCLE</span> <span>Blunt / Heavy</span></div>
+                <div class="key-value-pair"><span>SMALL CIRCLE</span> <span>Sharp / Precision</span></div>
+                <p><strong>Click Edge</strong> to set casting direction.</p>
+            </div>
+
+            <div class="htp-section">
+                <h2>LAYERS & COMBOS</h2>
+                <p>Use the <strong>Layer Manager</strong> to stack effects!</p>
+                <div class="key-value-pair"><span>RIGHT CLICK</span> <span>Remote Trigger</span></div>
+                <p>Combine layers to change direction or shape-shift mid-flight!</p>
+            </div>
+
+            <button id="btnBackToMenu" class="menu-btn small-btn">BACK</button>
+        </div>
+    </div>
+
+    <!-- DEBUG UI -->
+    <div id="debugPanel">
+        <div>POS: <span id="debugPos">0, 0</span></div>
+        <div>BIOME: <span id="debugBiome">Unknown</span></div>
+        <div>CHUNK: <span id="debugChunkType">Unknown</span></div>
+    </div>
+
+    <!-- Load Scripts in Order -->
+    <script src="static/js/utils/Vec2.js"></script>
+    <script src="static/js/core/Config.js"></script>
+    <script src="static/js/game/Item.js"></script>
+    <script src="static/js/entities/Entity.js"></script>
+    <script src="static/js/entities/Player.js"></script>
+    <script src="static/js/entities/Enemy.js"></script>
+    <script src="static/js/entities/Projectile.js"></script>
+    <script src="static/js/entities/Particle.js"></script>
+    <script src="static/js/entities/WorldObject.js"></script>
+    <script src="static/js/game/Game.js"></script>
+    <script src="static/js/core/Input.js"></script>
+    <script src="static/js/magic/Magic.js"></script>
+    <script src="static/js/magic/Cast.js"></script>
+    <script src="static/js/ui/Inventory.js"></script>
+    <script src="static/js/ui/MagicEditor.js"></script>
+    <script src="static/js/ui/LayerManager.js"></script>
+    <script src="static/js/main.js"></script>
+</body>
+
+</html>
