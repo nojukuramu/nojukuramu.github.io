@@ -225,15 +225,23 @@ class GameScene extends Phaser.Scene {
     setupInput() {
         // Left click to cast
         this.input.on('pointerdown', (pointer) => {
-            if (pointer.leftButtonDown() && !GameState.isMagicOpen) {
-                this.castSpell();
+            try {
+                if (pointer.leftButtonDown() && !GameState.isMagicOpen) {
+                    this.castSpell();
+                }
+            } catch (err) {
+                console.error('Cast input recovered from error:', err);
             }
         });
 
         // Right click for remote trigger
         this.input.on('pointerdown', (pointer) => {
-            if (pointer.rightButtonDown()) {
-                this.remoteTrigger();
+            try {
+                if (pointer.rightButtonDown()) {
+                    this.remoteTrigger();
+                }
+            } catch (err) {
+                console.error('Remote-trigger input recovered from error:', err);
             }
         });
 
@@ -244,6 +252,7 @@ class GameScene extends Phaser.Scene {
     setupCollisions() {
         // Projectile vs Enemy and Object collisions
         this.matter.world.on('collisionstart', (event) => {
+          try {
             for (let pair of event.pairs) {
                 const { bodyA, bodyB } = pair;
 
@@ -282,20 +291,22 @@ class GameScene extends Phaser.Scene {
                     this.handlePlayerEnemyCollision(player, enemy);
                 }
             }
+          } catch (err) {
+            // A collision callback runs inside the physics step; an uncaught
+            // error here would freeze the game. Recover and keep simulating.
+            console.error('Collision handler recovered from error:', err);
+          }
         });
     }
 
     handleProjectileHit(projectile, enemy) {
-        if (projectile && enemy && projectile.onHitEnemy) {
+        if (projectile && !projectile.isDead && enemy && projectile.onHitEnemy) {
             projectile.onHitEnemy(enemy);
         }
     }
 
     handleProjectileObjectHit(projectile, objectBody) {
-        if (!projectile || !projectile.onHitObject) return;
-
-        // Debug log
-        console.log('Projectile hit object:', objectBody.label, 'hasGameObject:', !!objectBody.gameObject);
+        if (!projectile || projectile.isDead || !projectile.onHitObject) return;
 
         // Find the world object associated with this physics body
         // The object could be stored as gameObject or we need to search chunks
@@ -315,10 +326,8 @@ class GameScene extends Phaser.Scene {
         }
 
         if (worldObj) {
-            console.log('Found world object:', worldObj.objectType, 'HP:', worldObj.hp);
             projectile.onHitObject(worldObj);
         } else {
-            console.log('World object NOT found, killing projectile');
             // Object not found, just kill projectile if not overwhelm
             if (projectile.power <= Config.OverwhelmThreshold) {
                 projectile.die();
@@ -327,7 +336,7 @@ class GameScene extends Phaser.Scene {
     }
 
     handleProjectilePlayerHit(projectile, player) {
-        if (!projectile || !player) return;
+        if (!projectile || projectile.isDead || !player) return;
 
         // Don't hit player if:
         // 1. Player is dashing (invincible)
@@ -546,9 +555,6 @@ class GameScene extends Phaser.Scene {
             // Virtual circles (no drawn circle) use modest speed
             const speed = circle.virtual ? (PLAYER_SPEED * 1.0) : finalSpeed;
 
-            // Debug log for testing
-            console.log(`Spell: rad=${circle.rad.toFixed(0)}, power=${basePower.toFixed(0)}, sizeNorm=${sizeNorm.toFixed(2)}, powerNorm=${powerNorm.toFixed(2)}, speed=${speed}`);
-
             // === PHYSICS TYPE DETERMINATION ===
             // Big circles (radius >= LARGE_THRESHOLD) are ALWAYS BLUNT, regardless of power
             const isBigCircle = circle.rad >= LARGE_THRESHOLD;
@@ -597,9 +603,6 @@ class GameScene extends Phaser.Scene {
                 // For a small circle (rad 30), projectile should be ~15
                 projRadius = Math.max(10, (circle.rad / 2) * (spectrumConfig.visualScale || 1));
             }
-
-            // Debug: log projectile radius
-            console.log('Projectile:', spectrum, 'drawnRad:', circle.rad.toFixed(0), 'projRadius:', projRadius.toFixed(0));
 
             // Spawn position
             const spawnOffset = Math.max(Config.ProjectileSpawnOffset || 30, this.player.rad + projRadius + 8);
@@ -712,9 +715,16 @@ class GameScene extends Phaser.Scene {
     }
 
     remoteTrigger() {
+        // Snapshot: activate() spawns new projectiles (and kills the parent),
+        // both of which mutate GameState.projectiles. Only the projectiles that
+        // existed at click time should be triggered this round. Each activation
+        // is isolated so one bad payload can't abort the rest or freeze the game.
         for (let proj of [...GameState.projectiles]) {
-            if (proj && proj.activate) {
+            if (!proj || proj.isDead || !proj.activate) continue;
+            try {
                 proj.activate();
+            } catch (err) {
+                console.warn('Projectile activation failed:', err);
             }
         }
     }
@@ -782,49 +792,62 @@ class GameScene extends Phaser.Scene {
     }
 
     update(time, delta) {
-        // Update player
-        if (this.player) {
-            this.player.update(time, delta);
-        }
-
-        // Update enemies
-        for (let enemy of this.enemies) {
-            if (enemy && this.player) {
-                enemy.update(time, delta, { x: this.player.x, y: this.player.y });
+        // The entire frame is wrapped: this runs inside Phaser's requestAnimationFrame
+        // step, so an uncaught error here would stop the loop and freeze the game.
+        // Catching it lets the game drop a bad frame and keep running instead.
+        try {
+            // Update player
+            if (this.player) {
+                this.player.update(time, delta);
             }
-        }
 
-        // Update projectiles
-        for (let proj of [...GameState.projectiles]) {
-            if (proj && proj.update) {
-                proj.update(time, delta);
+            // Update enemies
+            for (let enemy of this.enemies) {
+                if (enemy && this.player) {
+                    enemy.update(time, delta, { x: this.player.x, y: this.player.y });
+                }
             }
-        }
 
-        // Update chunk loading
-        if (this.player) {
-            this.chunkManager.update(this.player.x, this.player.y);
-        }
+            // Update projectiles. Snapshot the array (die() mutates it) and isolate
+            // each projectile so one misbehaving shard self-removes without taking
+            // down the rest of the frame.
+            for (let proj of [...GameState.projectiles]) {
+                if (!proj || proj.isDead || !proj.update) continue;
+                try {
+                    proj.update(time, delta);
+                } catch (projErr) {
+                    console.warn('Projectile update failed; removing it:', projErr);
+                    if (proj.die) proj.die();
+                }
+            }
 
-        // Render pathways
-        if (this.player) {
-            this.pathwayRenderer.render(
-                this.player.x,
-                this.player.y,
-                this.cameras.main.width,
-                this.cameras.main.height
-            );
-        }
+            // Update chunk loading
+            if (this.player) {
+                this.chunkManager.update(this.player.x, this.player.y);
+            }
 
-        // Update HUD
-        this.updateHUD();
+            // Render pathways
+            if (this.player) {
+                this.pathwayRenderer.render(
+                    this.player.x,
+                    this.player.y,
+                    this.cameras.main.width,
+                    this.cameras.main.height
+                );
+            }
 
-        // Update debug text
-        this.updateDebug();
+            // Update HUD
+            this.updateHUD();
 
-        // Update minimap
-        if (this.minimap && this.player) {
-            this.minimap.update(this.player.x, this.player.y, this.chunkManager);
+            // Update debug text
+            this.updateDebug();
+
+            // Update minimap
+            if (this.minimap && this.player) {
+                this.minimap.update(this.player.x, this.player.y, this.chunkManager);
+            }
+        } catch (err) {
+            console.error('GameScene.update recovered from a fatal frame error:', err);
         }
     }
 

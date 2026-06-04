@@ -62,8 +62,9 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
         this.pierceRemaining = spectrumConfig.pierce || 0;
         this.speed = spectrumConfig.speed || 800;
 
-        // Apply initial velocity
-        if (data.vel) {
+        // Apply initial velocity (guard against NaN/Infinity which would
+        // corrupt the Matter physics simulation and freeze the game)
+        if (data.vel && Number.isFinite(data.vel.x) && Number.isFinite(data.vel.y)) {
             this.setVelocity(data.vel.x * 0.1, data.vel.y * 0.1);
         }
 
@@ -76,6 +77,11 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
         // Active state (for remote trigger)
         this.isActive = false;
         this.activationDelay = 0.1; // Can't activate immediately
+
+        // Lifecycle guard - once dead, the body/scene are gone and this object
+        // must never be updated or touched again (prevents use-after-destroy
+        // crashes that would throw inside the game loop and freeze it).
+        this.isDead = false;
 
         // Trail particles
         this.setupTrail(scene);
@@ -96,8 +102,18 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
         GameState.projectiles.push(this);
     }
 
+    /**
+     * True only while this projectile is safe to touch. After die()/destroy()
+     * the physics body and scene reference are gone; calling into Phaser/Matter
+     * at that point throws and (because we are inside the rAF game step) would
+     * freeze the entire game. Every per-frame / collision method guards on this.
+     */
+    isAlive() {
+        return !this.isDead && !!this.body && !!this.scene;
+    }
+
     onHitObject(obj) {
-        if (!this.scene) return; // Safety check
+        if (!this.isAlive()) return; // Safety check
 
         // Avoid hitting the same object multiple times
         if (this.hitObjects.has(obj)) return;
@@ -280,6 +296,9 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
     }
 
     update(time, delta) {
+        // Never update a projectile whose body/scene have been destroyed.
+        if (!this.isAlive()) return;
+
         const dt = delta / 1000;
 
         // Update activation delay
@@ -341,11 +360,16 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
     }
 
     checkProjectileCollisions() {
+        if (!this.isAlive()) return;
+
         const myRadius = this.projectileData.radius || 10;
         const pvpRatio = Config.PvPPowerRatio || 1.5;
 
-        for (let other of GameState.projectiles) {
-            if (other === this || other.caster === this.caster) continue;
+        // Iterate a snapshot: die() mutates GameState.projectiles mid-loop.
+        for (let other of [...GameState.projectiles]) {
+            if (!other || other.isDead || other === this || other.caster === this.caster) continue;
+            // Stop if a collision already killed us this iteration.
+            if (this.isDead) return;
 
             const otherRadius = other.projectileData?.radius || 10;
             const dist = Phaser.Math.Distance.Between(this.x, this.y, other.x, other.y);
@@ -385,6 +409,8 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
     }
 
     pushEntitiesOnPath() {
+        if (!this.isAlive()) return;
+
         // Clear previous contacts
         this.earthContactEntities.clear();
 
@@ -486,6 +512,7 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
      * Apply continuous contact damage to entities being pushed by Earth BLUNT
      */
     applyEarthContactDamage(dt) {
+        if (!this.isAlive()) return;
         if (this.earthContactEntities.size === 0) return;
 
         this.earthDamageTick += dt;
@@ -522,6 +549,10 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
     }
 
     onHitEnemy(enemy) {
+        // Dead projectiles (already destroyed this step) must not run hit logic;
+        // reading this.body.velocity below would throw and freeze the loop.
+        if (!this.isAlive() || !enemy) return;
+
         // === BLUNT vs SHARP behavior ===
         // BLUNT: pushes enemies, reduced damage, doesn't die on hit (passes through)
         // SHARP: pierces enemies, full damage
@@ -581,6 +612,8 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
     }
 
     applyElementalEffects(target) {
+        if (!this.isAlive() || !target) return;
+
         for (let element of this.elements) {
             switch (element) {
                 case 'Fire':
@@ -616,72 +649,94 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
     }
 
     activate() {
+        // Guard the remote-trigger entry point. This runs inside the rAF game
+        // step (right-click input handler), so any throw here freezes the game.
+        if (!this.isAlive()) return;
         if (this.activationDelay > 0) return;
         if (!this.payload || this.payload.length === 0) return;
 
         this.isActive = true;
 
-        // Spawn payload projectiles with proper spectrum calculation
-        for (let payloadData of this.payload) {
-            // Calculate spawn direction (from current velocity + relative angle)
-            const baseAngle = Math.atan2(this.body.velocity.y, this.body.velocity.x);
-            const finalAngle = baseAngle + (payloadData.relAngle || 0);
+        try {
+            // Spawn payload projectiles with proper spectrum calculation
+            let shardIndex = 0;
+            for (let payloadData of this.payload) {
+                // Calculate spawn direction (from current velocity + relative angle)
+                const vel = this.body.velocity;
+                const baseAngle = Math.atan2(vel.y, vel.x);
+                const finalAngle = baseAngle + (payloadData.relAngle || 0);
 
-            // === SPECTRUM CALCULATION AT ACTIVATION TIME ===
-            // Use inheritedPower and circleRadius from payload data
-            const inheritedPower = payloadData.inheritedPower || this.power;
-            const circleRadius = payloadData.circleRadius || 30;
-            const spectrum = this.getSpellSpectrum(inheritedPower, circleRadius);
-            const spectrumConfig = Config.SpellSpectrum.effects[spectrum] || {};
+                // === SPECTRUM CALCULATION AT ACTIVATION TIME ===
+                // Use inheritedPower and circleRadius from payload data
+                const inheritedPower = payloadData.inheritedPower || this.power;
+                const circleRadius = payloadData.circleRadius || 30;
+                const spectrum = this.getSpellSpectrum(inheritedPower, circleRadius);
+                const spectrumConfig = Config.SpellSpectrum.effects[spectrum] || {};
 
-            // Size thresholds matching GameScene
-            const LARGE_THRESHOLD = 60;
-            const WEAK_THRESHOLD = 100;
-            const STRONG_THRESHOLD = 200;
+                // Size thresholds matching GameScene
+                const LARGE_THRESHOLD = 60;
+                const WEAK_THRESHOLD = 100;
+                const STRONG_THRESHOLD = 200;
 
-            // Big circles are ALWAYS BLUNT, regardless of spectrum
-            const isBigCircle = circleRadius >= LARGE_THRESHOLD;
-            const isPiercing = !isBigCircle && ['NEEDLE', 'LANCE', 'BEAM'].includes(spectrum);
-            const physics = isPiercing ? 'SHARP' : 'BLUNT';
-            const damage = payloadData.hasMorePayloads ? 10 : (payloadData.baseDamage || 10) * (spectrumConfig.damage || 1);
+                // Big circles are ALWAYS BLUNT, regardless of spectrum
+                const isBigCircle = circleRadius >= LARGE_THRESHOLD;
+                const isPiercing = !isBigCircle && ['NEEDLE', 'LANCE', 'BEAM'].includes(spectrum);
+                const physics = isPiercing ? 'SHARP' : 'BLUNT';
+                const damage = payloadData.hasMorePayloads ? 10 : (payloadData.baseDamage || 10) * (spectrumConfig.damage || 1);
 
-            // Base speed from spectrum
-            let speed = spectrumConfig.speed || 600;
+                // Base speed from spectrum
+                let speed = spectrumConfig.speed || 600;
 
-            // For BLUNT: more power = SLOWER
-            if (physics === 'BLUNT' && inheritedPower > WEAK_THRESHOLD) {
-                const powerFactor = Math.min(1, (inheritedPower - WEAK_THRESHOLD) / (STRONG_THRESHOLD - WEAK_THRESHOLD));
-                speed *= (1.0 - powerFactor * 0.5); // 50% slower at max power
+                // For BLUNT: more power = SLOWER
+                if (physics === 'BLUNT' && inheritedPower > WEAK_THRESHOLD) {
+                    const powerFactor = Math.min(1, (inheritedPower - WEAK_THRESHOLD) / (STRONG_THRESHOLD - WEAK_THRESHOLD));
+                    speed *= (1.0 - powerFactor * 0.5); // 50% slower at max power
+                }
+
+                // Projectile radius - SAME calculation as main spell (rad / 2)
+                let projRadius;
+                if (isPiercing) {
+                    projRadius = Math.max(5, 8 * (spectrumConfig.visualScale || 1));
+                } else {
+                    // Use same formula as GameScene.castSpell: circleRadius / 2
+                    projRadius = Math.max(10, (circleRadius / 2) * (spectrumConfig.visualScale || 1));
+                }
+
+                // Sanitize velocity: a non-finite value here would put a NaN into a
+                // Matter body and wedge the physics solver (a hard freeze).
+                let vx = Math.cos(finalAngle) * speed;
+                let vy = Math.sin(finalAngle) * speed;
+                if (!Number.isFinite(vx) || !Number.isFinite(vy)) {
+                    vx = 0;
+                    vy = -(speed || 600);
+                }
+
+                // Spread shards out from the parent along their heading. Spawning
+                // every shard at the exact same point creates perfectly coincident
+                // Matter bodies whose collision normal is NaN -> frozen simulation.
+                const spawnGap = projRadius + 6 + shardIndex * 3;
+                const spawnX = this.x + Math.cos(finalAngle) * spawnGap;
+                const spawnY = this.y + Math.sin(finalAngle) * spawnGap;
+
+                const newData = {
+                    elements: this.elements,
+                    spectrum: spectrum,
+                    physics: physics,
+                    damage: damage,
+                    pierce: spectrumConfig.pierce || 0,
+                    radius: projRadius,
+                    vel: { x: vx, y: vy },
+                    power: inheritedPower,
+                    caster: this.caster,
+                    payload: payloadData.nestedPayload || null
+                };
+
+                new ProjectileSprite(this.scene, spawnX, spawnY, newData);
+                shardIndex++;
             }
-
-            // Projectile radius - SAME calculation as main spell (rad / 2)
-            let projRadius;
-            if (isPiercing) {
-                projRadius = Math.max(5, 8 * (spectrumConfig.visualScale || 1));
-            } else {
-                // Use same formula as GameScene.castSpell: circleRadius / 2
-                projRadius = Math.max(10, (circleRadius / 2) * (spectrumConfig.visualScale || 1));
-            }
-
-            console.log('Payload activate:', spectrum, physics, 'circleRad:', circleRadius, 'power:', inheritedPower, 'speed:', speed.toFixed(0));
-
-            const newData = {
-                elements: this.elements,
-                spectrum: spectrum,
-                physics: physics,
-                damage: damage,
-                pierce: spectrumConfig.pierce || 0,
-                radius: projRadius,
-                vel: {
-                    x: Math.cos(finalAngle) * speed,
-                    y: Math.sin(finalAngle) * speed
-                },
-                power: inheritedPower,
-                caster: this.caster,
-                payload: payloadData.nestedPayload || null
-            };
-
-            new ProjectileSprite(this.scene, this.x, this.y, newData);
+        } catch (err) {
+            // One malformed payload shard must not take the whole game down.
+            console.warn('ProjectileSprite.activate recovered from error:', err);
         }
 
         // Die after activating
@@ -704,13 +759,23 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
     }
 
     die() {
-        // Death particles (more particles for higher power)
-        if (this.scene) {
-            const particleCount = Math.min(15, 4 + Math.floor(this.power / 30));
-            this.scene.spawnParticles(this.x, this.y, this.mainColor || this.tintTopLeft, particleCount);
+        // Idempotent: a projectile can be killed by several systems in the same
+        // step (collision + lifetime, two collision pairs, ...). Running the
+        // teardown twice would touch already-destroyed objects and throw.
+        if (this.isDead) return;
+        this.isDead = true;
 
-            // Spawn lingering death effect (bigger = more noticeable, lasts 1-2s)
-            this.spawnDeathEffect();
+        // Death particles + lingering effect (needs scene/position - do it first,
+        // before super.destroy() clears them). Wrapped so FX errors can't abort
+        // the cleanup below and leak the body/emitters.
+        try {
+            if (this.scene) {
+                const particleCount = Math.min(15, 4 + Math.floor(this.power / 30));
+                this.scene.spawnParticles(this.x, this.y, this.mainColor || this.tintTopLeft, particleCount);
+                this.spawnDeathEffect();
+            }
+        } catch (err) {
+            console.warn('ProjectileSprite death FX failed:', err);
         }
 
         // Remove from game state
@@ -721,24 +786,30 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
 
         // Clean up trail
         if (this.trailEmitter) {
-            this.trailEmitter.destroy();
+            try { this.trailEmitter.destroy(); } catch (e) { /* already gone */ }
+            this.trailEmitter = null;
         }
 
         // Clean up glow
         if (this.glow) {
-            this.glow.destroy();
+            try { this.glow.destroy(); } catch (e) { /* already gone */ }
+            this.glow = null;
         }
 
         // Clean up visual graphics
         if (this.visualGraphics) {
-            this.visualGraphics.destroy();
+            try { this.visualGraphics.destroy(); } catch (e) { /* already gone */ }
+            this.visualGraphics = null;
         }
 
-        if (this.body) {
-            this.scene.matter.world.remove(this.body);
-            this.body = null; // Prevent GameObject.destroy from trying to destroy it
+        // Remove the physics body before destroying the GameObject so Phaser's
+        // own destroy() doesn't try to remove an already-removed body.
+        if (this.body && this.scene && this.scene.matter) {
+            try { this.scene.matter.world.remove(this.body); } catch (e) { /* already removed */ }
         }
-        super.destroy();
+        this.body = null;
+
+        try { super.destroy(); } catch (e) { /* already destroyed */ }
     }
 
     /**

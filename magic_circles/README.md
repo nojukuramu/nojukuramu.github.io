@@ -1,63 +1,58 @@
 # Magic Circles — A Certain RPG Game (static build)
 
-A self-contained static build of the **`a_certain_rpg_game`** prototype, originally a
-Flask blueprint served at `/rpg`. Everything here is plain HTML/CSS/JS — no server, no
-build step. Open `index.html` (the section hub) and pick an experience.
+A self-contained static build of the **`a_certain_rpg_game`** prototype, originally a Flask
+blueprint served at `/rpg`. Everything here is plain HTML/CSS/JS — no server, no build step.
+Open `index.html` (the section hub) and hit **Play**.
 
 > The standout feature is the **magic-circle creation system**: you don't pick spells
 > from a menu, you *draw* them. This document explains how it works, end to end.
+
+The game is built with **Phaser 3** (loaded from a CDN): sprites, Matter physics, a
+chunk-streamed procedural world, a minimap, and a full-scene magic editor.
 
 ---
 
 ## Contents
 
-| Page | Was | What it is |
-|------|-----|------------|
-| [`index.html`](index.html) | _(new)_ | Hub / launcher for this section |
-| [`play.html`](play.html) | `templates/rpg.html` | **Canvas prototype** — the original build, with the in-world magic editor |
-| [`phaser.html`](phaser.html) | `templates/rpg_phaser.html` | **Phaser.js edition** — sprites, chunk streaming, minimap, full-scene magic editor |
-| [`editor.html`](editor.html) | `templates/editor.html` | **Chunk editor** — design 8×8 world chunks, export as JS presets |
+| Page | What it is |
+|------|-----------|
+| [`index.html`](index.html) | Hub / launcher for this section + visual explainer |
+| [`phaser.html`](phaser.html) | **The game** — Phaser.js edition (loads Phaser 3.80.1 from a CDN) |
 
 ```
 magic_circles/
 ├── index.html         # Section hub (launcher + visual explainer)
-├── play.html          # Canvas prototype
-├── phaser.html        # Phaser edition (loads Phaser 3.80.1 from CDN)
-├── editor.html        # Standalone chunk editor
+├── phaser.html        # The game (loads Phaser 3.80.1 from CDN)
 ├── README.md          # This file
 └── static/
-    ├── css/           # styles.css, editor.css
     ├── assets/        # 18 PNG sprites/tiles
     └── js/
-        ├── core/      # Config.js (all tuning constants), Input.js
-        ├── utils/     # Vec2.js
-        ├── game/      # Game.js, Item.js
-        ├── entities/  # Entity, Player, Enemy, Projectile, Particle, WorldObject
-        ├── magic/     # Magic.js, Cast.js          ← canvas magic core
-        ├── ui/        # MagicEditor.js, LayerManager.js, Inventory.js  ← canvas magic UI
-        ├── editor/    # ChunkEditor.js
-        ├── main.js    # Canvas entry point + game loop
-        └── phaser/    # Phaser implementation (scenes/, world/, entities/, effects/, …)
-            └── scenes/MagicEditorScene.js          ← Phaser magic editor
+        ├── core/      # Config.js — all tuning constants (shared)
+        └── phaser/    # Phaser implementation
+            ├── scenes/      # BootScene, MenuScene, GameScene, MagicEditorScene
+            ├── world/       # ChunkManager, BiomeRenderer, PathwayRenderer
+            ├── entities/    # PlayerSprite, EnemySprite, ProjectileSprite
+            ├── effects/     # MinimapSystem, ElementalEffects
+            ├── game/        # InventorySystem, Item
+            ├── config/      # ChunkPresets
+            ├── utils/       # SeededRandom
+            └── game.js      # Phaser bootstrap + GameState
 ```
 
 ---
 
 ## The magic-circle creation system
 
-The system exists in **two parallel implementations** that share the same rules:
-
-- **Canvas:** `static/js/magic/Magic.js`, `static/js/magic/Cast.js`,
-  `static/js/ui/MagicEditor.js`, `static/js/ui/LayerManager.js`
-- **Phaser:** `static/js/phaser/scenes/MagicEditorScene.js`
-
-Tuning constants for both live in **`static/js/core/Config.js`**.
+All tuning constants live in **`static/js/core/Config.js`**. The editor UI lives in
+**`static/js/phaser/scenes/MagicEditorScene.js`**; casting and the runtime spell behaviour
+live in **`static/js/phaser/scenes/GameScene.js`** and
+**`static/js/phaser/entities/ProjectileSprite.js`**.
 
 ### 1. The node ring
 
 When the editor opens it lays out **12 nodes** evenly around a circle (radius ≈ 60% of the
 smaller screen dimension). Node `i` sits at angle `i/12 · 2π − π/2`.
-(`Magic.initNodes`, `MagicEditor` render.)
+(`MagicEditorScene.initNodes`.)
 
 ### 2. Shapes → elements (the spell's *fuel*)
 
@@ -72,16 +67,16 @@ the element**:
 | 5 | **Earth** | `#80C060` | Impact & force — blunt-only push/bulldoze |
 | 6 | **Water** | `#4080E0` | Slow & control (×0.3 speed for 3 s) |
 
-(`getElement(n)` in `Magic.js`; identical mapping at `MagicEditorScene.js`. Effect values in
+(`getElement(n)` in `GameScene.js` / `MagicEditorScene.js`. Effect values in
 `Config.Effects`.) Each shape consumes mana on cast — Air 15, Fire 20, Earth 25, Water 20
 (`Config.ManaCost`).
 
 ### 3. Circles → containers
 
-Drag across empty canvas to draw a **circle** (minimum radius 20 px). Circles carry the
+Drag across empty space to draw a **circle** (minimum radius 20 px). Circles carry the
 elements and define the projectile:
 
-- **Radius > 60 px → Blunt** (heavy, magenta outline); **≤ 60 px → Sharp** (precise, yellow).
+- **Radius > 60 px → Blunt** (heavy); **≤ 60 px → Sharp** (precise).
   (`Config.SharpRadiusThreshold = 60`.)
 - Radius feeds the **spectrum** calculation (below).
 
@@ -89,37 +84,35 @@ elements and define the projectile:
 
 Tap a circle's **edge** to drop a rune (tap an existing rune to remove it). A rune is just
 an angle stored on the circle. The **first rune** rotates the spell's launch direction
-relative to your aim (`cont.runes[0]` offset in `Cast.js`).
+relative to your aim (`runes[0]` offset in `GameScene.castSpell` / `ProjectileSprite.activate`).
 
 ### 5. Layers → combos & payloads
 
-The **Layer Manager** (canvas: top-right panel; Phaser: in-scene) stacks shapes/circles
-into ordered layers. Each layer has visibility (👁) and **solo** (S) toggles, and can be
-reordered or deleted.
+The **Layer Manager** (an in-scene panel) stacks shapes/circles into ordered layers. Each
+layer has visibility (👁) and **solo** (S) toggles, and can be reordered or deleted.
 
 On cast, layers are grouped by index:
 
 - **Layer 0 = the container** that is thrown immediately.
 - **Layers 1…n = the payload chain**, released one stage at a time on **Right-Click**
-  (`buildPayloadChain` in `Cast.js`). Because the spectrum of each stage is recomputed at
-  *activation* time, you get multi-stage transformations — e.g. a slow `CANNON` that bursts
-  into a swarm of `NEEDLE` shards.
+  (`buildPayloadChain` in `GameScene.js`, `activate()` in `ProjectileSprite.js`). Because the
+  spectrum of each stage is recomputed at *activation* time, you get multi-stage
+  transformations — e.g. a slow `CANNON` that bursts into a swarm of `NEEDLE` shards.
 
 ### 6. Power
 
 When **Layer 0 is selected and contains a circle**, a **POWER** slider appears (×1–×10).
 It scales only the first layer: more range and damage, at a mana premium of
-`manaCostMult = 1 + (power − 1) · 0.2` (so ×10 ≈ 2.8× mana). Powered first-layer circles
-get a thicker outline and an orange glow.
+`manaCostMult = 1 + (power − 1) · 0.2` (so ×10 ≈ 2.8× mana).
 
 ### 7. Undo
 
 The editor keeps up to 20 snapshots of the layer stack; **`Ctrl+Z`** restores the previous
-state (`saveUndoState` / `undoLastEdit`).
+state (`saveUndoState` / `undoLastEdit` in `MagicEditorScene`).
 
 ### 8. Casting pipeline
 
-When you press **CAST** (or quick-cast with a scroll equipped), `cast()` runs:
+When you press **CAST** (or quick-cast with a scroll equipped), `GameScene.castSpell()` runs:
 
 1. **Elements (fuel).** Flatten shapes from every *visible* layer, bottom→top. For each, pay
    `ceil(baseCost · manaCostMult)` if affordable, then run **predator reduction** on a stack:
@@ -130,34 +123,34 @@ When you press **CAST** (or quick-cast with a scroll equipped), `cast()` runs:
 2. **Circles.** Group circles by layer; layer 0 is the container, the rest form the payload chain.
 
 3. **Fallbacks.** If there's truly nothing to cast — or shapes were drawn but you can't
-   afford *any* of them — fire weak **Base Magic** instead (gray, short range). Elements with
+   afford *any* of them — fire weak **Base Magic** instead (`castBaseMagic`). Elements with
    no circle still cast via a virtual 30 px circle.
 
 4. **Power & damage.** `basePower = (50 + sides·25) · powerMult`; `baseDmg = sides · 25`.
 
-5. **Spectrum.** For each container circle, `getSpellSpectrum(power, radius)` classifies the
-   shot by the **power ÷ radius** ratio (plus size/power special cases):
+5. **Spectrum.** For each container circle, the **power ÷ radius** ratio classifies the shot
+   (plus size/power special cases):
 
-   | Spectrum | Trigger (ratio unless noted) | Behavior |
-   |----------|------------------------------|----------|
-   | **NEEDLE**  | ≥ 6.0 (or tiny + very powerful) | pierces 4, fast |
-   | **LANCE**   | ≥ 4.0 | pierces 3 |
-   | **BEAM**    | ≥ 3.0 | pierces 2, long range |
-   | **DART**    | ≥ 2.0 | standard throw |
-   | **WAVE**    | ≥ 1.5 | spreading arc |
-   | **BURST**   | ≥ 1.0 | delayed explosion |
-   | **BOULDER** | ≥ 0.5 | slow, heavy push |
-   | **CANNON**  | < 0.5 | big, explosive |
-   | **NOVA**    | huge circle + very high power | short-range massive explosion |
-   | **FLICKER** | tiny circle + low power | weak, fast |
+   | Spectrum | Behavior |
+   |----------|----------|
+   | **NEEDLE**  | pierces 4, fast |
+   | **LANCE**   | pierces 3 |
+   | **BEAM**    | pierces 2, long range |
+   | **DART**    | standard throw |
+   | **WAVE**    | spreading arc |
+   | **BURST**   | delayed explosion |
+   | **BOULDER** | slow, heavy push |
+   | **CANNON**  | big, explosive |
+   | **NOVA**    | huge circle + very high power → short-range massive explosion |
+   | **FLICKER** | tiny circle + low power → weak, fast |
 
    Each spectrum sets pierce / damage multiplier / knockback / visual scale
    (`Config.SpellSpectrum.effects`). `NEEDLE`/`LANCE`/`BEAM` are **piercing** → `SHARP` physics;
    everything else is `BLUNT`.
 
-6. **Spawn.** A `Projectile` is created per container circle with the resolved element stack,
-   spectrum, physics, damage, pierce, speed, direction (aim + rune offset) and the nested
-   payload chain.
+6. **Spawn.** A `ProjectileSprite` is created per container circle with the resolved element
+   stack, spectrum, physics, damage, pierce, speed, direction (aim + rune offset) and the
+   nested payload chain.
 
 ---
 
@@ -169,62 +162,55 @@ When you press **CAST** (or quick-cast with a scroll equipped), `cast()` runs:
 | Dash | `Shift` |
 | Shoot / cast equipped scroll | Left Click |
 | Open/close magic editor | `M` (or the **MAGIC** button) · `Esc` closes |
-| Quick cast / remote-trigger payloads | Right Click |
+| Remote-trigger payloads | Right Click |
 | Draw shape | Click node → node, close on the first node |
-| Draw circle | Drag on empty canvas |
+| Draw circle | Drag on empty space |
 | Add/remove rune | Tap a circle's edge |
 | Undo (in editor) | `Ctrl+Z` |
 
-In the **canvas prototype** you must have a **scroll** selected to open the editor — each
-scroll stores its own spell, saved when you close the editor.
+Equip a **scroll** to open the magic editor — each scroll stores its own spell, saved when
+you close the editor.
+
+---
+
+## Stability / safety notes
+
+The projectile lifecycle was hardened to eliminate an intermittent freeze that could happen
+when right-clicking to release a payload layer. The game loop runs inside Phaser's
+`requestAnimationFrame` step, so **any uncaught error there stops the loop and freezes the
+screen**. The fixes:
+
+- `ProjectileSprite` now has an explicit lifecycle flag (`isDead`) and an `isAlive()` guard.
+  Every per-frame / collision method (`update`, `activate`, `onHitEnemy`, `onHitObject`,
+  `pushEntitiesOnPath`, `applyElementalEffects`, `checkProjectileCollisions`) bails out once
+  the projectile's physics body has been destroyed — preventing use-after-destroy crashes.
+- `die()` is **idempotent** and wraps every teardown step, so a projectile can be killed by
+  several systems in the same step without throwing.
+- Payload shards spawn spread apart (not all at the exact same point) and with sanitized,
+  finite velocities, so the Matter physics solver can't be wedged by coincident bodies or NaN.
+- The scene `update()`, the input handlers, the `collisionstart` callback, and
+  `remoteTrigger()` are wrapped in `try/catch`. A single bad object now drops one frame and
+  logs a warning instead of freezing the whole game.
 
 ---
 
 ## Conversion notes (Flask → static)
 
-This build is a faithful port of the Flask blueprint. The game logic under `static/` is
-copied from the source unchanged **except for three small upstream bug-fixes** (listed
-below); the HTML entry points are the only other change.
+This build is a faithful port of the Flask blueprint. The Phaser game logic under `static/`
+is copied from the source; the HTML entry points are the only structural change.
 
 - **Template calls removed.** Every `{{ url_for('rpg.static', filename='X') }}` became the
-  relative path `static/X`. The Phaser page's `window.STATIC_URL` is now the literal
-  `"static/"` (its loader reads this and falls back to `/static/` if unset —
-  `phaser/scenes/BootScene.js`).
-- **Pages live at the section root.** All four HTML files sit directly in `magic_circles/`
-  so that relative paths like `static/assets/…` resolve to `magic_circles/static/assets/…`.
-  This mirrors how Flask served the pages at `/rpg/` (with a trailing slash). If you move a
-  page into a sub-folder, fix the relative paths accordingly.
-- **Pages renamed** for clarity: `rpg.html → play.html`, `rpg_phaser.html → phaser.html`,
-  `editor.html` unchanged, plus the new `index.html` hub. No internal references depended on
-  the old filenames.
-- **Phaser is loaded from a CDN** (`phaser@3.80.1`, jsDelivr) exactly as in the original, so
-  the Phaser edition needs network access on first load. The canvas prototype and the chunk
-  editor have **no external dependencies**.
-- **Known quirk (preserved).** The canvas `Game.loadAssets()` requests four sprite files
-  (`player_sprite.png`, `enemy_sprite.png`, `ground_tile.png`, `particle_texture.png`) that
-  don't exist in `static/assets/`; the canvas game therefore renders programmatically. This
-  matches the original behavior and was intentionally left unchanged. (The Phaser edition uses
-  the 18 real PNGs in `static/assets/`.)
-
-### Upstream bug-fixes applied
-
-Three latent bugs (present identically in the `mysite` source, surfaced by an automated PR
-review) were fixed here. They're worth back-porting upstream:
-
-- **`static/js/ui/MagicEditor.js`** — the rune hit-test used nested `forEach` callbacks where
-  `return` only exits the callback, so overlapping circles could clobber the result. Rewritten
-  with labeled loops that stop at the first matching circle.
-- **`static/js/phaser/game.js`** — `GameState.getCurrentItem()` read a non-existent
-  `this.inventory` (inventory lives in `inventorySystem`). Now delegates to
-  `inventorySystem.getCurrentItem()` with a null guard.
-- **`static/js/phaser/scenes/MenuScene.js`** — closing the How-To-Play overlay destroyed *all*
-  `Text` below a y-threshold (could delete other menu text). Now tracks and destroys only the
-  overlay's own objects.
+  relative path `static/X`. The page's `window.STATIC_URL` is now the literal `"static/"`
+  (the loader reads this and falls back to `/static/` if unset — `phaser/scenes/BootScene.js`).
+- **Pages live at the section root.** The HTML files sit directly in `magic_circles/` so that
+  relative paths like `static/assets/…` resolve correctly. This mirrors how Flask served the
+  pages at `/rpg/` (with a trailing slash).
+- **Phaser is loaded from a CDN** (`phaser@3.80.1`, jsDelivr), so the page needs network
+  access on first load.
 
 ### Running locally
 
-Serve over HTTP (don't open via `file://`, or the Phaser asset loader's requests will be
-blocked):
+Serve over HTTP (don't open via `file://`, or the asset loader's requests will be blocked):
 
 ```bash
 cd magic_circles
