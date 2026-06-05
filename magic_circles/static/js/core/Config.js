@@ -186,11 +186,17 @@ const Config = {
     },
 
     // Magic Editor visuals
-    EditorPowerShrink: 0.06,    // How much each power level shrinks the drawn circle (0–1 fraction)
-    EditorMinPowerScale: 0.4,   // Minimum visual scale so circles never disappear entirely
+    EditorPowerShrink: 0.06,    // (legacy) kept for back-compat
+    EditorMinPowerScale: 0.4,   // (legacy)
 
-    // Editor grid / snap
-    EditorGridSize: 40,         // Grid cell size in pixels
+    // Star-ring spread vs Potency (per layer). LOWER potency = narrower ring = smaller glyphs.
+    EditorMinNodeScale: 0.5,    // potency 1  -> ring pulled in (small shapes)
+    EditorMaxNodeScale: 1.45,   // potency 10 -> ring pushed out (big shapes)
+
+    // Editor grid / snap (design-space units, independent of screen size)
+    EditorGridSize: 40,         // ley-grid cell size
+    EditorMinZoom: 0.35,
+    EditorMaxZoom: 3.2,
 
     // Symmetry / instability
     Instability: {

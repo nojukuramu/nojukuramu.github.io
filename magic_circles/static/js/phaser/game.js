@@ -49,7 +49,9 @@ let game;
 window.addEventListener('load', () => {
     GameState.isMobile = typeof Platform !== 'undefined' && Platform.isMobile();
     if (GameState.isMobile) {
-        gameConfig.input = { activePointers: 3 };
+        // up to 5 simultaneous touches so claw-grip (two thumbs + two index
+        // fingers) and pinch-zoom in the Spellforge all work at once
+        gameConfig.input = { activePointers: 5 };
     }
     game = new Phaser.Game(gameConfig);
 

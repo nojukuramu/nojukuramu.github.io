@@ -1,11 +1,17 @@
 /**
- * MagicEditorScene - Complete Magic Editor with:
- * - SHAPE drawing (connect 12 nodes to form polygons -> elements)
- * - CIRCLE drawing (drag to create circles -> containers)
- * - RUNES on circles (click edge to add/remove)
- * - LAYERS system (multiple layers, visibility, solo)
- * - POWER slider (affects first layer circles)
- * - UNDO support (Ctrl+Z)
+ * MagicEditorScene — "The Spellforge"
+ *
+ * A touch-first, freely zoom/pannable arcane editor.
+ *  - WEAVE   : bind stars (12-point ring) into glyphs, draw seals (circles), etch runes
+ *  - SHIFT   : drag seals to reposition (or drag the void to pan)
+ *  - UNMAKE  : tap a seal/glyph to dissolve it
+ *  - DRIFT   : pan the canvas
+ *  - pinch / wheel to zoom, two-finger drag to pan, ley-grid snapping
+ *
+ * Coordinate model: content is drawn in "design space" into a single Graphics
+ * layer whose position/scale form the view transform (pan = position, zoom =
+ * scale). Design space == legacy screen coords at the identity view, so existing
+ * saved spells stay compatible. UI lives in screen space (untransformed).
  */
 class MagicEditorScene extends Phaser.Scene {
     constructor() {
@@ -16,55 +22,99 @@ class MagicEditorScene extends Phaser.Scene {
         const width = this.cameras.main.width;
         const height = this.cameras.main.height;
 
-        // Semi-transparent overlay
-        this.overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.85);
-
-        // State
-        this.dragMode = null; // 'shape' or 'circle'
-        this.dragStart = null;
-        this.dragCurrent = null;
+        // ---- state ----
+        this.tool = 'weave';               // weave | shift | unmake | drift
+        this.dragMode = null;              // 'shape' | 'circle' | 'move' | 'pan' | null
+        this.dragStart = null;             // design-space
+        this.dragCurrent = null;           // design-space
         this.currentPath = [];
+        this.movingCircle = null;          // {item, grabDX, grabDY}
         this.undoHistory = [];
-        this.maxUndoSteps = 20;
-        this.stabilityText = null; // recreated lazily in renderMagic each time the editor opens
+        this.maxUndoSteps = 30;
+        this.stabilityText = null;
+        this.buttons = {};
+        this.uiRects = [];
 
-        // Initialize nodes (12 in a circle)
-        this.initNodes();
+        // view transform (design -> screen):  screen = design * scale + pan
+        this.view = { scale: 1, panX: 0, panY: 0 };
 
-        // Main graphics for rendering
+        // pinch tracking
+        this._pinch = null;
+
+        // dim backdrop (screen space)
+        this.overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x05060c, 0.88)
+            .setScrollFactor(0);
+
+        // the DOM slot hotbar floats above the canvas — tuck it away while forging
+        this._invBar = (typeof document !== 'undefined') ? document.getElementById('inventory-bar') : null;
+        if (this._invBar) this._invBar.style.display = 'none';
+
+        // content layer (design space; pan/zoom via its own transform)
         this.graphics = this.add.graphics();
 
-        // UI Elements
+        this.initNodes();
         this.createUI();
-
-        // Input
         this.setupInput();
-
-        // Load magic data from current scroll
         this.loadFromCurrentScroll();
-
-        // Initial render
+        this.recenterView(false);
+        this.layoutUI();
         this.renderMagic();
 
-        // Keyboard shortcuts
+        // keyboard
         this.input.keyboard.on('keydown-ESC', () => this.close());
         this.input.keyboard.on('keydown-M', () => this.close());
+        this.input.keyboard.on('keydown-Z', (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); this.undoLastEdit(); } });
+        this.input.keyboard.on('keydown-PLUS', () => this.zoomAt(this.cx(), this.cy(), 1.2));
+        this.input.keyboard.on('keydown-MINUS', () => this.zoomAt(this.cx(), this.cy(), 1 / 1.2));
 
-        // Ctrl+Z for undo
-        this.input.keyboard.on('keydown-Z', (event) => {
-            if (event.ctrlKey) {
-                event.preventDefault();
-                this.undoLastEdit();
-            }
-        });
+        // resize / orientation
+        this.scale.on('resize', this.onResize, this);
+        this.events.once('shutdown', () => this.scale.off('resize', this.onResize, this));
     }
 
-    initNodes() {
-        this.centerX = this.cameras.main.width / 2;
-        this.centerY = this.cameras.main.height / 2;
-        this.baseRadius = Math.min(this.centerX, this.centerY) * 0.5;
+    cx() { return this.cameras.main.width / 2; }
+    cy() { return this.cameras.main.height / 2; }
+    isMobile() { return !!(GameState && GameState.isMobile); }
+    isPortrait() { return this.cameras.main.height >= this.cameras.main.width; }
 
-        // baseNodes = canonical ring positions (power 1). Nodes never snap to the grid.
+    /* =====================  view transform  ===================== */
+    w2s(x, y) { return { x: x * this.view.scale + this.view.panX, y: y * this.view.scale + this.view.panY }; }
+    s2w(x, y) { return { x: (x - this.view.panX) / this.view.scale, y: (y - this.view.panY) / this.view.scale }; }
+
+    applyView() {
+        if (this.graphics) this.graphics.setPosition(this.view.panX, this.view.panY).setScale(this.view.scale);
+    }
+    zoomAt(sx, sy, factor) {
+        const before = this.s2w(sx, sy);
+        const lo = Config.EditorMinZoom || 0.35, hi = Config.EditorMaxZoom || 3.2;
+        this.view.scale = Math.max(lo, Math.min(hi, this.view.scale * factor));
+        this.view.panX = sx - before.x * this.view.scale;
+        this.view.panY = sy - before.y * this.view.scale;
+        this.renderMagic();
+    }
+    panBy(dx, dy) { this.view.panX += dx; this.view.panY += dy; this.renderMagic(); }
+    recenterView(preserveScale) {
+        if (!preserveScale) this.view.scale = 1;
+        this.view.panX = this.cx() - this.centerX * this.view.scale;
+        this.view.panY = this.cy() - this.centerY * this.view.scale;
+    }
+    fitView() { this.recenterView(false); this.renderMagic(); }
+
+    onResize() {
+        // keep the ring centred across rotations; reflow UI
+        const W = this.cameras.main.width, H = this.cameras.main.height;
+        if (this.overlay) this.overlay.setPosition(W / 2, H / 2).setSize(W, H);
+        this.recenterView(true);
+        this.layoutUI();
+        this.renderMagic();
+    }
+
+    /* =====================  nodes  ===================== */
+    initNodes() {
+        this.centerX = this.cx();
+        this.centerY = this.cy();
+        this.baseRadius = Math.min(this.centerX, this.centerY) * 0.55;
+
         this.baseNodes = [];
         this.nodes = [];
         for (let i = 0; i < 12; i++) {
@@ -74,20 +124,17 @@ class MagicEditorScene extends Phaser.Scene {
             this.baseNodes.push({ x: bx, y: by });
             this.nodes.push({ x: bx, y: by, id: i, used: false });
         }
-
-        // Sync used state from GameState, then place nodes at the active layer's scale
         this.syncNodeUsedState();
         this.refreshNodePositions();
     }
 
-    // Power -> node-ring scale. Power 1 = full size; higher power pulls nodes in
-    // (shapes drawn smaller but keep their form). Circles are NOT affected.
+    // Potency -> ring spread.  LOWER potency = narrower ring = smaller glyphs.
     nodeScale(power) {
-        const p = power || 1;
-        return Math.max(Config.EditorMinPowerScale, 1 - (p - 1) * Config.EditorPowerShrink);
+        const p = Math.max(1, Math.min(10, power || 1));
+        const lo = Config.EditorMinNodeScale != null ? Config.EditorMinNodeScale : 0.5;
+        const hi = Config.EditorMaxNodeScale != null ? Config.EditorMaxNodeScale : 1.45;
+        return lo + ((p - 1) / 9) * (hi - lo);
     }
-
-    // Scale a base point toward/away from the editor centre.
     scalePoint(base, scale) {
         if (!base) return { x: this.centerX, y: this.centerY };
         return {
@@ -95,849 +142,677 @@ class MagicEditorScene extends Phaser.Scene {
             y: this.centerY + (base.y - this.centerY) * scale
         };
     }
-
-    getActiveLayerPower() {
-        const l = this.getActiveLayer();
-        return (l && l.power) || 1;
-    }
-
-    // Reposition the interactive/displayed nodes to the active layer's scale.
+    getActiveLayerPower() { const l = this.getActiveLayer(); return (l && l.power) || 1; }
     refreshNodePositions() {
         if (!this.nodes || !this.baseNodes) return;
         const scale = this.nodeScale(this.getActiveLayerPower());
         for (let i = 0; i < this.nodes.length; i++) {
             const s = this.scalePoint(this.baseNodes[i], scale);
-            this.nodes[i].x = s.x;
-            this.nodes[i].y = s.y;
+            this.nodes[i].x = s.x; this.nodes[i].y = s.y;
         }
     }
-
     syncNodeUsedState() {
-        // Reset all
         this.nodes.forEach(n => n.used = false);
-
-        // Mark used nodes from existing shapes
         for (let layer of GameState.magic.layers) {
             for (let item of layer.items) {
-                if (item.type === 'SHAPE') {
-                    item.data.points.forEach(pid => {
-                        if (this.nodes[pid]) this.nodes[pid].used = true;
-                    });
-                }
+                if (item.type === 'SHAPE') item.data.points.forEach(pid => { if (this.nodes[pid]) this.nodes[pid].used = true; });
             }
         }
     }
 
+    /* =====================  UI  ===================== */
     createUI() {
-        const width = this.cameras.main.width;
-        const height = this.cameras.main.height;
+        this.titleText = this.add.text(0, 0, '✦ THE SPELLFORGE', {
+            fontFamily: 'Arial Black', fontSize: '22px', color: '#e9e6ff'
+        }).setOrigin(0.5, 0).setScrollFactor(0);
 
-        // Title
-        this.add.text(width / 2, 30, 'MAGIC EDITOR', {
-            fontFamily: 'Arial Black',
-            fontSize: '24px',
-            color: '#ffffff'
-        }).setOrigin(0.5);
+        this.instrText = this.add.text(0, 0, 'bind the stars · draw seals in the void · etch runes on their rims', {
+            fontFamily: 'Arial', fontSize: '12px', color: '#8e8bb5'
+        }).setOrigin(0.5, 0).setScrollFactor(0);
 
-        // Instructions
-        this.add.text(width / 2, 60, 'Connect nodes for elements • Drag in empty space for circles', {
-            fontFamily: 'Arial',
-            fontSize: '14px',
-            color: '#aaaaaa'
-        }).setOrigin(0.5);
+        // action buttons
+        this.makeButton('depart', 'DEPART', () => this.close(), { fill: 0x3a2740, stroke: 0x9a6aaa });
+        this.makeButton('dispel', 'DISPEL', () => this.clearAll(), { fill: 0x40262a, stroke: 0xaa6a6a });
+        this.makeButton('ley', 'LEY LINES', () => this.toggleSnapToGrid(), { fill: 0x223344, stroke: 0x4a88aa });
+        this.makeButton('invoke', 'INVOKE', () => this.castAndClose(), { fill: 0x2a2a55, stroke: 0x7a7aff });
 
-        // Right side buttons
-        const btnX = width - 80;
-        this.createButton(btnX, 120, 'CLOSE', () => this.close());
-        this.createButton(btnX, 170, 'RESET', () => this.clearAll());
-        this.createButton(btnX, 220, 'CAST', () => this.castAndClose());
-        this.magnetBtn = this.createButton(btnX, 270, 'MAGNET', () => this.toggleSnapToGrid());
+        // tool dock
+        this.makeButton('weave', '✶ Weave', () => this.setTool('weave'), { fill: 0x24305a, stroke: 0x6a7aff, tool: true });
+        this.makeButton('shift', '✥ Shift', () => this.setTool('shift'), { fill: 0x24305a, stroke: 0x6a7aff, tool: true });
+        this.makeButton('unmake', '✖ Unmake', () => this.setTool('unmake'), { fill: 0x24305a, stroke: 0x6a7aff, tool: true });
+        this.makeButton('drift', '✣ Drift', () => this.setTool('drift'), { fill: 0x24305a, stroke: 0x6a7aff, tool: true });
 
-        // Layer panel on the left
+        // zoom
+        this.makeButton('zin', '+', () => this.zoomAt(this.cx(), this.cy(), 1.25), { fill: 0x202a40, stroke: 0x5a6aaa, square: true });
+        this.makeButton('zout', '–', () => this.zoomAt(this.cx(), this.cy(), 1 / 1.25), { fill: 0x202a40, stroke: 0x5a6aaa, square: true });
+        this.makeButton('zfit', '⊡', () => this.fitView(), { fill: 0x202a40, stroke: 0x5a6aaa, square: true });
+        this.makeButton('undo', '⟲', () => this.undoLastEdit(), { fill: 0x202a40, stroke: 0x5a6aaa, square: true });
+
         this.createLayerPanel();
-
-        // Power slider (only visible when first layer has circles)
         this.createPowerSlider();
 
-        // Element legend at bottom
-        this.createElementLegend();
+        this.legendText = this.add.text(0, 0, '3★ Air   4★ Fire   5★ Earth   6★ Water', {
+            fontFamily: 'Arial', fontSize: '12px', color: '#9aa0c0'
+        }).setOrigin(0.5, 1).setScrollFactor(0);
+
+        this.stabilityText = this.add.text(0, 0, 'HARMONY: 100%', {
+            fontFamily: 'Arial', fontSize: '13px', color: '#88ff88'
+        }).setOrigin(0.5, 0).setScrollFactor(0);
+
+        this.updateToolButtons();
+        this.updateLeyBtn();
     }
 
-    createButton(x, y, text, callback) {
-        const btn = this.add.container(x, y);
-
+    // touch-friendly button factory; positions are set later in layoutUI()
+    makeButton(key, label, cb, opts) {
+        opts = opts || {};
+        const c = this.add.container(0, 0).setScrollFactor(0);
         const bg = this.add.graphics();
-        bg.fillStyle(0x333366, 1);
-        bg.fillRoundedRect(-50, -18, 100, 36, 6);
-        bg.lineStyle(2, 0x6666aa);
-        bg.strokeRoundedRect(-50, -18, 100, 36, 6);
-
-        const label = this.add.text(0, 0, text, {
-            fontFamily: 'Arial',
-            fontSize: '14px',
-            color: '#ffffff'
+        const txt = this.add.text(0, 0, label, {
+            fontFamily: 'Arial', fontSize: this.isMobile() ? '15px' : '14px', color: '#ffffff'
         }).setOrigin(0.5);
+        c.add([bg, txt]);
+        c.bgGfx = bg; c.labelText = txt;
+        c.baseFill = opts.fill != null ? opts.fill : 0x2a2a55;
+        c.baseStroke = opts.stroke != null ? opts.stroke : 0x7a7aff;
+        c.isSquare = !!opts.square;
+        c.isTool = !!opts.tool;
+        c.cb = cb;
+        c.setInteractive(new Phaser.Geom.Rectangle(-10, -10, 20, 20), Phaser.Geom.Rectangle.Contains);
+        c.on('pointerover', () => c.setScale(1.04));
+        c.on('pointerout', () => c.setScale(1));
+        c.on('pointerdown', (p, lx, ly, ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); cb(); });
+        this.buttons[key] = c;
+        return c;
+    }
 
-        btn.add([bg, label]);
-        btn.setSize(100, 36);
-        btn.setInteractive({ useHandCursor: true });
+    styleButton(key, active) {
+        const c = this.buttons[key]; if (!c) return;
+        const w = c.bw, h = c.bh;
+        if (w == null || h == null) return; // not laid out yet
+        const fill = active ? 0x4a6a3a : c.baseFill;
+        const stroke = active ? 0x9bff9b : c.baseStroke;
+        c.bgGfx.clear();
+        c.bgGfx.fillStyle(fill, 1); c.bgGfx.fillRoundedRect(-w / 2, -h / 2, w, h, 8);
+        c.bgGfx.lineStyle(2, stroke, 1); c.bgGfx.strokeRoundedRect(-w / 2, -h / 2, w, h, 8);
+    }
 
-        btn.on('pointerover', () => btn.setScale(1.05));
-        btn.on('pointerout', () => btn.setScale(1));
-        btn.on('pointerdown', callback);
+    placeButton(key, x, y, w, h) {
+        const c = this.buttons[key]; if (!c) return;
+        c.bw = w; c.bh = h;
+        c.setPosition(x, y);
+        c.input.hitArea.setTo(-w / 2, -h / 2, w, h);
+        this.styleButton(key, (c.isTool && this.tool === key) || (key === 'ley' && GameState.magic.snapToGrid));
+        this.uiRects.push({ x: x - w / 2, y: y - h / 2, w: w, h: h });
+    }
 
-        return btn;
+    layoutUI() {
+        const W = this.cameras.main.width, H = this.cameras.main.height;
+        const pad = this.isMobile() ? 14 : 16;
+        const bh = this.isMobile() ? 46 : 38;        // button height (touch target)
+        const sq = this.isMobile() ? 46 : 38;        // square button size
+        const portrait = this.isPortrait();
+        this.uiRects = [];
+
+        // title
+        this.titleText.setPosition(W / 2, 8).setFontSize(portrait ? 18 : 22);
+        this.instrText.setPosition(W / 2, portrait ? 32 : 36).setVisible(!this.isMobile() || !portrait);
+
+        // ---- action buttons: top row, centred ----
+        const actions = ['depart', 'dispel', 'ley', 'invoke'];
+        const aw = portrait ? Math.min(96, (W - pad * 2) / 4 - 6) : 104;
+        const ay = portrait ? 60 : 70;
+        let totalW = actions.length * aw + (actions.length - 1) * 8;
+        let ax = W / 2 - totalW / 2 + aw / 2;
+        actions.forEach(k => { this.placeButton(k, ax, ay, aw, bh); ax += aw + 8; });
+
+        // ---- tool dock: left edge, vertical ----
+        const tw = portrait ? 104 : 116;
+        let ty = ay + bh + (portrait ? 16 : 30);
+        const tx = pad + tw / 2;
+        ['weave', 'shift', 'unmake', 'drift'].forEach(k => { this.placeButton(k, tx, ty, tw, bh); ty += bh + 8; });
+
+        // ---- zoom + undo: bottom-left, vertical ----
+        let zy = H - pad - sq / 2;
+        ['undo', 'zfit', 'zout', 'zin'].forEach(k => { this.placeButton(k, pad + sq / 2, zy, sq, sq); zy -= sq + 8; });
+
+        // ---- weaves (layer) panel: right edge ----
+        const lpx = W - (portrait ? 150 : 168), lpy = ay + bh + (portrait ? 16 : 30);
+        this.layerPanel.setPosition(lpx, lpy);
+        this.updateLayerPanel();
+        const rows = Math.max(1, GameState.magic.layers.length);
+        this.uiRects.push({ x: lpx - 16, y: lpy - 8, w: (portrait ? 150 : 168) + 16, h: 30 + rows * (this.isMobile() ? 40 : 36) + 12 });
+
+        // ---- potency slider: right edge, below weaves panel ----
+        const pcx = W - (portrait ? 86 : 96);
+        const pcy = H - (portrait ? 120 : 150);
+        if (this.powerContainer) this.powerContainer.setPosition(pcx, pcy);
+        this.uiRects.push({ x: pcx - 70, y: pcy - 44, w: 140, h: 100 });
+
+        // ---- readouts ----
+        this.stabilityText.setPosition(W / 2, portrait ? 90 : 100);
+        this.legendText.setPosition(W / 2, H - 8);
+
+        this.applyView();
+    }
+
+    setTool(t) {
+        this.tool = t;
+        // cancel any in-progress action when switching tools
+        this.cancelDrag();
+        this.updateToolButtons();
+        this.renderMagic();
+    }
+    updateToolButtons() {
+        ['weave', 'shift', 'unmake', 'drift'].forEach(k => this.styleButton(k, this.tool === k));
     }
 
     createLayerPanel() {
-        const x = 20;
-        const y = 120;
-
-        this.layerPanel = this.add.container(x, y);
-
-        // Title
-        const title = this.add.text(0, 0, 'LAYERS', {
-            fontFamily: 'Arial',
-            fontSize: '14px',
-            color: '#aaaaff'
-        });
-        this.layerPanel.add(title);
-
-        // Buttons row
-        const addBtn = this.add.text(60, 0, '[+]', {
-            fontFamily: 'Arial',
-            fontSize: '14px',
-            color: '#88ff88'
-        }).setInteractive({ useHandCursor: true });
-        addBtn.on('pointerdown', () => this.createLayer());
-
-        const delBtn = this.add.text(85, 0, '[×]', {
-            fontFamily: 'Arial',
-            fontSize: '14px',
-            color: '#ff8888'
-        }).setInteractive({ useHandCursor: true });
-        delBtn.on('pointerdown', () => this.deleteActiveLayer());
-
-        this.layerPanel.add([addBtn, delBtn]);
-
+        this.layerPanel = this.add.container(0, 0).setScrollFactor(0);
+        const title = this.add.text(0, 0, 'WEAVES', { fontFamily: 'Arial', fontSize: '13px', color: '#aab0ff' });
+        const addBtn = this.add.text(72, 0, '[+]', { fontFamily: 'Arial', fontSize: '15px', color: '#88ff88' })
+            .setInteractive({ useHandCursor: true });
+        addBtn.on('pointerdown', (p, lx, ly, ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); this.createLayer(); });
+        const delBtn = this.add.text(104, 0, '[×]', { fontFamily: 'Arial', fontSize: '15px', color: '#ff8888' })
+            .setInteractive({ useHandCursor: true });
+        delBtn.on('pointerdown', (p, lx, ly, ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); this.deleteActiveLayer(); });
+        this.layerPanel.add([title, addBtn, delBtn]);
         this.updateLayerPanel();
     }
 
     updateLayerPanel() {
-        // Remove old layer items (keep title and buttons at indices 0, 1, 2)
+        if (!this.layerPanel) return;
         while (this.layerPanel.list.length > 3) {
             this.layerPanel.list[this.layerPanel.list.length - 1].destroy();
             this.layerPanel.list.pop();
         }
-
-        let yPos = 25;
-
-        // Render layers in reverse (top to bottom visually)
+        let yPos = 22;
         for (let i = GameState.magic.layers.length - 1; i >= 0; i--) {
             const layer = GameState.magic.layers[i];
             const isActive = layer.id === GameState.magic.activeLayerId;
-
-            // Get content description
             const shapes = layer.items.filter(it => it.type === 'SHAPE').map(it => it.data.element);
             const circles = layer.items.filter(it => it.type === 'CIRCLE').length;
             let desc = shapes.join(', ');
             if (circles > 0) desc += (desc ? ', ' : '') + `${circles}○`;
-            if (!desc) desc = 'Empty';
+            if (!desc) desc = 'empty';
 
-            const layerText = this.add.text(0, yPos, `${isActive ? '▶' : '  '} ${layer.name}`, {
-                fontFamily: 'Arial',
-                fontSize: '12px',
-                color: isActive ? '#ffffff' : '#888888',
-                backgroundColor: isActive ? '#444488' : null,
-                padding: { x: 4, y: 2 }
+            const row = this.add.text(0, yPos, `${isActive ? '▶' : '  '} ${layer.name}`, {
+                fontFamily: 'Arial', fontSize: this.isMobile() ? '13px' : '12px',
+                color: isActive ? '#ffffff' : '#9090b0',
+                backgroundColor: isActive ? '#3a3a66' : null, padding: { x: 5, y: 3 }
             }).setInteractive({ useHandCursor: true });
-
-            layerText.on('pointerdown', () => {
+            row.on('pointerdown', (p, lx, ly, ev) => {
+                if (ev && ev.stopPropagation) ev.stopPropagation();
                 GameState.magic.activeLayerId = layer.id;
-                this.updateLayerPanel();
-                this.updatePowerSliderVisibility();
-                this.refreshNodePositions();
-                this.renderMagic();
+                this.updateLayerPanel(); this.updatePowerSliderVisibility();
+                this.refreshNodePositions(); this.renderMagic();
             });
-
-            const descText = this.add.text(100, yPos, desc, {
-                fontFamily: 'Arial',
-                fontSize: '10px',
-                color: '#666666'
+            const sub = this.add.text(0, yPos + (this.isMobile() ? 20 : 18), desc, {
+                fontFamily: 'Arial', fontSize: '10px', color: '#6c6c8c'
             });
-
-            this.layerPanel.add([layerText, descText]);
-            yPos += 22;
+            this.layerPanel.add([row, sub]);
+            yPos += this.isMobile() ? 40 : 36;
         }
-
-        // If no layers, show message
         if (GameState.magic.layers.length === 0) {
-            const msg = this.add.text(0, yPos, 'No layers. Click + to add.', {
-                fontFamily: 'Arial',
-                fontSize: '11px',
-                color: '#666666'
-            });
-            this.layerPanel.add(msg);
+            this.layerPanel.add(this.add.text(0, yPos, 'no weaves — tap [+]', { fontFamily: 'Arial', fontSize: '11px', color: '#6c6c8c' }));
         }
     }
 
     createPowerSlider() {
-        const x = this.cameras.main.width - 80;
-        const y = 300;
-
-        this.powerContainer = this.add.container(x, y);
-
-        const label = this.add.text(0, -25, 'POWER', {
-            fontFamily: 'Arial',
-            fontSize: '12px',
-            color: '#aaaaff'
-        }).setOrigin(0.5);
-
-        // Track
-        const track = this.add.rectangle(0, 0, 80, 8, 0x333366);
-        track.setStrokeStyle(1, 0x6666aa);
-
-        // Handle
-        this.powerHandle = this.add.circle(-35, 0, 10, 0x6666aa);
-        this.powerHandle.setStrokeStyle(2, 0xaaaaff);
+        this.powerContainer = this.add.container(0, 0).setScrollFactor(0);
+        const label = this.add.text(0, -28, 'POTENCY', { fontFamily: 'Arial', fontSize: '12px', color: '#c0a0ff' }).setOrigin(0.5);
+        const hint = this.add.text(0, 40, '(star spread)', { fontFamily: 'Arial', fontSize: '10px', color: '#8888aa' }).setOrigin(0.5);
+        const track = this.add.rectangle(0, 0, 120, 10, 0x2a2a4a).setStrokeStyle(1, 0x6666aa);
+        this.powerHandle = this.add.circle(-55, 0, this.isMobile() ? 16 : 12, 0x8a6aff).setStrokeStyle(2, 0xc0a0ff);
         this.powerHandle.setInteractive({ draggable: true, useHandCursor: true });
-
-        // Label describing what power does now
-        const hint = this.add.text(0, 38, '(node spread)', {
-            fontFamily: 'Arial',
-            fontSize: '10px',
-            color: '#8888aa'
-        }).setOrigin(0.5);
-
-        // Value
-        this.powerValue = this.add.text(0, 20, `×${this.getActiveLayerPower()}`, {
-            fontFamily: 'Arial',
-            fontSize: '14px',
-            color: '#ffffff'
-        }).setOrigin(0.5);
-
+        this.powerValue = this.add.text(0, 20, `×${this.getActiveLayerPower()}`, { fontFamily: 'Arial', fontSize: '15px', color: '#ffffff' }).setOrigin(0.5);
         this.powerContainer.add([label, track, this.powerHandle, this.powerValue, hint]);
 
-        // Drag handling — adjusts the ACTIVE layer's power (node spread)
         this.input.setDraggable(this.powerHandle);
-        this.input.on('drag', (pointer, gameObject, dragX) => {
-          try {
-            if (gameObject === this.powerHandle) {
-                dragX = Phaser.Math.Clamp(dragX, -35, 35);
-                this.powerHandle.x = dragX;
-
-                const t = (dragX + 35) / 70;
-                const power = Math.round(1 + t * 9);
-                const layer = this.getActiveLayer();
-                if (layer) layer.power = power;
-                GameState.magic.powerMultiplier = power; // mirror for save/compat
-                this.powerValue.setText(`×${power}`);
-                this.refreshNodePositions();
-                this.renderMagic();
-            }
-          } catch (err) { console.warn('Editor power-drag recovered:', err); }
+        this.input.on('drag', (pointer, obj, dragX) => {
+            try {
+                if (obj === this.powerHandle) {
+                    dragX = Phaser.Math.Clamp(dragX, -55, 55);
+                    this.powerHandle.x = dragX;
+                    const t = (dragX + 55) / 110;
+                    const power = Math.round(1 + t * 9);
+                    const layer = this.getActiveLayer();
+                    if (layer) layer.power = power;
+                    GameState.magic.powerMultiplier = power;
+                    this.powerValue.setText(`×${power}`);
+                    this.refreshNodePositions();
+                    this.renderMagic();
+                }
+            } catch (err) { console.warn('Spellforge potency-drag recovered:', err); }
         });
-
         this.updatePowerSliderVisibility();
     }
-
-    // Move the slider handle/value to reflect the active layer's power.
     syncPowerSlider() {
         const power = this.getActiveLayerPower();
         const t = (power - 1) / 9;
-        if (this.powerHandle) this.powerHandle.x = -35 + t * 70;
+        if (this.powerHandle) this.powerHandle.x = -55 + t * 110;
         if (this.powerValue) this.powerValue.setText(`×${power}`);
     }
-
     updatePowerSliderVisibility() {
-        // The power slider now applies to ANY active layer (controls node spread).
         const layer = this.getActiveLayer();
         if (this.powerContainer) this.powerContainer.setVisible(!!layer);
         if (layer) this.syncPowerSlider();
     }
 
-    createElementLegend() {
-        const y = this.cameras.main.height - 40;
-        const elements = [
-            { sides: 3, name: 'Air', color: '#A0E0E0' },
-            { sides: 4, name: 'Fire', color: '#E06060' },
-            { sides: 5, name: 'Earth', color: '#80C060' },
-            { sides: 6, name: 'Water', color: '#4080E0' }
-        ];
-
-        let x = this.cameras.main.width / 2 - 150;
-        for (let el of elements) {
-            this.add.text(x, y, `${el.sides}△ = ${el.name}`, {
-                fontFamily: 'Arial',
-                fontSize: '12px',
-                color: el.color
-            });
-            x += 80;
-        }
-    }
-
+    /* =====================  input  ===================== */
     setupInput() {
-        // Pointer down
-        this.input.on('pointerdown', (pointer) => {
-          try {
-            // Ignore if clicking UI panels (left panel ~120px, right buttons ~150px)
-            if (pointer.x > this.cameras.main.width - 150 || pointer.x < 120) return;
+        if (this.input.mouse && this.input.mouse.disableContextMenu) this.input.mouse.disableContextMenu();
+        this.input.on('pointerdown', (p) => { try { this.onDown(p); } catch (e) { console.warn('Spellforge down recovered:', e); } });
+        this.input.on('pointermove', (p) => { try { this.onMove(p); } catch (e) { console.warn('Spellforge move recovered:', e); } });
+        this.input.on('pointerup', (p) => { try { this.onUp(p); } catch (e) { console.warn('Spellforge up recovered:', e); } });
 
-            const p = { x: pointer.x, y: pointer.y };
-
-            // Check if hitting a node
-            const hitNode = this.getNodeAt(p.x, p.y);
-            if (hitNode && !hitNode.used) {
-                this.saveUndoState();
-                this.ensureActiveLayer();
-
-                this.dragMode = 'shape';
-                this.currentPath = [hitNode.id];
-                hitNode.used = true;
-                this.renderMagic();
-                return;
-            }
-
-            // Check if clicking on a circle edge (for runes)
-            const runeResult = this.checkRuneClick(p);
-            if (runeResult) {
-                this.saveUndoState();
-                if (runeResult.runeIndex >= 0) {
-                    // Remove rune
-                    runeResult.circle.runes.splice(runeResult.runeIndex, 1);
-                } else {
-                    // Add rune
-                    const angle = Math.atan2(p.y - runeResult.circle.center.y, p.x - runeResult.circle.center.x);
-                    runeResult.circle.runes.push(angle);
-                }
-                this.renderMagic();
-                return;
-            }
-
-            // Start circle drawing
-            this.saveUndoState();
-            this.dragMode = 'circle';
-            this.dragStart = p;
-            this.dragCurrent = p;
-          } catch (err) { console.warn('Editor pointerdown recovered:', err); }
-        });
-
-        // Pointer move
-        this.input.on('pointermove', (pointer) => {
-          try {
-            const p = { x: pointer.x, y: pointer.y };
-
-            if (this.dragMode === 'shape') {
-                const hitNode = this.getNodeAt(p.x, p.y);
-                if (hitNode) {
-                    // Close loop
-                    if (hitNode.id === this.currentPath[0] && this.currentPath.length > 2) {
-                        const element = this.getElement(this.currentPath.length);
-                        const layer = this.getActiveLayer();
-                        if (layer) {
-                            layer.items.push({
-                                type: 'SHAPE',
-                                data: {
-                                    points: [...this.currentPath],
-                                    element: element
-                                }
-                            });
-                        }
-                        this.currentPath = [];
-                        this.dragMode = null;
-                        this.updateLayerPanel();
-                    }
-                    // Add node
-                    else if (!hitNode.used) {
-                        this.currentPath.push(hitNode.id);
-                        hitNode.used = true;
-                    }
-                }
-                this.renderMagic();
-            } else if (this.dragMode === 'circle') {
-                this.dragCurrent = p;
-                this.renderMagic();
-            }
-          } catch (err) { console.warn('Editor pointermove recovered:', err); }
-        });
-
-        // Pointer up
-        this.input.on('pointerup', () => {
-          try {
-            if (this.dragMode === 'circle' && this.dragStart && this.dragCurrent) {
-                const dx = this.dragCurrent.x - this.dragStart.x;
-                const dy = this.dragCurrent.y - this.dragStart.y;
-                let radius = Math.sqrt(dx * dx + dy * dy);
-
-                // Snap center and radius to grid if enabled
-                let cx = this.dragStart.x;
-                let cy = this.dragStart.y;
-                if (GameState.magic.snapToGrid) {
-                    cx = this.snapVal(cx);
-                    cy = this.snapVal(cy);
-                    radius = this.snapVal(radius);
-                }
-
-                if (radius > 20) {
-                    this.ensureActiveLayer();
-                    const layer = this.getActiveLayer();
-                    if (layer) {
-                        layer.items.push({
-                            type: 'CIRCLE',
-                            data: {
-                                center: { x: cx, y: cy },
-                                rad: radius,
-                                runes: []
-                            }
-                        });
-                    }
-                    this.updateLayerPanel();
-                    this.updatePowerSliderVisibility();
-                }
-            }
-
-            // If shape mode ended without completing, reset nodes
-            if (this.dragMode === 'shape' && this.currentPath.length > 0) {
-                this.currentPath.forEach(nodeId => {
-                    if (this.nodes[nodeId]) this.nodes[nodeId].used = false;
-                });
-            }
-
-            this.dragMode = null;
-            this.currentPath = [];
-            this.dragStart = null;
-            this.dragCurrent = null;
-            this.renderMagic();
-          } catch (err) { console.warn('Editor pointerup recovered:', err); }
+        // desktop wheel zoom
+        this.input.on('wheel', (p, objs, dx, dy) => {
+            this.zoomAt(p.x, p.y, dy > 0 ? 1 / 1.12 : 1.12);
         });
     }
 
-    getNodeAt(x, y) {
-        const hitR = GameState.isMobile ? 50 : 30;
-        for (let node of this.nodes) {
-            const dx = x - node.x;
-            const dy = y - node.y;
-            if (Math.sqrt(dx * dx + dy * dy) < hitR) return node;
+    overUI(sx, sy) {
+        for (const r of this.uiRects) {
+            if (sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h) return true;
         }
+        return false;
+    }
+
+    pinchActive() {
+        const p1 = this.input.pointer1, p2 = this.input.pointer2;
+        return p1 && p2 && p1.isDown && p2.isDown;
+    }
+
+    cancelDrag() {
+        if (this.dragMode === 'shape' && this.currentPath.length) {
+            this.currentPath.forEach(id => { if (this.nodes[id]) this.nodes[id].used = false; });
+        }
+        this.dragMode = null; this.currentPath = []; this.dragStart = null;
+        this.dragCurrent = null; this.movingCircle = null;
+    }
+
+    onDown(pointer) {
+        // entering a two-finger pinch: abort whatever single-finger action started
+        if (this.pinchActive()) {
+            this.cancelDrag();
+            this._pinch = this.pinchState();
+            return;
+        }
+        if (this.overUI(pointer.x, pointer.y)) return;
+
+        const p = this.s2w(pointer.x, pointer.y);
+
+        // right button always pans (desktop)
+        if (pointer.rightButtonDown && pointer.rightButtonDown()) { this.dragMode = 'pan'; this.dragStart = { x: pointer.x, y: pointer.y }; return; }
+
+        if (this.tool === 'drift') { this.dragMode = 'pan'; this.dragStart = { x: pointer.x, y: pointer.y }; return; }
+
+        if (this.tool === 'unmake') { this.eraseAt(p); return; }
+
+        if (this.tool === 'shift') {
+            const hit = this.getCircleAt(p);
+            if (hit) {
+                this.saveUndoState();
+                this.movingCircle = { item: hit.item, grabDX: p.x - hit.item.data.center.x, grabDY: p.y - hit.item.data.center.y };
+                this.dragMode = 'move';
+            } else {
+                this.dragMode = 'pan'; this.dragStart = { x: pointer.x, y: pointer.y };
+            }
+            return;
+        }
+
+        // ---- WEAVE (default smart tool) ----
+        const hitNode = this.getNodeAt(p.x, p.y);
+        if (hitNode && !hitNode.used) {
+            this.saveUndoState(); this.ensureActiveLayer();
+            this.dragMode = 'shape'; this.currentPath = [hitNode.id]; hitNode.used = true;
+            this.renderMagic(); return;
+        }
+        const rune = this.checkRuneClick(p);
+        if (rune) {
+            this.saveUndoState();
+            if (rune.runeIndex >= 0) rune.circle.runes.splice(rune.runeIndex, 1);
+            else rune.circle.runes.push(Math.atan2(p.y - rune.circle.center.y, p.x - rune.circle.center.x));
+            this.renderMagic(); return;
+        }
+        this.saveUndoState();
+        this.dragMode = 'circle'; this.dragStart = p; this.dragCurrent = p;
+    }
+
+    onMove(pointer) {
+        if (this.pinchActive()) { this.updatePinch(); return; }
+        const p = this.s2w(pointer.x, pointer.y);
+
+        if (this.dragMode === 'pan') {
+            if (this.dragStart) { this.panBy(pointer.x - this.dragStart.x, pointer.y - this.dragStart.y); this.dragStart = { x: pointer.x, y: pointer.y }; }
+            return;
+        }
+        if (this.dragMode === 'move' && this.movingCircle) {
+            let nx = p.x - this.movingCircle.grabDX, ny = p.y - this.movingCircle.grabDY;
+            if (GameState.magic.snapToGrid) { nx = this.snapVal(nx); ny = this.snapVal(ny); }
+            this.movingCircle.item.data.center.x = nx;
+            this.movingCircle.item.data.center.y = ny;
+            this.renderMagic(); return;
+        }
+        if (this.dragMode === 'shape') {
+            const hitNode = this.getNodeAt(p.x, p.y);
+            if (hitNode) {
+                if (hitNode.id === this.currentPath[0] && this.currentPath.length > 2) {
+                    const element = this.getElement(this.currentPath.length);
+                    const layer = this.getActiveLayer();
+                    if (layer) layer.items.push({ type: 'SHAPE', data: { points: [...this.currentPath], element } });
+                    this.currentPath = []; this.dragMode = null; this.updateLayerPanel();
+                } else if (!hitNode.used) {
+                    this.currentPath.push(hitNode.id); hitNode.used = true;
+                }
+            }
+            this.renderMagic(); return;
+        }
+        if (this.dragMode === 'circle') { this.dragCurrent = p; this.renderMagic(); return; }
+    }
+
+    onUp(pointer) {
+        if (this._pinch && !this.pinchActive()) { this._pinch = null; }
+
+        if (this.dragMode === 'circle' && this.dragStart && this.dragCurrent) {
+            const dx = this.dragCurrent.x - this.dragStart.x, dy = this.dragCurrent.y - this.dragStart.y;
+            let radius = Math.sqrt(dx * dx + dy * dy);
+            let cx = this.dragStart.x, cy = this.dragStart.y;
+            if (GameState.magic.snapToGrid) { cx = this.snapVal(cx); cy = this.snapVal(cy); radius = this.snapVal(radius); }
+            if (radius > 18) {
+                this.ensureActiveLayer();
+                const layer = this.getActiveLayer();
+                if (layer) layer.items.push({ type: 'CIRCLE', data: { center: { x: cx, y: cy }, rad: radius, runes: [] } });
+                this.updateLayerPanel(); this.updatePowerSliderVisibility();
+            }
+        }
+        if (this.dragMode === 'shape' && this.currentPath.length > 0) {
+            this.currentPath.forEach(id => { if (this.nodes[id]) this.nodes[id].used = false; });
+        }
+        this.dragMode = null; this.currentPath = []; this.dragStart = null; this.dragCurrent = null; this.movingCircle = null;
+        this.renderMagic();
+    }
+
+    /* ---- pinch (two-finger zoom + pan) ---- */
+    pinchState() {
+        const p1 = this.input.pointer1, p2 = this.input.pointer2;
+        const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+        const d = Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1;
+        return { mx, my, d };
+    }
+    updatePinch() {
+        const now = this.pinchState();
+        if (!this._pinch) { this._pinch = now; return; }
+        // zoom about midpoint by distance ratio
+        this.zoomAt(now.mx, now.my, now.d / (this._pinch.d || now.d));
+        // pan by midpoint movement
+        this.panBy(now.mx - this._pinch.mx, now.my - this._pinch.my);
+        this._pinch = now;
+    }
+
+    /* =====================  hit tests (design space)  ===================== */
+    getNodeAt(x, y) {
+        const hitR = (this.isMobile() ? 56 : 30) / this.view.scale;
+        for (let n of this.nodes) { if (Math.hypot(x - n.x, y - n.y) < hitR) return n; }
         return null;
     }
-
     checkRuneClick(p) {
+        const edgeTol = 22 / this.view.scale, runeTol = 16 / this.view.scale;
         for (let layer of GameState.magic.layers) {
             if (!layer.visible) continue;
             for (let item of layer.items) {
-                if (item.type === 'CIRCLE') {
-                    const c = item.data;
-                    const cx = c.center.x;
-                    const cy = c.center.y;
-                    const dist = Math.sqrt((p.x - cx) ** 2 + (p.y - cy) ** 2);
-
-                    // Near circle edge?
-                    if (Math.abs(dist - c.rad) < 20) {
-                        // Check existing runes
-                        for (let i = 0; i < c.runes.length; i++) {
-                            const rx = cx + Math.cos(c.runes[i]) * c.rad;
-                            const ry = cy + Math.sin(c.runes[i]) * c.rad;
-                            if (Math.sqrt((p.x - rx) ** 2 + (p.y - ry) ** 2) < 15) {
-                                return { circle: c, runeIndex: i };
-                            }
-                        }
-                        return { circle: c, runeIndex: -1 };
+                if (item.type !== 'CIRCLE') continue;
+                const c = item.data, dist = Math.hypot(p.x - c.center.x, p.y - c.center.y);
+                if (Math.abs(dist - c.rad) < edgeTol) {
+                    for (let i = 0; i < c.runes.length; i++) {
+                        const rx = c.center.x + Math.cos(c.runes[i]) * c.rad, ry = c.center.y + Math.sin(c.runes[i]) * c.rad;
+                        if (Math.hypot(p.x - rx, p.y - ry) < runeTol) return { circle: c, runeIndex: i };
                     }
+                    return { circle: c, runeIndex: -1 };
                 }
             }
         }
         return null;
     }
-
-    getElement(nodeCount) {
-        if (nodeCount === 3) return 'Air';
-        if (nodeCount === 4) return 'Fire';
-        if (nodeCount === 5) return 'Earth';
-        if (nodeCount === 6) return 'Water';
-        return 'Fire';
+    getCircleAt(p) {
+        const tol = 18 / this.view.scale;
+        for (let li = GameState.magic.layers.length - 1; li >= 0; li--) {
+            const layer = GameState.magic.layers[li];
+            if (!layer.visible) continue;
+            for (let ii = layer.items.length - 1; ii >= 0; ii--) {
+                const item = layer.items[ii];
+                if (item.type !== 'CIRCLE') continue;
+                if (Math.hypot(p.x - item.data.center.x, p.y - item.data.center.y) <= item.data.rad + tol) {
+                    return { layer, item, index: ii };
+                }
+            }
+        }
+        return null;
     }
-
-    getActiveLayer() {
-        return GameState.magic.layers.find(l => l.id === GameState.magic.activeLayerId);
+    getShapeAt(p) {
+        for (let li = GameState.magic.layers.length - 1; li >= 0; li--) {
+            const layer = GameState.magic.layers[li];
+            if (!layer.visible) continue;
+            const sc = this.nodeScale(layer.power);
+            for (let ii = layer.items.length - 1; ii >= 0; ii--) {
+                const item = layer.items[ii];
+                if (item.type !== 'SHAPE') continue;
+                const poly = item.data.points.map(pid => this.scalePoint(this.baseNodes[pid], sc));
+                if (this.pointInPoly(p, poly)) return { layer, item, index: ii };
+            }
+        }
+        return null;
     }
-
-    ensureActiveLayer() {
-        if (GameState.magic.layers.length === 0 || !this.getActiveLayer()) {
-            this.createLayer();
+    pointInPoly(pt, poly) {
+        let inside = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            const xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+            if (((yi > pt.y) !== (yj > pt.y)) && (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi)) inside = !inside;
+        }
+        return inside;
+    }
+    eraseAt(p) {
+        const c = this.getCircleAt(p);
+        if (c) { this.saveUndoState(); c.layer.items.splice(c.index, 1); this.afterStructureChange(); return; }
+        const s = this.getShapeAt(p);
+        if (s) {
+            this.saveUndoState();
+            s.item.data.points.forEach(pid => { if (this.nodes[pid]) this.nodes[pid].used = false; });
+            s.layer.items.splice(s.index, 1); this.syncNodeUsedState(); this.afterStructureChange(); return;
         }
     }
+    afterStructureChange() { this.updateLayerPanel(); this.updatePowerSliderVisibility(); this.renderMagic(); }
 
+    /* =====================  layers  ===================== */
+    getElement(n) { return n === 3 ? 'Air' : n === 4 ? 'Fire' : n === 5 ? 'Earth' : n === 6 ? 'Water' : 'Fire'; }
+    getActiveLayer() { return GameState.magic.layers.find(l => l.id === GameState.magic.activeLayerId); }
+    ensureActiveLayer() { if (GameState.magic.layers.length === 0 || !this.getActiveLayer()) this.createLayer(); }
     createLayer(name) {
-        const id = Date.now();
-        GameState.magic.layers.push({
-            id: id,
-            name: name || `Layer ${GameState.magic.layers.length + 1}`,
-            visible: true,
-            solo: false,
-            power: 1,
-            items: []
-        });
+        const id = Date.now() + Math.floor(Math.random() * 1000);
+        GameState.magic.layers.push({ id, name: name || `Weave ${GameState.magic.layers.length + 1}`, visible: true, solo: false, power: 1, items: [] });
         GameState.magic.activeLayerId = id;
-        this.updateLayerPanel();
-        this.updatePowerSliderVisibility();
-        this.refreshNodePositions();
+        this.updateLayerPanel(); this.updatePowerSliderVisibility(); this.refreshNodePositions();
     }
-
     deleteActiveLayer() {
         const idx = GameState.magic.layers.findIndex(l => l.id === GameState.magic.activeLayerId);
-        if (idx !== -1) {
-            this.saveUndoState();
-
-            // Free nodes
-            const layer = GameState.magic.layers[idx];
-            layer.items.forEach(it => {
-                if (it.type === 'SHAPE') {
-                    it.data.points.forEach(pid => {
-                        if (this.nodes[pid]) this.nodes[pid].used = false;
-                    });
-                }
-            });
-
-            GameState.magic.layers.splice(idx, 1);
-
-            if (GameState.magic.layers.length > 0) {
-                GameState.magic.activeLayerId = GameState.magic.layers[Math.max(0, idx - 1)].id;
-            } else {
-                GameState.magic.activeLayerId = -1;
-            }
-
-            this.updateLayerPanel();
-            this.updatePowerSliderVisibility();
-            this.renderMagic();
-        }
+        if (idx === -1) return;
+        this.saveUndoState();
+        const layer = GameState.magic.layers[idx];
+        layer.items.forEach(it => { if (it.type === 'SHAPE') it.data.points.forEach(pid => { if (this.nodes[pid]) this.nodes[pid].used = false; }); });
+        GameState.magic.layers.splice(idx, 1);
+        GameState.magic.activeLayerId = GameState.magic.layers.length > 0 ? GameState.magic.layers[Math.max(0, idx - 1)].id : -1;
+        this.syncNodeUsedState(); this.refreshNodePositions();
+        this.updateLayerPanel(); this.updatePowerSliderVisibility(); this.renderMagic();
     }
 
+    /* =====================  undo  ===================== */
     saveUndoState() {
-        const state = JSON.stringify(GameState.magic.layers);
-        this.undoHistory.push(state);
-        if (this.undoHistory.length > this.maxUndoSteps) {
-            this.undoHistory.shift();
-        }
+        this.undoHistory.push(JSON.stringify(GameState.magic.layers));
+        if (this.undoHistory.length > this.maxUndoSteps) this.undoHistory.shift();
     }
-
     undoLastEdit() {
         if (this.undoHistory.length === 0) return;
-
-        const prevState = JSON.parse(this.undoHistory.pop());
-        GameState.magic.layers = prevState;
-
-        // Sync node state
+        GameState.magic.layers = JSON.parse(this.undoHistory.pop());
         this.syncNodeUsedState();
-
-        // Update UI
-        if (GameState.magic.layers.length > 0) {
-            GameState.magic.activeLayerId = GameState.magic.layers[0].id;
-        } else {
-            GameState.magic.activeLayerId = -1;
-        }
-
-        this.updateLayerPanel();
-        this.updatePowerSliderVisibility();
-        this.renderMagic();
+        GameState.magic.activeLayerId = GameState.magic.layers.length > 0 ? GameState.magic.layers[0].id : -1;
+        this.refreshNodePositions();
+        this.updateLayerPanel(); this.updatePowerSliderVisibility(); this.renderMagic();
     }
-
     clearAll() {
         this.saveUndoState();
-        GameState.magic.layers = [];
-        GameState.magic.activeLayerId = -1;
-        GameState.magic.powerMultiplier = 1;
-
-        this.nodes.forEach(n => n.used = false);
-        this.currentPath = [];
-
-        this.createLayer(); // new layer has power 1
-        this.syncPowerSlider();
-        this.refreshNodePositions();
-        this.renderMagic();
+        GameState.magic.layers = []; GameState.magic.activeLayerId = -1; GameState.magic.powerMultiplier = 1;
+        this.nodes.forEach(n => n.used = false); this.currentPath = [];
+        this.createLayer(); this.syncPowerSlider(); this.refreshNodePositions(); this.renderMagic();
     }
 
+    /* =====================  render  ===================== */
     renderMagic() {
-      // Wrapped: renderMagic runs during create() (with GameScene paused), so a
-      // throw here would leave the game frozen on a paused scene. Never let it.
-      try {
-        this.graphics.clear();
+        try {
+            this.applyView();
+            const g = this.graphics;
+            g.clear();
 
-        // Draw gridlines when snap is active
-        if (GameState.magic.snapToGrid) {
-            const g = Config.EditorGridSize;
-            const w = this.cameras.main.width;
-            const h = this.cameras.main.height;
-            this.graphics.lineStyle(1, 0x334433, 0.4);
-            for (let x = g; x < w; x += g) {
-                this.graphics.lineBetween(x, 0, x, h);
+            // ley-grid (design-space, drawn across the visible region only)
+            if (GameState.magic.snapToGrid) {
+                const step = Config.EditorGridSize;
+                const tl = this.s2w(0, 0), br = this.s2w(this.cameras.main.width, this.cameras.main.height);
+                const x0 = Math.floor(tl.x / step) * step, x1 = Math.ceil(br.x / step) * step;
+                const y0 = Math.floor(tl.y / step) * step, y1 = Math.ceil(br.y / step) * step;
+                g.lineStyle(1, 0x3a5a4a, 0.45);
+                for (let x = x0; x <= x1; x += step) g.lineBetween(x, y0, x, y1);
+                for (let y = y0; y <= y1; y += step) g.lineBetween(x0, y, x1, y);
             }
-            for (let y = g; y < h; y += g) {
-                this.graphics.lineBetween(0, y, w, y);
+
+            // guide ring + quadrant axes (centred on the star ring)
+            const cx = this.centerX, cy = this.centerY, R = this.baseRadius * this.nodeScale(this.getActiveLayerPower());
+            g.lineStyle(1, 0x40406a, 0.5);
+            g.strokeCircle(cx, cy, this.baseRadius);
+            g.strokeCircle(cx, cy, this.baseRadius * 0.6);
+            g.lineStyle(1, 0x445566, 0.5);
+            g.lineBetween(cx, cy - this.baseRadius, cx, cy + this.baseRadius);
+            g.lineBetween(cx - this.baseRadius, cy, cx + this.baseRadius, cy);
+
+            // harmony (stored for casting)
+            const stability = this.computeStability();
+            GameState.magic.stability = stability;
+            const pct = Math.round(stability * 100);
+            const col = stability > 0.7 ? '#88ff88' : stability > 0.4 ? '#ffdd55' : '#ff6666';
+            if (this.stabilityText) { this.stabilityText.setText(`HARMONY: ${pct}%`).setColor(col); }
+
+            // stars (nodes)
+            for (let n of this.nodes) {
+                g.fillStyle(n.used ? 0x555566 : 0xffffff, 1);
+                g.fillCircle(n.x, n.y, 7);
+                g.lineStyle(2, n.used ? 0x444455 : 0xaab0ff, 1);
+                g.strokeCircle(n.x, n.y, 7);
             }
-        }
 
-        // Draw guide circle
-        const cx = this.cameras.main.width / 2;
-        const cy = this.cameras.main.height / 2;
-        const radius = Math.min(cx, cy) * 0.5;
+            const COL = { Air: 0xA0E0E0, Fire: 0xE06060, Earth: 0x80C060, Water: 0x4080E0 };
 
-        this.graphics.lineStyle(1, 0x333366, 0.5);
-        this.graphics.strokeCircle(cx, cy, radius);
-        this.graphics.strokeCircle(cx, cy, radius * 0.6);
+            for (let li = 0; li < GameState.magic.layers.length; li++) {
+                const layer = GameState.magic.layers[li];
+                if (!layer.visible) continue;
+                const sc = this.nodeScale(layer.power);
+                const pos = (pid) => this.scalePoint(this.baseNodes[pid], sc);
 
-        // Draw 4-quadrant symmetry axes
-        this.graphics.lineStyle(1, 0x334455, 0.5);
-        this.graphics.lineBetween(cx, cy - radius, cx, cy + radius);
-        this.graphics.lineBetween(cx - radius, cy, cx + radius, cy);
-
-        // Stability readout — stash it so castSpell can read it after the editor closes
-        const stability = this.computeStability();
-        GameState.magic.stability = stability;
-        const pct = Math.round(stability * 100);
-        const stabColor = stability > 0.7 ? '#88ff88' : stability > 0.4 ? '#ffff44' : '#ff6666';
-        if (!this.stabilityText) {
-            this.stabilityText = this.add.text(cx, cy + radius + 20, '', {
-                fontFamily: 'Arial',
-                fontSize: '13px',
-                color: stabColor
-            }).setOrigin(0.5);
-        }
-        this.stabilityText.setText(`STABILITY: ${pct}%`);
-        this.stabilityText.setColor(stabColor);
-
-        // Draw nodes
-        for (let node of this.nodes) {
-            this.graphics.fillStyle(node.used ? 0x555555 : 0xffffff, 1);
-            this.graphics.fillCircle(node.x, node.y, 8);
-            this.graphics.lineStyle(2, node.used ? 0x444444 : 0xaaaaff, 1);
-            this.graphics.strokeCircle(node.x, node.y, 8);
-        }
-
-        // Element colors
-        const elementColors = {
-            Air: 0xA0E0E0,
-            Fire: 0xE06060,
-            Earth: 0x80C060,
-            Water: 0x4080E0
-        };
-
-        // Draw layers
-        for (let layerIndex = 0; layerIndex < GameState.magic.layers.length; layerIndex++) {
-            const layer = GameState.magic.layers[layerIndex];
-            if (!layer.visible) continue;
-
-            // Each layer's shapes scale by that layer's power (node spread).
-            const layerScale = this.nodeScale(layer.power);
-            const pos = (pid) => this.scalePoint(this.baseNodes[pid], layerScale);
-
-            for (let item of layer.items) {
-                if (item.type === 'SHAPE') {
-                    const s = item.data;
-                    const color = elementColors[s.element] || 0xffffff;
-
-                    // Draw filled polygon
-                    this.graphics.fillStyle(color, 0.2);
-                    this.graphics.beginPath();
-                    const start = pos(s.points[0]);
-                    this.graphics.moveTo(start.x, start.y);
-                    for (let pid of s.points) {
-                        const pt = pos(pid);
-                        this.graphics.lineTo(pt.x, pt.y);
-                    }
-                    this.graphics.closePath();
-                    this.graphics.fillPath();
-
-                    // Draw outline
-                    this.graphics.lineStyle(3, color, 1);
-                    this.graphics.beginPath();
-                    this.graphics.moveTo(start.x, start.y);
-                    for (let pid of s.points) {
-                        const pt = pos(pid);
-                        this.graphics.lineTo(pt.x, pt.y);
-                    }
-                    this.graphics.closePath();
-                    this.graphics.strokePath();
-
-                } else if (item.type === 'CIRCLE') {
-                    // Circles always render at their drawn radius — power does NOT scale them.
-                    const c = item.data;
-                    const isBlunt = c.rad > (Config.SharpRadiusThreshold || 40);
-
-                    this.graphics.lineStyle(3, isBlunt ? 0xdd00dd : 0xffff00, 1);
-                    this.graphics.strokeCircle(c.center.x, c.center.y, c.rad);
-
-                    // Runes
-                    for (let angle of c.runes) {
-                        const rx = c.center.x + Math.cos(angle) * c.rad;
-                        const ry = c.center.y + Math.sin(angle) * c.rad;
-
-                        this.graphics.fillStyle(0xffffff, 1);
-                        this.graphics.fillCircle(rx, ry, 5);
-
-                        this.graphics.lineStyle(2, 0xffffff, 1);
-                        this.graphics.lineBetween(rx, ry, rx + Math.cos(angle) * 20, ry + Math.sin(angle) * 20);
+                for (let item of layer.items) {
+                    if (item.type === 'SHAPE') {
+                        const s = item.data, color = COL[s.element] || 0xffffff;
+                        const start = pos(s.points[0]);
+                        g.fillStyle(color, 0.18); g.beginPath(); g.moveTo(start.x, start.y);
+                        for (let pid of s.points) { const pt = pos(pid); g.lineTo(pt.x, pt.y); }
+                        g.closePath(); g.fillPath();
+                        g.lineStyle(3, color, 1); g.beginPath(); g.moveTo(start.x, start.y);
+                        for (let pid of s.points) { const pt = pos(pid); g.lineTo(pt.x, pt.y); }
+                        g.closePath(); g.strokePath();
+                    } else if (item.type === 'CIRCLE') {
+                        const c = item.data, isBlunt = c.rad > (Config.SharpRadiusThreshold || 40);
+                        g.lineStyle(3, isBlunt ? 0xdd00dd : 0xffff00, 1);
+                        g.strokeCircle(c.center.x, c.center.y, c.rad);
+                        for (let a of c.runes) {
+                            const rx = c.center.x + Math.cos(a) * c.rad, ry = c.center.y + Math.sin(a) * c.rad;
+                            g.fillStyle(0xffffff, 1); g.fillCircle(rx, ry, 5);
+                            g.lineStyle(2, 0xffffff, 1); g.lineBetween(rx, ry, rx + Math.cos(a) * 18, ry + Math.sin(a) * 18);
+                        }
                     }
                 }
             }
-        }
 
-        // Draw current path (in-progress shape) — uses active-layer node positions
-        if (this.currentPath.length > 0) {
-            this.graphics.lineStyle(3, 0xffffff, 0.8);
-            this.graphics.beginPath();
-            const start = this.nodes[this.currentPath[0]];
-            this.graphics.moveTo(start.x, start.y);
-            for (let pid of this.currentPath) {
-                this.graphics.lineTo(this.nodes[pid].x, this.nodes[pid].y);
+            // in-progress glyph
+            if (this.currentPath.length > 0) {
+                g.lineStyle(3, 0xffffff, 0.85); g.beginPath();
+                const s0 = this.nodes[this.currentPath[0]]; g.moveTo(s0.x, s0.y);
+                for (let pid of this.currentPath) g.lineTo(this.nodes[pid].x, this.nodes[pid].y);
+                g.strokePath();
             }
-            this.graphics.strokePath();
-        }
-
-        // Draw circle preview
-        if (this.dragMode === 'circle' && this.dragStart && this.dragCurrent) {
-            const dx = this.dragCurrent.x - this.dragStart.x;
-            const dy = this.dragCurrent.y - this.dragStart.y;
-            const r = Math.sqrt(dx * dx + dy * dy);
-
-            this.graphics.lineStyle(2, 0x888888, 0.5);
-            this.graphics.strokeCircle(this.dragStart.x, this.dragStart.y, r);
-        }
-      } catch (err) {
-        console.warn('Editor renderMagic recovered:', err);
-      }
+            // seal preview
+            if (this.dragMode === 'circle' && this.dragStart && this.dragCurrent) {
+                const r = Math.hypot(this.dragCurrent.x - this.dragStart.x, this.dragCurrent.y - this.dragStart.y);
+                g.lineStyle(2, 0x9090b0, 0.6); g.strokeCircle(this.dragStart.x, this.dragStart.y, r);
+            }
+        } catch (err) { console.warn('Spellforge render recovered:', err); }
     }
 
-    snapVal(v) {
-        const g = Config.EditorGridSize;
-        return Math.round(v / g) * g;
-    }
-
+    /* =====================  grid / ley lines  ===================== */
+    snapVal(v) { const g = Config.EditorGridSize; return Math.round(v / g) * g; }
     toggleSnapToGrid() {
-        // Snap only affects gridline display + circle placement. Nodes never snap.
         GameState.magic.snapToGrid = !GameState.magic.snapToGrid;
-        this.updateMagnetBtn();
+        this.styleButton('ley', GameState.magic.snapToGrid);
         this.renderMagic();
     }
+    updateLeyBtn() { this.styleButton('ley', GameState.magic.snapToGrid); }
 
-    updateMagnetBtn() {
-        if (!this.magnetBtn) return;
-        // Tint the background graphics of the button to signal active state
-        const bg = this.magnetBtn.list[0];
-        if (bg && bg.fillStyle) {
-            bg.clear();
-            bg.fillStyle(GameState.magic.snapToGrid ? 0x336633 : 0x333366, 1);
-            bg.fillRoundedRect(-50, -18, 100, 36, 6);
-            bg.lineStyle(2, GameState.magic.snapToGrid ? 0x88ff88 : 0x6666aa);
-            bg.strokeRoundedRect(-50, -18, 100, 36, 6);
-        }
-    }
-
-    /**
-     * Compute 4-quadrant symmetry stability [0..1] for the current magic.
-     * 1.0 = perfectly symmetric across both axes. 0.0 = fully asymmetric.
-     * Empty/trivial designs return 1.0.
-     */
+    /* =====================  harmony (4-quadrant symmetry)  ===================== */
     computeStability() {
-        // Guard: this is also called from GameScene; the editor scene may be
-        // stopped (no live camera) or never opened (no nodes) — treat as stable.
         if (!this.baseNodes || !this.cameras || !this.cameras.main) return 1.0;
         if (!GameState.magic || !GameState.magic.layers) return 1.0;
-
-        const cx = this.cameras.main.width / 2;
-        const cy = this.cameras.main.height / 2;
+        const cx = this.centerX, cy = this.centerY;
         const tol = (Config.Instability && Config.Instability.symTolerance) || 30;
-
-        // Collect tagged feature points relative to editor centre
-        const features = []; // {x, y, tag}
+        const features = [];
         for (const layer of GameState.magic.layers) {
             if (!layer.visible) continue;
             for (const item of layer.items) {
                 if (item.type === 'CIRCLE') {
                     const c = item.data;
                     features.push({ x: c.center.x - cx, y: c.center.y - cy, tag: 'circ' });
-                    for (const angle of c.runes) {
-                        features.push({ x: Math.cos(angle) * c.rad, y: Math.sin(angle) * c.rad, tag: 'rune' });
-                    }
+                    for (const a of c.runes) features.push({ x: Math.cos(a) * c.rad, y: Math.sin(a) * c.rad, tag: 'rune' });
                 } else if (item.type === 'SHAPE') {
                     for (const pid of item.data.points) {
-                        const n = this.baseNodes[pid];
-                        if (!n) continue;
+                        const n = this.baseNodes[pid]; if (!n) continue;
                         features.push({ x: n.x - cx, y: n.y - cy, tag: item.data.element });
                     }
                 }
             }
         }
-
         if (features.length === 0) return 1.0;
-
-        let satisfied = 0;
-        const total = features.length * 3; // 3 mirrors per feature
-
+        let satisfied = 0; const total = features.length * 3;
         for (const f of features) {
-            // Check each of the 3 mirror points
             const mirrors = [{ x: -f.x, y: f.y }, { x: f.x, y: -f.y }, { x: -f.x, y: -f.y }];
             for (const m of mirrors) {
-                const found = features.some(o =>
-                    o.tag === f.tag &&
-                    Math.abs(o.x - m.x) < tol &&
-                    Math.abs(o.y - m.y) < tol
-                );
-                if (found) satisfied++;
+                if (features.some(o => o.tag === f.tag && Math.abs(o.x - m.x) < tol && Math.abs(o.y - m.y) < tol)) satisfied++;
             }
         }
-
         return satisfied / total;
     }
 
-    castAndClose() {
-        this.close();
-        this.scene.get('GameScene').events.emit('cast-spell');
-    }
-
+    /* =====================  lifecycle  ===================== */
+    castAndClose() { this.close(); this.scene.get('GameScene').events.emit('cast-spell'); }
     close() {
-        // Save magic data to current scroll before closing
-        if (GameState.inventorySystem) {
-            GameState.inventorySystem.saveMagicToScroll(GameState.magic);
-        }
-
-        GameState.timeScale = 1.0;
-        GameState.isMagicOpen = false;
-
-        this.scene.resume('GameScene');
-        this.scene.stop();
+        if (GameState.inventorySystem) GameState.inventorySystem.saveMagicToScroll(GameState.magic);
+        if (this._invBar) this._invBar.style.display = 'flex'; // restore the hotbar
+        GameState.timeScale = 1.0; GameState.isMagicOpen = false;
+        this.scene.resume('GameScene'); this.scene.stop();
     }
-
     loadFromCurrentScroll() {
-        // Load magic data from current scroll
-        if (GameState.inventorySystem) {
-            const scrollData = GameState.inventorySystem.loadMagicFromScroll();
-            if (scrollData) {
-                GameState.magic.layers = scrollData.layers;
-                GameState.magic.powerMultiplier = scrollData.powerMultiplier;
-
-                // Migrate older scrolls: give each layer a power (default to the
-                // old global powerMultiplier so behaviour is preserved).
-                GameState.magic.layers.forEach(l => {
-                    if (l.power == null) l.power = scrollData.powerMultiplier || 1;
-                });
-
-                // Set active layer
-                if (GameState.magic.layers.length > 0) {
-                    GameState.magic.activeLayerId = GameState.magic.layers[0].id;
-                } else {
-                    GameState.magic.activeLayerId = -1;
-                }
-
-                // Sync node used state + positions for the active layer's power
-                this.syncNodeUsedState();
-                this.refreshNodePositions();
-                this.syncPowerSlider();
-
-                // Update layer panel
-                this.updateLayerPanel();
-                this.updatePowerSliderVisibility();
-            }
-        }
+        if (!GameState.inventorySystem) return;
+        const scrollData = GameState.inventorySystem.loadMagicFromScroll();
+        if (!scrollData) return;
+        GameState.magic.layers = scrollData.layers;
+        GameState.magic.powerMultiplier = scrollData.powerMultiplier;
+        GameState.magic.layers.forEach(l => { if (l.power == null) l.power = scrollData.powerMultiplier || 1; });
+        GameState.magic.activeLayerId = GameState.magic.layers.length > 0 ? GameState.magic.layers[0].id : -1;
+        this.syncNodeUsedState(); this.refreshNodePositions(); this.syncPowerSlider();
+        this.updateLayerPanel(); this.updatePowerSliderVisibility();
     }
 }
