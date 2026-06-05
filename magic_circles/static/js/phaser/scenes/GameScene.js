@@ -70,6 +70,11 @@ class GameScene extends Phaser.Scene {
         // Inventory slot click handlers (DOM)
         this.setupInventoryUI();
 
+        // Touch controls (mobile only)
+        if (GameState.isMobile && typeof TouchControls !== 'undefined') {
+            this.touchControls = new TouchControls(this);
+        }
+
         // Fade in
         this.cameras.main.fadeIn(500);
 
@@ -502,8 +507,27 @@ class GameScene extends Phaser.Scene {
         const payloadLayers = circleLayers.slice(1); // Remaining = payloads
 
         // Calculate damage and power
-        const baseDmg = stack.length > 0 ? stack.length * (Config.BaseDamagePerElement || 20) : 10;
-        const basePower = ((Config.BasePower || 50) + (stack.length * 25)) * powerMult;
+        let baseDmg = stack.length > 0 ? stack.length * (Config.BaseDamagePerElement || 20) : 10;
+        let basePower = ((Config.BasePower || 50) + (stack.length * 25)) * powerMult;
+
+        // === INSTABILITY PENALTIES (4-quadrant symmetry) ===
+        const editorScene = this.scene.get('MagicEditorScene');
+        let instab = 0;
+        if (editorScene && editorScene.computeStability) {
+            instab = 1 - editorScene.computeStability();
+        }
+        if (instab > 0) {
+            const ins = Config.Instability;
+            basePower *= (1 - instab * ins.powerMax);
+            baseDmg   *= (1 - instab * ins.dmgMax);
+
+            // Element mixing: randomly drop/swap an element proportional to instability
+            if (stack.length > 0 && Math.random() < instab * ins.mixChance) {
+                const elements = ['Air', 'Fire', 'Earth', 'Water'];
+                const idx = Math.floor(Math.random() * stack.length);
+                stack[idx] = elements[Math.floor(Math.random() * elements.length)];
+            }
+        }
 
         // Direction
         const angle = this.player.aimAngle;
@@ -597,8 +621,9 @@ class GameScene extends Phaser.Scene {
                 totalRecoil += recoilAmount;
             }
 
-            // Direction with averaged-rune offset
-            const finalAngle = angle + this.runeOffset(circle.runes);
+            // Direction with averaged-rune offset + instability aim spread
+            const spread = instab * (Config.Instability.spreadMax || 0.52);
+            const finalAngle = angle + this.runeOffset(circle.runes) + (Math.random() - 0.5) * 2 * spread;
 
             // Projectile radius (larger for blunt, tiny for piercing)
             let projRadius;

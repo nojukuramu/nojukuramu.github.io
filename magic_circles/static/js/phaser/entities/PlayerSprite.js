@@ -79,8 +79,12 @@ class PlayerSprite extends Phaser.Physics.Matter.Sprite {
             magic: 'M'
         });
 
-        // Aim direction (towards mouse)
+        // Aim direction (towards mouse on desktop; overridden by touch stick on mobile)
         this.aimAngle = 0;
+
+        // Virtual input vectors (set by TouchControls on mobile, ignored on desktop)
+        this._moveVec = { x: 0, y: 0 };
+        this._touchAimOverride = false;
 
         // Dash particles
         this.dashEmitter = null;
@@ -169,15 +173,24 @@ class PlayerSprite extends Phaser.Physics.Matter.Sprite {
         }
     }
 
+    setMoveVector(x, y) { this._moveVec = { x, y }; }
+    setAimAngle(a) { this.aimAngle = a; this._touchAimOverride = true; }
+
     handleMovement(dt) {
         let moveX = 0;
         let moveY = 0;
 
-        // WASD / Arrow keys
-        if (this.wasd.left.isDown || this.cursors.left.isDown) moveX = -1;
-        if (this.wasd.right.isDown || this.cursors.right.isDown) moveX = 1;
-        if (this.wasd.up.isDown || this.cursors.up.isDown) moveY = -1;
-        if (this.wasd.down.isDown || this.cursors.down.isDown) moveY = 1;
+        if (GameState.isMobile && (this._moveVec.x !== 0 || this._moveVec.y !== 0)) {
+            // Mobile: read from virtual stick
+            moveX = this._moveVec.x;
+            moveY = this._moveVec.y;
+        } else {
+            // Desktop: WASD / Arrow keys
+            if (this.wasd.left.isDown || this.cursors.left.isDown) moveX = -1;
+            if (this.wasd.right.isDown || this.cursors.right.isDown) moveX = 1;
+            if (this.wasd.up.isDown || this.cursors.up.isDown) moveY = -1;
+            if (this.wasd.down.isDown || this.cursors.down.isDown) moveY = 1;
+        }
 
         // Normalize diagonal movement
         if (moveX !== 0 && moveY !== 0) {
@@ -219,9 +232,9 @@ class PlayerSprite extends Phaser.Physics.Matter.Sprite {
     }
 
     updateAim() {
+        if (this._touchAimOverride) return; // Mobile aim stick drives aimAngle directly
         const pointer = this.scene.input.activePointer;
         const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
-
         this.aimAngle = Phaser.Math.Angle.Between(this.x, this.y, worldPoint.x, worldPoint.y);
     }
 
