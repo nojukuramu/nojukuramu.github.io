@@ -47,6 +47,10 @@ let game;
 
 // Wait for DOM to be ready
 window.addEventListener('load', () => {
+    GameState.isMobile = typeof Platform !== 'undefined' && Platform.isMobile();
+    if (GameState.isMobile) {
+        gameConfig.input = { activePointers: 3 };
+    }
     game = new Phaser.Game(gameConfig);
 
     // Handle window resize
@@ -91,7 +95,8 @@ const GameState = {
         activeLayerId: -1,
         nodes: [],
         currPath: [],
-        powerMultiplier: 1
+        powerMultiplier: 1,
+        snapToGrid: false
     },
 
     getCurrentItem() {

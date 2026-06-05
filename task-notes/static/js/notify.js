@@ -119,7 +119,7 @@ var Notifier = (function () {
     if (settings.soundEnabled) _makeBeep(task.priority);
     if (navigator.vibrate && task.priority === 'high') navigator.vibrate([200, 100, 200]);
 
-    if (Notification.permission === 'granted' && document.visibilityState === 'hidden') {
+    if (Notification.permission === 'granted') {
       _showWebNotification(task);
     }
   }

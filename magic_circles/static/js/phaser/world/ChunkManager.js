@@ -122,6 +122,12 @@ class ChunkManagerPhaser {
         const size = Config.Chunks.size;
         const pcx = Math.floor(playerX / size);
         const pcy = Math.floor(playerY / size);
+
+        // Skip the load/unload sweep when the player hasn't crossed a chunk boundary.
+        if (pcx === this.lastPcx && pcy === this.lastPcy) return;
+        this.lastPcx = pcx;
+        this.lastPcy = pcy;
+
         const loadRadius = Config.Chunks.loadRadius;
         const unloadRadius = Config.Chunks.unloadRadius;
 

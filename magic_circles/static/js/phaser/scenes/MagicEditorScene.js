@@ -62,16 +62,18 @@ class MagicEditorScene extends Phaser.Scene {
         const cx = this.cameras.main.width / 2;
         const cy = this.cameras.main.height / 2;
         const radius = Math.min(cx, cy) * 0.5;
+        const snap = GameState.magic.snapToGrid;
 
         this.nodes = [];
         for (let i = 0; i < 12; i++) {
             const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
-            this.nodes.push({
-                x: cx + Math.cos(angle) * radius,
-                y: cy + Math.sin(angle) * radius,
-                id: i,
-                used: false
-            });
+            let nx = cx + Math.cos(angle) * radius;
+            let ny = cy + Math.sin(angle) * radius;
+            if (snap) {
+                nx = this.snapVal(nx);
+                ny = this.snapVal(ny);
+            }
+            this.nodes.push({ x: nx, y: ny, id: i, used: false });
         }
 
         // Sync used state from GameState
@@ -117,6 +119,7 @@ class MagicEditorScene extends Phaser.Scene {
         this.createButton(btnX, 120, 'CLOSE', () => this.close());
         this.createButton(btnX, 170, 'RESET', () => this.clearAll());
         this.createButton(btnX, 220, 'CAST', () => this.castAndClose());
+        this.magnetBtn = this.createButton(btnX, 270, 'MAGNET', () => this.toggleSnapToGrid());
 
         // Layer panel on the left
         this.createLayerPanel();
@@ -405,7 +408,16 @@ class MagicEditorScene extends Phaser.Scene {
             if (this.dragMode === 'circle' && this.dragStart && this.dragCurrent) {
                 const dx = this.dragCurrent.x - this.dragStart.x;
                 const dy = this.dragCurrent.y - this.dragStart.y;
-                const radius = Math.sqrt(dx * dx + dy * dy);
+                let radius = Math.sqrt(dx * dx + dy * dy);
+
+                // Snap center and radius to grid if enabled
+                let cx = this.dragStart.x;
+                let cy = this.dragStart.y;
+                if (GameState.magic.snapToGrid) {
+                    cx = this.snapVal(cx);
+                    cy = this.snapVal(cy);
+                    radius = this.snapVal(radius);
+                }
 
                 if (radius > 20) {
                     this.ensureActiveLayer();
@@ -414,7 +426,7 @@ class MagicEditorScene extends Phaser.Scene {
                         layer.items.push({
                             type: 'CIRCLE',
                             data: {
-                                center: { x: this.dragStart.x, y: this.dragStart.y },
+                                center: { x: cx, y: cy },
                                 rad: radius,
                                 runes: []
                             }
@@ -441,10 +453,11 @@ class MagicEditorScene extends Phaser.Scene {
     }
 
     getNodeAt(x, y) {
+        const hitR = GameState.isMobile ? 50 : 30;
         for (let node of this.nodes) {
             const dx = x - node.x;
             const dy = y - node.y;
-            if (Math.sqrt(dx * dx + dy * dy) < 30) return node;
+            if (Math.sqrt(dx * dx + dy * dy) < hitR) return node;
         }
         return null;
     }
@@ -587,6 +600,20 @@ class MagicEditorScene extends Phaser.Scene {
     renderMagic() {
         this.graphics.clear();
 
+        // Draw gridlines when snap is active
+        if (GameState.magic.snapToGrid) {
+            const g = Config.EditorGridSize;
+            const w = this.cameras.main.width;
+            const h = this.cameras.main.height;
+            this.graphics.lineStyle(1, 0x334433, 0.4);
+            for (let x = g; x < w; x += g) {
+                this.graphics.lineBetween(x, 0, x, h);
+            }
+            for (let y = g; y < h; y += g) {
+                this.graphics.lineBetween(0, y, w, y);
+            }
+        }
+
         // Draw guide circle
         const cx = this.cameras.main.width / 2;
         const cy = this.cameras.main.height / 2;
@@ -595,6 +622,25 @@ class MagicEditorScene extends Phaser.Scene {
         this.graphics.lineStyle(1, 0x333366, 0.5);
         this.graphics.strokeCircle(cx, cy, radius);
         this.graphics.strokeCircle(cx, cy, radius * 0.6);
+
+        // Draw 4-quadrant symmetry axes
+        this.graphics.lineStyle(1, 0x334455, 0.5);
+        this.graphics.lineBetween(cx, cy - radius, cx, cy + radius);
+        this.graphics.lineBetween(cx - radius, cy, cx + radius, cy);
+
+        // Stability readout
+        const stability = this.computeStability();
+        const pct = Math.round(stability * 100);
+        const stabColor = stability > 0.7 ? '#88ff88' : stability > 0.4 ? '#ffff44' : '#ff6666';
+        if (!this.stabilityText) {
+            this.stabilityText = this.add.text(cx, cy + radius + 20, '', {
+                fontFamily: 'Arial',
+                fontSize: '13px',
+                color: stabColor
+            }).setOrigin(0.5);
+        }
+        this.stabilityText.setText(`STABILITY: ${pct}%`);
+        this.stabilityText.setColor(stabColor);
 
         // Draw nodes
         for (let node of this.nodes) {
@@ -647,28 +693,34 @@ class MagicEditorScene extends Phaser.Scene {
                     const c = item.data;
                     const isBlunt = c.rad > (Config.SharpRadiusThreshold || 40);
                     const isFirstLayer = (layerIndex === 0);
-                    const thickness = isFirstLayer ? 3 + GameState.magic.powerMultiplier * 1.5 : 3;
+
+                    // Higher power shrinks the drawn shapes (visual only – stored rad is unchanged)
+                    const vScale = isFirstLayer
+                        ? Math.max(Config.EditorMinPowerScale, 1 - (GameState.magic.powerMultiplier - 1) * Config.EditorPowerShrink)
+                        : 1;
+                    const vRad = c.rad * vScale;
+                    const dotR = Math.max(2, 5 * vScale);
 
                     // Circle
-                    this.graphics.lineStyle(thickness, isBlunt ? 0xdd00dd : 0xffff00, 1);
-                    this.graphics.strokeCircle(c.center.x, c.center.y, c.rad);
+                    this.graphics.lineStyle(3, isBlunt ? 0xdd00dd : 0xffff00, 1);
+                    this.graphics.strokeCircle(c.center.x, c.center.y, vRad);
 
-                    // Power glow for first layer
+                    // Subtle power indicator: semi-transparent inner ring
                     if (isFirstLayer && GameState.magic.powerMultiplier > 1) {
-                        this.graphics.lineStyle(thickness + 6, 0xff8800, 0.3);
-                        this.graphics.strokeCircle(c.center.x, c.center.y, c.rad);
+                        this.graphics.lineStyle(1, 0xff8800, 0.4);
+                        this.graphics.strokeCircle(c.center.x, c.center.y, vRad * 0.7);
                     }
 
                     // Runes
                     for (let angle of c.runes) {
-                        const rx = c.center.x + Math.cos(angle) * c.rad;
-                        const ry = c.center.y + Math.sin(angle) * c.rad;
+                        const rx = c.center.x + Math.cos(angle) * vRad;
+                        const ry = c.center.y + Math.sin(angle) * vRad;
 
                         this.graphics.fillStyle(0xffffff, 1);
-                        this.graphics.fillCircle(rx, ry, 5);
+                        this.graphics.fillCircle(rx, ry, dotR);
 
                         this.graphics.lineStyle(2, 0xffffff, 1);
-                        this.graphics.lineBetween(rx, ry, rx + Math.cos(angle) * 20, ry + Math.sin(angle) * 20);
+                        this.graphics.lineBetween(rx, ry, rx + Math.cos(angle) * 20 * vScale, ry + Math.sin(angle) * 20 * vScale);
                     }
                 }
             }
@@ -695,6 +747,82 @@ class MagicEditorScene extends Phaser.Scene {
             this.graphics.lineStyle(2, 0x888888, 0.5);
             this.graphics.strokeCircle(this.dragStart.x, this.dragStart.y, r);
         }
+    }
+
+    snapVal(v) {
+        const g = Config.EditorGridSize;
+        return Math.round(v / g) * g;
+    }
+
+    toggleSnapToGrid() {
+        GameState.magic.snapToGrid = !GameState.magic.snapToGrid;
+        this.updateMagnetBtn();
+        this.initNodes(); // Re-compute node positions with/without snapping
+        this.renderMagic();
+    }
+
+    updateMagnetBtn() {
+        if (!this.magnetBtn) return;
+        // Tint the background graphics of the button to signal active state
+        const bg = this.magnetBtn.list[0];
+        if (bg && bg.fillStyle) {
+            bg.clear();
+            bg.fillStyle(GameState.magic.snapToGrid ? 0x336633 : 0x333366, 1);
+            bg.fillRoundedRect(-50, -18, 100, 36, 6);
+            bg.lineStyle(2, GameState.magic.snapToGrid ? 0x88ff88 : 0x6666aa);
+            bg.strokeRoundedRect(-50, -18, 100, 36, 6);
+        }
+    }
+
+    /**
+     * Compute 4-quadrant symmetry stability [0..1] for the current magic.
+     * 1.0 = perfectly symmetric across both axes. 0.0 = fully asymmetric.
+     * Empty/trivial designs return 1.0.
+     */
+    computeStability() {
+        const cx = this.cameras.main.width / 2;
+        const cy = this.cameras.main.height / 2;
+        const tol = Config.Instability.symTolerance;
+
+        // Collect tagged feature points relative to editor centre
+        const features = []; // {x, y, tag}
+        for (const layer of GameState.magic.layers) {
+            if (!layer.visible) continue;
+            for (const item of layer.items) {
+                if (item.type === 'CIRCLE') {
+                    const c = item.data;
+                    features.push({ x: c.center.x - cx, y: c.center.y - cy, tag: 'circ' });
+                    for (const angle of c.runes) {
+                        features.push({ x: Math.cos(angle) * c.rad, y: Math.sin(angle) * c.rad, tag: 'rune' });
+                    }
+                } else if (item.type === 'SHAPE') {
+                    for (const pid of item.data.points) {
+                        const n = this.nodes[pid];
+                        features.push({ x: n.x - cx, y: n.y - cy, tag: item.data.element });
+                    }
+                }
+            }
+        }
+
+        if (features.length === 0) return 1.0;
+
+        let satisfied = 0;
+        const total = features.length * 3; // 3 mirrors per feature
+
+        for (const f of features) {
+            // Check each of the 3 mirror points
+            const mirrors = [{ x: -f.x, y: f.y }, { x: f.x, y: -f.y }, { x: -f.x, y: -f.y }];
+            for (const m of mirrors) {
+                const found = features.some(o =>
+                    o.tag === f.tag &&
+                    Math.abs(o.x - m.x) < tol &&
+                    Math.abs(o.y - m.y) < tol
+                );
+                if (found) satisfied++;
+            }
+        }
+
+        return satisfied / total;
     }
 
     castAndClose() {

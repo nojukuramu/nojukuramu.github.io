@@ -185,6 +185,22 @@ const Config = {
         }
     },
 
+    // Magic Editor visuals
+    EditorPowerShrink: 0.06,    // How much each power level shrinks the drawn circle (0–1 fraction)
+    EditorMinPowerScale: 0.4,   // Minimum visual scale so circles never disappear entirely
+
+    // Editor grid / snap
+    EditorGridSize: 40,         // Grid cell size in pixels
+
+    // Symmetry / instability
+    Instability: {
+        powerMax: 0.5,          // Max power reduction fraction at full instability
+        dmgMax: 0.5,            // Max damage reduction fraction
+        spreadMax: 0.52,        // Max aim spread in radians (~30°)
+        mixChance: 0.6,         // Probability of an element mix penalty at full instability
+        symTolerance: 30        // Pixel tolerance when checking for mirror feature points
+    },
+
     // Chunk-Based World Generation
     Chunks: {
         size: 320,          // 320x320 pixels per chunk (40px tiles)
