@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task Notes</title>
+  <meta name="description" content="Sticky-note task reminders. Add tasks, set alerts, and stay on top of what matters — all in your browser.">
+  <meta name="theme-color" content="#f59e0b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Task Notes">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
+  <link rel="icon" href="static/icons/favicon.png" type="image/png">
+  <link rel="stylesheet" href="static/css/app.css">
+</head>
+<body>
+
+<div id="alert-banners" aria-label="Reminder alerts" aria-live="assertive"></div>
+
+<div class="app-root">
+
+  <!-- Header -->
+  <header class="app-header" role="banner">
+    <div class="app-title">
+      <span aria-hidden="true">📝</span> Task Notes
+    </div>
+
+    <div class="search-wrap">
+      <span aria-hidden="true">🔍</span>
+      <input type="search" id="search-input" placeholder="Search tasks…" aria-label="Search tasks">
+    </div>
+
+    <div class="header-spacer"></div>
+
+    <button id="btn-notif" class="btn-icon" title="Enable desktop notifications" aria-label="Enable notifications">
+      🔔 Enable alerts
+    </button>
+
+    <button id="btn-install" class="btn-icon" title="Install as desktop app" aria-label="Install app" style="display:none">
+      ⬇ Install
+    </button>
+
+    <button id="btn-mode-toggle" class="btn-icon" title="Toggle compact / full view" aria-label="Toggle layout">
+      ⊞
+    </button>
+
+    <!-- Overflow menu -->
+    <div class="overflow-menu">
+      <button class="btn-icon" id="btn-overflow" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋯</button>
+      <div class="overflow-dropdown" id="overflow-dropdown" role="menu">
+        <button id="btn-export" role="menuitem">⬆ Export backup</button>
+        <button id="btn-import" role="menuitem">⬇ Import backup</button>
+        <input type="file" id="import-input" accept=".json" style="display:none" aria-hidden="true">
+      </div>
+    </div>
+  </header>
+
+  <!-- iOS install tip -->
+  <div id="ios-install-tip" role="note" aria-label="Install instructions">
+    📲 Tap the Share button then "Add to Home Screen" to install.
+  </div>
+
+  <!-- Main -->
+  <main class="app-main" role="main">
+    <div class="content-area">
+
+      <!-- Add task bar -->
+      <div class="add-task-bar">
+        <div id="add-input-wrap" role="search" aria-label="Add a new task">
+          <input type="text" id="add-task-input" placeholder="Add a task…" aria-label="New task title" autocomplete="off" maxlength="200">
+          <button id="btn-add-commit" aria-label="Confirm add task">Add</button>
+          <button id="btn-add-cancel" aria-label="Cancel">✕</button>
+        </div>
+        <button id="btn-add" aria-label="Add task" title="Add task (shortcut: +)">+</button>
+      </div>
+
+      <!-- Filter bar -->
+      <div class="filter-bar" id="filter-bar" role="toolbar" aria-label="Filter and sort tasks"></div>
+
+      <!-- Task list -->
+      <ul id="task-list" aria-label="Tasks" aria-live="polite"></ul>
+    </div>
+  </main>
+
+</div><!-- .app-root -->
+
+<!-- Editor overlay and panel (outside .app-root so it overlays everything) -->
+<div id="editor-overlay" aria-hidden="true"></div>
+<aside id="editor-panel" role="complementary" aria-label="Task editor" aria-modal="true"></aside>
+
+<!-- Scripts — ordered classic scripts, no modules -->
+<script src="static/js/model.js"></script>
+<script src="static/js/store.js"></script>
+<script src="static/js/notify.js"></script>
+<script src="static/js/reminders.js"></script>
+<script src="static/js/search.js"></script>
+<script src="static/js/modes.js"></script>
+<script src="static/js/ui.js"></script>
+<script src="static/js/pwa.js"></script>
+<script src="static/js/app.js"></script>
+
+<script>
+  // Overflow menu toggle
+  document.getElementById('btn-overflow').addEventListener('click', function () {
+    var dd = document.getElementById('overflow-dropdown');
+    var open = dd.classList.toggle('open');
+    this.setAttribute('aria-expanded', open);
+  });
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.overflow-menu')) {
+      document.getElementById('overflow-dropdown').classList.remove('open');
+      document.getElementById('btn-overflow').setAttribute('aria-expanded', false);
+    }
+  });
+</script>
+</body>
+</html>
