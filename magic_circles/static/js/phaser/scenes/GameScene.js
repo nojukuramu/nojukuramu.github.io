@@ -87,7 +87,12 @@ class GameScene extends Phaser.Scene {
     setupInventoryUI() {
         // Show inventory bar when entering game
         const inventoryBar = document.getElementById('inventory-bar');
-        if (inventoryBar) inventoryBar.style.display = 'flex';
+        if (inventoryBar) {
+            inventoryBar.style.display = 'flex';
+            // On touch devices pin the hotbar to the top strip (clear of the
+            // bottom-corner sticks) and make it compact + horizontally scrollable.
+            if (GameState.isMobile) inventoryBar.classList.add('mobile');
+        }
 
         // Slot click handlers
         const slots = document.querySelectorAll('.inv-slot');
@@ -175,7 +180,7 @@ class GameScene extends Phaser.Scene {
         this.hpBar.setOrigin(0, 0.5);
 
         // HP Label
-        const hpLabel = this.add.text(120, 30, 'HP', {
+        const hpLabel = this.add.text(120, 30, 'LIFE', {
             fontFamily: 'Arial',
             fontSize: '12px',
             color: '#ffffff'
@@ -188,7 +193,7 @@ class GameScene extends Phaser.Scene {
         this.stmBar = this.add.rectangle(21, 55, 198, 10, 0x2288aa);
         this.stmBar.setOrigin(0, 0.5);
 
-        const stmLabel = this.add.text(120, 55, 'STM', {
+        const stmLabel = this.add.text(120, 55, 'VIGOR', {
             fontFamily: 'Arial',
             fontSize: '10px',
             color: '#ffffff'
@@ -228,6 +233,13 @@ class GameScene extends Phaser.Scene {
             fontSize: '11px',
             color: '#88aa88'
         }).setScrollFactor(0).setDepth(1000);
+
+        // On mobile the slot hotbar pins to the top strip — drop the HUD below it,
+        // shrink it, and hide the debug readout so nothing overlaps.
+        if (GameState.isMobile) {
+            this.hud.setPosition(4, 52).setScale(0.82);
+            this.debugText.setVisible(false);
+        }
     }
 
     setupInput() {

@@ -37,6 +37,8 @@
             display: block;
             width: 100%;
             height: 100%;
+            touch-action: none;
+            -ms-touch-action: none;
         }
 
         /* Loading screen */
@@ -157,6 +159,33 @@
 
         .inv-slot .cast-indicator.fallback {
             background: #f00;
+        }
+
+        /* ---- Mobile hotbar: pin to the top strip, clear of the bottom sticks ---- */
+        #inventory-bar.mobile {
+            bottom: auto;
+            top: 6px;
+            gap: 5px;
+            padding: 5px 8px;
+            max-width: 96vw;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            touch-action: pan-x;
+        }
+        #inventory-bar.mobile::-webkit-scrollbar { display: none; }
+        #inventory-bar.mobile .inv-slot {
+            width: 42px;
+            height: 42px;
+            font-size: 20px;
+            flex: 0 0 auto;
+        }
+
+        /* Landscape phones are short — tuck the hotbar tighter and shrink slots */
+        @media (orientation: landscape) and (max-height: 480px) {
+            #inventory-bar.mobile { top: 4px; padding: 4px 6px; }
+            #inventory-bar.mobile .inv-slot { width: 38px; height: 38px; font-size: 18px; }
         }
     </style>
 </head>
