@@ -64,8 +64,11 @@ class GameScene extends Phaser.Scene {
         // Collision handlers
         this.setupCollisions();
 
-        // Events
-        this.events.on('cast-spell', this.castSpell, this);
+        // Events — guard so a throw inside the cast path can't freeze the game loop
+        this.events.on('cast-spell', () => {
+            try { this.castSpell(); }
+            catch (err) { console.error('cast-spell event recovered from error:', err); }
+        });
 
         // Inventory slot click handlers (DOM)
         this.setupInventoryUI();
@@ -409,7 +412,10 @@ class GameScene extends Phaser.Scene {
         });
 
         // Power multiplier affects mana costs
-        const powerMult = GameState.magic.powerMultiplier || 1;
+        // Power is now per-layer (node spread). The thrown spell's power comes from
+        // the container layer (layer 0); fall back to the legacy global value.
+        const powerMult = (GameState.magic.layers[0] && GameState.magic.layers[0].power)
+            || GameState.magic.powerMultiplier || 1;
         const manaCostMult = 1 + (powerMult - 1) * 0.2;
 
         // Aggregate costs per element first, then deduct in one pass to avoid
@@ -511,11 +517,13 @@ class GameScene extends Phaser.Scene {
         let basePower = ((Config.BasePower || 50) + (stack.length * 25)) * powerMult;
 
         // === INSTABILITY PENALTIES (4-quadrant symmetry) ===
-        const editorScene = this.scene.get('MagicEditorScene');
-        let instab = 0;
-        if (editorScene && editorScene.computeStability) {
-            instab = 1 - editorScene.computeStability();
-        }
+        // Read the stability the editor stored (it's stopped by the time we cast),
+        // and clamp defensively so a bad value can never poison the math below.
+        let stability = (GameState.magic && Number.isFinite(GameState.magic.stability))
+            ? GameState.magic.stability : 1;
+        let instab = 1 - stability;
+        if (!Number.isFinite(instab) || instab < 0) instab = 0;
+        if (instab > 1) instab = 1;
         if (instab > 0) {
             const ins = Config.Instability;
             basePower *= (1 - instab * ins.powerMax);
@@ -534,7 +542,7 @@ class GameScene extends Phaser.Scene {
 
         // Spawn projectile for each circle in container layer
         let totalRecoil = 0;
-        containerLayer.forEach(circle => {
+        containerLayer.forEach((circle, circleIndex) => {
             // Calculate spectrum
             const spectrum = this.getSpellSpectrum(basePower, circle.rad);
             const spectrumConfig = Config.SpellSpectrum.effects[spectrum] || {};
@@ -638,18 +646,23 @@ class GameScene extends Phaser.Scene {
                 projRadius = Math.max(10, (circle.rad / 2) * (spectrumConfig.visualScale || 1));
             }
 
-            // Spawn position
-            const spawnOffset = Math.max(Config.ProjectileSpawnOffset || 30, this.player.rad + projRadius + 8);
+            // Spawn position. Stagger multiple circles along/around the heading so
+            // two projectiles from the same cast never spawn at the exact same point
+            // (coincident Matter bodies can produce a NaN normal and freeze the sim).
+            const spawnOffset = Math.max(Config.ProjectileSpawnOffset || 30, this.player.rad + projRadius + 8)
+                + circleIndex * (projRadius + 8);
+            const dirX = Math.cos(finalAngle);
+            const dirY = Math.sin(finalAngle);
+            const perpNudge = (circleIndex % 2 === 0 ? 1 : -1) * Math.ceil(circleIndex / 2) * 6;
+            const sx = this.player.x + dirX * spawnOffset - dirY * perpNudge;
+            const sy = this.player.y + dirY * spawnOffset + dirX * perpNudge;
 
             // Build payload chain
             const payload = this.buildPayloadChain(payloadLayers, stack, baseDmg, basePower);
 
-            const dirX = Math.cos(finalAngle);
-            const dirY = Math.sin(finalAngle);
-
             new ProjectileSprite(this,
-                this.player.x + dirX * spawnOffset,
-                this.player.y + dirY * spawnOffset,
+                sx,
+                sy,
                 {
                     elements: stack,
                     spectrum: spectrum,
@@ -763,9 +776,9 @@ class GameScene extends Phaser.Scene {
 
     runeOffset(runes) {
         if (!runes || runes.length === 0) return 0;
-        // Average of all rune angles relative to the upward baseline (-π/2).
-        // Single rune at angle a → offset = a - (-π/2). Multiple runes → arithmetic mean.
-        const sum = runes.reduce((acc, a) => acc + (a - (-Math.PI / 2)), 0);
+        // Direction offset = arithmetic mean of the rune angles, applied relative to
+        // the aim. Example: runes at 0° and 180° average to 90°. No runes → straight.
+        const sum = runes.reduce((acc, a) => acc + a, 0);
         return sum / runes.length;
     }
 
@@ -832,34 +845,40 @@ class GameScene extends Phaser.Scene {
     }
 
     resolveProjectilePvP() {
-        const list = GameState.projectiles;
+        // Snapshot — die() splices GameState.projectiles, so iterate a stable copy
+        // and re-check isDead each step. Skip any projectile with a non-finite
+        // position (a poisoned body must never drive collision math).
+        const list = [...GameState.projectiles];
         const pvpRatio = Config.PvPPowerRatio || 1.5;
 
         for (let i = 0; i < list.length; i++) {
             const a = list[i];
-            if (!a || a.isDead) continue;
+            if (!a || a.isDead || !Number.isFinite(a.x) || !Number.isFinite(a.y)) continue;
 
             for (let j = i + 1; j < list.length; j++) {
+                if (a.isDead) break; // a was killed earlier in this pass
                 const b = list[j];
-                if (!b || b.isDead) continue;
-                if (a.isDead) break; // a was killed this pass
+                if (!b || b.isDead || b === a) continue;
                 if (a.caster === b.caster) continue;
+                if (!Number.isFinite(b.x) || !Number.isFinite(b.y)) continue;
 
-                const ra = a.projectileData?.radius || 10;
-                const rb = b.projectileData?.radius || 10;
+                const ra = (a.projectileData && a.projectileData.radius) || 10;
+                const rb = (b.projectileData && b.projectileData.radius) || 10;
                 const dist = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
                 if (dist >= ra + rb) continue;
 
+                const mx = (a.x + b.x) / 2;
+                const my = (a.y + b.y) / 2;
                 if (a.power > b.power * pvpRatio) {
                     b.die();
                     a.power -= b.power * 0.5;
-                    this.spawnParticles((a.x + b.x) / 2, (a.y + b.y) / 2, 0xffffff, 8);
+                    this.spawnParticles(mx, my, 0xffffff, 8);
                 } else if (b.power > a.power * pvpRatio) {
                     a.die();
                     b.power -= a.power * 0.5;
-                    this.spawnParticles((a.x + b.x) / 2, (a.y + b.y) / 2, 0xffffff, 8);
+                    this.spawnParticles(mx, my, 0xffffff, 8);
                 } else {
-                    this.spawnParticles((a.x + b.x) / 2, (a.y + b.y) / 2, 0xffffff, 12);
+                    this.spawnParticles(mx, my, 0xffffff, 12);
                     a.die();
                     b.die();
                 }

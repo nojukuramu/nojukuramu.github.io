@@ -26,6 +26,7 @@ class MagicEditorScene extends Phaser.Scene {
         this.currentPath = [];
         this.undoHistory = [];
         this.maxUndoSteps = 20;
+        this.stabilityText = null; // recreated lazily in renderMagic each time the editor opens
 
         // Initialize nodes (12 in a circle)
         this.initNodes();
@@ -59,25 +60,56 @@ class MagicEditorScene extends Phaser.Scene {
     }
 
     initNodes() {
-        const cx = this.cameras.main.width / 2;
-        const cy = this.cameras.main.height / 2;
-        const radius = Math.min(cx, cy) * 0.5;
-        const snap = GameState.magic.snapToGrid;
+        this.centerX = this.cameras.main.width / 2;
+        this.centerY = this.cameras.main.height / 2;
+        this.baseRadius = Math.min(this.centerX, this.centerY) * 0.5;
 
+        // baseNodes = canonical ring positions (power 1). Nodes never snap to the grid.
+        this.baseNodes = [];
         this.nodes = [];
         for (let i = 0; i < 12; i++) {
             const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
-            let nx = cx + Math.cos(angle) * radius;
-            let ny = cy + Math.sin(angle) * radius;
-            if (snap) {
-                nx = this.snapVal(nx);
-                ny = this.snapVal(ny);
-            }
-            this.nodes.push({ x: nx, y: ny, id: i, used: false });
+            const bx = this.centerX + Math.cos(angle) * this.baseRadius;
+            const by = this.centerY + Math.sin(angle) * this.baseRadius;
+            this.baseNodes.push({ x: bx, y: by });
+            this.nodes.push({ x: bx, y: by, id: i, used: false });
         }
 
-        // Sync used state from GameState
+        // Sync used state from GameState, then place nodes at the active layer's scale
         this.syncNodeUsedState();
+        this.refreshNodePositions();
+    }
+
+    // Power -> node-ring scale. Power 1 = full size; higher power pulls nodes in
+    // (shapes drawn smaller but keep their form). Circles are NOT affected.
+    nodeScale(power) {
+        const p = power || 1;
+        return Math.max(Config.EditorMinPowerScale, 1 - (p - 1) * Config.EditorPowerShrink);
+    }
+
+    // Scale a base point toward/away from the editor centre.
+    scalePoint(base, scale) {
+        if (!base) return { x: this.centerX, y: this.centerY };
+        return {
+            x: this.centerX + (base.x - this.centerX) * scale,
+            y: this.centerY + (base.y - this.centerY) * scale
+        };
+    }
+
+    getActiveLayerPower() {
+        const l = this.getActiveLayer();
+        return (l && l.power) || 1;
+    }
+
+    // Reposition the interactive/displayed nodes to the active layer's scale.
+    refreshNodePositions() {
+        if (!this.nodes || !this.baseNodes) return;
+        const scale = this.nodeScale(this.getActiveLayerPower());
+        for (let i = 0; i < this.nodes.length; i++) {
+            const s = this.scalePoint(this.baseNodes[i], scale);
+            this.nodes[i].x = s.x;
+            this.nodes[i].y = s.y;
+        }
     }
 
     syncNodeUsedState() {
@@ -224,6 +256,8 @@ class MagicEditorScene extends Phaser.Scene {
                 GameState.magic.activeLayerId = layer.id;
                 this.updateLayerPanel();
                 this.updatePowerSliderVisibility();
+                this.refreshNodePositions();
+                this.renderMagic();
             });
 
             const descText = this.add.text(100, yPos, desc, {
@@ -268,38 +302,58 @@ class MagicEditorScene extends Phaser.Scene {
         this.powerHandle.setStrokeStyle(2, 0xaaaaff);
         this.powerHandle.setInteractive({ draggable: true, useHandCursor: true });
 
+        // Label describing what power does now
+        const hint = this.add.text(0, 38, '(node spread)', {
+            fontFamily: 'Arial',
+            fontSize: '10px',
+            color: '#8888aa'
+        }).setOrigin(0.5);
+
         // Value
-        this.powerValue = this.add.text(0, 20, `×${GameState.magic.powerMultiplier}`, {
+        this.powerValue = this.add.text(0, 20, `×${this.getActiveLayerPower()}`, {
             fontFamily: 'Arial',
             fontSize: '14px',
             color: '#ffffff'
         }).setOrigin(0.5);
 
-        this.powerContainer.add([label, track, this.powerHandle, this.powerValue]);
+        this.powerContainer.add([label, track, this.powerHandle, this.powerValue, hint]);
 
-        // Drag handling
+        // Drag handling — adjusts the ACTIVE layer's power (node spread)
         this.input.setDraggable(this.powerHandle);
         this.input.on('drag', (pointer, gameObject, dragX) => {
+          try {
             if (gameObject === this.powerHandle) {
                 dragX = Phaser.Math.Clamp(dragX, -35, 35);
                 this.powerHandle.x = dragX;
 
                 const t = (dragX + 35) / 70;
-                GameState.magic.powerMultiplier = Math.round(1 + t * 9);
-                this.powerValue.setText(`×${GameState.magic.powerMultiplier}`);
+                const power = Math.round(1 + t * 9);
+                const layer = this.getActiveLayer();
+                if (layer) layer.power = power;
+                GameState.magic.powerMultiplier = power; // mirror for save/compat
+                this.powerValue.setText(`×${power}`);
+                this.refreshNodePositions();
                 this.renderMagic();
             }
+          } catch (err) { console.warn('Editor power-drag recovered:', err); }
         });
 
         this.updatePowerSliderVisibility();
     }
 
-    updatePowerSliderVisibility() {
-        const firstLayer = GameState.magic.layers[0];
-        const hasCircles = firstLayer && firstLayer.items.some(it => it.type === 'CIRCLE');
-        const isFirstLayerSelected = firstLayer && GameState.magic.activeLayerId === firstLayer.id;
+    // Move the slider handle/value to reflect the active layer's power.
+    syncPowerSlider() {
+        const power = this.getActiveLayerPower();
+        const t = (power - 1) / 9;
+        if (this.powerHandle) this.powerHandle.x = -35 + t * 70;
+        if (this.powerValue) this.powerValue.setText(`×${power}`);
+    }
 
-        this.powerContainer.setVisible(hasCircles && isFirstLayerSelected);
+    updatePowerSliderVisibility() {
+        // The power slider now applies to ANY active layer (controls node spread).
+        const layer = this.getActiveLayer();
+        if (this.powerContainer) this.powerContainer.setVisible(!!layer);
+        if (layer) this.syncPowerSlider();
     }
 
     createElementLegend() {
@@ -325,6 +379,7 @@ class MagicEditorScene extends Phaser.Scene {
     setupInput() {
         // Pointer down
         this.input.on('pointerdown', (pointer) => {
+          try {
             // Ignore if clicking UI panels (left panel ~120px, right buttons ~150px)
             if (pointer.x > this.cameras.main.width - 150 || pointer.x < 120) return;
 
@@ -364,10 +419,12 @@ class MagicEditorScene extends Phaser.Scene {
             this.dragMode = 'circle';
             this.dragStart = p;
             this.dragCurrent = p;
+          } catch (err) { console.warn('Editor pointerdown recovered:', err); }
         });
 
         // Pointer move
         this.input.on('pointermove', (pointer) => {
+          try {
             const p = { x: pointer.x, y: pointer.y };
 
             if (this.dragMode === 'shape') {
@@ -401,10 +458,12 @@ class MagicEditorScene extends Phaser.Scene {
                 this.dragCurrent = p;
                 this.renderMagic();
             }
+          } catch (err) { console.warn('Editor pointermove recovered:', err); }
         });
 
         // Pointer up
         this.input.on('pointerup', () => {
+          try {
             if (this.dragMode === 'circle' && this.dragStart && this.dragCurrent) {
                 const dx = this.dragCurrent.x - this.dragStart.x;
                 const dy = this.dragCurrent.y - this.dragStart.y;
@@ -449,6 +508,7 @@ class MagicEditorScene extends Phaser.Scene {
             this.dragStart = null;
             this.dragCurrent = null;
             this.renderMagic();
+          } catch (err) { console.warn('Editor pointerup recovered:', err); }
         });
     }
 
@@ -515,11 +575,13 @@ class MagicEditorScene extends Phaser.Scene {
             name: name || `Layer ${GameState.magic.layers.length + 1}`,
             visible: true,
             solo: false,
+            power: 1,
             items: []
         });
         GameState.magic.activeLayerId = id;
         this.updateLayerPanel();
         this.updatePowerSliderVisibility();
+        this.refreshNodePositions();
     }
 
     deleteActiveLayer() {
@@ -589,15 +651,16 @@ class MagicEditorScene extends Phaser.Scene {
         this.nodes.forEach(n => n.used = false);
         this.currentPath = [];
 
-        // Reset power slider
-        this.powerHandle.x = -35;
-        this.powerValue.setText('×1');
-
-        this.createLayer();
+        this.createLayer(); // new layer has power 1
+        this.syncPowerSlider();
+        this.refreshNodePositions();
         this.renderMagic();
     }
 
     renderMagic() {
+      // Wrapped: renderMagic runs during create() (with GameScene paused), so a
+      // throw here would leave the game frozen on a paused scene. Never let it.
+      try {
         this.graphics.clear();
 
         // Draw gridlines when snap is active
@@ -628,8 +691,9 @@ class MagicEditorScene extends Phaser.Scene {
         this.graphics.lineBetween(cx, cy - radius, cx, cy + radius);
         this.graphics.lineBetween(cx - radius, cy, cx + radius, cy);
 
-        // Stability readout
+        // Stability readout — stash it so castSpell can read it after the editor closes
         const stability = this.computeStability();
+        GameState.magic.stability = stability;
         const pct = Math.round(stability * 100);
         const stabColor = stability > 0.7 ? '#88ff88' : stability > 0.4 ? '#ffff44' : '#ff6666';
         if (!this.stabilityText) {
@@ -663,6 +727,10 @@ class MagicEditorScene extends Phaser.Scene {
             const layer = GameState.magic.layers[layerIndex];
             if (!layer.visible) continue;
 
+            // Each layer's shapes scale by that layer's power (node spread).
+            const layerScale = this.nodeScale(layer.power);
+            const pos = (pid) => this.scalePoint(this.baseNodes[pid], layerScale);
+
             for (let item of layer.items) {
                 if (item.type === 'SHAPE') {
                     const s = item.data;
@@ -671,10 +739,11 @@ class MagicEditorScene extends Phaser.Scene {
                     // Draw filled polygon
                     this.graphics.fillStyle(color, 0.2);
                     this.graphics.beginPath();
-                    const start = this.nodes[s.points[0]];
+                    const start = pos(s.points[0]);
                     this.graphics.moveTo(start.x, start.y);
                     for (let pid of s.points) {
-                        this.graphics.lineTo(this.nodes[pid].x, this.nodes[pid].y);
+                        const pt = pos(pid);
+                        this.graphics.lineTo(pt.x, pt.y);
                     }
                     this.graphics.closePath();
                     this.graphics.fillPath();
@@ -684,49 +753,36 @@ class MagicEditorScene extends Phaser.Scene {
                     this.graphics.beginPath();
                     this.graphics.moveTo(start.x, start.y);
                     for (let pid of s.points) {
-                        this.graphics.lineTo(this.nodes[pid].x, this.nodes[pid].y);
+                        const pt = pos(pid);
+                        this.graphics.lineTo(pt.x, pt.y);
                     }
                     this.graphics.closePath();
                     this.graphics.strokePath();
 
                 } else if (item.type === 'CIRCLE') {
+                    // Circles always render at their drawn radius — power does NOT scale them.
                     const c = item.data;
                     const isBlunt = c.rad > (Config.SharpRadiusThreshold || 40);
-                    const isFirstLayer = (layerIndex === 0);
 
-                    // Higher power shrinks the drawn shapes (visual only – stored rad is unchanged)
-                    const vScale = isFirstLayer
-                        ? Math.max(Config.EditorMinPowerScale, 1 - (GameState.magic.powerMultiplier - 1) * Config.EditorPowerShrink)
-                        : 1;
-                    const vRad = c.rad * vScale;
-                    const dotR = Math.max(2, 5 * vScale);
-
-                    // Circle
                     this.graphics.lineStyle(3, isBlunt ? 0xdd00dd : 0xffff00, 1);
-                    this.graphics.strokeCircle(c.center.x, c.center.y, vRad);
-
-                    // Subtle power indicator: semi-transparent inner ring
-                    if (isFirstLayer && GameState.magic.powerMultiplier > 1) {
-                        this.graphics.lineStyle(1, 0xff8800, 0.4);
-                        this.graphics.strokeCircle(c.center.x, c.center.y, vRad * 0.7);
-                    }
+                    this.graphics.strokeCircle(c.center.x, c.center.y, c.rad);
 
                     // Runes
                     for (let angle of c.runes) {
-                        const rx = c.center.x + Math.cos(angle) * vRad;
-                        const ry = c.center.y + Math.sin(angle) * vRad;
+                        const rx = c.center.x + Math.cos(angle) * c.rad;
+                        const ry = c.center.y + Math.sin(angle) * c.rad;
 
                         this.graphics.fillStyle(0xffffff, 1);
-                        this.graphics.fillCircle(rx, ry, dotR);
+                        this.graphics.fillCircle(rx, ry, 5);
 
                         this.graphics.lineStyle(2, 0xffffff, 1);
-                        this.graphics.lineBetween(rx, ry, rx + Math.cos(angle) * 20 * vScale, ry + Math.sin(angle) * 20 * vScale);
+                        this.graphics.lineBetween(rx, ry, rx + Math.cos(angle) * 20, ry + Math.sin(angle) * 20);
                     }
                 }
             }
         }
 
-        // Draw current path (in-progress shape)
+        // Draw current path (in-progress shape) — uses active-layer node positions
         if (this.currentPath.length > 0) {
             this.graphics.lineStyle(3, 0xffffff, 0.8);
             this.graphics.beginPath();
@@ -747,6 +803,9 @@ class MagicEditorScene extends Phaser.Scene {
             this.graphics.lineStyle(2, 0x888888, 0.5);
             this.graphics.strokeCircle(this.dragStart.x, this.dragStart.y, r);
         }
+      } catch (err) {
+        console.warn('Editor renderMagic recovered:', err);
+      }
     }
 
     snapVal(v) {
@@ -755,9 +814,9 @@ class MagicEditorScene extends Phaser.Scene {
     }
 
     toggleSnapToGrid() {
+        // Snap only affects gridline display + circle placement. Nodes never snap.
         GameState.magic.snapToGrid = !GameState.magic.snapToGrid;
         this.updateMagnetBtn();
-        this.initNodes(); // Re-compute node positions with/without snapping
         this.renderMagic();
     }
 
@@ -780,9 +839,14 @@ class MagicEditorScene extends Phaser.Scene {
      * Empty/trivial designs return 1.0.
      */
     computeStability() {
+        // Guard: this is also called from GameScene; the editor scene may be
+        // stopped (no live camera) or never opened (no nodes) — treat as stable.
+        if (!this.baseNodes || !this.cameras || !this.cameras.main) return 1.0;
+        if (!GameState.magic || !GameState.magic.layers) return 1.0;
+
         const cx = this.cameras.main.width / 2;
         const cy = this.cameras.main.height / 2;
-        const tol = Config.Instability.symTolerance;
+        const tol = (Config.Instability && Config.Instability.symTolerance) || 30;
 
         // Collect tagged feature points relative to editor centre
         const features = []; // {x, y, tag}
@@ -797,7 +861,8 @@ class MagicEditorScene extends Phaser.Scene {
                     }
                 } else if (item.type === 'SHAPE') {
                     for (const pid of item.data.points) {
-                        const n = this.nodes[pid];
+                        const n = this.baseNodes[pid];
+                        if (!n) continue;
                         features.push({ x: n.x - cx, y: n.y - cy, tag: item.data.element });
                     }
                 }
@@ -851,6 +916,12 @@ class MagicEditorScene extends Phaser.Scene {
                 GameState.magic.layers = scrollData.layers;
                 GameState.magic.powerMultiplier = scrollData.powerMultiplier;
 
+                // Migrate older scrolls: give each layer a power (default to the
+                // old global powerMultiplier so behaviour is preserved).
+                GameState.magic.layers.forEach(l => {
+                    if (l.power == null) l.power = scrollData.powerMultiplier || 1;
+                });
+
                 // Set active layer
                 if (GameState.magic.layers.length > 0) {
                     GameState.magic.activeLayerId = GameState.magic.layers[0].id;
@@ -858,15 +929,10 @@ class MagicEditorScene extends Phaser.Scene {
                     GameState.magic.activeLayerId = -1;
                 }
 
-                // Sync node used state
+                // Sync node used state + positions for the active layer's power
                 this.syncNodeUsedState();
-
-                // Update power slider position
-                if (this.powerHandle && this.powerValue) {
-                    const t = (GameState.magic.powerMultiplier - 1) / 9;
-                    this.powerHandle.x = -35 + t * 70;
-                    this.powerValue.setText(`×${GameState.magic.powerMultiplier}`);
-                }
+                this.refreshNodePositions();
+                this.syncPowerSlider();
 
                 // Update layer panel
                 this.updateLayerPanel();

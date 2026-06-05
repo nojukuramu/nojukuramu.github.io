@@ -96,7 +96,8 @@ const GameState = {
         nodes: [],
         currPath: [],
         powerMultiplier: 1,
-        snapToGrid: false
+        snapToGrid: false,
+        stability: 1 // 4-quadrant symmetry score, refreshed by the editor; read at cast time
     },
 
     getCurrentItem() {

@@ -54,6 +54,19 @@ class EnemySprite extends Phaser.Physics.Matter.Sprite {
     update(time, delta, playerPos) {
         const dt = delta / 1000;
 
+        // NaN self-heal: never let a poisoned enemy body wedge the physics sim.
+        if (this.body) {
+            const v = this.body.velocity;
+            if (!Number.isFinite(this.x) || !Number.isFinite(this.y) ||
+                !Number.isFinite(v.x) || !Number.isFinite(v.y)) {
+                this.setVelocity(0, 0);
+                const px = (playerPos && Number.isFinite(playerPos.x)) ? playerPos.x : 0;
+                const py = (playerPos && Number.isFinite(playerPos.y)) ? playerPos.y : 0;
+                this.setPosition(px + 200, py);
+                return;
+            }
+        }
+
         // Update effects
         this.updateEffects(dt);
 

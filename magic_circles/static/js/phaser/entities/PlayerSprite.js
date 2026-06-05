@@ -119,6 +119,23 @@ class PlayerSprite extends Phaser.Physics.Matter.Sprite {
     update(time, delta) {
         const dt = delta / 1000;
 
+        // NaN self-heal: a poisoned body (from a degenerate collision) would freeze
+        // the whole Matter sim. Restore the last finite position instead.
+        if (this.body) {
+            const v = this.body.velocity;
+            if (!Number.isFinite(this.x) || !Number.isFinite(this.y) ||
+                !Number.isFinite(v.x) || !Number.isFinite(v.y)) {
+                this.setVelocity(0, 0);
+                this.setPosition(
+                    Number.isFinite(this._lastGoodX) ? this._lastGoodX : 0,
+                    Number.isFinite(this._lastGoodY) ? this._lastGoodY : 0
+                );
+            } else {
+                this._lastGoodX = this.x;
+                this._lastGoodY = this.y;
+            }
+        }
+
         // Update cooldowns
         if (this.castCooldown > 0) this.castCooldown -= dt;
         if (this.dashCooldown > 0) this.dashCooldown -= dt;
