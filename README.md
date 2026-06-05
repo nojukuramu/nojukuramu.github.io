@@ -3,6 +3,10 @@
 Personal GitHub Pages site. Each sub-folder is a self-contained static project that can be
 visited directly at `https://nojukuramu.github.io/<folder>/`.
 
+The root (`index.html`) is a small interactive landing page — **"The Atelier"** — that ties the
+projects together: light/dark themes, a command palette (`/`), an *Elemental Echo* minigame, and a
+discreet, multi-step treasure hunt for the curious. (Start at the ✦ in the footer.)
+
 ## Projects
 
 | Path | Project | Description |

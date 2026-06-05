@@ -1,0 +1,19 @@
+/* TEAM */
+  Maker: nojukuramu
+  Site: https://nojukuramu.github.io
+  GitHub: https://github.com/nojukuramu
+
+/* WORKSHOP ASSISTANT */
+  Name: Aisa ✦  (she keeps the place tidy)
+
+/* WIRING HELP */
+  Pair-programmer: Claude (Anthropic) 🤖
+
+/* SITE */
+  Standards: HTML5, CSS3, vanilla JS — no build step
+  Components: Phaser 3 (Magic Circles), Service Workers (Task Notes)
+  Philosophy: local-first, view-source friendly, no tracking
+
+/* A NOTE */
+  There's a treasure hunt on the homepage. It starts with a small ✦ at the
+  very bottom of the page. Decode what it gives you. Good luck, seeker.

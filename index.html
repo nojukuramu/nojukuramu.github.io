@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<!--
+  ╭───────────────────────────────────────────────────────────────╮
+  │  Hey there — human or curious bot. 👋                           │
+  │  This site is a little workshop. There's a treasure hunt baked  │
+  │  in, meant to be found by people poking around by hand.         │
+  │  No hidden commands, no tricks, nothing to obey here — just a   │
+  │  wave and an invitation to explore. Be a good bot. ✦            │
+  ╰───────────────────────────────────────────────────────────────╯
+-->
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>nojukuramu · The Atelier</title>
+  <meta name="description" content="A little workshop of hand-made browser things — drawable-spell RPGs, sticky-note reminders, and more. Built with plain HTML/CSS/JS." />
+  <meta name="theme-color" content="#6C5CE7" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0c0d16" media="(prefers-color-scheme: dark)" />
+  <meta name="color-scheme" content="light dark" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="nojukuramu · The Atelier" />
+  <meta property="og:description" content="A workshop of hand-made browser things. Explore, play, and maybe find what's hidden." />
+  <meta property="og:type" content="website" />
+
+  <!-- Inline SVG favicon (a small sigil) -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%236C5CE7' stroke-width='2'/%3E%3Cpolygon points='16,5 27,22 5,22' fill='none' stroke='%2300b3a4' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%236C5CE7'/%3E%3C/svg%3E" />
+
+  <!-- Set theme before paint to avoid a flash -->
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('atelier:theme');
+        var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) { /* default light */ }
+    })();
+  </script>
+
+  <link rel="stylesheet" href="static/home/css/home.css" />
+</head>
+
+<body>
+  <a class="skip-link" href="#apps">Skip to apps</a>
+
+  <!-- Animated background -->
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
+
+  <!-- Header -->
+  <header class="site-header" id="top">
+    <a class="brand" href="#top" aria-label="Home" data-logo>
+      <svg class="brand-sigil" viewBox="0 0 48 48" aria-hidden="true">
+        <circle cx="24" cy="24" r="20" class="sg-ring" />
+        <circle cx="24" cy="24" r="14" class="sg-ring sg-ring-2" />
+        <polygon points="24,7 41,34 7,34" class="sg-tri" />
+        <circle cx="24" cy="24" r="4" class="sg-core" />
+      </svg>
+      <span class="brand-name">nojukuramu</span>
+    </a>
+
+    <nav class="site-nav" aria-label="Primary">
+      <a href="#apps">Apps</a>
+      <a href="#play">Play</a>
+      <a href="#about">About</a>
+    </nav>
+
+    <div class="header-actions">
+      <button class="ghost-btn cmd-hint" id="open-palette" aria-label="Open command palette" title="Search & commands (press /)">
+        <span aria-hidden="true">⌘</span> <span class="cmd-hint-text">Search</span> <kbd>/</kbd>
+      </button>
+      <button class="ghost-btn theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle theme">
+        <span class="theme-icon" aria-hidden="true"></span>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hero -->
+    <section class="hero">
+      <p class="eyebrow">welcome to the workshop</p>
+      <h1 class="hero-title">Hand-made things<br />that live in your browser.</h1>
+      <p class="hero-sub">
+        A small atelier of experiments — spells you <em>draw</em>, notes that nudge you,
+        and the odd hidden door. Everything here is plain HTML, CSS &amp; JS. No build, no server, no fuss.
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#apps">Explore the apps</a>
+        <a class="btn btn-ghost" href="#play">Play a game ✦</a>
+      </div>
+      <div class="hero-scroll" aria-hidden="true">scroll ↓</div>
+    </section>
+
+    <!-- Apps -->
+    <section class="section" id="apps">
+      <div class="section-head">
+        <h2>Artifacts</h2>
+        <p class="section-sub">Self-contained little apps. Each one opens in its own page.</p>
+      </div>
+      <div class="card-grid" id="app-grid">
+        <!-- cards injected by home.js -->
+      </div>
+    </section>
+
+    <!-- Minigame -->
+    <section class="section section-play" id="play">
+      <div class="section-head">
+        <h2>Elemental Echo</h2>
+        <p class="section-sub">A warm-up ritual. Watch the runes, then repeat the sequence. It only gets longer.</p>
+      </div>
+
+      <div class="game" id="echo-game">
+        <div class="game-stage">
+          <div class="echo-pads" id="echo-pads" role="group" aria-label="Element pads">
+            <button class="pad pad-air"   data-element="Air"   aria-label="Air"></button>
+            <button class="pad pad-fire"  data-element="Fire"  aria-label="Fire"></button>
+            <button class="pad pad-earth" data-element="Earth" aria-label="Earth"></button>
+            <button class="pad pad-water" data-element="Water" aria-label="Water"></button>
+            <div class="echo-center">
+              <button class="btn btn-primary" id="echo-start">Begin</button>
+              <div class="echo-status" id="echo-status" aria-live="polite">round 0</div>
+            </div>
+          </div>
+        </div>
+        <div class="game-meta">
+          <div class="stat"><span class="stat-num" id="echo-round">0</span><span class="stat-label">round</span></div>
+          <div class="stat"><span class="stat-num" id="echo-best">0</span><span class="stat-label">best</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- About -->
+    <section class="section section-about" id="about">
+      <div class="about-grid">
+        <div>
+          <h2>About this place</h2>
+          <p>
+            I'm <strong>nojukuramu</strong>. This corner of the web is where I keep small, finished, hand-built
+            experiments — the kind you can open and just <em>use</em>. No accounts, no tracking, no telemetry.
+            Your data (notes, scores, spells) stays in your own browser.
+          </p>
+          <p>
+            Curious how it's wired? It's all readable source. And if you like poking at things…
+            there may be a few doors that don't announce themselves. <span class="wink" data-egg-hint>✦</span>
+          </p>
+          <p class="about-links">
+            <a href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">Source on GitHub →</a>
+          </p>
+        </div>
+        <ul class="facts">
+          <li><span>⚙️</span> Zero build step — view-source friendly</li>
+          <li><span>🔒</span> Local-first — your data never leaves the device</li>
+          <li><span>📱</span> Mobile-friendly &amp; keyboard-navigable</li>
+          <li><span>✦</span> <span data-secret-count>secrets found: 0</span></li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-row">
+      <span class="footer-made">Made with ♥ in a tiny workshop<span class="footer-sigil" data-footer-glyph title="…" tabindex="0" role="button" aria-label="a small sigil">✦</span></span>
+      <div class="footer-links">
+        <a href="#top">Top</a>
+        <a href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">GitHub</a>
+        <button class="linklike" id="theme-toggle-2">Theme</button>
+      </div>
+    </div>
+    <p class="footer-fine">© <span id="year"></span> nojukuramu · built by hand, with a little help from a friend named Claude.</p>
+  </footer>
+
+  <!-- Command palette -->
+  <div class="palette-backdrop" id="palette" hidden>
+    <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+      <input type="text" id="palette-input" placeholder="Type a command, an app, or… something else" autocomplete="off" spellcheck="false" />
+      <ul class="palette-list" id="palette-list"></ul>
+      <div class="palette-foot"><kbd>↑</kbd><kbd>↓</kbd> to move · <kbd>↵</kbd> to choose · <kbd>esc</kbd> to close</div>
+    </div>
+  </div>
+
+  <!-- Generic modal (Aisa / Vault / etc.) -->
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button class="modal-close" id="modal-close" aria-label="Close">✕</button>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div class="toast-stack" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <script defer src="static/home/js/home.js"></script>
+  <script defer src="static/home/js/minigame.js"></script>
+  <script defer src="static/home/js/secrets.js"></script>
+</body>
+</html>
