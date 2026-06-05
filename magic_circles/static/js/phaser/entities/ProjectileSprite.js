@@ -296,6 +296,15 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
         // Never update a projectile whose body/scene have been destroyed.
         if (!this.isAlive()) return;
 
+        // A body with a non-finite position/velocity has been poisoned (NaN) and
+        // would corrupt every subsequent physics step. Kill it before it spreads.
+        const bvel = this.body.velocity;
+        if (!Number.isFinite(this.x) || !Number.isFinite(this.y) ||
+            !Number.isFinite(bvel.x) || !Number.isFinite(bvel.y)) {
+            this.die();
+            return;
+        }
+
         const dt = delta / 1000;
 
         // Update activation delay
@@ -352,51 +361,6 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
             }
         }
 
-    }
-
-    checkProjectileCollisions() {
-        if (!this.isAlive()) return;
-
-        const myRadius = this.projectileData.radius || 10;
-        const pvpRatio = Config.PvPPowerRatio || 1.5;
-
-        // Iterate a snapshot: die() mutates GameState.projectiles mid-loop.
-        for (let other of [...GameState.projectiles]) {
-            if (!other || other.isDead || other === this || other.caster === this.caster) continue;
-            // Stop if a collision already killed us this iteration.
-            if (this.isDead) return;
-
-            const otherRadius = other.projectileData?.radius || 10;
-            const dist = Phaser.Math.Distance.Between(this.x, this.y, other.x, other.y);
-
-            if (dist < myRadius + otherRadius) {
-                // Collision detected - compare power
-                if (this.power > other.power * pvpRatio) {
-                    // This projectile destroys the other
-                    other.die();
-                    this.power -= other.power * 0.5; // Reduce power
-                    this.scene.spawnParticles(
-                        (this.x + other.x) / 2,
-                        (this.y + other.y) / 2,
-                        0xffffff, 8
-                    );
-                } else if (other.power > this.power * pvpRatio) {
-                    // Other destroys this
-                    this.die();
-                    return;
-                } else {
-                    // Similar power - both destroyed
-                    other.die();
-                    this.die();
-                    this.scene.spawnParticles(
-                        (this.x + other.x) / 2,
-                        (this.y + other.y) / 2,
-                        0xffffff, 12
-                    );
-                    return;
-                }
-            }
-        }
     }
 
     hasElement(element) {
