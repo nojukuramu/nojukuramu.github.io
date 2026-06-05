@@ -5,6 +5,16 @@ var ReminderEngine = (function () {
     return Model.UNIT_MS(unit);
   }
 
+  // Safely parse an "HH:MM" string, clamping to valid ranges with a 09:00 fallback.
+  function _parseHHMM(str) {
+    var parts = (str || '').split(':');
+    var h = parseInt(parts[0], 10);
+    var m = parseInt(parts[1], 10);
+    if (isNaN(h) || h < 0 || h > 23) h = 9;
+    if (isNaN(m) || m < 0 || m > 59) m = 0;
+    return { h: h, m: m };
+  }
+
   function _inQuietHours(qh, atMs) {
     if (!qh || !qh.start || !qh.end) return false;
     var d = new Date(atMs || Date.now());
@@ -55,10 +65,11 @@ var ReminderEngine = (function () {
 
   // Compute next fire for interval/monthly-date: every Nth day of the month at HH:MM
   function _nextMonthlyDate(rem, now) {
-    var day = Math.max(1, Math.min(31, rem.intervalMonthDay || 1));
-    var timeParts = (rem.intervalDayTime || '09:00').split(':');
-    var h = parseInt(timeParts[0], 10);
-    var m = parseInt(timeParts[1], 10);
+    var day = parseInt(rem.intervalMonthDay, 10);
+    if (isNaN(day)) day = 1;
+    day = Math.max(1, Math.min(31, day));
+    var t = _parseHHMM(rem.intervalDayTime);
+    var h = t.h, m = t.m;
 
     // Try this month
     var candidate = new Date(now);
@@ -89,10 +100,10 @@ var ReminderEngine = (function () {
 
   // Compute next fire for interval/weekly-day: every specific weekday at HH:MM
   function _nextWeeklyDay(rem, now) {
-    var targetDay = rem.intervalWeekDay != null ? rem.intervalWeekDay : 1;
-    var timeParts = (rem.intervalDayTime || '09:00').split(':');
-    var h = parseInt(timeParts[0], 10);
-    var m = parseInt(timeParts[1], 10);
+    var targetDay = parseInt(rem.intervalWeekDay, 10);
+    if (isNaN(targetDay) || targetDay < 0 || targetDay > 6) targetDay = 1;
+    var t = _parseHHMM(rem.intervalDayTime);
+    var h = t.h, m = t.m;
 
     var candidate = new Date(now);
     candidate.setHours(h, m, 0, 0);
@@ -353,36 +364,36 @@ var ReminderEngine = (function () {
     });
   }
 
-  function enableTask(task) {
-    var rem = task.reminder;
+  // Mutate a reminder's schedule in place (no persistence). Works for both
+  // task and subtask reminders since both share the reminder sub-object shape.
+  function _applyEnableReminder(rem) {
     if (!rem.intervalAnchor && rem.mode === 'interval' && (rem.intervalType || 'frequency') === 'frequency') {
       rem.intervalAnchor = Date.now();
     }
     rem.nextFireAt = computeNextFireAt(rem, Date.now());
     rem.snoozeCount = 0;
+  }
+
+  function _applyDisableReminder(rem) {
+    rem.nextFireAt = null;
+    rem.snoozeCount = 0;
+  }
+
+  // Apply the correct enabled/disabled schedule based on the reminder's own
+  // state, without persisting. Callers batch a single Store write afterwards.
+  function applyReminderState(rem) {
+    if (rem && rem.enabled && rem.mode !== 'none') _applyEnableReminder(rem);
+    else if (rem) _applyDisableReminder(rem);
+  }
+
+  function enableTask(task) {
+    _applyEnableReminder(task.reminder);
     Store.upsertTask(task);
   }
 
   function disableTask(task) {
-    task.reminder.nextFireAt = null;
-    task.reminder.snoozeCount = 0;
+    _applyDisableReminder(task.reminder);
     Store.upsertTask(task);
-  }
-
-  function enableSubtaskReminder(parentTask, subtask) {
-    var rem = subtask.reminder;
-    if (!rem.intervalAnchor && rem.mode === 'interval' && (rem.intervalType || 'frequency') === 'frequency') {
-      rem.intervalAnchor = Date.now();
-    }
-    rem.nextFireAt = computeNextFireAt(rem, Date.now());
-    rem.snoozeCount = 0;
-    Store.upsertTask(parentTask);
-  }
-
-  function disableSubtaskReminder(parentTask, subtask) {
-    subtask.reminder.nextFireAt = null;
-    subtask.reminder.snoozeCount = 0;
-    Store.upsertTask(parentTask);
   }
 
   function start() {
@@ -404,10 +415,9 @@ var ReminderEngine = (function () {
     sweep: sweep,
     refreshAll: refreshAll,
     computeNextFireAt: computeNextFireAt,
+    applyReminderState: applyReminderState,
     enableTask: enableTask,
     disableTask: disableTask,
-    enableSubtaskReminder: enableSubtaskReminder,
-    disableSubtaskReminder: disableSubtaskReminder,
     dismissTask: _handleDismiss,
     snoozeTask: _handleSnooze
   };

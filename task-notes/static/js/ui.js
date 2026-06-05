@@ -42,7 +42,7 @@ var UI = (function () {
       if (itype === 'monthly-date') {
         icon = '🔁'; text = 'every ' + _ordinal(rem.intervalMonthDay || 1);
       } else if (itype === 'weekly-day') {
-        icon = '🔁'; text = 'every ' + _weekdayName(rem.intervalWeekDay || 1);
+        icon = '🔁'; text = 'every ' + _weekdayName(rem.intervalWeekDay != null ? rem.intervalWeekDay : 1);
       } else {
         icon = '🔁'; text = 'every ' + rem.intervalEvery + rem.intervalUnit[0];
       }
@@ -249,7 +249,6 @@ var UI = (function () {
         '<button class="btn-tag-remove" data-tag="' + esc(tag) + '" aria-label="Remove tag ' + esc(tag) + '">✕</button></span>';
     }).join('');
 
-    var allSubtasksDone = task.subtasks.length > 0 && task.subtasks.every(function (s) { return s.done; });
     var subtasksHtml = task.subtasks.map(function (s) {
       return _buildSubtaskCardHtml(s);
     }).join('');
@@ -527,29 +526,34 @@ var UI = (function () {
     });
   }
 
+  // Auto-complete is buffered (not persisted here): the whole editor commits on
+  // Save via _readEditor + a single Store.upsertTask, so we never write a stale
+  // snapshot or persist edits the user might cancel. We only flip task.done in
+  // memory and surface the Reset affordance.
   function _checkAutoComplete(task) {
     if (task.subtasks.length === 0) return;
     var allDone = task.subtasks.every(function (s) { return s.done; });
     if (allDone && !task.done) {
       task.done = true;
-      Store.upsertTask(task);
-      // Update editor if open
-      var resetBtn = document.getElementById('btn-reset-subtasks');
-      if (!resetBtn) {
-        var subtasksHeader = document.querySelector('.subtasks-header');
-        if (subtasksHeader) {
-          var btn = document.createElement('button');
-          btn.id = 'btn-reset-subtasks';
-          btn.className = 'btn-sm btn-reset';
-          btn.title = 'Reset all subtasks and reopen task';
-          btn.textContent = '↺ Reset';
-          subtasksHeader.appendChild(btn);
-          _wireResetSubtasks(task, btn);
-        }
-      }
+      _showResetButton(task);
     }
   }
 
+  function _showResetButton(task) {
+    if (document.getElementById('btn-reset-subtasks')) return;
+    var subtasksHeader = document.querySelector('.subtasks-header');
+    if (!subtasksHeader) return;
+    var btn = document.createElement('button');
+    btn.id = 'btn-reset-subtasks';
+    btn.className = 'btn-sm btn-reset';
+    btn.title = 'Reset all subtasks and reopen task';
+    btn.textContent = '↺ Reset';
+    subtasksHeader.appendChild(btn);
+    _wireResetSubtasks(task, btn);
+  }
+
+  // Editor-context reset: buffer the change (reopen task + clear subtasks) and
+  // reflect it in the open editor. Persisted on Save like every other edit.
   function _wireResetSubtasks(task, btn) {
     if (!btn) return;
     btn.addEventListener('click', function () {
@@ -562,10 +566,6 @@ var UI = (function () {
           cardEl.classList.remove('subtask-done');
         }
       });
-      // Also uncheck main task done if in editor
-      var mainDoneEl = document.getElementById('task-done-main');
-      if (mainDoneEl) mainDoneEl.checked = false;
-      Store.upsertTask(task);
       btn.remove();
     });
   }
@@ -598,7 +598,8 @@ var UI = (function () {
         rem.intervalMonthDay = parseInt(p.querySelector('#rem-month-day').value, 10) || 1;
         rem.intervalDayTime = p.querySelector('#rem-interval-day-time').value || '09:00';
       } else if (rem.intervalType === 'weekly-day') {
-        rem.intervalWeekDay = parseInt(p.querySelector('#rem-week-day').value, 10) || 1;
+        var wd = parseInt(p.querySelector('#rem-week-day').value, 10);
+        rem.intervalWeekDay = isNaN(wd) ? 1 : wd;  // keep 0 (Sunday) intact
         rem.intervalDayTime = p.querySelector('#rem-interval-day-time-weekly').value || '09:00';
       }
     }
@@ -705,22 +706,13 @@ var UI = (function () {
     var resetBtn = p.querySelector('#btn-reset-subtasks');
     if (resetBtn) _wireResetSubtasks(task, resetBtn);
 
-    // Save
+    // Save — compute all reminder schedules in memory, then persist once.
     p.querySelector('#btn-save-task').addEventListener('click', function () {
       _readEditor(task);
       if (!task.title) { p.querySelector('#editor-title').focus(); return; }
-      if (task.reminder.enabled && task.reminder.mode !== 'none') {
-        ReminderEngine.enableTask(task);
-      } else {
-        ReminderEngine.disableTask(task);
-      }
-      // Enable/disable subtask reminders
+      ReminderEngine.applyReminderState(task.reminder);
       task.subtasks.forEach(function (s) {
-        if (s.reminder.enabled && s.reminder.mode !== 'none') {
-          ReminderEngine.enableSubtaskReminder(task, s);
-        } else {
-          ReminderEngine.disableSubtaskReminder(task, s);
-        }
+        ReminderEngine.applyReminderState(s.reminder);
       });
       Store.upsertTask(task);
       closeEditor();
