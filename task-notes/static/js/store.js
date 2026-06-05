@@ -1,12 +1,28 @@
 var Store = (function () {
   var STORE_KEY = 'task-notes:v1';
-  var CURRENT_VERSION = 1;
+  var CURRENT_VERSION = 2;
   var _data = null;
   var _saveTimer = null;
   var _listeners = [];
 
   var MIGRATIONS = {
-    // placeholder for future migrations: 1→2, 2→3, etc.
+    // v1 → v2: expand subtask shape from {id,text,done} to {id,title,notes,done,reminder}
+    1: function (data) {
+      (data.tasks || []).forEach(function (task) {
+        if (Array.isArray(task.subtasks)) {
+          task.subtasks = task.subtasks.map(function (s) {
+            return {
+              id: s.id || ('st_' + Math.random().toString(36).slice(2, 10)),
+              title: s.title || s.text || '',
+              notes: s.notes || '',
+              done: !!s.done,
+              reminder: s.reminder || Model.defaultReminder()
+            };
+          });
+        }
+      });
+      return data;
+    }
   };
 
   function defaultData() {

@@ -38,8 +38,14 @@ var UI = (function () {
     var cls = isOverdue ? 'chip-overdue' : 'chip-reminder';
     var icon, text;
     if (rem.mode === 'interval') {
-      icon = '🔁';
-      text = 'every ' + rem.intervalEvery + rem.intervalUnit[0];
+      var itype = rem.intervalType || 'frequency';
+      if (itype === 'monthly-date') {
+        icon = '🔁'; text = 'every ' + _ordinal(rem.intervalMonthDay || 1);
+      } else if (itype === 'weekly-day') {
+        icon = '🔁'; text = 'every ' + _weekdayName(rem.intervalWeekDay != null ? rem.intervalWeekDay : 1);
+      } else {
+        icon = '🔁'; text = 'every ' + rem.intervalEvery + rem.intervalUnit[0];
+      }
     } else if (rem.mode === 'datetime') {
       icon = rem.dueAt < now ? '⚠' : '📅';
       text = fmtDate(rem.dueAt);
@@ -50,12 +56,18 @@ var UI = (function () {
     return '<span class="chip ' + cls + '">' + icon + ' ' + esc(text) + '</span>';
   }
 
-  function priorityIcon(p) {
-    return { high: '🔴', normal: '', low: '🔵' }[p] || '';
+  function _ordinal(n) {
+    var s = ['th', 'st', 'nd', 'rd'];
+    var v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
   }
 
-  function colorName(c) {
-    return { yellow: '🟡', pink: '🌸', blue: '🔵', green: '🟢', purple: '🟣', gray: '⬜' }[c] || '🟡';
+  function _weekdayName(d) {
+    return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d] || 'Mon';
+  }
+
+  function priorityIcon(p) {
+    return { high: '🔴', normal: '', low: '🔵' }[p] || '';
   }
 
   // ---- Task list ----
@@ -80,13 +92,17 @@ var UI = (function () {
       var pinnedCls = task.pinned ? ' pinned' : '';
       var subtasksDone = task.subtasks.filter(function (s) { return s.done; }).length;
       var subtasksTotal = task.subtasks.length;
+      var allSubtasksDone = subtasksTotal > 0 && subtasksDone === subtasksTotal;
       var subtaskChip = subtasksTotal > 0
-        ? '<span class="chip chip-subtasks">' + subtasksDone + '/' + subtasksTotal + ' ✓</span>'
+        ? '<span class="chip chip-subtasks' + (allSubtasksDone ? ' chip-subtasks-done' : '') + '">' + subtasksDone + '/' + subtasksTotal + ' ✓</span>'
         : '';
       var tagChips = task.tags.map(function (tag) {
         return '<span class="chip chip-tag">' + esc(tag) + '</span>';
       }).join('');
       var popoutBtn = '<button class="btn-popout" title="Pop out as sticky note" data-id="' + esc(task.id) + '" aria-label="Pop out">⧉</button>';
+      var resetBtn = (task.done && subtasksTotal > 0)
+        ? '<button class="btn-reset-task" data-id="' + esc(task.id) + '" title="Reset subtasks and reopen task" aria-label="Reset task">↺ Reset</button>'
+        : '';
 
       return '<li class="task-card color-' + esc(task.color) + doneCls + pinnedCls +
         '" data-id="' + esc(task.id) + '" tabindex="0" role="article" aria-label="Task: ' + esc(task.title) + '">' +
@@ -106,13 +122,14 @@ var UI = (function () {
           subtaskChip +
           tagChips +
         '</div>' +
+        (resetBtn ? '<div class="card-reset-row">' + resetBtn + '</div>' : '') +
         '</li>';
     }).join('');
 
     // Wire card click → open editor
     container.querySelectorAll('.task-card').forEach(function (card) {
       card.addEventListener('click', function (e) {
-        if (e.target.closest('.task-done-cb') || e.target.closest('.btn-popout')) return;
+        if (e.target.closest('.task-done-cb') || e.target.closest('.btn-popout') || e.target.closest('.btn-reset-task')) return;
         openEditor(card.dataset.id);
       });
       card.addEventListener('keydown', function (e) {
@@ -138,6 +155,17 @@ var UI = (function () {
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
         Modes.popOut(btn.dataset.id);
+      });
+    });
+
+    container.querySelectorAll('.btn-reset-task').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var task = _findTask(btn.dataset.id);
+        if (!task) return;
+        task.done = false;
+        task.subtasks.forEach(function (s) { s.done = false; });
+        Store.upsertTask(task);
       });
     });
   }
@@ -169,6 +197,14 @@ var UI = (function () {
     return Store.getTasks().find(function (t) { return t.id === id; });
   }
 
+  function _toDatetimeLocal(ms) {
+    if (!ms) return '';
+    var d = new Date(ms);
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+      'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
   function _renderEditor(task) {
     var panel = document.getElementById('editor-panel');
     if (!panel) return;
@@ -196,21 +232,25 @@ var UI = (function () {
       return '<option value="' + v + '"' + (task.priority === v ? ' selected' : '') + '>' + v.charAt(0).toUpperCase() + v.slice(1) + '</option>';
     }).join('');
 
-    var nextFire = rem.nextFireAt ? fmtDate(rem.nextFireAt) : (rem.enabled ? '—' : '');
-
-    var subtasksHtml = task.subtasks.map(function (s) {
-      return '<li class="subtask-item" data-sid="' + esc(s.id) + '">' +
-        '<label>' +
-          '<input type="checkbox" class="subtask-cb"' + (s.done ? ' checked' : '') + '> ' +
-          '<span class="subtask-text" contenteditable="true" data-sid="' + esc(s.id) + '">' + esc(s.text) + '</span>' +
-        '</label>' +
-        '<button class="btn-subtask-del" data-sid="' + esc(s.id) + '" aria-label="Remove subtask">✕</button>' +
-        '</li>';
+    var itype = rem.intervalType || 'frequency';
+    var intervalTypeOpts = ['frequency', 'monthly-date', 'weekly-day'].map(function (v) {
+      var labels = { 'frequency': 'Every N units', 'monthly-date': 'Day of month', 'weekly-day': 'Day of week' };
+      return '<option value="' + v + '"' + (itype === v ? ' selected' : '') + '>' + labels[v] + '</option>';
     }).join('');
+
+    var weekdayOpts = [['0','Sunday'],['1','Monday'],['2','Tuesday'],['3','Wednesday'],['4','Thursday'],['5','Friday'],['6','Saturday']].map(function (pair) {
+      return '<option value="' + pair[0] + '"' + (String(rem.intervalWeekDay) === pair[0] ? ' selected' : '') + '>' + pair[1] + '</option>';
+    }).join('');
+
+    var nextFire = rem.nextFireAt ? fmtDate(rem.nextFireAt) : (rem.enabled ? '—' : '');
 
     var tagsHtml = task.tags.map(function (tag) {
       return '<span class="tag-pill">' + esc(tag) +
         '<button class="btn-tag-remove" data-tag="' + esc(tag) + '" aria-label="Remove tag ' + esc(tag) + '">✕</button></span>';
+    }).join('');
+
+    var subtasksHtml = task.subtasks.map(function (s) {
+      return _buildSubtaskCardHtml(s);
     }).join('');
 
     panel.innerHTML =
@@ -224,7 +264,7 @@ var UI = (function () {
         '<input id="editor-title" class="editor-title-input" type="text" value="' + esc(task.title) + '" placeholder="Task title…" aria-required="true">' +
 
         '<label class="field-label" for="editor-notes">Notes</label>' +
-        '<textarea id="editor-notes" class="editor-notes" placeholder="Optional notes…" rows="3">' + esc(task.notes) + '</textarea>' +
+        '<textarea id="editor-notes" class="editor-notes" placeholder="Optional notes…">' + esc(task.notes) + '</textarea>' +
 
         '<label class="field-label">Color</label>' +
         '<div class="color-swatches">' + colorSwatches + '</div>' +
@@ -249,8 +289,12 @@ var UI = (function () {
         '</div>' +
 
         // Subtasks
-        '<label class="field-label">Subtasks</label>' +
-        '<ul class="subtasks-list" id="subtasks-list">' + subtasksHtml + '</ul>' +
+        '<div class="subtasks-header">' +
+          '<span class="field-label" style="margin-bottom:0">Subtasks</span>' +
+          (task.done && task.subtasks.length > 0 ?
+            '<button id="btn-reset-subtasks" class="btn-sm btn-reset" title="Reset all subtasks and reopen task">↺ Reset</button>' : '') +
+        '</div>' +
+        '<div class="subtasks-list" id="subtasks-list">' + subtasksHtml + '</div>' +
         '<div class="subtask-add-row">' +
           '<input id="subtask-input" type="text" placeholder="Add subtask…" class="subtask-input">' +
           '<button id="btn-add-subtask" class="btn-sm">Add</button>' +
@@ -281,9 +325,20 @@ var UI = (function () {
             '</div>' +
 
             '<div class="rem-interval-opts" style="' + (rem.mode === 'interval' ? '' : 'display:none') + '">' +
-              '<label>Every <input type="number" id="rem-interval-every" value="' + (rem.intervalEvery || 1) + '" min="1" style="width:60px"> ' +
-                '<select id="rem-interval-unit">' + intervalUnitOpts + '</select>' +
-              '</label>' +
+              '<label>Type <select id="rem-interval-type">' + intervalTypeOpts + '</select></label>' +
+              '<div id="rem-interval-freq" style="' + (itype !== 'frequency' ? 'display:none' : '') + '">' +
+                '<label>Every <input type="number" id="rem-interval-every" value="' + (rem.intervalEvery || 1) + '" min="1" style="width:60px"> ' +
+                  '<select id="rem-interval-unit">' + intervalUnitOpts + '</select>' +
+                '</label>' +
+              '</div>' +
+              '<div id="rem-interval-monthly" style="' + (itype !== 'monthly-date' ? 'display:none' : '') + '">' +
+                '<label>Day of month (1–31) <input type="number" id="rem-month-day" value="' + (rem.intervalMonthDay || 1) + '" min="1" max="31" style="width:60px"></label>' +
+                '<label>At time <input type="time" id="rem-interval-day-time" value="' + (rem.intervalDayTime || '09:00') + '"></label>' +
+              '</div>' +
+              '<div id="rem-interval-weekly" style="' + (itype !== 'weekly-day' ? 'display:none' : '') + '">' +
+                '<label>Day of week <select id="rem-week-day">' + weekdayOpts + '</select></label>' +
+                '<label>At time <input type="time" id="rem-interval-day-time-weekly" value="' + (rem.intervalDayTime || '09:00') + '"></label>' +
+              '</div>' +
             '</div>' +
 
             '<div class="rem-snooze-opts">' +
@@ -321,12 +376,198 @@ var UI = (function () {
     _wireEditor(task);
   }
 
-  function _toDatetimeLocal(ms) {
-    if (!ms) return '';
-    var d = new Date(ms);
-    var pad = function (n) { return String(n).padStart(2, '0'); };
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
-      'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  function _buildSubtaskCardHtml(s) {
+    var srem = s.reminder;
+    var hasReminder = srem && srem.enabled && srem.mode !== 'none';
+    var remChip = hasReminder
+      ? '<span class="chip chip-reminder subtask-rem-chip">' +
+          (srem.mode === 'interval' ? '🔁' : '📅') + ' ' +
+          esc(srem.nextFireAt ? fmtDate(srem.nextFireAt) : '—') +
+        '</span>'
+      : '';
+
+    var dueVal = (srem && srem.dueAt) ? _toDatetimeLocal(srem.dueAt) : '';
+    var sIntervalUnitOpts = ['minutes', 'hours', 'days'].map(function (v) {
+      return '<option value="' + v + '"' + (srem && srem.intervalUnit === v ? ' selected' : '') + '>' + v + '</option>';
+    }).join('');
+    var sSnoozeUnitOpts = ['minutes', 'hours'].map(function (v) {
+      return '<option value="' + v + '"' + (srem && srem.snoozeUnit === v ? ' selected' : '') + '>' + v + '</option>';
+    }).join('');
+
+    return '<div class="subtask-card' + (s.done ? ' subtask-done' : '') + '" data-sid="' + esc(s.id) + '">' +
+      '<div class="subtask-card-header">' +
+        '<label class="checkbox-wrap" aria-label="' + (s.done ? 'Mark undone' : 'Mark done') + '">' +
+          '<input type="checkbox" class="subtask-cb"' + (s.done ? ' checked' : '') + '>' +
+          '<span class="checkbox-custom"></span>' +
+        '</label>' +
+        '<input type="text" class="subtask-title-input" value="' + esc(s.title) + '" placeholder="Subtask title…" aria-label="Subtask title">' +
+        remChip +
+        '<button class="btn-subtask-toggle" aria-label="Expand subtask details" title="Expand">▼</button>' +
+        '<button class="btn-subtask-del" aria-label="Remove subtask" title="Remove">✕</button>' +
+      '</div>' +
+      '<div class="subtask-card-body" style="display:none">' +
+        '<textarea class="subtask-notes-input" placeholder="Notes / description…" aria-label="Subtask notes">' + esc(s.notes) + '</textarea>' +
+        '<div class="subtask-rem-section">' +
+          '<label class="toggle-label">' +
+            '<input type="checkbox" class="subtask-rem-enabled"' + (srem && srem.enabled ? ' checked' : '') + '> Reminder' +
+          '</label>' +
+          '<div class="subtask-rem-config" style="' + (srem && srem.enabled ? '' : 'display:none') + '">' +
+            '<div class="seg-control" role="group" aria-label="Subtask reminder mode">' +
+              '<button class="subtask-seg-btn' + (srem && srem.mode === 'none' ? ' active' : '') + '" data-mode="none">Off</button>' +
+              '<button class="subtask-seg-btn' + (srem && srem.mode === 'datetime' ? ' active' : '') + '" data-mode="datetime">At a time</button>' +
+              '<button class="subtask-seg-btn' + (srem && srem.mode === 'interval' ? ' active' : '') + '" data-mode="interval">Every…</button>' +
+            '</div>' +
+            '<div class="subtask-rem-datetime" style="' + (srem && srem.mode === 'datetime' ? '' : 'display:none') + '">' +
+              '<label>Due <input type="datetime-local" class="subtask-rem-due" value="' + dueVal + '"></label>' +
+            '</div>' +
+            '<div class="subtask-rem-interval" style="' + (srem && srem.mode === 'interval' ? '' : 'display:none') + '">' +
+              '<label>Every <input type="number" class="subtask-rem-interval-every" value="' + (srem ? srem.intervalEvery || 1 : 1) + '" min="1" style="width:55px"> ' +
+                '<select class="subtask-rem-interval-unit">' + sIntervalUnitOpts + '</select>' +
+              '</label>' +
+            '</div>' +
+            '<div class="subtask-rem-snooze">' +
+              '<label class="toggle-label" style="font-size:12px">' +
+                '<input type="checkbox" class="subtask-rem-autosnooze"' + (srem && srem.autoSnooze ? ' checked' : '') + '> Auto-snooze' +
+              '</label>' +
+              '<div class="subtask-snooze-detail" style="' + (srem && srem.autoSnooze ? '' : 'display:none') + '">' +
+                '<label>Every <input type="number" class="subtask-snooze-every" value="' + (srem ? srem.snoozeEvery || 5 : 5) + '" min="1" style="width:45px"> ' +
+                  '<select class="subtask-snooze-unit">' + sSnoozeUnitOpts + '</select>' +
+                '</label>' +
+              '</div>' +
+            '</div>' +
+            (srem && srem.nextFireAt ? '<div class="next-fire-preview" style="font-size:11px">⏰ Next: <strong>' + esc(fmtDate(srem.nextFireAt)) + '</strong></div>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function _wireSubtaskCard(parentTask, s, cardEl) {
+    var titleInput = cardEl.querySelector('.subtask-title-input');
+    titleInput.addEventListener('input', function () { s.title = this.value; });
+
+    var cb = cardEl.querySelector('.subtask-cb');
+    cb.addEventListener('change', function () {
+      s.done = this.checked;
+      cardEl.classList.toggle('subtask-done', s.done);
+      _checkAutoComplete(parentTask);
+    });
+
+    var toggleBtn = cardEl.querySelector('.btn-subtask-toggle');
+    var body = cardEl.querySelector('.subtask-card-body');
+    toggleBtn.addEventListener('click', function () {
+      var isOpen = body.style.display !== 'none';
+      body.style.display = isOpen ? 'none' : '';
+      toggleBtn.textContent = isOpen ? '▼' : '▲';
+      toggleBtn.setAttribute('aria-label', isOpen ? 'Expand subtask details' : 'Collapse subtask details');
+    });
+
+    var notesTextarea = cardEl.querySelector('.subtask-notes-input');
+    notesTextarea.addEventListener('input', function () { s.notes = this.value; });
+
+    var remEnabled = cardEl.querySelector('.subtask-rem-enabled');
+    var remConfig = cardEl.querySelector('.subtask-rem-config');
+    remEnabled.addEventListener('change', function () {
+      s.reminder.enabled = this.checked;
+      remConfig.style.display = this.checked ? '' : 'none';
+      if (this.checked && Notification && Notification.permission === 'default') {
+        Notifier.requestPermission(function () {});
+      }
+    });
+
+    cardEl.querySelectorAll('.subtask-seg-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        cardEl.querySelectorAll('.subtask-seg-btn').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        s.reminder.mode = btn.dataset.mode;
+        cardEl.querySelector('.subtask-rem-datetime').style.display = btn.dataset.mode === 'datetime' ? '' : 'none';
+        cardEl.querySelector('.subtask-rem-interval').style.display = btn.dataset.mode === 'interval' ? '' : 'none';
+      });
+    });
+
+    cardEl.querySelector('.subtask-rem-due').addEventListener('change', function () {
+      s.reminder.dueAt = this.value ? new Date(this.value).getTime() : null;
+    });
+    cardEl.querySelector('.subtask-rem-interval-every').addEventListener('change', function () {
+      s.reminder.intervalEvery = parseInt(this.value, 10) || 1;
+      if (!s.reminder.intervalAnchor) s.reminder.intervalAnchor = Date.now();
+    });
+    cardEl.querySelector('.subtask-rem-interval-unit').addEventListener('change', function () {
+      s.reminder.intervalUnit = this.value;
+    });
+
+    var autoSnoozeCb = cardEl.querySelector('.subtask-rem-autosnooze');
+    var snoozDetail = cardEl.querySelector('.subtask-snooze-detail');
+    autoSnoozeCb.addEventListener('change', function () {
+      s.reminder.autoSnooze = this.checked;
+      snoozDetail.style.display = this.checked ? '' : 'none';
+    });
+    cardEl.querySelector('.subtask-snooze-every').addEventListener('change', function () {
+      s.reminder.snoozeEvery = parseInt(this.value, 10) || 5;
+    });
+    cardEl.querySelector('.subtask-snooze-unit').addEventListener('change', function () {
+      s.reminder.snoozeUnit = this.value;
+    });
+
+    cardEl.querySelector('.btn-subtask-del').addEventListener('click', function () {
+      parentTask.subtasks = parentTask.subtasks.filter(function (st) { return st.id !== s.id; });
+      cardEl.remove();
+    });
+  }
+
+  function _wireSubtasksList(task) {
+    var list = document.getElementById('subtasks-list');
+    if (!list) return;
+    list.querySelectorAll('.subtask-card').forEach(function (cardEl) {
+      var sid = cardEl.dataset.sid;
+      var s = task.subtasks.find(function (st) { return st.id === sid; });
+      if (!s) return;
+      _wireSubtaskCard(task, s, cardEl);
+    });
+  }
+
+  // Auto-complete is buffered (not persisted here): the whole editor commits on
+  // Save via _readEditor + a single Store.upsertTask, so we never write a stale
+  // snapshot or persist edits the user might cancel. We only flip task.done in
+  // memory and surface the Reset affordance.
+  function _checkAutoComplete(task) {
+    if (task.subtasks.length === 0) return;
+    var allDone = task.subtasks.every(function (s) { return s.done; });
+    if (allDone && !task.done) {
+      task.done = true;
+      _showResetButton(task);
+    }
+  }
+
+  function _showResetButton(task) {
+    if (document.getElementById('btn-reset-subtasks')) return;
+    var subtasksHeader = document.querySelector('.subtasks-header');
+    if (!subtasksHeader) return;
+    var btn = document.createElement('button');
+    btn.id = 'btn-reset-subtasks';
+    btn.className = 'btn-sm btn-reset';
+    btn.title = 'Reset all subtasks and reopen task';
+    btn.textContent = '↺ Reset';
+    subtasksHeader.appendChild(btn);
+    _wireResetSubtasks(task, btn);
+  }
+
+  // Editor-context reset: buffer the change (reopen task + clear subtasks) and
+  // reflect it in the open editor. Persisted on Save like every other edit.
+  function _wireResetSubtasks(task, btn) {
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      task.done = false;
+      task.subtasks.forEach(function (s) {
+        s.done = false;
+        var cardEl = document.querySelector('.subtask-card[data-sid="' + s.id + '"]');
+        if (cardEl) {
+          cardEl.querySelector('.subtask-cb').checked = false;
+          cardEl.classList.remove('subtask-done');
+        }
+      });
+      btn.remove();
+    });
   }
 
   function _readEditor(task) {
@@ -348,9 +589,19 @@ var UI = (function () {
       rem.customRepeatUnit = p.querySelector('#rem-custom-unit').value;
       rem.leadTime = parseInt(p.querySelector('#rem-lead').value, 10) || 0;
     } else if (rem.mode === 'interval') {
-      rem.intervalEvery = parseInt(p.querySelector('#rem-interval-every').value, 10) || 1;
-      rem.intervalUnit = p.querySelector('#rem-interval-unit').value;
-      if (!rem.intervalAnchor) rem.intervalAnchor = Date.now();
+      rem.intervalType = p.querySelector('#rem-interval-type').value;
+      if (rem.intervalType === 'frequency') {
+        rem.intervalEvery = parseInt(p.querySelector('#rem-interval-every').value, 10) || 1;
+        rem.intervalUnit = p.querySelector('#rem-interval-unit').value;
+        if (!rem.intervalAnchor) rem.intervalAnchor = Date.now();
+      } else if (rem.intervalType === 'monthly-date') {
+        rem.intervalMonthDay = parseInt(p.querySelector('#rem-month-day').value, 10) || 1;
+        rem.intervalDayTime = p.querySelector('#rem-interval-day-time').value || '09:00';
+      } else if (rem.intervalType === 'weekly-day') {
+        var wd = parseInt(p.querySelector('#rem-week-day').value, 10);
+        rem.intervalWeekDay = isNaN(wd) ? 1 : wd;  // keep 0 (Sunday) intact
+        rem.intervalDayTime = p.querySelector('#rem-interval-day-time-weekly').value || '09:00';
+      }
     }
 
     rem.autoSnooze = p.querySelector('#rem-autosnooze').checked;
@@ -374,7 +625,6 @@ var UI = (function () {
   function _wireEditor(task) {
     var p = document.getElementById('editor-panel');
 
-    // Close
     p.querySelector('#btn-editor-close').addEventListener('click', closeEditor);
 
     // Color swatches
@@ -393,13 +643,24 @@ var UI = (function () {
     // Segment mode
     p.querySelectorAll('.seg-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        p.querySelectorAll('.seg-btn').forEach(function (b) { b.classList.remove('active'); });
+        // Only handle main task seg-btns (not subtask ones)
+        if (btn.closest('.subtask-rem-config')) return;
+        p.querySelectorAll('.editor-body > .reminder-section .seg-btn').forEach(function (b) { b.classList.remove('active'); });
         btn.classList.add('active');
         var mode = btn.dataset.mode;
         p.querySelector('.rem-datetime-opts').style.display = mode === 'datetime' ? '' : 'none';
         p.querySelector('.rem-interval-opts').style.display = mode === 'interval' ? '' : 'none';
         _updateNextFirePreview(task);
       });
+    });
+
+    // Interval type switcher
+    p.querySelector('#rem-interval-type').addEventListener('change', function () {
+      var v = this.value;
+      p.querySelector('#rem-interval-freq').style.display = v === 'frequency' ? '' : 'none';
+      p.querySelector('#rem-interval-monthly').style.display = v === 'monthly-date' ? '' : 'none';
+      p.querySelector('#rem-interval-weekly').style.display = v === 'weekly-day' ? '' : 'none';
+      _updateNextFirePreview(task);
     });
 
     // Reminder enabled toggle
@@ -420,7 +681,7 @@ var UI = (function () {
       p.querySelector('#rem-custom-repeat').style.display = this.value === 'custom' ? '' : 'none';
     });
 
-    // Live next-fire preview on any reminder input change
+    // Live next-fire preview
     p.querySelector('.rem-config').querySelectorAll('input, select').forEach(function (el) {
       el.addEventListener('change', function () { _updateNextFirePreview(task); });
     });
@@ -430,38 +691,29 @@ var UI = (function () {
     p.querySelector('#tag-input').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); _addTag(task); }
     });
-    p.querySelectorAll('.btn-tag-remove').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        task.tags = task.tags.filter(function (t) { return t !== btn.dataset.tag; });
-        p.querySelector('#tag-pills').innerHTML = task.tags.map(function (tag) {
-          return '<span class="tag-pill">' + esc(tag) +
-            '<button class="btn-tag-remove" data-tag="' + esc(tag) + '">✕</button></span>';
-        }).join('');
-        p.querySelectorAll('.btn-tag-remove').forEach(function (b) {
-          b.addEventListener('click', function () {
-            task.tags = task.tags.filter(function (t) { return t !== b.dataset.tag; });
-            _refreshTagPills(task);
-          });
-        });
-      });
-    });
+    _refreshTagPills(task);
 
-    // Subtasks
+    // Subtasks: wire existing cards
+    _wireSubtasksList(task);
+
+    // Add subtask
     p.querySelector('#btn-add-subtask').addEventListener('click', function () { _addSubtask(task); });
     p.querySelector('#subtask-input').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); _addSubtask(task); }
     });
-    _wireSubtasks(task);
 
-    // Save
+    // Reset subtasks button (if present)
+    var resetBtn = p.querySelector('#btn-reset-subtasks');
+    if (resetBtn) _wireResetSubtasks(task, resetBtn);
+
+    // Save — compute all reminder schedules in memory, then persist once.
     p.querySelector('#btn-save-task').addEventListener('click', function () {
       _readEditor(task);
       if (!task.title) { p.querySelector('#editor-title').focus(); return; }
-      if (task.reminder.enabled && task.reminder.mode !== 'none') {
-        ReminderEngine.enableTask(task);
-      } else {
-        ReminderEngine.disableTask(task);
-      }
+      ReminderEngine.applyReminderState(task.reminder);
+      task.subtasks.forEach(function (s) {
+        ReminderEngine.applyReminderState(s.reminder);
+      });
       Store.upsertTask(task);
       closeEditor();
     });
@@ -521,48 +773,17 @@ var UI = (function () {
     var input = document.getElementById('subtask-input');
     var val = input.value.trim();
     if (!val) return;
-    task.subtasks.push(Model.createSubtask(val));
+    var s = Model.createSubtask(val);
+    task.subtasks.push(s);
     input.value = '';
     var list = document.getElementById('subtasks-list');
-    _renderSubtaskItem(task, task.subtasks[task.subtasks.length - 1], list);
-  }
-
-  function _renderSubtaskItem(task, s, list) {
-    var li = document.createElement('li');
-    li.className = 'subtask-item';
-    li.dataset.sid = s.id;
-    li.innerHTML =
-      '<label><input type="checkbox" class="subtask-cb"' + (s.done ? ' checked' : '') + '> ' +
-        '<span class="subtask-text" contenteditable="true" data-sid="' + esc(s.id) + '">' + esc(s.text) + '</span>' +
-      '</label>' +
-      '<button class="btn-subtask-del" data-sid="' + esc(s.id) + '" aria-label="Remove subtask">✕</button>';
-    list.appendChild(li);
-    li.querySelector('.subtask-cb').addEventListener('change', function () {
-      s.done = this.checked;
-    });
-    li.querySelector('.subtask-text').addEventListener('blur', function () {
-      s.text = this.textContent.trim();
-    });
-    li.querySelector('.btn-subtask-del').addEventListener('click', function () {
-      task.subtasks = task.subtasks.filter(function (st) { return st.id !== s.id; });
-      li.remove();
-    });
-  }
-
-  function _wireSubtasks(task) {
-    var list = document.getElementById('subtasks-list');
-    if (!list) return;
-    list.querySelectorAll('.subtask-item').forEach(function (li) {
-      var sid = li.dataset.sid;
-      var s = task.subtasks.find(function (st) { return st.id === sid; });
-      if (!s) return;
-      li.querySelector('.subtask-cb').addEventListener('change', function () { s.done = this.checked; });
-      li.querySelector('.subtask-text').addEventListener('blur', function () { s.text = this.textContent.trim(); });
-      li.querySelector('.btn-subtask-del').addEventListener('click', function () {
-        task.subtasks = task.subtasks.filter(function (st) { return st.id !== sid; });
-        li.remove();
-      });
-    });
+    var cardHtml = _buildSubtaskCardHtml(s);
+    var tmp = document.createElement('div');
+    tmp.innerHTML = cardHtml;
+    var cardEl = tmp.firstElementChild;
+    list.appendChild(cardEl);
+    _wireSubtaskCard(task, s, cardEl);
+    input.focus();
   }
 
   // ---- Toolbar ----
@@ -689,10 +910,8 @@ var UI = (function () {
   // ---- Main init ----
 
   function init() {
-    // Banner container
     Notifier.setBannerContainer(document.getElementById('alert-banners'));
 
-    // Add task button
     var btnAdd = document.getElementById('btn-add');
     if (btnAdd) btnAdd.addEventListener('click', _showAddInput);
 
@@ -711,15 +930,12 @@ var UI = (function () {
     var btnAddCancel = document.getElementById('btn-add-cancel');
     if (btnAddCancel) btnAddCancel.addEventListener('click', _hideAddInput);
 
-    // Editor overlay close
     var overlay = document.getElementById('editor-overlay');
     if (overlay) overlay.addEventListener('click', closeEditor);
 
-    // Mode toggle
     var modeBtn = document.getElementById('btn-mode-toggle');
     if (modeBtn) modeBtn.addEventListener('click', Modes.toggle);
 
-    // Notifications chip
     var notifBtn = document.getElementById('btn-notif');
     if (notifBtn) {
       notifBtn.addEventListener('click', function () {
@@ -727,7 +943,6 @@ var UI = (function () {
       });
     }
 
-    // Search
     var searchInput = document.getElementById('search-input');
     if (searchInput) {
       searchInput.addEventListener('input', function () {
@@ -736,7 +951,6 @@ var UI = (function () {
       });
     }
 
-    // Export / Import
     var btnExport = document.getElementById('btn-export');
     if (btnExport) btnExport.addEventListener('click', exportData);
     var importInput = document.getElementById('import-input');
@@ -750,7 +964,6 @@ var UI = (function () {
       document.getElementById('import-input').click();
     });
 
-    // Keyboard shortcuts (global)
     document.addEventListener('keydown', function (e) {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
       if ((e.key === '+' || e.key === 'n') && !e.metaKey && !e.ctrlKey) {
@@ -760,14 +973,12 @@ var UI = (function () {
       if (e.key === 'Escape' && _activeEditorId) closeEditor();
     });
 
-    // Store changes → re-render
     Store.onChange(function () {
       renderTaskList();
       renderFilterBar();
       renderToolbar();
     });
 
-    // Initial render
     renderTaskList();
     renderFilterBar();
     renderToolbar();

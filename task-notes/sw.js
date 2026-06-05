@@ -1,4 +1,4 @@
-var CACHE = 'task-notes-v1';
+var CACHE = 'task-notes-v2';
 var SHELL = [
   './',
   'index.html',
