@@ -116,8 +116,12 @@ var UI = (function () {
         openEditor(card.dataset.id);
       });
       card.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditor(card.dataset.id); }
-        if (e.key === 'e') openEditor(card.dataset.id);
+        if (e.key === 'Enter' || e.key === 'e') { e.preventDefault(); openEditor(card.dataset.id); }
+        if (e.key === ' ') {
+          e.preventDefault();
+          var t = _findTask(card.dataset.id);
+          if (t) { t.done = !t.done; Store.upsertTask(t); }
+        }
       });
     });
 
@@ -189,7 +193,7 @@ var UI = (function () {
       return '<option value="' + v + '"' + (rem.snoozeUnit === v ? ' selected' : '') + '>' + v + '</option>';
     }).join('');
     var priorityOpts = ['low', 'normal', 'high'].map(function (v) {
-      return '<option value="' + v + '"' + (rem.priority === v ? ' selected' : '') + '>' + v.charAt(0).toUpperCase() + v.slice(1) + '</option>';
+      return '<option value="' + v + '"' + (task.priority === v ? ' selected' : '') + '>' + v.charAt(0).toUpperCase() + v.slice(1) + '</option>';
     }).join('');
 
     var nextFire = rem.nextFireAt ? fmtDate(rem.nextFireAt) : (rem.enabled ? '—' : '');

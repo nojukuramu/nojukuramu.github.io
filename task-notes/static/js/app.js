@@ -17,12 +17,9 @@
       if (!task) return;
 
       if (msg.type === 'SNOOZE_TASK') {
-        task.reminder.nextFireAt = Date.now() + (msg.every || 5) * Model.UNIT_MS(msg.unit || 'minutes');
-        Store.upsertTask(task);
+        ReminderEngine.snoozeTask(task, msg.every || 5, msg.unit || 'minutes');
       } else if (msg.type === 'DISMISS_TASK') {
-        task.reminder.acknowledgedAt = Date.now();
-        task.reminder.snoozeCount = 0;
-        Store.upsertTask(task);
+        ReminderEngine.dismissTask(task);
       } else if (msg.type === 'PERIODIC_SWEEP') {
         ReminderEngine.sweep(true);
       }

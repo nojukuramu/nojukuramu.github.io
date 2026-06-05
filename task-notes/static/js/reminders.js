@@ -5,23 +5,23 @@ var ReminderEngine = (function () {
     return Model.UNIT_MS(unit);
   }
 
-  function _inQuietHours(qh) {
+  function _inQuietHours(qh, atMs) {
     if (!qh || !qh.start || !qh.end) return false;
-    var now = new Date();
-    var hhmm = now.getHours() * 100 + now.getMinutes();
+    var d = new Date(atMs || Date.now());
+    var hhmm = d.getHours() * 100 + d.getMinutes();
     var s = parseInt(qh.start.replace(':', ''), 10);
     var e = parseInt(qh.end.replace(':', ''), 10);
     if (s > e) return hhmm >= s || hhmm < e;  // crosses midnight
     return hhmm >= s && hhmm < e;
   }
 
-  function _quietHoursEnd(qh) {
-    if (!qh || !qh.end) return Date.now();
-    var now = new Date();
+  function _quietHoursEnd(qh, fromMs) {
+    if (!qh || !qh.end) return fromMs || Date.now();
+    var ref = new Date(fromMs || Date.now());
     var parts = qh.end.split(':');
-    var end = new Date(now);
+    var end = new Date(ref);
     end.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
-    if (end <= now) end.setDate(end.getDate() + 1);
+    if (end <= ref) end.setDate(end.getDate() + 1);
     return end.getTime();
   }
 
@@ -64,8 +64,8 @@ var ReminderEngine = (function () {
       var k = Math.ceil((now - anchor) / step);
       if (k <= 0) k = 1;
       var next = anchor + k * step;
-      if (reminder.quietHours && _inQuietHours(reminder.quietHours)) {
-        return _quietHoursEnd(reminder.quietHours);
+      if (reminder.quietHours && _inQuietHours(reminder.quietHours, next)) {
+        return _quietHoursEnd(reminder.quietHours, next);
       }
       return next;
     }
@@ -78,12 +78,13 @@ var ReminderEngine = (function () {
         if (reminder.repeat && reminder.repeat !== 'none') {
           var nextDue = _advanceDueAt(reminder.dueAt, reminder.repeat, reminder.customRepeatEvery, reminder.customRepeatUnit);
           if (!nextDue) return null;
-          return nextDue - (reminder.leadTime || 0) * 60000;
+          fire = nextDue - (reminder.leadTime || 0) * 60000;
+        } else {
+          return null; // past, no repeat
         }
-        return null; // past, no repeat
       }
-      if (reminder.quietHours && _inQuietHours(reminder.quietHours)) {
-        return _quietHoursEnd(reminder.quietHours);
+      if (reminder.quietHours && _inQuietHours(reminder.quietHours, fire)) {
+        return _quietHoursEnd(reminder.quietHours, fire);
       }
       return fire;
     }
@@ -245,6 +246,8 @@ var ReminderEngine = (function () {
     refreshAll: refreshAll,
     computeNextFireAt: computeNextFireAt,
     enableTask: enableTask,
-    disableTask: disableTask
+    disableTask: disableTask,
+    dismissTask: _handleDismiss,
+    snoozeTask: _handleSnooze
   };
 })();

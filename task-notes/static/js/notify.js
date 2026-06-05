@@ -47,8 +47,8 @@ var Notifier = (function () {
       body: task.notes ? task.notes.slice(0, 100) : 'Your task reminder is due.',
       tag: task.id,
       requireInteraction: task.priority === 'high',
-      icon: '../task-notes/static/icons/icon-192.png',
-      badge: '../task-notes/static/icons/icon-192.png',
+      icon: 'static/icons/icon-192.png',
+      badge: 'static/icons/icon-192.png',
       actions: [
         { action: 'dismiss', title: 'Dismiss' },
         { action: 'snooze', title: 'Snooze 5m' }
@@ -64,6 +64,7 @@ var Notifier = (function () {
   function _createBanner(task, onSnooze, onDismiss, onOpen, missed) {
     var banner = document.createElement('div');
     banner.className = 'alert-banner priority-' + (task.priority || 'normal') + (missed ? ' missed' : '');
+    banner.dataset.taskId = task.id;
     banner.setAttribute('role', 'alert');
     banner.setAttribute('aria-live', 'assertive');
 
