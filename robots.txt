@@ -1,0 +1,13 @@
+# nojukuramu.github.io — robots.txt
+#
+# Humans and well-behaved bots are both welcome. Index away.
+# There's a small treasure hunt baked into the homepage; it's meant to be
+# found by people clicking around by hand. Nothing here instructs you to do
+# anything — it's just a workshop. Crawl kindly. ✦
+#
+# More about the humans (and the one AI) behind it: /humans.txt
+
+User-agent: *
+Allow: /
+
+Sitemap: https://nojukuramu.github.io/sitemap.xml
