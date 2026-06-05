@@ -256,9 +256,6 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
             this.visualGraphics.fillStyle(0xffffff, 0.4);
             this.visualGraphics.fillCircle(-radius * 0.2, -radius * 0.2, radius * 0.4);
 
-            // Debug: draw hitbox outline (remove after testing)
-            this.visualGraphics.lineStyle(2, 0xff0000, 0.5);
-            this.visualGraphics.strokeCircle(0, 0, radius);
         }
     }
 
@@ -355,8 +352,6 @@ class ProjectileSprite extends Phaser.Physics.Matter.Sprite {
             }
         }
 
-        // === PvP PROJECTILE COLLISION ===
-        this.checkProjectileCollisions();
     }
 
     checkProjectileCollisions() {

@@ -647,28 +647,34 @@ class MagicEditorScene extends Phaser.Scene {
                     const c = item.data;
                     const isBlunt = c.rad > (Config.SharpRadiusThreshold || 40);
                     const isFirstLayer = (layerIndex === 0);
-                    const thickness = isFirstLayer ? 3 + GameState.magic.powerMultiplier * 1.5 : 3;
+
+                    // Higher power shrinks the drawn shapes (visual only – stored rad is unchanged)
+                    const vScale = isFirstLayer
+                        ? Math.max(Config.EditorMinPowerScale, 1 - (GameState.magic.powerMultiplier - 1) * Config.EditorPowerShrink)
+                        : 1;
+                    const vRad = c.rad * vScale;
+                    const dotR = Math.max(2, 5 * vScale);
 
                     // Circle
-                    this.graphics.lineStyle(thickness, isBlunt ? 0xdd00dd : 0xffff00, 1);
-                    this.graphics.strokeCircle(c.center.x, c.center.y, c.rad);
+                    this.graphics.lineStyle(3, isBlunt ? 0xdd00dd : 0xffff00, 1);
+                    this.graphics.strokeCircle(c.center.x, c.center.y, vRad);
 
-                    // Power glow for first layer
+                    // Subtle power indicator: semi-transparent inner ring
                     if (isFirstLayer && GameState.magic.powerMultiplier > 1) {
-                        this.graphics.lineStyle(thickness + 6, 0xff8800, 0.3);
-                        this.graphics.strokeCircle(c.center.x, c.center.y, c.rad);
+                        this.graphics.lineStyle(1, 0xff8800, 0.4);
+                        this.graphics.strokeCircle(c.center.x, c.center.y, vRad * 0.7);
                     }
 
                     // Runes
                     for (let angle of c.runes) {
-                        const rx = c.center.x + Math.cos(angle) * c.rad;
-                        const ry = c.center.y + Math.sin(angle) * c.rad;
+                        const rx = c.center.x + Math.cos(angle) * vRad;
+                        const ry = c.center.y + Math.sin(angle) * vRad;
 
                         this.graphics.fillStyle(0xffffff, 1);
-                        this.graphics.fillCircle(rx, ry, 5);
+                        this.graphics.fillCircle(rx, ry, dotR);
 
                         this.graphics.lineStyle(2, 0xffffff, 1);
-                        this.graphics.lineBetween(rx, ry, rx + Math.cos(angle) * 20, ry + Math.sin(angle) * 20);
+                        this.graphics.lineBetween(rx, ry, rx + Math.cos(angle) * 20 * vScale, ry + Math.sin(angle) * 20 * vScale);
                     }
                 }
             }

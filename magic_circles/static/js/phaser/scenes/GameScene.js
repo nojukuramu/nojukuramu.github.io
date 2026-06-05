@@ -407,14 +407,21 @@ class GameScene extends Phaser.Scene {
         const powerMult = GameState.magic.powerMultiplier || 1;
         const manaCostMult = 1 + (powerMult - 1) * 0.2;
 
-        // Stack Reduction Algorithm (predator logic)
+        // Aggregate costs per element first, then deduct in one pass to avoid
+        // partial deductions when the player can only afford some shapes.
+        const costByElement = {};
+        allShapes.forEach(shape => {
+            const el = shape.element;
+            const cost = Math.ceil((Config.ManaCost[el] || 15) * manaCostMult);
+            costByElement[el] = (costByElement[el] || 0) + cost;
+        });
+
+        // Stack Reduction Algorithm (predator logic) — only count affordable elements
         allShapes.forEach(shape => {
             const element = shape.element;
-            const baseCost = Config.ManaCost[element] || 15;
-            const actualCost = Math.ceil(baseCost * manaCostMult);
+            const actualCost = Math.ceil((Config.ManaCost[element] || 15) * manaCostMult);
 
-            if (this.player.mana[element] >= actualCost) {
-                this.player.mana[element] -= actualCost;
+            if (this.player.mana[element] >= (costByElement[element] || 0)) {
                 manaCost += actualCost;
 
                 // Predator Logic: bottom beats top
@@ -438,6 +445,13 @@ class GameScene extends Phaser.Scene {
                 }
             }
         });
+
+        // Deduct total costs now that we know what's affordable
+        for (const [el, cost] of Object.entries(costByElement)) {
+            if (this.player.mana[el] >= cost) {
+                this.player.mana[el] -= cost;
+            }
+        }
 
         // === CIRCLE LOGIC (LAYER-BASED) ===
         let circleLayers = [];
@@ -583,13 +597,8 @@ class GameScene extends Phaser.Scene {
                 totalRecoil += recoilAmount;
             }
 
-            // Direction with rune offset
-            let dir = { x: Math.cos(angle), y: Math.sin(angle) };
-            if (circle.runes && circle.runes.length > 0) {
-                const offset = circle.runes[0] - (-Math.PI / 2);
-                const finalAngle = angle + offset;
-                dir = { x: Math.cos(finalAngle), y: Math.sin(finalAngle) };
-            }
+            // Direction with averaged-rune offset
+            const finalAngle = angle + this.runeOffset(circle.runes);
 
             // Projectile radius (larger for blunt, tiny for piercing)
             let projRadius;
@@ -610,9 +619,12 @@ class GameScene extends Phaser.Scene {
             // Build payload chain
             const payload = this.buildPayloadChain(payloadLayers, stack, baseDmg, basePower);
 
+            const dirX = Math.cos(finalAngle);
+            const dirY = Math.sin(finalAngle);
+
             new ProjectileSprite(this,
-                this.player.x + dir.x * spawnOffset,
-                this.player.y + dir.y * spawnOffset,
+                this.player.x + dirX * spawnOffset,
+                this.player.y + dirY * spawnOffset,
                 {
                     elements: stack,
                     spectrum: spectrum,
@@ -620,7 +632,7 @@ class GameScene extends Phaser.Scene {
                     damage: damage,
                     pierce: spectrumConfig.pierce || 0,
                     radius: projRadius,
-                    vel: { x: dir.x * speed * bluntSpeedModifier, y: dir.y * speed * bluntSpeedModifier },
+                    vel: { x: dirX * speed * bluntSpeedModifier, y: dirY * speed * bluntSpeedModifier },
                     power: basePower,
                     caster: this.player,
                     payload: payload
@@ -665,13 +677,8 @@ class GameScene extends Phaser.Scene {
         let payload = [];
 
         currentLayer.forEach(circle => {
-            let relAngle = 0;
-            if (circle.runes && circle.runes.length > 0) {
-                relAngle = circle.runes[0] - (-Math.PI / 2);
-            }
-
             payload.push({
-                relAngle: relAngle,
+                relAngle: this.runeOffset(circle.runes),
                 circleRadius: circle.rad,
                 baseDamage: damagePerShard,
                 inheritedPower: powerPerShard,
@@ -727,6 +734,14 @@ class GameScene extends Phaser.Scene {
                 console.warn('Projectile activation failed:', err);
             }
         }
+    }
+
+    runeOffset(runes) {
+        if (!runes || runes.length === 0) return 0;
+        // Average of all rune angles relative to the upward baseline (-π/2).
+        // Single rune at angle a → offset = a - (-π/2). Multiple runes → arithmetic mean.
+        const sum = runes.reduce((acc, a) => acc + (a - (-Math.PI / 2)), 0);
+        return sum / runes.length;
     }
 
     getElement(nodeCount) {
@@ -791,6 +806,42 @@ class GameScene extends Phaser.Scene {
         }
     }
 
+    resolveProjectilePvP() {
+        const list = GameState.projectiles;
+        const pvpRatio = Config.PvPPowerRatio || 1.5;
+
+        for (let i = 0; i < list.length; i++) {
+            const a = list[i];
+            if (!a || a.isDead) continue;
+
+            for (let j = i + 1; j < list.length; j++) {
+                const b = list[j];
+                if (!b || b.isDead) continue;
+                if (a.isDead) break; // a was killed this pass
+                if (a.caster === b.caster) continue;
+
+                const ra = a.projectileData?.radius || 10;
+                const rb = b.projectileData?.radius || 10;
+                const dist = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
+                if (dist >= ra + rb) continue;
+
+                if (a.power > b.power * pvpRatio) {
+                    b.die();
+                    a.power -= b.power * 0.5;
+                    this.spawnParticles((a.x + b.x) / 2, (a.y + b.y) / 2, 0xffffff, 8);
+                } else if (b.power > a.power * pvpRatio) {
+                    a.die();
+                    b.power -= a.power * 0.5;
+                    this.spawnParticles((a.x + b.x) / 2, (a.y + b.y) / 2, 0xffffff, 8);
+                } else {
+                    this.spawnParticles((a.x + b.x) / 2, (a.y + b.y) / 2, 0xffffff, 12);
+                    a.die();
+                    b.die();
+                }
+            }
+        }
+    }
+
     update(time, delta) {
         // The entire frame is wrapped: this runs inside Phaser's requestAnimationFrame
         // step, so an uncaught error here would stop the loop and freeze the game.
@@ -820,6 +871,9 @@ class GameScene extends Phaser.Scene {
                     if (proj.die) proj.die();
                 }
             }
+
+            // Single O(n²/2) PvP pass — replaces per-projectile individual scans.
+            this.resolveProjectilePvP();
 
             // Update chunk loading
             if (this.player) {
