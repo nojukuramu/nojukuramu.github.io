@@ -41,7 +41,6 @@ var ReminderEngine = (function () {
       case 'monthly':
         var origDay = d.getDate();
         d.setMonth(d.getMonth() + 1);
-        // clamp if month is shorter
         var maxDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
         d.setDate(Math.min(origDay, maxDay));
         break;
@@ -49,9 +48,65 @@ var ReminderEngine = (function () {
         d = new Date(dueAt + (customEvery || 1) * UNIT_MS(customUnit || 'days'));
         break;
       default:
-        return null; // one-shot, disable after firing
+        return null;
     }
     return d.getTime();
+  }
+
+  // Compute next fire for interval/monthly-date: every Nth day of the month at HH:MM
+  function _nextMonthlyDate(rem, now) {
+    var day = Math.max(1, Math.min(31, rem.intervalMonthDay || 1));
+    var timeParts = (rem.intervalDayTime || '09:00').split(':');
+    var h = parseInt(timeParts[0], 10);
+    var m = parseInt(timeParts[1], 10);
+
+    // Try this month
+    var candidate = new Date(now);
+    candidate.setDate(1);
+    candidate.setHours(h, m, 0, 0);
+    var maxDayThisMonth = new Date(candidate.getFullYear(), candidate.getMonth() + 1, 0).getDate();
+    candidate.setDate(Math.min(day, maxDayThisMonth));
+
+    if (candidate.getTime() > now) {
+      if (rem.quietHours && _inQuietHours(rem.quietHours, candidate.getTime())) {
+        return _quietHoursEnd(rem.quietHours, candidate.getTime());
+      }
+      return candidate.getTime();
+    }
+
+    // Advance to next month
+    candidate.setDate(1);
+    candidate.setMonth(candidate.getMonth() + 1);
+    var maxDayNext = new Date(candidate.getFullYear(), candidate.getMonth() + 1, 0).getDate();
+    candidate.setDate(Math.min(day, maxDayNext));
+    candidate.setHours(h, m, 0, 0);
+
+    if (rem.quietHours && _inQuietHours(rem.quietHours, candidate.getTime())) {
+      return _quietHoursEnd(rem.quietHours, candidate.getTime());
+    }
+    return candidate.getTime();
+  }
+
+  // Compute next fire for interval/weekly-day: every specific weekday at HH:MM
+  function _nextWeeklyDay(rem, now) {
+    var targetDay = rem.intervalWeekDay != null ? rem.intervalWeekDay : 1;
+    var timeParts = (rem.intervalDayTime || '09:00').split(':');
+    var h = parseInt(timeParts[0], 10);
+    var m = parseInt(timeParts[1], 10);
+
+    var candidate = new Date(now);
+    candidate.setHours(h, m, 0, 0);
+
+    var daysUntil = (targetDay - candidate.getDay() + 7) % 7;
+    if (daysUntil === 0 && candidate.getTime() <= now) {
+      daysUntil = 7;
+    }
+    candidate.setDate(candidate.getDate() + daysUntil);
+
+    if (rem.quietHours && _inQuietHours(rem.quietHours, candidate.getTime())) {
+      return _quietHoursEnd(rem.quietHours, candidate.getTime());
+    }
+    return candidate.getTime();
   }
 
   function computeNextFireAt(reminder, now) {
@@ -59,6 +114,17 @@ var ReminderEngine = (function () {
     now = now || Date.now();
 
     if (reminder.mode === 'interval') {
+      var itype = reminder.intervalType || 'frequency';
+
+      if (itype === 'monthly-date') {
+        return _nextMonthlyDate(reminder, now);
+      }
+
+      if (itype === 'weekly-day') {
+        return _nextWeeklyDay(reminder, now);
+      }
+
+      // frequency sub-type (default)
       var anchor = reminder.intervalAnchor || now;
       var step = (reminder.intervalEvery || 1) * UNIT_MS(reminder.intervalUnit);
       var k = Math.ceil((now - anchor) / step);
@@ -74,13 +140,12 @@ var ReminderEngine = (function () {
       if (!reminder.dueAt) return null;
       var fire = reminder.dueAt - (reminder.leadTime || 0) * 60000;
       if (fire <= now) {
-        // already past, advance if repeating
         if (reminder.repeat && reminder.repeat !== 'none') {
           var nextDue = _advanceDueAt(reminder.dueAt, reminder.repeat, reminder.customRepeatEvery, reminder.customRepeatUnit);
           if (!nextDue) return null;
           fire = nextDue - (reminder.leadTime || 0) * 60000;
         } else {
-          return null; // past, no repeat
+          return null;
         }
       }
       if (reminder.quietHours && _inQuietHours(reminder.quietHours, fire)) {
@@ -92,22 +157,15 @@ var ReminderEngine = (function () {
     return null;
   }
 
-  function _fireTask(task) {
-    var now = Date.now();
-    var rem = task.reminder;
-    rem.lastFiredAt = now;
-    rem.acknowledgedAt = null;
-
-    // advance nextFireAt after fire
+  function _advanceReminder(rem, now) {
     if (rem.autoSnooze) {
       rem.snoozeCount = (rem.snoozeCount || 0) + 1;
       if (rem.maxSnoozes && rem.snoozeCount >= rem.maxSnoozes) {
-        rem.nextFireAt = null; // exhausted
+        rem.nextFireAt = null;
       } else {
         rem.nextFireAt = now + (rem.snoozeEvery || 5) * UNIT_MS(rem.snoozeUnit || 'minutes');
       }
     } else {
-      // advance to normal next occurrence
       rem.snoozeCount = 0;
       if (rem.mode === 'interval') {
         rem.nextFireAt = computeNextFireAt(rem, now);
@@ -121,9 +179,15 @@ var ReminderEngine = (function () {
         }
       }
     }
+  }
 
+  function _fireTask(task) {
+    var now = Date.now();
+    var rem = task.reminder;
+    rem.lastFiredAt = now;
+    rem.acknowledgedAt = null;
+    _advanceReminder(rem, now);
     Store.upsertTask(task);
-
     Notifier.alert(
       task,
       function (every, unit) { _handleSnooze(task, every, unit); },
@@ -133,10 +197,33 @@ var ReminderEngine = (function () {
     );
   }
 
+  function _fireSubtask(parentTask, subtask) {
+    var now = Date.now();
+    var rem = subtask.reminder;
+    rem.lastFiredAt = now;
+    rem.acknowledgedAt = null;
+    _advanceReminder(rem, now);
+    Store.upsertTask(parentTask);
+
+    // Build a virtual task object for Notifier.alert
+    var virtualTask = {
+      id: subtask.id,
+      title: subtask.title + ' • ' + parentTask.title,
+      notes: subtask.notes || '',
+      priority: 'normal'
+    };
+    Notifier.alert(
+      virtualTask,
+      function (every, unit) { _handleSubtaskSnooze(parentTask, subtask, every, unit); },
+      function () { _handleSubtaskDismiss(parentTask, subtask); },
+      function () { UI.openEditor(parentTask.id); },
+      false
+    );
+  }
+
   function _handleSnooze(task, every, unit) {
     var rem = task.reminder;
     rem.nextFireAt = Date.now() + every * UNIT_MS(unit);
-    rem.snoozeCount = (rem.snoozeCount || 0);
     Store.upsertTask(task);
   }
 
@@ -144,7 +231,6 @@ var ReminderEngine = (function () {
     var rem = task.reminder;
     rem.acknowledgedAt = Date.now();
     rem.snoozeCount = 0;
-    // advance to next normal occurrence
     if (rem.mode === 'interval') {
       rem.nextFireAt = computeNextFireAt(rem, Date.now());
     } else if (rem.mode === 'datetime') {
@@ -159,18 +245,45 @@ var ReminderEngine = (function () {
     Store.upsertTask(task);
   }
 
+  function _handleSubtaskSnooze(parentTask, subtask, every, unit) {
+    subtask.reminder.nextFireAt = Date.now() + every * UNIT_MS(unit);
+    Store.upsertTask(parentTask);
+  }
+
+  function _handleSubtaskDismiss(parentTask, subtask) {
+    var rem = subtask.reminder;
+    rem.acknowledgedAt = Date.now();
+    rem.snoozeCount = 0;
+    if (rem.mode === 'interval') {
+      rem.nextFireAt = computeNextFireAt(rem, Date.now());
+    } else if (rem.mode === 'datetime') {
+      if (rem.repeat && rem.repeat !== 'none') {
+        var nextDue = _advanceDueAt(rem.dueAt, rem.repeat, rem.customRepeatEvery, rem.customRepeatUnit);
+        rem.dueAt = nextDue;
+        rem.nextFireAt = nextDue ? computeNextFireAt(rem, Date.now()) : null;
+      } else {
+        rem.nextFireAt = null;
+      }
+    }
+    Store.upsertTask(parentTask);
+  }
+
   function sweep(catchUp) {
     var now = Date.now();
     var tasks = Store.getTasks();
     tasks.forEach(function (task) {
+      // Sweep task-level reminder
       var rem = task.reminder;
-      if (!rem.enabled || !rem.nextFireAt) return;
-      if (now >= rem.nextFireAt) {
+      if (rem.enabled && rem.nextFireAt && now >= rem.nextFireAt) {
         _fireTask(task);
-        if (catchUp && UI && UI.showMissedBadge) {
-          // mark as missed
-        }
       }
+      // Sweep subtask reminders
+      (task.subtasks || []).forEach(function (subtask) {
+        var srem = subtask.reminder;
+        if (srem && srem.enabled && srem.nextFireAt && now >= srem.nextFireAt) {
+          _fireSubtask(task, subtask);
+        }
+      });
     });
   }
 
@@ -179,11 +292,19 @@ var ReminderEngine = (function () {
     var tasks = Store.getTasks();
     tasks.forEach(function (task) {
       var rem = task.reminder;
-      if (!rem.enabled) return;
-      if (!rem.nextFireAt && rem.mode !== 'none') {
+      var changed = false;
+      if (rem.enabled && !rem.nextFireAt && rem.mode !== 'none') {
         rem.nextFireAt = computeNextFireAt(rem, now);
-        Store.upsertTask(task);
+        changed = true;
       }
+      (task.subtasks || []).forEach(function (subtask) {
+        var srem = subtask.reminder;
+        if (srem && srem.enabled && !srem.nextFireAt && srem.mode !== 'none') {
+          srem.nextFireAt = computeNextFireAt(srem, now);
+          changed = true;
+        }
+      });
+      if (changed) Store.upsertTask(task);
     });
   }
 
@@ -192,27 +313,49 @@ var ReminderEngine = (function () {
     var tasks = Store.getTasks();
     tasks.forEach(function (task) {
       var rem = task.reminder;
-      if (!rem.enabled || !rem.nextFireAt) return;
-      if (now > rem.nextFireAt + 5000) {
-        // missed — fire immediately with missed flag
+      var changed = false;
+      if (rem.enabled && rem.nextFireAt && now > rem.nextFireAt + 5000) {
         rem.lastFiredAt = now;
         rem.acknowledgedAt = null;
         rem.nextFireAt = null;
-        Store.upsertTask(task);
+        changed = true;
         Notifier.alert(
           task,
           function (every, unit) { _handleSnooze(task, every, unit); },
           function () { _handleDismiss(task); },
           function () { if (UI) UI.openEditor(task.id); },
-          true  // missed flag
+          true
         );
       }
+      (task.subtasks || []).forEach(function (subtask) {
+        var srem = subtask.reminder;
+        if (srem && srem.enabled && srem.nextFireAt && now > srem.nextFireAt + 5000) {
+          srem.lastFiredAt = now;
+          srem.acknowledgedAt = null;
+          srem.nextFireAt = null;
+          changed = true;
+          var virtualTask = {
+            id: subtask.id,
+            title: subtask.title + ' • ' + task.title,
+            notes: subtask.notes || '',
+            priority: 'normal'
+          };
+          Notifier.alert(
+            virtualTask,
+            function (every, unit) { _handleSubtaskSnooze(task, subtask, every, unit); },
+            function () { _handleSubtaskDismiss(task, subtask); },
+            function () { if (UI) UI.openEditor(task.id); },
+            true
+          );
+        }
+      });
+      if (changed) Store.upsertTask(task);
     });
   }
 
   function enableTask(task) {
     var rem = task.reminder;
-    if (!rem.intervalAnchor && rem.mode === 'interval') {
+    if (!rem.intervalAnchor && rem.mode === 'interval' && (rem.intervalType || 'frequency') === 'frequency') {
       rem.intervalAnchor = Date.now();
     }
     rem.nextFireAt = computeNextFireAt(rem, Date.now());
@@ -224,6 +367,22 @@ var ReminderEngine = (function () {
     task.reminder.nextFireAt = null;
     task.reminder.snoozeCount = 0;
     Store.upsertTask(task);
+  }
+
+  function enableSubtaskReminder(parentTask, subtask) {
+    var rem = subtask.reminder;
+    if (!rem.intervalAnchor && rem.mode === 'interval' && (rem.intervalType || 'frequency') === 'frequency') {
+      rem.intervalAnchor = Date.now();
+    }
+    rem.nextFireAt = computeNextFireAt(rem, Date.now());
+    rem.snoozeCount = 0;
+    Store.upsertTask(parentTask);
+  }
+
+  function disableSubtaskReminder(parentTask, subtask) {
+    subtask.reminder.nextFireAt = null;
+    subtask.reminder.snoozeCount = 0;
+    Store.upsertTask(parentTask);
   }
 
   function start() {
@@ -247,6 +406,8 @@ var ReminderEngine = (function () {
     computeNextFireAt: computeNextFireAt,
     enableTask: enableTask,
     disableTask: disableTask,
+    enableSubtaskReminder: enableSubtaskReminder,
+    disableSubtaskReminder: disableSubtaskReminder,
     dismissTask: _handleDismiss,
     snoozeTask: _handleSnooze
   };
