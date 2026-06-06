@@ -1,0 +1,17 @@
+{
+  "name": "Magic Circles — A Certain RPG",
+  "short_name": "Magic Circles",
+  "description": "A magic-based RPG where spells are drawn, not picked. Trace elemental glyphs, wrap them in seals, and cast.",
+  "start_url": "phaser.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0c0d16",
+  "theme_color": "#16213e",
+  "icons": [
+    { "src": "static/icons/mc-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "static/icons/mc-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "static/icons/mc-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

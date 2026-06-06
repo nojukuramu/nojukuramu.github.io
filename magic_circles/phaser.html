@@ -9,7 +9,16 @@
     <!-- Meta Tags -->
     <meta name="description"
         content="A magic-based RPG game built with Phaser.js featuring procedural world generation and spell crafting.">
-    <meta name="theme-color" content="#1a1a2e">
+    <meta name="theme-color" content="#16213e">
+
+    <!-- PWA: installable on mobile & desktop -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Magic Circles">
+    <link rel="apple-touch-icon" href="static/icons/mc-192.png">
+    <link rel="icon" href="static/icons/mc-192.png" type="image/png">
 
     <style>
         * {
@@ -278,8 +287,9 @@
     <!-- Effects -->
     <script src="static/js/phaser/effects/MinimapSystem.js"></script>
 
-    <!-- UI (mobile touch controls) -->
+    <!-- UI (mobile touch controls + game menu / PWA) -->
     <script src="static/js/phaser/ui/TouchControls.js"></script>
+    <script src="static/js/phaser/ui/GameMenu.js"></script>
 
     <!-- Scenes -->
     <script src="static/js/phaser/scenes/BootScene.js"></script>

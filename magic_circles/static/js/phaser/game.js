@@ -54,6 +54,7 @@ window.addEventListener('load', () => {
         gameConfig.input = { activePointers: 5 };
     }
     game = new Phaser.Game(gameConfig);
+    window.game = game; // exposed for GameMenu (DOM) and other UI helpers
 
     // Handle window resize
     window.addEventListener('resize', () => {

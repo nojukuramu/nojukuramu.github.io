@@ -2,13 +2,13 @@
  * TouchControls — orientation-aware, claw-grip-friendly on-screen controls.
  *
  *  bottom-left  : MOVE stick (left thumb)
- *  bottom-right : AIM / CHANNEL stick (right thumb) — releases a cast on lift
- *  right cluster: BLINK (dash) · RELEASE (remote-trigger)   — thumb or claw index
- *  top-right    : FORGE (open the Spellforge)               — claw index reach
+ *  bottom-right : AIM stick (right thumb) — sets aim direction; it does NOT cast
+ *  near aim stick: CAST (throw the spell) · TRIGGER (detonate payload) · BLINK (dash)
+ *  top-right    : FORGE (Spellforge) · MENU (game menu)
  *
- * Everything re-lays-out on resize so portrait and landscape both work, and the
- * slot hotbar (DOM) is kept clear of the sticks. Buttons are hit-tested by rect
- * so multi-touch / claw grips never get swallowed by Phaser's input ordering.
+ * Casting only happens when CAST is tapped — touching the sticks or any other
+ * button never fires a spell. Aim persists after you lift the stick, so the
+ * flow is: nudge aim → tap CAST.
  */
 class TouchControls {
     constructor(scene) {
@@ -17,7 +17,7 @@ class TouchControls {
         this.rightPtr = null;
         this.lKnob = { x: 0, y: 0 };
         this.rKnob = { x: 0, y: 0 };
-        this.consumed = {};          // pointerId -> true (a button press, not a stick)
+        this.consumed = {};
         this.buttons = [];
 
         this.gfx = scene.add.graphics().setScrollFactor(0).setDepth(2000);
@@ -35,61 +35,72 @@ class TouchControls {
     }
 
     _buildButtons() {
-        const mk = (key, label, color, action) => {
+        const mk = (key, label, color, big, action) => {
             const c = this.scene.add.container(0, 0).setScrollFactor(0).setDepth(2001);
             const bg = this.scene.add.graphics();
             const txt = this.scene.add.text(0, 0, label, { fontFamily: 'Arial Black', fontSize: '13px', color: '#ffffff' }).setOrigin(0.5);
             c.add([bg, txt]);
-            const b = { key, label, color, action, c, bg, txt, rect: { x: 0, y: 0, w: 70, h: 70 } };
+            const b = { key, label, color, big: !!big, action, c, bg, txt, rect: { x: 0, y: 0, w: 70, h: 70 } };
             this.buttons.push(b);
             return b;
         };
-        mk('blink', 'BLINK', 0x55aaff, () => { if (this.scene.player) this.scene.player.dash(); });
-        mk('release', 'RELEASE', 0xcc66ff, () => { this.scene.remoteTrigger(); });
-        mk('forge', 'FORGE', 0x66ddaa, () => { if (!GameState.isMagicOpen) this.scene.openMagicEditor(); });
+        // primary
+        mk('cast', 'CAST', 0xffcc44, true, () => { if (!GameState.isMagicOpen) { try { this.scene.castSpell(); } catch (e) { console.warn('cast recovered:', e); } } });
+        mk('trigger', 'TRIGGER', 0xcc66ff, false, () => { if (!GameState.isMagicOpen) { try { this.scene.remoteTrigger(); } catch (e) { console.warn('trigger recovered:', e); } } });
+        mk('blink', 'BLINK', 0x55aaff, false, () => { if (this.scene.player) this.scene.player.dash(); });
+        mk('forge', 'FORGE', 0x66ddaa, false, () => { if (!GameState.isMagicOpen) this.scene.openMagicEditor(); });
+        mk('menu', 'MENU', 0xaab0c0, false, () => { if (window.GameMenu) window.GameMenu.open(); });
     }
+
+    _byKey(k) { return this.buttons.find(b => b.key === k); }
 
     layout() {
         const W = this.scene.cameras.main.width, H = this.scene.cameras.main.height;
         const portrait = H >= W;
 
-        // stick geometry scales with the smaller screen dimension
         this.r = Math.max(46, Math.min(82, Math.min(W, H) * 0.13));
-        const m = this.r * 0.55 + 16;     // margin from the corner
-        this.lx = m + this.r;
-        this.ly = H - m - this.r;
-        this.rx = W - m - this.r;
-        this.ry = H - m - this.r;
+        const m = this.r * 0.55 + 16;
+        this.lx = m + this.r;  this.ly = H - m - this.r;
+        this.rx = W - m - this.r;  this.ry = H - m - this.r;
 
-        const bs = Math.max(58, this.r * 0.92);  // button size (touch target)
-        const place = (b, x, y) => { b.rect = { x: x - bs / 2, y: y - bs / 2, w: bs, h: bs }; b.c.setPosition(x, y); this._drawButton(b, false); };
+        const bs = Math.max(54, this.r * 0.86);     // standard button
+        const cs = bs * 1.32;                        // CAST (bigger)
+        const place = (b, x, y, size) => {
+            const s = size || bs;
+            b.rect = { x: x - s / 2, y: y - s / 2, w: s, h: s };
+            b.c.setPosition(x, y);
+            this._drawButton(b, false);
+        };
 
-        // RELEASE + BLINK stack above-left of the aim stick; FORGE top-right corner.
-        const cluX = this.rx - this.r - bs * 0.7;
-        place(this.buttons[0], cluX, this.ry - bs * 0.2);                 // blink (lower)
-        place(this.buttons[1], cluX, this.ry - bs * 1.3);                 // release (upper)
-        place(this.buttons[2], W - bs / 2 - 12, bs / 2 + (portrait ? 60 : 14)); // forge (top-right, below the hotbar in portrait)
+        // action cluster around the aim stick (right thumb / claw index)
+        place(this._byKey('cast'), this.rx, this.ry - this.r - cs * 0.58, cs);          // big, straight above aim
+        place(this._byKey('trigger'), this.rx - this.r - bs * 0.55, this.ry - bs * 0.1); // left of aim stick
+        place(this._byKey('blink'), this.lx, this.ly - this.r - bs * 0.6);               // above move stick
+
+        // top-right utilities (kept below the top hotbar in portrait)
+        const topY = portrait ? 60 : 12;
+        place(this._byKey('forge'), W - bs / 2 - 10, topY + bs / 2);
+        place(this._byKey('menu'), W - bs / 2 - 10, topY + bs / 2 + bs + 8);
 
         this.drawSticks();
     }
 
     _drawButton(b, pressed) {
-        const w = b.rect.w, h = b.rect.h;
+        const w = b.rect.w;
         b.bg.clear();
-        b.bg.fillStyle(0x0a0c16, pressed ? 0.9 : 0.55);
+        b.bg.fillStyle(0x0a0c16, pressed ? 0.92 : 0.58);
         b.bg.fillCircle(0, 0, w / 2);
-        b.bg.lineStyle(3, b.color, pressed ? 1 : 0.85);
+        b.bg.lineStyle(b.big ? 4 : 3, b.color, pressed ? 1 : (b.big ? 0.95 : 0.85));
         b.bg.strokeCircle(0, 0, w / 2);
-        b.txt.setFontSize(Math.max(11, Math.floor(w * 0.2)));
+        b.txt.setFontSize(Math.max(11, Math.floor(w * (b.big ? 0.24 : 0.2))));
+        b.txt.setColor(b.big ? '#fff3cc' : '#ffffff');
     }
 
     drawSticks() {
         const g = this.gfx;
         g.clear();
-        // move stick
         g.lineStyle(3, 0xffffff, 0.25); g.strokeCircle(this.lx, this.ly, this.r);
         g.fillStyle(0xffffff, 0.5); g.fillCircle(this.lx + this.lKnob.x, this.ly + this.lKnob.y, this.r * 0.42);
-        // aim / channel stick
         g.lineStyle(3, 0xff99cc, 0.3); g.strokeCircle(this.rx, this.ry, this.r);
         g.fillStyle(0xff99cc, 0.5); g.fillCircle(this.rx + this.rKnob.x, this.ry + this.rKnob.y, this.r * 0.42);
     }
@@ -129,9 +140,7 @@ class TouchControls {
             this.drawSticks();
         }
         if (pointer.id === this.rightPtr) {
-            // fire on release if the stick was actually pushed (avoids accidental taps)
-            const pushed = Math.hypot(this.rKnob.x, this.rKnob.y) > this.r * 0.2;
-            if (pushed && !GameState.isMagicOpen) { try { this.scene.castSpell(); } catch (e) { console.warn('cast recovered:', e); } }
+            // aim persists after release (no auto-cast); CAST button does the casting
             this.rightPtr = null; this.rKnob = { x: 0, y: 0 };
             this.drawSticks();
         }
