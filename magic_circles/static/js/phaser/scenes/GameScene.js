@@ -9,6 +9,7 @@ class GameScene extends Phaser.Scene {
     init(data) {
         // Receive seed from MenuScene
         this.worldSeed = data?.seed || Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+        GameState.lastSeed = this.worldSeed; // remembered so the menu can "Restart Run"
         console.log('World Seed:', this.worldSeed);
     }
 
@@ -243,6 +244,14 @@ class GameScene extends Phaser.Scene {
     }
 
     setupInput() {
+        // Disable right-click context menu
+        this.input.mouse.disableContextMenu();
+
+        // On touch devices every tap reports as a left-button press, so casting
+        // is driven ONLY by the on-screen CAST/TRIGGER buttons (TouchControls).
+        // The mouse handlers below are desktop-only.
+        if (GameState.isMobile) return;
+
         // Left click to cast
         this.input.on('pointerdown', (pointer) => {
             try {
@@ -264,9 +273,6 @@ class GameScene extends Phaser.Scene {
                 console.error('Remote-trigger input recovered from error:', err);
             }
         });
-
-        // Disable right-click context menu
-        this.input.mouse.disableContextMenu();
     }
 
     setupCollisions() {
