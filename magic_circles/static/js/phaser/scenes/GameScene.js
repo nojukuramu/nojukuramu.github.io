@@ -79,10 +79,29 @@ class GameScene extends Phaser.Scene {
             this.touchControls = new TouchControls(this);
         }
 
+        // Reflow size-dependent UI when the viewport changes (rotate / resize).
+        // The main camera auto-resizes in RESIZE mode; we just re-anchor the HUD
+        // and minimap so nothing drifts off-screen.
+        this.scale.on('resize', this.onResize, this);
+        this.events.once('shutdown', () => this.scale.off('resize', this.onResize, this));
+
         // Fade in
         this.cameras.main.fadeIn(500);
 
         console.log('GameScene created with seed:', this.worldSeed);
+    }
+
+    onResize(gameSize) {
+        const w = gameSize ? gameSize.width : this.cameras.main.width;
+        const h = gameSize ? gameSize.height : this.cameras.main.height;
+        if (this.minimap && this.minimap.resize) {
+            try { this.minimap.resize(w, h); } catch (e) { /* ignore */ }
+        }
+        // HUD is anchored top-left (scrollFactor 0); keep its mobile offset/scale.
+        if (this.hud) {
+            if (GameState.isMobile) this.hud.setPosition(4, 52).setScale(0.82);
+            else this.hud.setPosition(0, 0).setScale(1);
+        }
     }
 
     setupInventoryUI() {

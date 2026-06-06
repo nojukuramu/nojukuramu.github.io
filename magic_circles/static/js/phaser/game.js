@@ -56,10 +56,34 @@ window.addEventListener('load', () => {
     game = new Phaser.Game(gameConfig);
     window.game = game; // exposed for GameMenu (DOM) and other UI helpers
 
-    // Handle window resize
-    window.addEventListener('resize', () => {
-        game.scale.resize(window.innerWidth, window.innerHeight);
-    });
+    // --- Robust viewport sizing -------------------------------------------
+    // Keep the canvas resolution locked to the *true* visible viewport so the
+    // game never gets squished/stretched. visualViewport is the source of truth
+    // on mobile (address-bar show/hide, pinch); innerWidth/Height are a fallback.
+    // Rotations need a short delay before the new dimensions settle.
+    function fitGame() {
+        const vv = window.visualViewport;
+        const w = Math.round((vv && vv.width) || window.innerWidth);
+        const h = Math.round((vv && vv.height) || window.innerHeight);
+        if (!w || !h) return;
+        const c = document.getElementById('game-container');
+        if (c) { c.style.width = w + 'px'; c.style.height = h + 'px'; }
+        if (game && game.scale) { game.scale.resize(w, h); game.scale.refresh(); }
+    }
+    let _fitTimer = null;
+    function scheduleFit(delay) {
+        clearTimeout(_fitTimer);
+        _fitTimer = setTimeout(fitGame, delay || 120);
+    }
+    window.addEventListener('resize', () => scheduleFit(120));
+    window.addEventListener('orientationchange', () => scheduleFit(350));
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => scheduleFit(120));
+    }
+    // a couple of settle passes after load (mobile chrome resizes post-load)
+    scheduleFit(60);
+    setTimeout(fitGame, 500);
+    window.fitGame = fitGame;
 });
 
 // Global game state (accessible from all scenes)

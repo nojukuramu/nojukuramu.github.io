@@ -61,6 +61,19 @@ class MenuScene extends Phaser.Scene {
             repeat: -1,
             ease: 'Sine.easeInOut'
         });
+
+        // The menu UI is centre-anchored, so rebuild it at the new size when the
+        // viewport changes — but never while a modal is open or we're leaving.
+        this._leaving = false;
+        this.scale.on('resize', this._onMenuResize, this);
+        this.events.once('shutdown', () => this.scale.off('resize', this._onMenuResize, this));
+    }
+
+    _onMenuResize() {
+        if (this._leaving) return;
+        if ((this.worldSettingsElements && this.worldSettingsElements.length) ||
+            (this.howToPlayElements && this.howToPlayElements.length)) return;
+        this.scene.restart();
     }
 
     createButton(x, y, text, callback, minWidth = 200) {
@@ -382,7 +395,8 @@ class MenuScene extends Phaser.Scene {
             // Cleanup
             this.cleanupWorldSettings();
 
-            // Start game with seed
+            // Start game with seed (block resize-restart during the transition)
+            this._leaving = true;
             this.cameras.main.fadeOut(500);
             this.time.delayedCall(500, () => {
                 this.scene.start('GameScene', { seed: seed });
