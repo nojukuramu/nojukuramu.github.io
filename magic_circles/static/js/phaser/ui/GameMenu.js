@@ -48,7 +48,12 @@
       background:rgba(0,0,0,.25);border-radius:10px;padding:12px;margin-top:10px}\
     .gm-help.open{display:block}\
     .gm-help b{color:#cdc8ff}\
-    .gm-hide{display:none!important}';
+    .gm-hide{display:none!important}\
+    .gm-rotate{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:250;display:none;\
+      align-items:center;gap:8px;padding:9px 14px;border-radius:999px;background:rgba(16,18,34,.9);\
+      border:1px solid rgba(140,130,255,.5);color:#dfe0ff;font-family:Arial,sans-serif;font-size:13px;\
+      cursor:pointer;box-shadow:0 8px 24px -8px #000}\
+    .gm-rotate b{font-size:16px}';
     var s = document.createElement('style');
     s.textContent = css;
     document.head.appendChild(s);
@@ -76,6 +81,7 @@
         '<div class="gm-sub">Magic Circles</div>' +
         '<button class="gm-btn primary" data-act="resume">Resume</button>' +
         '<button class="gm-btn" data-act="fullscreen">Enter Fullscreen</button>' +
+        '<button class="gm-btn gm-rotate-btn" data-act="rotate">Force Landscape ↻</button>' +
         '<button class="gm-btn gm-hide" data-act="install">Install App</button>' +
         '<button class="gm-btn" data-act="controls">Controls</button>' +
         '<button class="gm-btn" data-act="restart">Restart Run</button>' +
@@ -90,10 +96,21 @@
     els.help = back.querySelector('.gm-help');
     els.install = back.querySelector('[data-act="install"]');
     els.fullscreen = back.querySelector('[data-act="fullscreen"]');
+    els.rotateBtn = back.querySelector('.gm-rotate-btn');
+    if (els.rotateBtn && !isMobile()) els.rotateBtn.classList.add('gm-hide'); // mobile-only
 
     back.querySelectorAll('.gm-btn').forEach(function (b) {
       b.addEventListener('click', function () { handle(b.getAttribute('data-act')); });
     });
+
+    // standing "rotate to landscape" nudge (mobile + portrait)
+    var rot = document.createElement('button');
+    rot.className = 'gm-rotate';
+    rot.innerHTML = '<b>↻</b> Tap to play in landscape';
+    rot.addEventListener('click', forceLandscape);
+    document.body.appendChild(rot);
+    els.rotate = rot;
+    updateRotateHint();
   }
 
   function controlsHTML() {
@@ -111,6 +128,7 @@
     switch (act) {
       case 'resume': close(); break;
       case 'fullscreen': toggleFullscreen(); break;
+      case 'rotate': forceLandscape(); break;
       case 'install': doInstall(); break;
       case 'controls':
         helpOpen = !helpOpen;
@@ -125,6 +143,37 @@
 
   function fsActive() {
     return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  function isPortrait() {
+    return (window.innerHeight || 0) > (window.innerWidth || 0);
+  }
+  // Force landscape: orientation lock needs fullscreen, so request both. iOS
+  // doesn't support either on the web — it just stays put (the layout still
+  // adapts), and we keep the rotate hint visible.
+  function forceLandscape() {
+    var lock = function () {
+      try {
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock('landscape').catch(function () {});
+        }
+      } catch (e) { /* unsupported */ }
+    };
+    try {
+      if (!fsActive()) {
+        var el = document.documentElement;
+        var p = (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+        if (p && p.then) { p.then(lock).catch(lock); } else { lock(); }
+      } else {
+        lock();
+      }
+    } catch (e) { console.warn('force landscape failed:', e); }
+    setTimeout(updateRotateHint, 400);
+  }
+  function updateRotateHint() {
+    if (!els.rotate) return;
+    var show = isMobile() && isPortrait();
+    els.rotate.style.display = show ? 'flex' : 'none';
   }
   function toggleFullscreen() {
     // Fullscreen the whole document (not just the Phaser parent) so this DOM
@@ -210,6 +259,9 @@
   // ---- wiring ----
   function init() {
     build();
+
+    window.addEventListener('resize', updateRotateHint);
+    window.addEventListener('orientationchange', function () { setTimeout(updateRotateHint, 300); });
 
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {

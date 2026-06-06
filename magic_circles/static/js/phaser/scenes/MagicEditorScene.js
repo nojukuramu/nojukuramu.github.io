@@ -490,7 +490,7 @@ class MagicEditorScene extends Phaser.Scene {
         }
         if (this.dragMode === 'move' && this.movingCircle) {
             let nx = p.x - this.movingCircle.grabDX, ny = p.y - this.movingCircle.grabDY;
-            if (GameState.magic.snapToGrid) { nx = this.snapVal(nx); ny = this.snapVal(ny); }
+            if (GameState.magic.snapToGrid) { nx = this.snapX(nx); ny = this.snapY(ny); }
             this.movingCircle.item.data.center.x = nx;
             this.movingCircle.item.data.center.y = ny;
             this.renderMagic(); return;
@@ -519,7 +519,7 @@ class MagicEditorScene extends Phaser.Scene {
             const dx = this.dragCurrent.x - this.dragStart.x, dy = this.dragCurrent.y - this.dragStart.y;
             let radius = Math.sqrt(dx * dx + dy * dy);
             let cx = this.dragStart.x, cy = this.dragStart.y;
-            if (GameState.magic.snapToGrid) { cx = this.snapVal(cx); cy = this.snapVal(cy); radius = this.snapVal(radius); }
+            if (GameState.magic.snapToGrid) { cx = this.snapX(cx); cy = this.snapY(cy); radius = this.snapLen(radius); }
             if (radius > 18) {
                 this.ensureActiveLayer();
                 const layer = this.getActiveLayer();
@@ -673,15 +673,27 @@ class MagicEditorScene extends Phaser.Scene {
             const g = this.graphics;
             g.clear();
 
-            // ley-grid (design-space, drawn across the visible region only)
+            // ley-grid — centred on the star ring (so it's symmetric on every
+            // screen) and finer the more you zoom in (for fine-grained control).
             if (GameState.magic.snapToGrid) {
-                const step = Config.EditorGridSize;
+                const step = this.gridStep();
+                const cgx = this.centerX, cgy = this.centerY;
                 const tl = this.s2w(0, 0), br = this.s2w(this.cameras.main.width, this.cameras.main.height);
-                const x0 = Math.floor(tl.x / step) * step, x1 = Math.ceil(br.x / step) * step;
-                const y0 = Math.floor(tl.y / step) * step, y1 = Math.ceil(br.y / step) * step;
-                g.lineStyle(1, 0x3a5a4a, 0.45);
-                for (let x = x0; x <= x1; x += step) g.lineBetween(x, y0, x, y1);
-                for (let y = y0; y <= y1; y += step) g.lineBetween(x0, y, x1, y);
+                const kx0 = Math.floor((tl.x - cgx) / step), kx1 = Math.ceil((br.x - cgx) / step);
+                const ky0 = Math.floor((tl.y - cgy) / step), ky1 = Math.ceil((br.y - cgy) / step);
+                const yTop = cgy + ky0 * step, yBot = cgy + ky1 * step;
+                const xLeft = cgx + kx0 * step, xRight = cgx + kx1 * step;
+                for (let k = kx0; k <= kx1; k++) {
+                    const x = cgx + k * step;
+                    // emphasise the centre lines and every 4th line
+                    g.lineStyle(1, 0x3a5a4a, k === 0 ? 0.85 : (k % 4 === 0 ? 0.5 : 0.28));
+                    g.lineBetween(x, yTop, x, yBot);
+                }
+                for (let k = ky0; k <= ky1; k++) {
+                    const y = cgy + k * step;
+                    g.lineStyle(1, 0x3a5a4a, k === 0 ? 0.85 : (k % 4 === 0 ? 0.5 : 0.28));
+                    g.lineBetween(xLeft, y, xRight, y);
+                }
             }
 
             // guide ring + quadrant axes (centred on the star ring)
@@ -755,7 +767,19 @@ class MagicEditorScene extends Phaser.Scene {
     }
 
     /* =====================  grid / ley lines  ===================== */
-    snapVal(v) { const g = Config.EditorGridSize; return Math.round(v / g) * g; }
+    // Effective grid step: a power-of-two multiple of the base unit chosen so the
+    // on-screen spacing stays readable — i.e. the grid gets finer as you zoom in.
+    gridStep() {
+        const base = Config.EditorGridSize || 40;
+        const target = 46; // desired on-screen px between lines
+        let k = Math.round(Math.log2(target / (base * (this.view.scale || 1))));
+        const step = base * Math.pow(2, k);
+        return Math.max(2, Math.min(base * 8, step));
+    }
+    // Snap relative to the ring centre so placements are symmetric about it.
+    snapX(v) { const s = this.gridStep(); return this.centerX + Math.round((v - this.centerX) / s) * s; }
+    snapY(v) { const s = this.gridStep(); return this.centerY + Math.round((v - this.centerY) / s) * s; }
+    snapLen(v) { const s = this.gridStep(); return Math.round(v / s) * s; }
     toggleSnapToGrid() {
         GameState.magic.snapToGrid = !GameState.magic.snapToGrid;
         this.styleButton('ley', GameState.magic.snapToGrid);
