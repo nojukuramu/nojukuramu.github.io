@@ -1,11 +1,12 @@
 /* Pinoy Word Games — offline cache (app shell only; Firestore goes online) */
-const CACHE = "pwg-v5";
+const CACHE = "pwg-v6";
 const SHELL = [
   "./",
   "index.html",
   "manifest.webmanifest",
   "static/css/pwg.css",
   "static/js/game.js",
+  "static/js/audio.js",
   "static/js/questions.js",
   "static/js/firebase.js",
   "static/icons/icon.svg",
