@@ -1,0 +1,426 @@
+# Pinoy Word Games — Question Bank (for review)
+
+All 100 levels, in play order. Format follows the manual: **Q:** clue, **A:** `WORD1 - WORD2`.
+**Levels 1–10 are the tutorial** — lesson levels show an in-game lesson card (with the manual example worked out in letter tiles) and practice levels show a reminder tip; level 10 is the graduation.
+Edit `static/js/questions.js` to change any item, then re-seed Firestore.
+
+### Level 1 · 1DL (1 Dagdag Letra) · 📚 TUTORIAL LESSON
+> Lesson: Aralin 1 · Dagdag Letra (DL)
+
+Q: NILALANG NA NAG-IISIP na MAY 365 ARAW  
+A: TAO - TAON
+
+### Level 2 · 1DL (1 Dagdag Letra) · 📌 TUTORIAL PRACTICE
+> Tip: Tandaan: 1DL — hanapin muna ang unang salita, tapos dagdagan ng 1 letra sa dulo para makuha ang pangalawa.
+
+Q: NARARAMDAMAN TUWING PISTA na GALAW SA SALIW NG TUGTUGIN  
+A: SAYA - SAYAW
+
+### Level 3 · 1DL (1 Dagdag Letra) · 📌 TUTORIAL PRACTICE
+> Tip: Huling DL practice! Tingnan ang mga kahon sa ibaba — makikita mo kung saan papasok ang dagdag na letra.
+
+Q: MAY TUGMA AT SUKAT na TAWIRAN SA ILOG  
+A: TULA - TULAY
+
+### Level 4 · 1BL (1 Bawas Letra) · 📚 TUTORIAL LESSON
+> Lesson: Aralin 2 · Bawas Letra (BL)
+
+Q: GULAY NA LILA na LUKSO  
+A: TALONG - TALON
+
+### Level 5 · 1BL (1 Bawas Letra) · 📌 TUTORIAL PRACTICE
+> Tip: Tandaan: 1BL — alisin ang huling letra ng unang salita para makuha ang pangalawa.
+
+Q: TIRAHAN na DULOT NG MALAKAS NA ULAN  
+A: BAHAY - BAHA
+
+### Level 6 · 1KL (1 Kislap Letra) · 📚 TUTORIAL LESSON
+> Lesson: Aralin 3 · Kislap Letra (KL)
+
+Q: ALAGANG NGUMINGIYAW na TUMITIBOK SA DIBDIB  
+A: PUSA - PUSO
+
+### Level 7 · 1KL (1 Kislap Letra) · 📌 TUTORIAL PRACTICE
+> Tip: Tandaan: 1KL — parehong haba ang dalawang salita; isang letra lang ang nag-iba.
+
+Q: LASA NG KALAMANSI na PAMPAALAT NG ULAM  
+A: ASIM - ASIN
+
+### Level 8 · BS (Banat Salita) · 📚 TUTORIAL LESSON
+> Lesson: Aralin 4 · Banat Salita (BS)
+
+Q: HINIHIGAAN SA KUWARTO na KAAGAPAY SAAN MAN MAGPUNTA  
+A: KAMA - KASAMA
+
+### Level 9 · BS (Banat Salita) · 📌 TUTORIAL PRACTICE
+> Tip: Tandaan: BS — buksan ang unang salita sa gitna at magsingit ng letra. Pareho pa rin ang unahan at dulo.
+
+Q: PANTAPAK na MAG-ANAK  
+A: PAA - PAMILYA
+
+### Level 10 · 1DL (1 Dagdag Letra) · 🎓 TUTORIAL GRADUATION
+> Lesson: Huling Aralin · Pagtatapos! 🎓
+
+Q: GAWAIN SA MARURUMING DAMIT na BAKBAKAN  
+A: LABA - LABAN
+
+### Level 11 · 1DL (1 Dagdag Letra)
+Q: KULAY NG ULAP na NASA KANAL PAGKATAPOS NG ULAN  
+A: PUTI - PUTIK
+
+### Level 12 · 1DL (1 Dagdag Letra)
+Q: HAYOP NA PINAGKUKUNAN NG GATAS na MATIGAS NA METAL  
+A: BAKA - BAKAL
+
+### Level 13 · 1DL (1 Dagdag Letra)
+Q: MUSMOS na IPINATUTUPAD NG PAMAHALAAN  
+A: BATA - BATAS
+
+### Level 14 · 1DL (1 Dagdag Letra)
+Q: MURANG NIYOG NA PANTANGGAL-UHAW na HIWALAY SA IBA  
+A: BUKO - BUKOD
+
+### Level 15 · 1DL (1 Dagdag Letra)
+Q: PINAKAMALIIT NA HALAGA NG BARYA na PAMPATAG NG BAGONG SEMENTONG KALSADA  
+A: PISO - PISON
+
+### Level 16 · 1DL (1 Dagdag Letra)
+Q: MAANGAS SA KANTO na MALAKAS NA BOSES  
+A: SIGA - SIGAW
+
+### Level 17 · 1DL (1 Dagdag Letra)
+Q: GAWAIN SA PALENGKE na HUMANGA NANG TODO  
+A: BILI - BILIB
+
+### Level 18 · 1DL (1 Dagdag Letra)
+Q: DAMIT NA NAULANAN na PINGGANG NAHULOG  
+A: BASA - BASAG
+
+### Level 19 · 1BL (1 Bawas Letra)
+Q: INUMING MULA SA BAKA na PIGA MULA SA NIYOG  
+A: GATAS - GATA
+
+### Level 20 · 1BL (1 Bawas Letra)
+Q: PANGUNAHING SANGKAP NG OKOY na DAMPI NG KAMAY  
+A: HIPON - HIPO
+
+### Level 21 · 1BL (1 Bawas Letra)
+Q: KULAY NG HINOG NA MANGGA na PANLASA SA BIBIG  
+A: DILAW - DILA
+
+### Level 22 · 1BL (1 Bawas Letra)
+Q: NAGLILIYAB SA KALAN na ANAK NG IYONG ANAK  
+A: APOY - APO
+
+### Level 23 · 1BL (1 Bawas Letra)
+Q: KUMAKALAM KAPAG GUTOM na KAPATID NI NANAY  
+A: TIYAN - TIYA
+
+### Level 24 · 1BL (1 Bawas Letra)
+Q: KABALIGTARAN NG HARAPAN na HINDI DIRETSONG DAAN  
+A: LIKOD - LIKO
+
+### Level 25 · 1BL (1 Bawas Letra)
+Q: LUMALABAS SA TAMBUTSO na SIKAT SA KASALUKUYAN  
+A: USOK - USO
+
+### Level 26 · 1BL (1 Bawas Letra)
+Q: PANLABAS NA TAKIP NG PRUTAS na LAMAN NG BARIL  
+A: BALAT - BALA
+
+### Level 27 · 1BL (1 Bawas Letra)
+Q: TUMUTULO HABANG MAHIMBING ANG TULOG na MALAWAK NA TUBIG-TABANG  
+A: LAWAY - LAWA
+
+### Level 28 · 1BL (1 Bawas Letra)
+Q: KASAMA NG KIDLAT KAPAG BUMABAGYO na GINAGAWA NG TUBIG SA TAKURE  
+A: KULOG - KULO
+
+### Level 29 · 1KL (1 Kislap Letra)
+Q: KASAMA NG KANIN na NASA HIMPAPAWID  
+A: ULAM - ULAP
+
+### Level 30 · 1KL (1 Kislap Letra)
+Q: KAPANGYARIHAN NG KATAWAN na HAKBANG NANG HAKBANG  
+A: LAKAS - LAKAD
+
+### Level 31 · 1KL (1 Kislap Letra)
+Q: PAMPALUSOG NA PANANIM na BIGLANG PAGKAGITLA  
+A: GULAY - GULAT
+
+### Level 32 · 1KL (1 Kislap Letra)
+Q: LAGAKAN NG PERA na SASAKYAN SA DAGAT  
+A: BANGKO - BANGKA
+
+### Level 33 · 1KL (1 Kislap Letra)
+Q: TAHANAN NG MGA ANGHEL na PAMPADULAS SA KAWALI  
+A: LANGIT - LANGIS
+
+### Level 34 · 1KL (1 Kislap Letra)
+Q: PATUNGAN NG PAGKAIN na GANAP SA SIMBAHAN TUWING LINGGO  
+A: MESA - MISA
+
+### Level 35 · 1KL (1 Kislap Letra)
+Q: DAANAN PAPASOK NG BAHAY na ISKOR SA LARO  
+A: PINTO - PUNTO
+
+### Level 36 · 1KL (1 Kislap Letra)
+Q: ANI NG PUNO na SISIDLANG LUWAD NG TUBIG  
+A: BUNGA - BANGA
+
+### Level 37 · 1KL (1 Kislap Letra)
+Q: BINABASA SA AKLATAN na PANUKAT NG TUBIG O GASOLINA  
+A: LIBRO - LITRO
+
+### Level 38 · 1KL (1 Kislap Letra)
+Q: PAHINGA SA GABI na ISINISIGAW KAPAG MAY KUMATOK  
+A: TULOG - TULOY
+
+### Level 39 · BS (Banat Salita)
+Q: TAKBUHAN SA KUSINA KAPAG NAMATAAN na BABAENG NASA HUSTONG GULANG  
+A: DAGA - DALAGA
+
+### Level 40 · BS (Banat Salita)
+Q: TANONG KUNG NASA ALING LUGAR na PAMPASULONG NG BANGKA  
+A: SAAN - SAGWAN
+
+### Level 41 · BS (Banat Salita)
+Q: MALIIT NA IBONG KAYUMANGGI na BATI TUWING KAARAWAN  
+A: MAYA - MALIGAYA
+
+### Level 42 · BS (Banat Salita)
+Q: PANG-AKIT SA ISDA na NASA HAPAG TUWING TANGHALIAN  
+A: PAIN - PAGKAIN
+
+### Level 43 · BS (Banat Salita)
+Q: BAHAY NA MUNTI SA AWITIN na PANANGGALANG SA LAMOK  
+A: KUBO - KULAMBO
+
+### Level 44 · BS (Banat Salita)
+Q: NILALAKARAN na HIMPILAN NG MGA BARKO  
+A: DAAN - DAUNGAN
+
+### Level 45 · 1DL (1 Dagdag Letra)
+Q: PANSAWSAW NA MAASIM na HABA AT LAPAD  
+A: SUKA - SUKAT
+
+### Level 46 · 1DL (1 Dagdag Letra)
+Q: PAGKAMANGHA na LAGING GUTOM ANG MATA AT TIYAN  
+A: TAKA - TAKAW
+
+### Level 47 · 1DL (1 Dagdag Letra)
+Q: MATIGAS NA TAKIP NG NIYOG na DALA-DALANG PERA O PAGKAIN SA ESKUWELA  
+A: BAO - BAON
+
+### Level 48 · 1DL (1 Dagdag Letra)
+Q: KALAGAYANG WALANG GAPOS na HINIHILA NG HANGIN SA BANGKA  
+A: LAYA - LAYAG
+
+### Level 49 · 1BL (1 Bawas Letra)
+Q: TUMITILAOK SA UMAGA na PAGGALANG SA NAKATATANDA  
+A: MANOK - MANO
+
+### Level 50 · 1BL (1 Bawas Letra)
+Q: MAALAT NA PANSAWSAW MULA SA ISDA na IBIG SABIHIN AY KASAMA RIN  
+A: PATIS - PATI
+
+### Level 51 · 1BL (1 Bawas Letra)
+Q: GINAGAMIT SA PAGSASALITA na SISIW NG PATO  
+A: BIBIG - BIBI
+
+### Level 52 · 1BL (1 Bawas Letra)
+Q: MALALIM NA KUHANAN NG TUBIG na NAIWAN NG YUMAONG ASAWA  
+A: BALON - BALO
+
+### Level 53 · 1KL (1 Kislap Letra)
+Q: ISINASAING na NARARAMDAMAN SA TIMBANG  
+A: BIGAS - BIGAT
+
+### Level 54 · 1KL (1 Kislap Letra)
+Q: PANAHON NG TAG-ARAW na UNAT NG KATAWAN PAGKAGISING  
+A: INIT - INAT
+
+### Level 55 · 1KL (1 Kislap Letra)
+Q: PAGTAPON NG TUBIG MULA SA TIMBA na MAHIRAP KALAGIN SA TALI  
+A: BUHOS - BUHOL
+
+### Level 56 · 1KL (1 Kislap Letra)
+Q: GINAGAWA NG IBON SA HIMPAPAWID na LUMA NA SA PANAHON  
+A: LIPAD - LIPAS
+
+### Level 57 · 1KL (1 Kislap Letra)
+Q: PINAKAMASARAP SA BULALO na MAGKAAGAPAY NA KILOS  
+A: SABAW - SABAY
+
+### Level 58 · 1KL (1 Kislap Letra)
+Q: PAMBILI NG BIGAS na ISINISIGAW PARA PAHINTUIN ANG DYIP  
+A: PERA - PARA
+
+### Level 59 · 1KL (1 Kislap Letra)
+Q: REAKSIYON SA NAKAKATUWA na DAGDAG SA TIMBANG  
+A: TAWA - TABA
+
+### Level 60 · 1KL (1 Kislap Letra)
+Q: GAWA SA KUSINA na HINDI ALAM ANG PIPILIIN  
+A: LUTO - LITO
+
+### Level 61 · 2DL (2 Dagdag Letra)
+Q: NALILIKHA NG SABON SA TUBIG na MAHABANG UOD SA LUPA  
+A: BULA - BULATE
+
+### Level 62 · 2DL (2 Dagdag Letra)
+Q: HINDI KATULAD na KABILANG PAMPANG  
+A: IBA - IBAYO
+
+### Level 63 · 2DL (2 Dagdag Letra)
+Q: PANGGAPOS O PAMBIGKIS na YAMAN NG ISIP  
+A: TALI - TALINO
+
+### Level 64 · 2DL (2 Dagdag Letra)
+Q: TINATAMNAN na MALAWAK NA TERITORYO  
+A: LUPA - LUPAIN
+
+### Level 65 · 2DL (2 Dagdag Letra)
+Q: PINUNO NG KAHARIAN na PANGUNAHING SANGKAP NG TINAPAY  
+A: HARI - HARINA
+
+### Level 66 · 2DL (2 Dagdag Letra)
+Q: GINAGAMIT SA PAGTINGIN na ABOT-LANGIT  
+A: MATA - MATAAS
+
+### Level 67 · 2DL (2 Dagdag Letra)
+Q: NILAGANG BUTIL SA SUPOT na LARUANG BINIBIHISAN  
+A: MANI - MANIKA
+
+### Level 68 · 2DL (2 Dagdag Letra)
+Q: NAGBIBIGAY-LIWANAG na GASERANG SISIDLAN NITO  
+A: ILAW - ILAWAN
+
+### Level 69 · 2BL (2 Bawas Letra)
+Q: SUOT SA PAA PAPASOK SA OPISINA na HUSTONG-HUSTO  
+A: SAPATOS - SAPAT
+
+### Level 70 · 2BL (2 Bawas Letra)
+Q: DUNGAWAN NG BAHAY na MAKULAY NA BANGKA SA MINDANAO  
+A: BINTANA - BINTA
+
+### Level 71 · 2BL (2 Bawas Letra)
+Q: SINASAKYAN NG KOBOY na RAMDAM NG DIBDIB BAGO ANG EKSAMEN  
+A: KABAYO - KABA
+
+### Level 72 · 2BL (2 Bawas Letra)
+Q: SILID-IMBAKAN NG KARUNUNGAN na ISA SA MGA LAMAN NITO  
+A: AKLATAN - AKLAT
+
+### Level 73 · 2BL (2 Bawas Letra)
+Q: KABIBING BERDE ANG GILID na SIGAW NG MAGLALAKO SA UMAGA  
+A: TAHONG - TAHO
+
+### Level 74 · 2BL (2 Bawas Letra)
+Q: SAMPU SA DALAWANG KAMAY na MABILIS LANG  
+A: DALIRI - DALI
+
+### Level 75 · 2BL (2 Bawas Letra)
+Q: PINAPATUNGAN NG PASANIN na MULING PAGDATING  
+A: BALIKAT - BALIK
+
+### Level 76 · 2BL (2 Bawas Letra)
+Q: KABIYAK SA BUHAY na PAGTITIWALANG MANGYAYARI PA  
+A: ASAWA - ASA
+
+### Level 77 · 2BL (2 Bawas Letra)
+Q: KASUNOD MO SA SIKAT NG ARAW na BUNGA NG PAGSASAKA  
+A: ANINO - ANI
+
+### Level 78 · 2BL (2 Bawas Letra)
+Q: PANG-ILAW NOONG UNANG PANAHON na MADALAS MATUMBA  
+A: LAMPARA - LAMPA
+
+### Level 79 · 2KL (2 Kislap Letra)
+Q: LIHAM SA KAIBIGAN na MATAMIS MULA SA PUKYUTAN  
+A: SULAT - PULOT
+
+### Level 80 · 2KL (2 Kislap Letra)
+Q: RAMDAM SA BAHAY NA MULTO na PANSARA NG GARAPON  
+A: TAKOT - TAKIP
+
+### Level 81 · 2KL (2 Kislap Letra)
+Q: ITINUSOK SA LUPA UPANG TUMUBO na NAKIKITA MULA SA MALAYO  
+A: TANIM - TANAW
+
+### Level 82 · 2KL (2 Kislap Letra)
+Q: HUGIS NG KABILUGAN NG BUWAN na ITLOG NA MERYENDA PAGSAPIT NG DILIM  
+A: BILOG - BALOT
+
+### Level 83 · 2KL (2 Kislap Letra)
+Q: PAGLULUTO NG KANIN na NILALAMPASO  
+A: SAING - SAHIG
+
+### Level 84 · 2KL (2 Kislap Letra)
+Q: LASA NG PULOT na ABOT SA PINAGSIKAPAN  
+A: TAMIS - KAMIT
+
+### Level 85 · 2KL (2 Kislap Letra)
+Q: ORAS PAGKATAPOS NG TANGHALI na HABI NG GAGAMBA  
+A: HAPON - SAPOT
+
+### Level 86 · 2KL (2 Kislap Letra)
+Q: NASA PAGITAN NG TUHOD AT PAA na PAMPAKULAY SA DINGDING  
+A: BINTI - PINTA
+
+### Level 87 · BS (Banat Salita)
+Q: NAIPAPASA NG MAY SAKIT na MODELONG MAAARING TULARAN  
+A: HAWA - HALIMBAWA
+
+### Level 88 · BS (Banat Salita)
+Q: SUGAT MULA SA MAINIT na HARDING WALANG-HANGGANG LIGAYA  
+A: PASO - PARAISO
+
+### Level 89 · BS (Banat Salita)
+Q: NAKATALAGA PARA SA IYO na LIBANGAN NG MGA BATA  
+A: LAAN - LARUAN
+
+### Level 90 · BS (Banat Salita)
+Q: PARUSA NG TSINELAS NI NANAY na PATIMPALAK TUWING PISTA  
+A: PALO - PALARO
+
+### Level 91 · BS (Banat Salita)
+Q: GRUPO NG MGA TUPA na MATIBAY NA PUNONG YUMUYUKO SA HANGIN  
+A: KAWAN - KAWAYAN
+
+### Level 92 · BS (Banat Salita)
+Q: PAGLINGON NG ULO na PRUTAS NA MAY LIMANG GILID  
+A: BALING - BALIMBING
+
+### Level 93 · 3DL (3 Dagdag Letra)
+Q: TAMBAYAN NG BISITA SA BAHAY na DITO MO NAKIKITA ANG SARILI  
+A: SALA - SALAMIN
+
+### Level 94 · 3DL (3 Dagdag Letra)
+Q: BALANGKAS NG KATAWAN na PANSARA NG POLO  
+A: BUTO - BUTONES
+
+### Level 95 · 3BL (3 Bawas Letra)
+Q: PUWESTO NI ALING NENA SA KANTO na MGA PANINDA NITO  
+A: TINDAHAN - TINDA
+
+### Level 96 · 3BL (3 Bawas Letra)
+Q: DAMBUHALANG NILALANG SA ALAMAT na POSISYON SA KAMA  
+A: HIGANTE - HIGA
+
+### Level 97 · 3KL (3 Kislap Letra)
+Q: KUWARTONG TULUGAN na DAKONG PINAGTATAGPUAN NG DALAWANG PADER  
+A: SILID - SULOK
+
+### Level 98 · 4KL (4 Kislap Letra)
+Q: MASUKAL NA TAHANAN NG MABABANGIS na TANIMAN NG PALAY  
+A: GUBAT - BUKID
+
+### Level 99 · 4BL (4 Bawas Letra)
+Q: MAKULAY NA ARKO PAGKATAPOS NG ULAN na SINAUNANG KASUOTAN  
+A: BAHAGHARI - BAHAG
+
+### Level 100 · 5DL (5 Dagdag Letra)
+Q: PAGTUKOY NG NAIS na PERLAS NG SILANGANAN  
+A: PILI - PILIPINAS
+

@@ -95,7 +95,8 @@
   var ICONS = {
     notes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11l5 5v11a0 0 0 0 1 0 0H4z"/><path d="M15 4v5h5"/><path d="M8 13h8M8 17h6"/></svg>',
     sigil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polygon points="12,4 20,18 4,18"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>',
-    spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M18 6l-2.5 2.5M8.5 15.5L6 18"/></svg>'
+    spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M18 6l-2.5 2.5M8.5 15.5L6 18"/></svg>',
+    tiles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="8" y="13" width="8" height="8" rx="2"/><path d="M6.2 8V6.4a1 1 0 0 1 1.6-.8"/><path d="M16 9V5l2 4V5"/><path d="M11 18.5h2"/></svg>'
   };
   var APPS = [
     {
@@ -109,6 +110,12 @@
       href: "task-notes/", badge: "PWA",
       desc: "Installable sticky-note reminders — intervals, datetime alerts, auto-snooze, tags, subtasks. All saved locally, no account.",
       tags: ["PWA", "offline", "local-first"]
+    },
+    {
+      id: "pwg", name: "Pinoy Word Games", accent: "#e76f51", icon: ICONS.tiles,
+      href: "pwg/", badge: "Word game",
+      desc: "Hulaan ang dalawang salita! Dagdag, bawas, kislap, o banat ng letra — 100 cozy levels in Filipino, progress saved locally.",
+      tags: ["Filipino", "puzzle", "100 levels"]
     }
   ];
 
