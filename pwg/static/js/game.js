@@ -1,5 +1,8 @@
 /* Pinoy Word Games — game logic
  * Hash-routed mini SPA: #/ (home), #/levels, #/level/N, #/manual.
+ * Single-screen layout: lessons/reminders and the win screen are overlays,
+ * and input comes from the in-game keyboard (the OS virtual keyboard never
+ * opens — the inputs are readonly + inputmode="none").
  * Progress lives in localStorage; the question bank comes from Firestore
  * (front-end only) with the bundled bank as fallback.
  */
@@ -45,7 +48,10 @@ loadBank(PWG_QUESTIONS).then(({ items, source }) => {
   bank = items;
   bankByLevel = indexBank(bank);
   if (source === "cloud") toast("☁️ Na-load ang mga tanong mula sa cloud");
-  route(); // re-render current view with fresh data
+  // refresh home/levels with cloud data, but never disturb an active play
+  // session (it would close overlays and wipe typed letters); the fresh
+  // bank applies on the next level load
+  if (!views.play.classList.contains("active")) route();
 }).catch(() => { /* bundled bank already in place */ });
 
 /* ---------------- tiny helpers ---------------- */
@@ -147,7 +153,7 @@ const views = {
 
 function show(name) {
   for (const key of Object.keys(views)) views[key].classList.toggle("active", key === name);
-  window.scrollTo({ top: 0 });
+  if (name !== "play") closeOverlays();
 }
 
 function route() {
@@ -174,6 +180,62 @@ window.addEventListener("hashchange", route);
 document.addEventListener("click", (e) => {
   const go = e.target.closest("[data-go]");
   if (go) location.hash = go.getAttribute("data-go");
+});
+
+/* ---------------- overlays ---------------- */
+
+function closeOverlays() {
+  $("#overlay-tut").classList.remove("show");
+  $("#overlay-win").classList.remove("show");
+}
+
+// backdrop tap closes the lesson overlay (win overlay needs a button choice)
+$("#overlay-tut").addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) $("#overlay-tut").classList.remove("show");
+});
+$("#btn-tut-close").addEventListener("click", () => $("#overlay-tut").classList.remove("show"));
+
+function openLessonOverlay() {
+  if (!current || (!current.tut && !current.tip)) return;
+  let html = "";
+  if (current.tut) {
+    const t = current.tut;
+    html = `<div class="tut-label">📚 TUTORIAL</div><h3>${t.title}</h3><p>${t.text}</p>`;
+    if (t.example) {
+      html += `<div class="tut-example">` +
+        `<div class="tut-eq">Q: ${t.example.q}</div>` +
+        tilesHTML(t.example.a, current.type, true) +
+        `<div class="tut-ea">A: <b>${t.example.a}</b></div>` +
+        `<p class="tut-note">${t.example.note}</p>` +
+        `</div>`;
+    }
+  } else {
+    html = `<div class="tut-label">📌 PAALALA</div><p>${current.tip}</p>`;
+  }
+  $("#tut-content").innerHTML = html;
+  $("#overlay-tut").classList.add("show");
+}
+
+$("#btn-lesson").addEventListener("click", openLessonOverlay);
+
+function openWinOverlay(opts) {
+  $("#win-title").textContent = opts.title;
+  $("#win-answer").textContent = opts.answer;
+  $("#win-tiles").innerHTML = tilesHTML(opts.answer, opts.type, true);
+  $("#win-sub").textContent = opts.sub || "";
+  $("#btn-win-next").textContent = opts.hasNext ? "Susunod →" : "🏆 Tapos na lahat!";
+  $("#overlay-win").classList.add("show");
+}
+
+$("#btn-win-levels").addEventListener("click", () => {
+  closeOverlays();
+  location.hash = "#/levels";
+});
+$("#btn-win-next").addEventListener("click", () => {
+  closeOverlays();
+  const next = current && bankByLevel.has(current.level + 1) ? current.level + 1 : null;
+  if (next && next <= progress.unlocked) location.hash = "#/level/" + next;
+  else location.hash = "#/levels";
 });
 
 /* ---------------- home ---------------- */
@@ -213,7 +275,6 @@ function renderLevels() {
     const cls = solved ? "solved" : (locked ? "locked" : (lv === progress.unlocked ? "current" : ""));
     html += `<button class="lvl ${cls}" data-level="${lv}" ${locked ? "disabled" : ""} aria-label="Level ${lv}${locked ? " (naka-lock)" : ""}">` +
       (locked ? "🔒" : lv) +
-      (!locked ? `<span class="tag">${it.type}</span>` : "") +
       "</button>";
   }
   grid.innerHTML = html;
@@ -229,33 +290,20 @@ $("#level-grid").addEventListener("click", (e) => {
 
 let current = null;   // current question object
 let hintStep = 0;
+const seenLessons = new Set(); // auto-open each lesson once per visit
 
 const w1 = $("#word1");
 const w2 = $("#word2");
+let active = w1;      // which word box the keyboard types into
 
-function renderTutorial() {
-  const box = $("#tut-box");
-  if (current.tut) {
-    const t = current.tut;
-    let html = `<div class="tut-label">📚 TUTORIAL</div><h3>${t.title}</h3><p>${t.text}</p>`;
-    if (t.example) {
-      html += `<div class="tut-example">` +
-        `<div class="tut-eq">Q: ${t.example.q}</div>` +
-        tilesHTML(t.example.a, current.type, true) +
-        `<div class="tut-ea">A: <b>${t.example.a}</b></div>` +
-        `<p class="tut-note">${t.example.note}</p>` +
-        `</div>`;
-    }
-    box.innerHTML = html;
-    box.style.display = "";
-  } else if (current.tip) {
-    box.innerHTML = `<div class="tut-label">📌 PAALALA</div><p>${current.tip}</p>`;
-    box.style.display = "";
-  } else {
-    box.innerHTML = "";
-    box.style.display = "none";
-  }
+function setActive(input) {
+  active = input;
+  w1.classList.toggle("active", input === w1);
+  w2.classList.toggle("active", input === w2);
 }
+
+w1.addEventListener("click", () => { if (!w1.disabled) setActive(w1); });
+w2.addEventListener("click", () => { if (!w2.disabled) setActive(w2); });
 
 function renderPlay(level) {
   current = bankByLevel.get(level);
@@ -267,7 +315,9 @@ function renderPlay(level) {
   $("#feedback").textContent = "";
   $("#feedback").className = "feedback";
   $("#hint-box").innerHTML = "";
-  renderTutorial();
+  $("#btn-lesson").style.display = (current.tut || current.tip) ? "" : "none";
+  closeOverlays();
+
   // Tutorial levels get the answer-shape tiles for free (that's hint step 1,
   // so the 💡 button goes straight to first letters there).
   if (current.tut || current.tip) {
@@ -275,71 +325,112 @@ function renderPlay(level) {
     $("#hint-box").innerHTML =
       `<div class="hint-line">Hugis ng sagot:</div>` + tilesHTML(current.a, current.type, false);
   }
+
+  const solved = !!progress.solved[level];
   w1.value = "";
   w2.value = "";
-  w1.disabled = w2.disabled = false;
-  $("#btn-check").style.display = "";
-  $("#btn-hint").style.display = "";
+  w1.disabled = w2.disabled = solved;
+  $("#kb").style.display = solved ? "none" : "";
+  $("#solved-bar").classList.toggle("show", solved);
 
-  const solvedBox = $("#solved-box");
-  if (progress.solved[level]) {
-    // already solved before: show it as solved, allow replay browsing
+  if (solved) {
     const [a1, a2] = splitAnswer(current.a);
     w1.value = a1; w2.value = a2;
-    w1.disabled = w2.disabled = true;
-    $("#solved-title").textContent = "⭐ Nasagot mo na ito!";
-    $("#solved-answer").textContent = current.a;
-    $("#btn-check").style.display = "none";
-    $("#btn-hint").style.display = "none";
-    $("#btn-next").textContent = nextLevelOf(level) ? "Susunod na Level →" : "Tapos na lahat! 🏆";
-    solvedBox.classList.add("show");
+    w1.classList.remove("active"); w2.classList.remove("active");
+    $("#btn-next-inline").textContent = bankByLevel.has(level + 1) ? "Susunod →" : "🏆 Tapos!";
   } else {
-    solvedBox.classList.remove("show");
-    setTimeout(() => w1.focus(), 50);
+    setActive(w1);
+    // lessons & reminders appear as an overlay, once per level per visit
+    if ((current.tut || current.tip) && !seenLessons.has(level)) {
+      seenLessons.add(level);
+      openLessonOverlay();
+    }
   }
 }
 
-function nextLevelOf(level) {
-  return bankByLevel.has(level + 1) ? level + 1 : null;
+$("#btn-next-inline").addEventListener("click", () => {
+  const next = current && bankByLevel.has(current.level + 1) ? current.level + 1 : null;
+  if (next && next <= progress.unlocked) location.hash = "#/level/" + next;
+  else location.hash = "#/levels";
+});
+
+/* --- in-game keyboard (the OS virtual keyboard stays closed) --- */
+
+const MAX_WORD_LEN = 14;
+
+function typeChar(ch) {
+  if (!current || progress.solved[current.level]) return;
+  if (active.value.length < MAX_WORD_LEN) {
+    active.value += ch;
+    $("#feedback").textContent = "";
+    $("#feedback").className = "feedback";
+  }
 }
 
-/* --- TryHackMe-style dash handling: the dash between the two words is fixed.
- * Typing "-" (or "–"/em-dash/space at the end of word 1) jumps to word 2;
- * the character itself is swallowed. Backspace on an empty word 2 hops back. */
+function doDash() {
+  // the dash between the words is fixed; "-" just hops to the other box
+  if (!current || progress.solved[current.level]) return;
+  setActive(active === w1 ? w2 : w1);
+}
 
-w1.addEventListener("beforeinput", (e) => {
-  if (e.data && /[-–—]/.test(e.data)) {
-    e.preventDefault();
-    w2.focus();
+function doBackspace() {
+  if (!current || progress.solved[current.level]) return;
+  if (active.value) {
+    active.value = active.value.slice(0, -1);
+  } else if (active === w2) {
+    setActive(w1);
+    w1.value = w1.value.slice(0, -1);
   }
+}
+
+$("#kb").addEventListener("click", (e) => {
+  const key = e.target.closest(".key[data-k]");
+  if (!key) return;
+  const k = key.dataset.k;
+  if (k === "back") doBackspace();
+  else if (k === "-") doDash();
+  else typeChar(k);
 });
 
-w2.addEventListener("keydown", (e) => {
-  if (e.key === "Backspace" && w2.value === "") {
-    e.preventDefault();
-    w1.focus();
-    const len = w1.value.length;
-    w1.setSelectionRange(len, len);
+// physical keyboard still works on desktop
+document.addEventListener("keydown", (e) => {
+  if (!views.play.classList.contains("active")) return;
+  if ($("#overlay-tut").classList.contains("show")) {
+    if (e.key === "Enter" || e.key === "Escape") $("#overlay-tut").classList.remove("show");
+    return;
   }
+  if ($("#overlay-win").classList.contains("show")) {
+    if (e.key === "Enter") $("#btn-win-next").click();
+    return;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "Enter") { checkAnswer(); return; }
+  if (e.key === "Backspace") { e.preventDefault(); doBackspace(); return; }
+  if (/^[-–—]$/.test(e.key)) { e.preventDefault(); doDash(); return; }
+  if (e.key === "ArrowLeft") { setActive(w1); return; }
+  if (e.key === "ArrowRight") { setActive(w2); return; }
+  const ch = normalizeWord(e.key);
+  if (ch.length === 1) { e.preventDefault(); typeChar(ch); }
 });
 
-// Pasting a full "WORD1 - WORD2" into the first box splits it across both.
-w1.addEventListener("paste", (e) => {
+// pasting "WORD1 - WORD2" anywhere on the play screen fills both boxes
+document.addEventListener("paste", (e) => {
+  if (!views.play.classList.contains("active")) return;
+  if (!current || progress.solved[current.level]) return;
   const text = (e.clipboardData || window.clipboardData).getData("text") || "";
+  if (!text) return;
+  e.preventDefault();
   if (text.includes("-")) {
-    e.preventDefault();
     const [p1, ...rest] = text.split("-");
-    w1.value = normalizeWord(p1);
-    w2.value = normalizeWord(rest.join("-"));
-    w2.focus();
+    w1.value = normalizeWord(p1).slice(0, MAX_WORD_LEN);
+    w2.value = normalizeWord(rest.join("-")).slice(0, MAX_WORD_LEN);
+    setActive(w2);
+  } else {
+    active.value = normalizeWord(text).slice(0, MAX_WORD_LEN);
   }
 });
 
-for (const input of [w1, w2]) {
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") checkAnswer();
-  });
-}
+/* --- checking --- */
 
 function checkAnswer() {
   if (!current || progress.solved[current.level]) return;
@@ -355,19 +446,20 @@ function checkAnswer() {
   }
 
   if (g1 === a1 && g2 === a2) {
+    const isGrad = !!(current.tut && current.tut.grad);
     progress.solved[current.level] = { ts: Date.now() };
     progress.unlocked = Math.max(progress.unlocked, Math.min(current.level + 1, TOTAL()));
     saveProgress();
     fb.textContent = "";
     w1.disabled = w2.disabled = true;
-    $("#btn-check").style.display = "none";
-    $("#btn-hint").style.display = "none";
-    $("#solved-title").textContent = (current.tut && current.tut.grad)
-      ? "🎓 Pasado ka! Tapos na ang tutorial — handa ka na sa totoong laban!"
-      : "🎉 Tama!";
-    $("#solved-answer").textContent = current.a;
-    $("#btn-next").textContent = nextLevelOf(current.level) ? "Susunod na Level →" : "Tapos na lahat! 🏆";
-    $("#solved-box").classList.add("show");
+    $("#kb").style.display = "none";
+    openWinOverlay({
+      title: isGrad ? "🎓 Pasado ka!" : "🎉 Tama!",
+      answer: current.a,
+      type: current.type,
+      sub: isGrad ? "Tapos na ang tutorial — handa ka na sa totoong laban!" : "",
+      hasNext: bankByLevel.has(current.level + 1)
+    });
     celebrate();
   } else if (g1 === a1 || g2 === a2) {
     fb.textContent = "Malapit na! Tama na ang isang salita 👀";
@@ -383,15 +475,9 @@ function checkAnswer() {
 
 $("#btn-check").addEventListener("click", checkAnswer);
 
-$("#btn-next").addEventListener("click", () => {
-  const next = nextLevelOf(current.level);
-  if (next && next <= progress.unlocked) location.hash = "#/level/" + next;
-  else location.hash = "#/levels";
-});
-
 /* --- hints: 1) answer-shape tiles, 2) first letters --- */
 $("#btn-hint").addEventListener("click", () => {
-  if (!current) return;
+  if (!current || progress.solved[current.level]) return;
   const [a1, a2] = splitAnswer(current.a);
   const box = $("#hint-box");
   hintStep = Math.min(hintStep + 1, 2);
@@ -409,20 +495,43 @@ $("#btn-hint").addEventListener("click", () => {
 function celebrate() {
   if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const icons = ["🎉", "✨", "⭐", "🎊", "💛"];
-  const rect = $("#solved-box").getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + 20;
+  const cx = window.innerWidth / 2;
+  const cy = window.innerHeight / 2;
   for (let i = 0; i < 14; i++) {
     const s = document.createElement("span");
     s.className = "burst";
     s.textContent = icons[i % icons.length];
     s.style.left = cx + "px";
     s.style.top = cy + "px";
-    s.style.setProperty("--bx", Math.round(Math.random() * 320 - 160) + "px");
-    s.style.setProperty("--by", Math.round(-60 - Math.random() * 200) + "px");
+    s.style.setProperty("--bx", Math.round(Math.random() * 360 - 180) + "px");
+    s.style.setProperty("--by", Math.round(-80 - Math.random() * 240) + "px");
     document.body.appendChild(s);
     setTimeout(() => s.remove(), 1000);
   }
+}
+
+/* ---------------- PWA: install button + offline cache ---------------- */
+
+let installPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  $("#btn-install").style.display = "";
+});
+$("#btn-install").addEventListener("click", async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice;
+  installPrompt = null;
+  $("#btn-install").style.display = "none";
+});
+window.addEventListener("appinstalled", () => {
+  $("#btn-install").style.display = "none";
+  toast("🏠 Na-install ang Pinoy Word Games!");
+});
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => { /* offline play is a bonus */ });
 }
 
 /* ---------------- boot ---------------- */

@@ -2,14 +2,16 @@
 <html lang="fil">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Pinoy Word Games</title>
   <meta name="description" content="Pinoy Word Games — Letter-Shift Series. Hulaan ang dalawang salita: Dagdag Letra, Bawas Letra, Kislap Letra, at Banat Salita. 100 levels, libre, walang account." />
   <meta name="theme-color" content="#fdf6ec" />
   <meta property="og:title" content="Pinoy Word Games" />
   <meta property="og:description" content="Hulaan ang dalawang salita! DL · BL · KL · BS — 100 cozy levels." />
   <meta property="og:type" content="website" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='4' width='28' height='24' rx='7' fill='%23fdf6ec' stroke='%23e76f51' stroke-width='2.5'/%3E%3Ctext x='16' y='22' font-family='sans-serif' font-weight='bold' font-size='14' fill='%23e76f51' text-anchor='middle'%3EPW%3C/text%3E%3C/svg%3E" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="static/icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="static/icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -24,20 +26,22 @@
     <header class="topbar">
       <a class="brand" href="#/">
         <span class="tile-logo"><b>P</b><b>W</b><b>G</b></span>
-        <span>Pinoy Word Games</span>
+        <span class="brand-name">Pinoy Word Games</span>
       </a>
       <span class="spacer"></span>
+      <button class="btn secondary small" id="btn-install" style="display:none" title="I-install ang laro">⬇ Install</button>
       <button class="btn secondary small" id="nav-manual">📖 Manual</button>
     </header>
 
-    <!-- ============ HOME ============ -->
-    <section class="view" id="view-home">
-      <div class="hero">
+    <main id="stage">
+
+      <!-- ============ HOME ============ -->
+      <section class="view" id="view-home">
         <div class="word-demo" aria-hidden="true">
           <b>B</b><b>A</b><b>T</b><b>I</b><b class="plus">+ S ✨</b>
         </div>
-        <h1>Pinoy <span class="hl">Word</span> Games</h1>
-        <p class="sub">Hulaan ang dalawang magkaugnay na salita — dagdagan, bawasan, kislapan, o banatin ang mga letra!</p>
+        <h1 class="hero-title">Pinoy <span class="hl">Word</span> Games</h1>
+        <p class="hero-sub">Hulaan ang dalawang magkaugnay na salita — dagdagan, bawasan, kislapan, o banatin ang mga letra!</p>
         <nav class="menu">
           <button class="btn" id="btn-play">▶ Maglaro</button>
           <button class="btn secondary" id="btn-levels">🗺 Mga Level</button>
@@ -47,107 +51,135 @@
           </button>
         </nav>
         <p class="home-progress" id="home-progress"></p>
-      </div>
-    </section>
+        <p class="home-foot">gawa nang may ☕ at ❤️ · <a href="../">balik sa atelier</a></p>
+      </section>
 
-    <!-- ============ LEVELS ============ -->
-    <section class="view" id="view-levels">
-      <div class="view-head">
-        <h2>Mga Level</h2>
-        <span class="meta" id="levels-meta"></span>
-        <span class="spacer"></span>
-        <button class="btn secondary small" data-go="#/">← Bahay</button>
-      </div>
-      <div class="level-grid" id="level-grid"></div>
-    </section>
-
-    <!-- ============ PLAY ============ -->
-    <section class="view" id="view-play">
-      <div class="view-head">
-        <button class="btn secondary small" data-go="#/levels">← Mga Level</button>
-        <span class="spacer"></span>
-        <button class="btn secondary small" id="btn-hint">💡 Pahiwatig</button>
-      </div>
-
-      <div class="play-card">
-        <div class="play-head">
-          <h2 id="play-level">Level 1</h2>
-          <span class="badge" id="play-type">1DL</span>
-          <span class="badge kind" id="play-kind">Dagdag Letra</span>
+      <!-- ============ LEVELS ============ -->
+      <section class="view" id="view-levels">
+        <div class="view-head">
+          <h2>Mga Level</h2>
+          <span class="meta" id="levels-meta"></span>
+          <span class="spacer"></span>
+          <button class="btn secondary small" data-go="#/">← Bahay</button>
         </div>
+        <div class="level-grid" id="level-grid"></div>
+      </section>
 
-        <div class="tut-card" id="tut-box" style="display:none"></div>
+      <!-- ============ PLAY ============ -->
+      <section class="view" id="view-play">
+        <div class="view-head">
+          <button class="btn secondary small" data-go="#/levels">←</button>
+          <div class="play-info">
+            <h2 id="play-level">Level 1</h2>
+            <span class="badge" id="play-type">1DL</span>
+            <span class="badge kind" id="play-kind">Dagdag Letra</span>
+          </div>
+          <span class="spacer"></span>
+          <button class="btn secondary small" id="btn-lesson" style="display:none" title="Buksan ang aralin">📚</button>
+        </div>
 
         <div class="clue">
           <span class="q-label">TANONG</span>
           <span id="play-clue"></span>
         </div>
 
-        <div class="answer-row">
-          <input class="word-input" id="word1" type="text" autocomplete="off"
-                 autocapitalize="characters" spellcheck="false" aria-label="Unang salita" />
-          <span class="dash" aria-hidden="true">—</span>
-          <input class="word-input" id="word2" type="text" autocomplete="off"
-                 autocapitalize="characters" spellcheck="false" aria-label="Pangalawang salita" />
-        </div>
-        <p class="answer-help">Dalawang salita ang sagot. I-type ang <b>-</b> para tumalon sa pangalawang salita.</p>
+        <div class="hint-box" id="hint-box"></div>
 
-        <div class="play-actions">
-          <button class="btn" id="btn-check">✔ Suriin</button>
+        <div class="answer-row">
+          <input class="word-input" id="word1" type="text" readonly inputmode="none"
+                 autocomplete="off" spellcheck="false" aria-label="Unang salita" />
+          <span class="dash" aria-hidden="true">—</span>
+          <input class="word-input" id="word2" type="text" readonly inputmode="none"
+                 autocomplete="off" spellcheck="false" aria-label="Pangalawang salita" />
         </div>
 
         <div class="feedback" id="feedback" role="status" aria-live="polite"></div>
-        <div class="hint-box" id="hint-box"></div>
 
-        <div class="solved-box" id="solved-box">
-          <div id="solved-title">🎉 Tama!</div>
-          <div class="ans" id="solved-answer"></div>
-          <button class="btn" id="btn-next">Susunod na Level →</button>
+        <div class="solved-bar" id="solved-bar">
+          <span>⭐ Nasagot mo na ito!</span>
+          <button class="btn small" id="btn-next-inline">Susunod →</button>
         </div>
+
+        <div class="kb" id="kb" aria-label="Keyboard">
+          <div class="kb-row">
+            <button class="key" data-k="Q">Q</button><button class="key" data-k="W">W</button><button class="key" data-k="E">E</button><button class="key" data-k="R">R</button><button class="key" data-k="T">T</button><button class="key" data-k="Y">Y</button><button class="key" data-k="U">U</button><button class="key" data-k="I">I</button><button class="key" data-k="O">O</button><button class="key" data-k="P">P</button>
+          </div>
+          <div class="kb-row">
+            <button class="key" data-k="A">A</button><button class="key" data-k="S">S</button><button class="key" data-k="D">D</button><button class="key" data-k="F">F</button><button class="key" data-k="G">G</button><button class="key" data-k="H">H</button><button class="key" data-k="J">J</button><button class="key" data-k="K">K</button><button class="key" data-k="L">L</button><button class="key" data-k="Ñ">Ñ</button>
+          </div>
+          <div class="kb-row">
+            <button class="key fn dash" data-k="-" title="Lipat sa kabilang salita">–</button><button class="key" data-k="Z">Z</button><button class="key" data-k="X">X</button><button class="key" data-k="C">C</button><button class="key" data-k="V">V</button><button class="key" data-k="B">B</button><button class="key" data-k="N">N</button><button class="key" data-k="M">M</button><button class="key fn" data-k="back" aria-label="Burahin">⌫</button>
+          </div>
+          <div class="kb-row">
+            <button class="key hintkey" id="btn-hint" title="Pahiwatig">💡</button>
+            <button class="key check" id="btn-check">✔ SURIIN</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ MANUAL ============ -->
+      <section class="view" id="view-manual">
+        <div class="view-head">
+          <h2>📖 Manual</h2>
+          <span class="spacer"></span>
+          <button class="btn secondary small" data-go="#/">← Bahay</button>
+        </div>
+        <article class="manual">
+          <h2>Pinoy Wordgame — Letter-Shift Series</h2>
+
+          <h3>DL — Dagdag Letra</h3>
+          <p>Salita 1 + letra(s) na <b>idinagdag sa dulo</b> = Salita 2. Parehong dapat tunay na salitang Tagalog/Filipino.</p>
+          <div class="example">Q: MAGANDANG UMAGA ng ANYONG TUBIG<br />A: <b>BATI - BATIS</b></div>
+
+          <h3>BL — Bawas Letra</h3>
+          <p>Salita 1 − letra(s) na <b>binawas mula sa dulo</b> = Salita 2.</p>
+          <div class="example">Q: SAKTO ng ANYONG TUBIG<br />A: <b>SAPAT - SAPA</b></div>
+
+          <h3>KL — Kislap Letra</h3>
+          <p>Salita 1 → Salita 2: <b>parehong haba</b>, may letra(s) na pinalitan sa <b>parehong posisyon</b>.</p>
+          <div class="example">Q: sa KAPATID ko PINAGAWA<br />A: <b>UTOL - UTOS</b></div>
+
+          <h3>BS — Banat Salita</h3>
+          <p>Hinati ang Salita 1 sa <b>unahan + dulo</b>; may letrang isiningit sa <b>gitna</b> = Salita 2.</p>
+          <div class="example">Q: KINAMOT na HAYOP<br />A: <b>KATI - KALAPATI</b></div>
+
+          <h3>Mga Variant</h3>
+          <p>Para sa DL, BL, at KL: maaaring 1, 2, 3, o higit pang letra ang dagdag/bawas/palit, depende sa hirap. Nakalagay ang variant sa bawat level (hal. <b>2DL</b>, <b>3KL</b>). Ang BS ay flexible na ang haba ng isiningit kaya walang variant.</p>
+
+          <h3>Paano sumagot</h3>
+          <ul>
+            <li>Laging dalawang salita ang sagot: <b>SALITA1 - SALITA2</b>.</li>
+            <li>Gamitin ang keyboard ng laro; pindutin ang <b>–</b> para lumipat sa kabilang salita.</li>
+            <li>Gamitin ang 💡 para sa pahiwatig kung naiipit.</li>
+            <li>Bubukas ang susunod na level kapag nasagot ang kasalukuyan. Naka-save ang progreso sa browser mo.</li>
+          </ul>
+        </article>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ============ OVERLAYS ============ -->
+  <div class="overlay" id="overlay-tut" role="dialog" aria-modal="true">
+    <div class="sheet" id="tut-sheet">
+      <div id="tut-content"></div>
+      <div class="sheet-actions">
+        <button class="btn" id="btn-tut-close">Sige, laro na! →</button>
       </div>
-    </section>
+    </div>
+  </div>
 
-    <!-- ============ MANUAL ============ -->
-    <section class="view" id="view-manual">
-      <div class="view-head">
-        <h2 style="display:none">Manual</h2>
-        <button class="btn secondary small" data-go="#/">← Bahay</button>
+  <div class="overlay" id="overlay-win" role="dialog" aria-modal="true">
+    <div class="sheet win">
+      <div class="win-title" id="win-title">🎉 Tama!</div>
+      <div class="ans" id="win-answer"></div>
+      <div id="win-tiles"></div>
+      <p class="win-sub" id="win-sub"></p>
+      <div class="sheet-actions">
+        <button class="btn secondary" id="btn-win-levels">🗺 Mga Level</button>
+        <button class="btn" id="btn-win-next">Susunod →</button>
       </div>
-      <article class="manual">
-        <h2>📖 Pinoy Wordgame Manual — Letter-Shift Series</h2>
-
-        <h3>DL — Dagdag Letra</h3>
-        <p>Salita 1 + letra(s) na <b>idinagdag sa dulo</b> = Salita 2. Parehong dapat tunay na salitang Tagalog/Filipino.</p>
-        <div class="example">Q: MAGANDANG UMAGA ng ANYONG TUBIG<br />A: <b>BATI - BATIS</b></div>
-
-        <h3>BL — Bawas Letra</h3>
-        <p>Salita 1 − letra(s) na <b>binawas mula sa dulo</b> = Salita 2.</p>
-        <div class="example">Q: SAKTO ng ANYONG TUBIG<br />A: <b>SAPAT - SAPA</b></div>
-
-        <h3>KL — Kislap Letra</h3>
-        <p>Salita 1 → Salita 2: <b>parehong haba</b>, may letra(s) na pinalitan sa <b>parehong posisyon</b>.</p>
-        <div class="example">Q: sa KAPATID ko PINAGAWA<br />A: <b>UTOL - UTOS</b></div>
-
-        <h3>BS — Banat Salita</h3>
-        <p>Hinati ang Salita 1 sa <b>unahan + dulo</b>; may letrang isiningit sa <b>gitna</b> = Salita 2.</p>
-        <div class="example">Q: KINAMOT na HAYOP<br />A: <b>KATI - KALAPATI</b></div>
-
-        <h3>Mga Variant</h3>
-        <p>Para sa DL, BL, at KL: maaaring 1, 2, 3, o higit pang letra ang dagdag/bawas/palit, depende sa hirap. Nakalagay ang variant sa bawat level (hal. <b>2DL</b>, <b>3KL</b>). Ang BS ay flexible na ang haba ng isiningit kaya walang variant.</p>
-
-        <h3>Paano sumagot</h3>
-        <ul>
-          <li>Laging dalawang salita ang sagot: <b>SALITA1 - SALITA2</b>.</li>
-          <li>May dalawang kahon na pinaghihiwalay ng gitling — i-type ang <b>-</b> para lumipat sa pangalawa.</li>
-          <li>Masusulusyunan ang bawat level gamit ang clue; gamitin ang 💡 Pahiwatig kung naiipit.</li>
-          <li>Bubukas ang susunod na level kapag nasagot ang kasalukuyan. Naka-save ang progreso sa browser mo.</li>
-        </ul>
-      </article>
-    </section>
-
-    <footer class="foot">
-      gawa nang may ☕ at ❤️ · <a href="../">balik sa atelier</a>
-    </footer>
+    </div>
   </div>
 
   <div class="toast" id="toast" role="status"></div>
