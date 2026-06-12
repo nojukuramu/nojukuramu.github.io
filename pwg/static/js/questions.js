@@ -208,7 +208,7 @@ export const PWG_QUESTIONS = [
     "h2": "d13b4eb8a5aaba8b084475df06b5daa31ca8d9646dddd2ca6e903ecdcc031f5f",
     "tut": {
       "title": "Huling Aralin · Pagtatapos! 🎓",
-      "text": "Alam mo na ang apat na uri: DL (dagdag sa dulo), BL (bawas sa dulo), KL (palit sa parehong posisyon), at BS (singit sa gitna). Basahin lagi ang tsapa para malaman ang uri at bilang ng letra. Mula sa susunod na level, wala nang gabay — pero nandiyan lagi ang 💡 Pahiwatig kung kailangan mo. Sagutan ito para mag-graduate!",
+      "text": "Alam mo na ang apat na uri: DL (dagdag sa dulo), BL (bawas sa dulo), KL (palit sa parehong posisyon), at BS (singit sa gitna). Basahin lagi ang tsapa para malaman ang uri at bilang ng letra. Mula sa susunod na level, wala nang gabay at wala nang 💡 Pahiwatig — kabisado mo na ang laro! Sagutan ito para mag-graduate!",
       "grad": true
     }
   },
