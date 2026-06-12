@@ -112,6 +112,10 @@ export function playGrad() {
  * whole 4-chord progression (8 beats per chord). All instruments are
  * scheduled against an arbitrary destination node, so the same score can
  * play live or render into an OfflineAudioContext (see renderMusicPreview).
+ *
+ * The melody is performed, not sequenced: phrase-level rubato, per-note
+ * timing/velocity wobble, velocity that follows the pitch contour, and a
+ * chance of grace notes, soft echoes, passing tones, and pickup runs.
  */
 
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
@@ -126,34 +130,56 @@ const PROG = [
   { bass: 43, pad: [55, 59, 62, 64] }    // G2 | G3 B3 D4 E4
 ];
 
-/* two melodies per chord: [beat, midi] — set A sings, set B is sparser */
+/* A natural-minor / C-major pitch set, for ornaments and passing tones */
+const SCALE = [45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81];
+
+function scaleStep(midi, dir) {
+  const i = SCALE.indexOf(midi);
+  if (i < 0) return midi + dir;
+  return SCALE[Math.min(SCALE.length - 1, Math.max(0, i + dir))];
+}
+
+/* three melodies per chord: [beat, midi] */
 const MELODIES = [
-  [ // set A
+  [ // set A — singing
     [[0, 64], [1.5, 69], [3, 71], [4.5, 72], [6, 71]],
     [[0, 69], [1.5, 72], [3, 76], [5, 72], [6.5, 69]],
     [[0, 71], [1.5, 67], [3, 64], [5, 67], [6.5, 74]],
     [[0, 74], [2, 71], [4, 69], [6, 67]]
   ],
-  [ // set B
+  [ // set B — sparse, lets the pads speak
     [[0, 69], [3, 72], [6, 76]],
     [[1, 76], [4, 72], [6.5, 69]],
     [[0, 76], [3, 71], [6, 67]],
     [[0, 69], [3, 71], [5.5, 74]]
+  ],
+  [ // set C — lyrical descent, ends suspended into the next pass
+    [[0, 76], [2, 74], [3.5, 72], [5, 71], [6.5, 72]],
+    [[0, 72], [2, 69], [4, 67], [5.5, 64]],
+    [[0, 64], [1.5, 67], [3, 71], [4.5, 72], [6, 74]],
+    [[0, 71], [2, 74], [4, 76], [6, 74]]
   ]
 ];
 
-/* music-box piano: sine partials, higher ones decay faster */
-function piano(c, dest, midi, t, vel = 1, dur = 3) {
-  const f = mtof(midi);
-  const partials = [[1, 0.16], [2, 0.05], [3, 0.018]];
+/* felt piano: soft attack, slightly chorused fundamental, dark partials
+ * whose brightness follows the velocity — quiet notes are rounder */
+function piano(c, dest, midi, t, vel = 1, dur = 4.5) {
+  t = Math.max(t, 0.01); // ornaments may aim before the render/context start
+  const det = (Math.random() - 0.5) * 5; // ±2.5 cents, never twice the same
+  const f = mtof(midi) * Math.pow(2, det / 1200);
+  const attack = 0.055 + (1 - Math.min(vel, 1)) * 0.07;
+  const partials = [
+    [0.9985, 0.1], [1.0015, 0.1],         // chorused fundamental
+    [2, 0.042 * vel], [3, 0.011 * vel]    // overtones fade with soft touch
+  ];
   for (const [mult, amp] of partials) {
     const o = c.createOscillator();
     const g = c.createGain();
-    const d = dur / mult;
+    const d = dur / Math.max(1, Math.floor(mult));
     o.type = "sine";
     o.frequency.value = f * mult;
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(amp * vel, t + 0.012);
+    g.gain.linearRampToValueAtTime(amp * vel, t + attack);
     g.gain.exponentialRampToValueAtTime(0.0001, t + d);
     o.connect(g);
     g.connect(dest);
@@ -197,7 +223,7 @@ function bass(c, dest, midi, t, dur) {
   o.type = "sine";
   o.frequency.value = mtof(midi);
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.linearRampToValueAtTime(0.09, t + 0.06);
+  g.gain.linearRampToValueAtTime(0.09, t + 0.14);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(g);
   g.connect(dest);
@@ -205,13 +231,55 @@ function bass(c, dest, midi, t, dur) {
   o.stop(t + dur + 0.05);
 }
 
+/* one chord's melody, performed: rubato curve, contour-following velocity,
+ * and dice rolls for grace notes, echoes, and passing tones */
+function performPhrase(c, dest, phrase, t, beat, rng, octave, baseVel) {
+  // breathe across the bar: push a hair early mid-phrase, settle at the end
+  const rubato = (b) => beat * 0.06 * Math.sin((b / BEATS_PER_CHORD) * Math.PI * 2);
+  for (let i = 0; i < phrase.length; i++) {
+    const [b, m] = phrase[i];
+    const midi = m + octave;
+    let vel = baseVel * (0.72 + 0.22 * ((midi - 64 - octave) / 12)) * (0.85 + rng() * 0.3);
+    vel = Math.min(1, Math.max(0.35, vel));
+    const tt = t + b * beat + rubato(b) + (rng() - 0.5) * 0.055;
+
+    if (rng() < 0.16) { // grace note leaning into the main tone
+      piano(c, dest, scaleStep(midi, rng() < 0.65 ? -1 : 1), tt - beat * 0.16, vel * 0.38, 1.8);
+    }
+    piano(c, dest, midi, tt, vel);
+    if (rng() < 0.13) { // soft echo of the same note
+      piano(c, dest, midi, tt + beat * 0.9, vel * 0.4, 3.2);
+    }
+    const nxt = phrase[i + 1];
+    if (nxt && rng() < 0.3) { // walk a passing tone toward the next note
+      const gap = nxt[1] + octave - midi;
+      if (Math.abs(gap) >= 3 && Math.abs(gap) <= 5) {
+        const tm = t + ((b + nxt[0]) / 2) * beat + (rng() - 0.5) * 0.04;
+        piano(c, dest, scaleStep(midi, gap > 0 ? 1 : -1), tm, vel * 0.5, 2.6);
+      }
+    }
+  }
+}
+
 /* schedule one full pass of the progression at t0; returns its duration */
 function scheduleMusicPass(c, dest, t0, rng = Math.random) {
-  const beat = 0.82 + rng() * 0.06;          // gentle tempo drift per pass
+  const beat = 0.86 + rng() * 0.08;          // gentle tempo drift per pass
   const chordDur = BEATS_PER_CHORD * beat;
   const quiet = rng() < 0.28;                // breathing pass: pads only
-  const melody = MELODIES[rng() < 0.5 ? 0 : 1];
-  const human = () => (rng() - 0.5) * 0.03;
+  const melody = MELODIES[Math.floor(rng() * MELODIES.length)];
+  const octave = !quiet && rng() < 0.12 ? 12 : 0; // rare sparkle pass, up high
+  const baseVel = octave ? 0.6 : 0.85;
+  const human = () => (rng() - 0.5) * 0.04;
+
+  // occasional pickup run rising into the first phrase
+  if (!quiet && rng() < 0.22) {
+    const first = melody[0][0][1] + octave;
+    for (let i = 3; i >= 1; i--) {
+      let p = first;
+      for (let k = 0; k < i; k++) p = scaleStep(p, -1);
+      piano(c, dest, p, Math.max(0.01, t0 - i * beat * 0.22), 0.3, 2);
+    }
+  }
 
   for (let ci = 0; ci < PROG.length; ci++) {
     const t = t0 + ci * chordDur;
@@ -219,15 +287,13 @@ function scheduleMusicPass(c, dest, t0, rng = Math.random) {
     pad(c, dest, chord.pad, t, chordDur * 1.12);   // slight overlap = no seams
     bass(c, dest, chord.bass, t + 0.02, chordDur * 0.95);
 
-    if (!quiet) {
-      for (const [b, midi] of melody[ci]) {
-        piano(c, dest, midi, t + b * beat + human(), 0.8 + rng() * 0.25, 3);
-      }
-    }
-    // soft broken-chord undercurrent, sometimes
-    if (rng() < (quiet ? 0.7 : 0.45)) {
+    if (!quiet) performPhrase(c, dest, melody[ci], t, beat, rng, octave, baseVel);
+
+    // soft broken-chord undercurrent, sometimes, with a lazy lilt
+    if (rng() < (quiet ? 0.7 : 0.4)) {
       chord.pad.forEach((m, i) => {
-        piano(c, dest, m, t + (0.5 + i * 1.75) * beat + human(), 0.3, 2.2);
+        const lilt = i % 2 ? beat * 0.09 : 0;
+        piano(c, dest, m, t + (0.5 + i * 1.75) * beat + lilt + human(), 0.26, 2.4);
       });
     }
   }
@@ -291,7 +357,7 @@ export function startBgMusic() {
     }
     bgRunning = true;
     musicGain.gain.cancelScheduledValues(c.currentTime);
-    musicGain.gain.setTargetAtTime(0.9, c.currentTime, 1.2); // gentle fade in
+    musicGain.gain.setTargetAtTime(1.05, c.currentTime, 1.2); // gentle fade in
     nextPassAt = c.currentTime + 0.2;
     bgTick();
     bgTimer = setInterval(bgTick, 500);
@@ -325,7 +391,7 @@ export function isMuted() { return _muted; }
 export async function renderMusicPreview(seconds = 30, sampleRate = 44100) {
   const c = new OfflineAudioContext(2, Math.ceil(sampleRate * seconds), sampleRate);
   const out = c.createGain();
-  out.gain.value = 0.9;
+  out.gain.value = 1.05;
   out.connect(c.destination);
   const input = makeMusicChain(c, out);
   let t = 0.1;
