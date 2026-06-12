@@ -318,6 +318,86 @@ h1, h2, h3, .btn, .lvl, .badge {
 }
 .badge.kind { background: var(--sage-soft); color: var(--sage); }
 
+/* tutorial lesson / reminder card */
+.tut-card {
+  background: var(--sage-soft);
+  border: 2px solid #cfe0c0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  font-size: 15px;
+}
+.tut-card .tut-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  color: var(--sage);
+}
+.tut-card h3 {
+  margin: 4px 0 6px;
+  font-size: 18px;
+  color: var(--ink);
+}
+.tut-card p { margin: 6px 0; }
+.tut-example {
+  background: #fffdf8;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 10px;
+}
+.tut-example .tut-eq { font-weight: 600; font-size: 13.5px; color: var(--ink-soft); }
+.tut-example .tut-ea { font-size: 14px; margin-top: 4px; }
+.tut-example .tut-ea b { color: var(--sage); }
+.tut-example .tut-note { font-size: 13.5px; color: var(--ink-soft); margin: 6px 0 0; }
+
+/* letter-tile mechanic visualizer (lessons + hints) */
+.tiles-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0 2px;
+}
+.tiles { display: inline-flex; gap: 3px; }
+.tiles-arrow {
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.tile {
+  width: 24px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: #fffdf8;
+  border: 2px solid var(--line);
+  border-bottom-width: 3px;
+  border-radius: 7px;
+  font-family: "Baloo 2", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.tile.add { border-color: #9dc18b; background: var(--sage-soft); color: var(--sage); }
+.tile.ins { border-color: #93bcd8; background: #e3eef7; color: var(--sky); }
+.tile.swap { border-color: #eebf90; background: #fdeedd; color: var(--peach); }
+.tile.cut {
+  border-style: dashed;
+  border-color: #e7a797;
+  background: var(--coral-soft);
+  color: var(--coral);
+  position: relative;
+}
+.tile.cut::after {
+  content: "✕";
+  position: absolute;
+  font-size: 9px;
+  top: -2px;
+  right: -1px;
+  color: var(--coral);
+}
+
 .clue {
   background: var(--bg-soft);
   border: 2px dashed #ecd3ad;

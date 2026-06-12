@@ -72,6 +72,50 @@ function splitAnswer(a) {
   return [w1, w2];
 }
 
+/* ---------------- letter-tile mechanic visualizer ----------------
+ * Renders the two answer words as tile rows with the mechanic highlighted:
+ * DL = added tiles at the end, BL = removed tiles at the end,
+ * KL = swapped positions, BS = inserted tiles in the middle.
+ * With revealed=false the tiles stay blank, so it teaches the *shape*
+ * of the answer without giving the letters away. */
+
+function mechanicRows(a1, a2, type) {
+  const kind = (/(DL|BL|KL|BS)$/.exec(type) || [])[1];
+  const row1 = a1.split("").map((ch) => ({ ch, cls: "" }));
+  const row2 = a2.split("").map((ch) => ({ ch, cls: "" }));
+  if (kind === "DL") {
+    for (let i = a1.length; i < a2.length; i++) row2[i].cls = "add";
+  } else if (kind === "BL") {
+    for (let i = a2.length; i < a1.length; i++) row1[i].cls = "cut";
+  } else if (kind === "KL") {
+    for (let i = 0; i < a1.length; i++) {
+      if (a1[i] !== a2[i]) { row1[i].cls = "swap"; row2[i].cls = "swap"; }
+    }
+  } else if (kind === "BS") {
+    // several splits can be valid (K+ALAP+ATI vs KA+LAPA+TI) — show the most
+    // balanced one, which matches how the clues are meant to be read
+    const valid = [];
+    for (let p = 1; p < a1.length; p++) {
+      if (a2.startsWith(a1.slice(0, p)) && a2.endsWith(a1.slice(p))) valid.push(p);
+    }
+    if (valid.length) {
+      const mid = a1.length / 2;
+      const p = valid.reduce((best, x) => Math.abs(x - mid) < Math.abs(best - mid) ? x : best);
+      for (let i = p; i < p + (a2.length - a1.length); i++) row2[i].cls = "ins";
+    }
+  }
+  return [row1, row2];
+}
+
+function tilesHTML(answer, type, revealed) {
+  const [a1, a2] = splitAnswer(answer);
+  const [row1, row2] = mechanicRows(a1, a2, type);
+  const row = (tiles) => '<div class="tiles">' +
+    tiles.map((t) => `<b class="tile ${t.cls}">${revealed ? t.ch : ""}</b>`).join("") +
+    "</div>";
+  return `<div class="tiles-wrap">${row(row1)}<span class="tiles-arrow">→</span>${row(row2)}</div>`;
+}
+
 /* ---------------- floating cozy bits ---------------- */
 
 (function makeFloaties() {
@@ -189,6 +233,30 @@ let hintStep = 0;
 const w1 = $("#word1");
 const w2 = $("#word2");
 
+function renderTutorial() {
+  const box = $("#tut-box");
+  if (current.tut) {
+    const t = current.tut;
+    let html = `<div class="tut-label">📚 TUTORIAL</div><h3>${t.title}</h3><p>${t.text}</p>`;
+    if (t.example) {
+      html += `<div class="tut-example">` +
+        `<div class="tut-eq">Q: ${t.example.q}</div>` +
+        tilesHTML(t.example.a, current.type, true) +
+        `<div class="tut-ea">A: <b>${t.example.a}</b></div>` +
+        `<p class="tut-note">${t.example.note}</p>` +
+        `</div>`;
+    }
+    box.innerHTML = html;
+    box.style.display = "";
+  } else if (current.tip) {
+    box.innerHTML = `<div class="tut-label">📌 PAALALA</div><p>${current.tip}</p>`;
+    box.style.display = "";
+  } else {
+    box.innerHTML = "";
+    box.style.display = "none";
+  }
+}
+
 function renderPlay(level) {
   current = bankByLevel.get(level);
   hintStep = 0;
@@ -199,6 +267,14 @@ function renderPlay(level) {
   $("#feedback").textContent = "";
   $("#feedback").className = "feedback";
   $("#hint-box").innerHTML = "";
+  renderTutorial();
+  // Tutorial levels get the answer-shape tiles for free (that's hint step 1,
+  // so the 💡 button goes straight to first letters there).
+  if (current.tut || current.tip) {
+    hintStep = 1;
+    $("#hint-box").innerHTML =
+      `<div class="hint-line">Hugis ng sagot:</div>` + tilesHTML(current.a, current.type, false);
+  }
   w1.value = "";
   w2.value = "";
   w1.disabled = w2.disabled = false;
@@ -211,6 +287,7 @@ function renderPlay(level) {
     const [a1, a2] = splitAnswer(current.a);
     w1.value = a1; w2.value = a2;
     w1.disabled = w2.disabled = true;
+    $("#solved-title").textContent = "⭐ Nasagot mo na ito!";
     $("#solved-answer").textContent = current.a;
     $("#btn-check").style.display = "none";
     $("#btn-hint").style.display = "none";
@@ -285,6 +362,9 @@ function checkAnswer() {
     w1.disabled = w2.disabled = true;
     $("#btn-check").style.display = "none";
     $("#btn-hint").style.display = "none";
+    $("#solved-title").textContent = (current.tut && current.tut.grad)
+      ? "🎓 Pasado ka! Tapos na ang tutorial — handa ka na sa totoong laban!"
+      : "🎉 Tama!";
     $("#solved-answer").textContent = current.a;
     $("#btn-next").textContent = nextLevelOf(current.level) ? "Susunod na Level →" : "Tapos na lahat! 🏆";
     $("#solved-box").classList.add("show");
@@ -309,7 +389,7 @@ $("#btn-next").addEventListener("click", () => {
   else location.hash = "#/levels";
 });
 
-/* --- hints: 1) letter counts, 2) first letters --- */
+/* --- hints: 1) answer-shape tiles, 2) first letters --- */
 $("#btn-hint").addEventListener("click", () => {
   if (!current) return;
   const [a1, a2] = splitAnswer(current.a);
@@ -317,7 +397,7 @@ $("#btn-hint").addEventListener("click", () => {
   hintStep = Math.min(hintStep + 1, 2);
   let html = "";
   if (hintStep >= 1) {
-    html += `<div class="hint-line">💡 Bilang ng letra: <b>${a1.length}</b> — <b>${a2.length}</b></div>`;
+    html += `<div class="hint-line">💡 Hugis ng sagot:</div>` + tilesHTML(current.a, current.type, false);
   }
   if (hintStep >= 2) {
     html += `<div class="hint-line">💡 Unang letra: <b>${a1[0]}…</b> — <b>${a2[0]}…</b></div>`;

@@ -1,62 +1,155 @@
-/* Pinoy Word Games — Level Bank (v1)
+/* Pinoy Word Games — Level Bank (v2)
  * 100 levels following the Letter-Shift Series manual (see ../../MANUAL.md).
  * Types: NDL (dagdag letra, end), NBL (bawas letra, end),
  *        NKL (kislap letra, same positions), BS (banat salita, mid insert).
  * Answers are always "WORD1 - WORD2".
+ *
+ * Levels 1–10 are the TUTORIAL: each game type is introduced with a lesson
+ * card (`tut`: title/text + worked example from the manual) and reinforced
+ * with a practice level (`tip`: short reminder). Level 10 is the graduation.
+ *
  * This file is the local fallback bank; the live bank is read from Firestore
  * (collection `pwg_levels`) and seeded from this same data.
  */
 
-export const PWG_BANK_VERSION = 1;
+export const PWG_BANK_VERSION = 2;
 
 export const PWG_QUESTIONS = [
-  // ---- Levels 1–12 · 1DL (dagdag 1 letra sa dulo) ----
-  { level: 1,  type: "1DL", q: "NILALANG NA NAG-IISIP na MAY 365 ARAW", a: "TAO - TAON" },
-  { level: 2,  type: "1DL", q: "NARARAMDAMAN TUWING PISTA na GALAW SA SALIW NG TUGTUGIN", a: "SAYA - SAYAW" },
-  { level: 3,  type: "1DL", q: "KULAY NG ULAP na NASA KANAL PAGKATAPOS NG ULAN", a: "PUTI - PUTIK" },
-  { level: 4,  type: "1DL", q: "HAYOP NA PINAGKUKUNAN NG GATAS na MATIGAS NA METAL", a: "BAKA - BAKAL" },
-  { level: 5,  type: "1DL", q: "MUSMOS na IPINATUTUPAD NG PAMAHALAAN", a: "BATA - BATAS" },
-  { level: 6,  type: "1DL", q: "MURANG NIYOG NA PANTANGGAL-UHAW na HIWALAY SA IBA", a: "BUKO - BUKOD" },
-  { level: 7,  type: "1DL", q: "PINAKAMALIIT NA HALAGA NG BARYA na PAMPATAG NG BAGONG SEMENTONG KALSADA", a: "PISO - PISON" },
-  { level: 8,  type: "1DL", q: "GAWAIN SA MARURUMING DAMIT na BAKBAKAN", a: "LABA - LABAN" },
-  { level: 9,  type: "1DL", q: "MAANGAS SA KANTO na MALAKAS NA BOSES", a: "SIGA - SIGAW" },
-  { level: 10, type: "1DL", q: "GAWAIN SA PALENGKE na HUMANGA NANG TODO", a: "BILI - BILIB" },
-  { level: 11, type: "1DL", q: "MAY TUGMA AT SUKAT na TAWIRAN SA ILOG", a: "TULA - TULAY" },
-  { level: 12, type: "1DL", q: "DAMIT NA NAULANAN na PINGGANG NAHULOG", a: "BASA - BASAG" },
+  // ---- Levels 1–10 · TUTORIAL ----
+  {
+    level: 1, type: "1DL",
+    q: "NILALANG NA NAG-IISIP na MAY 365 ARAW",
+    a: "TAO - TAON",
+    tut: {
+      title: "Aralin 1 · Dagdag Letra (DL)",
+      text: "Bawat tanong, DALAWANG salita ang sagot — magkaugnay ang mga letra nila. Sa DL, ang Salita 2 ay ang Salita 1 na DINAGDAGAN ng letra SA DULO. Ang numero sa tsapa (hal. 1DL) ang bilang ng dagdag na letra. I-type ang unang salita, pindutin ang - para tumalon sa pangalawang kahon.",
+      example: {
+        q: "MAGANDANG UMAGA ng ANYONG TUBIG",
+        a: "BATI - BATIS",
+        note: "MAGANDANG UMAGA = BATI. Dagdagan ng S sa dulo: BATI + S = BATIS, isang ANYONG TUBIG."
+      }
+    }
+  },
+  {
+    level: 2, type: "1DL",
+    q: "NARARAMDAMAN TUWING PISTA na GALAW SA SALIW NG TUGTUGIN",
+    a: "SAYA - SAYAW",
+    tip: "Tandaan: 1DL — hanapin muna ang unang salita, tapos dagdagan ng 1 letra sa dulo para makuha ang pangalawa."
+  },
+  {
+    level: 3, type: "1DL",
+    q: "MAY TUGMA AT SUKAT na TAWIRAN SA ILOG",
+    a: "TULA - TULAY",
+    tip: "Huling DL practice! Tingnan ang mga kahon sa ibaba — makikita mo kung saan papasok ang dagdag na letra."
+  },
+  {
+    level: 4, type: "1BL",
+    q: "GULAY NA LILA na LUKSO",
+    a: "TALONG - TALON",
+    tut: {
+      title: "Aralin 2 · Bawas Letra (BL)",
+      text: "Baligtad naman: sa BL, ang Salita 2 ay ang Salita 1 na BINAWASAN ng letra MULA SA DULO. Ang numero sa tsapa ang bilang ng tinanggal na letra.",
+      example: {
+        q: "SAKTO ng ANYONG TUBIG",
+        a: "SAPAT - SAPA",
+        note: "SAKTO = SAPAT. Tanggalin ang huling letra: SAPAT − T = SAPA, isang ANYONG TUBIG."
+      }
+    }
+  },
+  {
+    level: 5, type: "1BL",
+    q: "TIRAHAN na DULOT NG MALAKAS NA ULAN",
+    a: "BAHAY - BAHA",
+    tip: "Tandaan: 1BL — alisin ang huling letra ng unang salita para makuha ang pangalawa."
+  },
+  {
+    level: 6, type: "1KL",
+    q: "ALAGANG NGUMINGIYAW na TUMITIBOK SA DIBDIB",
+    a: "PUSA - PUSO",
+    tut: {
+      title: "Aralin 3 · Kislap Letra (KL)",
+      text: "Sa KL, PAREHONG HABA ang dalawang salita — may letra lang na PINALITAN sa PAREHONG POSISYON. Maaaring nasa unahan, gitna, o dulo ang palit; ang numero sa tsapa ang bilang ng letrang nagbago.",
+      example: {
+        q: "sa KAPATID ko PINAGAWA",
+        a: "UTOL - UTOS",
+        note: "KAPATID = UTOL. Palitan ang ika-4 na letra: UTO[L] → UTO[S] = UTOS, ang PINAGAWA."
+      }
+    }
+  },
+  {
+    level: 7, type: "1KL",
+    q: "LASA NG KALAMANSI na PAMPAALAT NG ULAM",
+    a: "ASIM - ASIN",
+    tip: "Tandaan: 1KL — parehong haba ang dalawang salita; isang letra lang ang nag-iba."
+  },
+  {
+    level: 8, type: "BS",
+    q: "HINIHIGAAN SA KUWARTO na KAAGAPAY SAAN MAN MAGPUNTA",
+    a: "KAMA - KASAMA",
+    tut: {
+      title: "Aralin 4 · Banat Salita (BS)",
+      text: "Sa BS, BINABANAT ang unang salita: hatiin ito sa unahan at dulo, tapos magsingit ng letra SA GITNA para mabuo ang pangalawang salita. Kahit ilang letra ang maaaring isingit.",
+      example: {
+        q: "KINAMOT na HAYOP",
+        a: "KATI - KALAPATI",
+        note: "KINAMOT = KATI. Hatiin: KA + TI, tapos singitan ang gitna: KA + LAPA + TI = KALAPATI, isang HAYOP."
+      }
+    }
+  },
+  {
+    level: 9, type: "BS",
+    q: "PANTAPAK na MAG-ANAK",
+    a: "PAA - PAMILYA",
+    tip: "Tandaan: BS — buksan ang unang salita sa gitna at magsingit ng letra. Pareho pa rin ang unahan at dulo."
+  },
+  {
+    level: 10, type: "1DL",
+    q: "GAWAIN SA MARURUMING DAMIT na BAKBAKAN",
+    a: "LABA - LABAN",
+    tut: {
+      title: "Huling Aralin · Pagtatapos! 🎓",
+      text: "Alam mo na ang apat na uri: DL (dagdag sa dulo), BL (bawas sa dulo), KL (palit sa parehong posisyon), at BS (singit sa gitna). Basahin lagi ang tsapa para malaman ang uri at bilang ng letra. Mula sa susunod na level, wala nang gabay — pero nandiyan lagi ang 💡 Pahiwatig kung kailangan mo. Sagutan ito para mag-graduate!",
+      grad: true
+    }
+  },
 
-  // ---- Levels 13–24 · 1BL (bawas 1 letra sa dulo) ----
-  { level: 13, type: "1BL", q: "GULAY NA LILA na LUKSO", a: "TALONG - TALON" },
-  { level: 14, type: "1BL", q: "INUMING MULA SA BAKA na PIGA MULA SA NIYOG", a: "GATAS - GATA" },
-  { level: 15, type: "1BL", q: "PANGUNAHING SANGKAP NG OKOY na DAMPI NG KAMAY", a: "HIPON - HIPO" },
-  { level: 16, type: "1BL", q: "KULAY NG HINOG NA MANGGA na PANLASA SA BIBIG", a: "DILAW - DILA" },
-  { level: 17, type: "1BL", q: "TIRAHAN na DULOT NG MALAKAS NA ULAN", a: "BAHAY - BAHA" },
-  { level: 18, type: "1BL", q: "NAGLILIYAB SA KALAN na ANAK NG IYONG ANAK", a: "APOY - APO" },
-  { level: 19, type: "1BL", q: "KUMAKALAM KAPAG GUTOM na KAPATID NI NANAY", a: "TIYAN - TIYA" },
-  { level: 20, type: "1BL", q: "KABALIGTARAN NG HARAPAN na HINDI DIRETSONG DAAN", a: "LIKOD - LIKO" },
-  { level: 21, type: "1BL", q: "LUMALABAS SA TAMBUTSO na SIKAT SA KASALUKUYAN", a: "USOK - USO" },
-  { level: 22, type: "1BL", q: "PANLABAS NA TAKIP NG PRUTAS na LAMAN NG BARIL", a: "BALAT - BALA" },
-  { level: 23, type: "1BL", q: "TUMUTULO HABANG MAHIMBING ANG TULOG na MALAWAK NA TUBIG-TABANG", a: "LAWAY - LAWA" },
-  { level: 24, type: "1BL", q: "KASAMA NG KIDLAT KAPAG BUMABAGYO na GINAGAWA NG TUBIG SA TAKURE", a: "KULOG - KULO" },
+  // ---- Levels 11–18 · 1DL (dagdag 1 letra sa dulo) ----
+  { level: 11, type: "1DL", q: "KULAY NG ULAP na NASA KANAL PAGKATAPOS NG ULAN", a: "PUTI - PUTIK" },
+  { level: 12, type: "1DL", q: "HAYOP NA PINAGKUKUNAN NG GATAS na MATIGAS NA METAL", a: "BAKA - BAKAL" },
+  { level: 13, type: "1DL", q: "MUSMOS na IPINATUTUPAD NG PAMAHALAAN", a: "BATA - BATAS" },
+  { level: 14, type: "1DL", q: "MURANG NIYOG NA PANTANGGAL-UHAW na HIWALAY SA IBA", a: "BUKO - BUKOD" },
+  { level: 15, type: "1DL", q: "PINAKAMALIIT NA HALAGA NG BARYA na PAMPATAG NG BAGONG SEMENTONG KALSADA", a: "PISO - PISON" },
+  { level: 16, type: "1DL", q: "MAANGAS SA KANTO na MALAKAS NA BOSES", a: "SIGA - SIGAW" },
+  { level: 17, type: "1DL", q: "GAWAIN SA PALENGKE na HUMANGA NANG TODO", a: "BILI - BILIB" },
+  { level: 18, type: "1DL", q: "DAMIT NA NAULANAN na PINGGANG NAHULOG", a: "BASA - BASAG" },
 
-  // ---- Levels 25–36 · 1KL (kislap 1 letra, parehong posisyon) ----
-  { level: 25, type: "1KL", q: "ALAGANG NGUMINGIYAW na TUMITIBOK SA DIBDIB", a: "PUSA - PUSO" },
-  { level: 26, type: "1KL", q: "LASA NG KALAMANSI na PAMPAALAT NG ULAM", a: "ASIM - ASIN" },
-  { level: 27, type: "1KL", q: "KASAMA NG KANIN na NASA HIMPAPAWID", a: "ULAM - ULAP" },
-  { level: 28, type: "1KL", q: "KAPANGYARIHAN NG KATAWAN na HAKBANG NANG HAKBANG", a: "LAKAS - LAKAD" },
-  { level: 29, type: "1KL", q: "PAMPALUSOG NA PANANIM na BIGLANG PAGKAGITLA", a: "GULAY - GULAT" },
-  { level: 30, type: "1KL", q: "LAGAKAN NG PERA na SASAKYAN SA DAGAT", a: "BANGKO - BANGKA" },
-  { level: 31, type: "1KL", q: "TAHANAN NG MGA ANGHEL na PAMPADULAS SA KAWALI", a: "LANGIT - LANGIS" },
-  { level: 32, type: "1KL", q: "PATUNGAN NG PAGKAIN na GANAP SA SIMBAHAN TUWING LINGGO", a: "MESA - MISA" },
-  { level: 33, type: "1KL", q: "DAANAN PAPASOK NG BAHAY na ISKOR SA LARO", a: "PINTO - PUNTO" },
-  { level: 34, type: "1KL", q: "ANI NG PUNO na SISIDLANG LUWAD NG TUBIG", a: "BUNGA - BANGA" },
-  { level: 35, type: "1KL", q: "BINABASA SA AKLATAN na PANUKAT NG TUBIG O GASOLINA", a: "LIBRO - LITRO" },
-  { level: 36, type: "1KL", q: "PAHINGA SA GABI na ISINISIGAW KAPAG MAY KUMATOK", a: "TULOG - TULOY" },
+  // ---- Levels 19–28 · 1BL (bawas 1 letra sa dulo) ----
+  { level: 19, type: "1BL", q: "INUMING MULA SA BAKA na PIGA MULA SA NIYOG", a: "GATAS - GATA" },
+  { level: 20, type: "1BL", q: "PANGUNAHING SANGKAP NG OKOY na DAMPI NG KAMAY", a: "HIPON - HIPO" },
+  { level: 21, type: "1BL", q: "KULAY NG HINOG NA MANGGA na PANLASA SA BIBIG", a: "DILAW - DILA" },
+  { level: 22, type: "1BL", q: "NAGLILIYAB SA KALAN na ANAK NG IYONG ANAK", a: "APOY - APO" },
+  { level: 23, type: "1BL", q: "KUMAKALAM KAPAG GUTOM na KAPATID NI NANAY", a: "TIYAN - TIYA" },
+  { level: 24, type: "1BL", q: "KABALIGTARAN NG HARAPAN na HINDI DIRETSONG DAAN", a: "LIKOD - LIKO" },
+  { level: 25, type: "1BL", q: "LUMALABAS SA TAMBUTSO na SIKAT SA KASALUKUYAN", a: "USOK - USO" },
+  { level: 26, type: "1BL", q: "PANLABAS NA TAKIP NG PRUTAS na LAMAN NG BARIL", a: "BALAT - BALA" },
+  { level: 27, type: "1BL", q: "TUMUTULO HABANG MAHIMBING ANG TULOG na MALAWAK NA TUBIG-TABANG", a: "LAWAY - LAWA" },
+  { level: 28, type: "1BL", q: "KASAMA NG KIDLAT KAPAG BUMABAGYO na GINAGAWA NG TUBIG SA TAKURE", a: "KULOG - KULO" },
 
-  // ---- Levels 37–44 · BS (banat salita, madali) ----
-  { level: 37, type: "BS", q: "HINIHIGAAN SA KUWARTO na KAAGAPAY SAAN MAN MAGPUNTA", a: "KAMA - KASAMA" },
-  { level: 38, type: "BS", q: "TAKBUHAN SA KUSINA KAPAG NAMATAAN na BABAENG NASA HUSTONG GULANG", a: "DAGA - DALAGA" },
-  { level: 39, type: "BS", q: "TANONG KUNG NASA ALING LUGAR na PAMPASULONG NG BANGKA", a: "SAAN - SAGWAN" },
-  { level: 40, type: "BS", q: "PANTAPAK na MAG-ANAK", a: "PAA - PAMILYA" },
+  // ---- Levels 29–38 · 1KL (kislap 1 letra, parehong posisyon) ----
+  { level: 29, type: "1KL", q: "KASAMA NG KANIN na NASA HIMPAPAWID", a: "ULAM - ULAP" },
+  { level: 30, type: "1KL", q: "KAPANGYARIHAN NG KATAWAN na HAKBANG NANG HAKBANG", a: "LAKAS - LAKAD" },
+  { level: 31, type: "1KL", q: "PAMPALUSOG NA PANANIM na BIGLANG PAGKAGITLA", a: "GULAY - GULAT" },
+  { level: 32, type: "1KL", q: "LAGAKAN NG PERA na SASAKYAN SA DAGAT", a: "BANGKO - BANGKA" },
+  { level: 33, type: "1KL", q: "TAHANAN NG MGA ANGHEL na PAMPADULAS SA KAWALI", a: "LANGIT - LANGIS" },
+  { level: 34, type: "1KL", q: "PATUNGAN NG PAGKAIN na GANAP SA SIMBAHAN TUWING LINGGO", a: "MESA - MISA" },
+  { level: 35, type: "1KL", q: "DAANAN PAPASOK NG BAHAY na ISKOR SA LARO", a: "PINTO - PUNTO" },
+  { level: 36, type: "1KL", q: "ANI NG PUNO na SISIDLANG LUWAD NG TUBIG", a: "BUNGA - BANGA" },
+  { level: 37, type: "1KL", q: "BINABASA SA AKLATAN na PANUKAT NG TUBIG O GASOLINA", a: "LIBRO - LITRO" },
+  { level: 38, type: "1KL", q: "PAHINGA SA GABI na ISINISIGAW KAPAG MAY KUMATOK", a: "TULOG - TULOY" },
+
+  // ---- Levels 39–44 · BS (banat salita, madali) ----
+  { level: 39, type: "BS", q: "TAKBUHAN SA KUSINA KAPAG NAMATAAN na BABAENG NASA HUSTONG GULANG", a: "DAGA - DALAGA" },
+  { level: 40, type: "BS", q: "TANONG KUNG NASA ALING LUGAR na PAMPASULONG NG BANGKA", a: "SAAN - SAGWAN" },
   { level: 41, type: "BS", q: "MALIIT NA IBONG KAYUMANGGI na BATI TUWING KAARAWAN", a: "MAYA - MALIGAYA" },
   { level: 42, type: "BS", q: "PANG-AKIT SA ISDA na NASA HAPAG TUWING TANGHALIAN", a: "PAIN - PAGKAIN" },
   { level: 43, type: "BS", q: "BAHAY NA MUNTI SA AWITIN na PANANGGALANG SA LAMOK", a: "KUBO - KULAMBO" },
