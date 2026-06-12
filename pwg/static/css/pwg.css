@@ -356,7 +356,11 @@ button { touch-action: manipulation; }
 .lvl.locked:hover { transform: none; }
 
 /* ---------- play: column that always fits ---------- */
-#view-play { min-height: 0; gap: clamp(6px, 1.4vh, 12px); }
+#view-play {
+  min-height: 0;
+  gap: clamp(6px, 1.4vh, 12px);
+  overflow-y: auto; /* last-resort: scroll instead of clipping the keyboard */
+}
 
 .play-info {
   display: flex;
@@ -413,9 +417,12 @@ button { touch-action: manipulation; }
   border-bottom: 1px solid var(--line);
 }
 
-/* hint area lives inside the column, stays compact */
+/* hint area lives inside the column; shrinks/scrolls before the keyboard
+   ever gets pushed past the bottom */
 .hint-box {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   text-align: center;
   font-size: 13px;
   color: var(--ink-soft);
@@ -547,6 +554,25 @@ button { touch-action: manipulation; }
 }
 .key.check:active { box-shadow: 0 1px 0 #c4583e; }
 .key.hintkey { max-width: 64px; background: var(--bg-soft); }
+
+/* very short screens (landscape phones, tiny windows): tighten everything
+   so all four keyboard rows stay above the bottom edge */
+@media (max-height: 540px) {
+  .wrap { padding-top: 6px; gap: 4px; }
+  .topbar { min-height: 30px; }
+  #view-play { gap: 4px; }
+  .view-head { margin: 0 0 2px; }
+  .clue { padding: 5px 10px; }
+  .clue .q-label { display: none; }
+  .clue-kind { padding-bottom: 2px; }
+  .hint-box { font-size: 12px; }
+  .feedback { min-height: 0; font-size: 12px; }
+  .word-input { padding: 5px 8px; font-size: 15px; }
+  .answer-row .dash { font-size: 18px; }
+  .kb { gap: 3px; }
+  .key { height: clamp(26px, 7.5vh, 38px); font-size: clamp(12px, 4vh, 15px); }
+  .toast { bottom: 6px; }
+}
 
 /* ---------- overlays (lesson / reminder / win) ---------- */
 .overlay {
