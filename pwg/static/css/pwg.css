@@ -511,7 +511,7 @@ button { touch-action: manipulation; }
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: clamp(4px, 0.9vh, 7px);
+  gap: clamp(3px, 0.8vh, 7px);
   user-select: none;
   padding-bottom: 2px;
 }
@@ -523,7 +523,7 @@ button { touch-action: manipulation; }
 .key {
   flex: 1 1 0;
   max-width: 52px;
-  height: clamp(38px, 6vh, 50px);
+  height: clamp(34px, 5.4vh, 50px);
   border: none;
   border-radius: 9px;
   background: var(--card);
@@ -554,6 +554,17 @@ button { touch-action: manipulation; }
 }
 .key.check:active { box-shadow: 0 1px 0 #c4583e; }
 .key.hintkey { max-width: 64px; background: var(--bg-soft); }
+
+/* typical phones (most portrait handsets): the column was fitting with only
+   a couple px to spare, which real-device font metrics / browser chrome eat,
+   spilling the keyboard. Trim the non-shrinking parts for breathing room. */
+@media (max-height: 740px) {
+  .wrap { padding-top: 8px; gap: 6px; }
+  #view-play { gap: clamp(5px, 1vh, 9px); }
+  .view-head { margin: 2px 0 4px; }
+  .clue { padding: 8px 12px; }
+  .answer-row .dash { font-size: 20px; }
+}
 
 /* very short screens (landscape phones, tiny windows): tighten everything
    so all four keyboard rows stay above the bottom edge */
