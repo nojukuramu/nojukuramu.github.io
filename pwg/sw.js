@@ -1,5 +1,5 @@
 /* Pinoy Word Games — offline cache (app shell only; Firestore goes online) */
-const CACHE = "pwg-v4";
+const CACHE = "pwg-v5";
 const SHELL = [
   "./",
   "index.html",
@@ -14,7 +14,15 @@ const SHELL = [
 ];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // Pre-cache the new shell but stay in "waiting" until the page asks us to
+  // take over (via Sync Up), so an update never swaps assets mid-game.
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
+});
+
+// Sync Up tells the waiting worker to activate now; controllerchange in the
+// page then reloads into the fresh version.
+self.addEventListener("message", (e) => {
+  if (e.data && e.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (e) => {
