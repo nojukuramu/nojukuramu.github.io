@@ -173,6 +173,29 @@ function tilesFromAnswer(answer, type) {
   return tilesHTML(rowsFromWords(a1, a2, type));
 }
 
+/* ---------------- lock the app to the *visible* viewport height ----------
+ * In an installed (standalone) PWA on Android, 100dvh can resolve taller than
+ * the on-screen area (the bottom system/gesture bar), which pushes the
+ * keyboard's last row off-screen. visualViewport.height is the real visible
+ * height; we mirror it into --app-h and keep CSS's 100dvh as the fallback. */
+(function lockAppHeight() {
+  const setH = () => {
+    const vv = window.visualViewport;
+    const h = Math.min(
+      vv ? vv.height : Infinity,
+      document.documentElement.clientHeight || Infinity,
+      window.innerHeight || Infinity
+    );
+    if (isFinite(h) && h > 0) {
+      document.documentElement.style.setProperty("--app-h", h + "px");
+    }
+  };
+  setH();
+  window.addEventListener("resize", setH);
+  window.addEventListener("orientationchange", setH);
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", setH);
+})();
+
 /* ---------------- floating cozy bits ---------------- */
 
 (function makeFloaties() {
