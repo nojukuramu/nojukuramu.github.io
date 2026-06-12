@@ -15,6 +15,10 @@
 
 import { PWG_QUESTIONS, typeLabel } from "./questions.js";
 import { loadBank } from "./firebase.js";
+import {
+  playKeyTap, playDash, playBackspace, playWrong, playHint, playWin, playGrad,
+  startBgMusic, toggleMute, isMuted
+} from "./audio.js";
 
 /* ---------------- answer hashing (matches mysite/pwg_bank/build.mjs) ------ */
 
@@ -412,6 +416,7 @@ function typeChar(ch) {
   if (!current || progress.solved[current.level]) return;
   if (active.value.length < MAX_WORD_LEN) {
     active.value += ch;
+    playKeyTap();
     $("#feedback").textContent = "";
     $("#feedback").className = "feedback";
   }
@@ -421,15 +426,18 @@ function doDash() {
   // the dash between the words is fixed; "-" just hops to the other box
   if (!current || progress.solved[current.level]) return;
   setActive(active === w1 ? w2 : w1);
+  playDash();
 }
 
 function doBackspace() {
   if (!current || progress.solved[current.level]) return;
   if (active.value) {
     active.value = active.value.slice(0, -1);
+    playBackspace();
   } else if (active === w2) {
     setActive(w1);
     w1.value = w1.value.slice(0, -1);
+    playBackspace();
   }
 }
 
@@ -519,6 +527,7 @@ async function checkAnswer() {
     fb.textContent = "";
     w1.disabled = w2.disabled = true;
     $("#kb").style.display = "none";
+    if (isGrad) playGrad(); else playWin();
     openWinOverlay({
       title: isGrad ? "🎓 Pasado ka!" : "🎉 Tama!",
       answer,
@@ -528,9 +537,11 @@ async function checkAnswer() {
     });
     celebrate();
   } else if (ok1 || ok2) {
+    playWrong();
     fb.textContent = "Malapit na! Tama na ang isang salita 👀";
     fb.className = "feedback no";
   } else {
+    playWrong();
     fb.textContent = "Hindi pa tama — subukan muli! 💭";
     fb.className = "feedback no";
     $(".answer-row").classList.remove("shake");
@@ -544,6 +555,7 @@ $("#btn-check").addEventListener("click", checkAnswer);
 /* --- hints: 1) answer-shape tiles, 2) first letters (from hint metadata) --- */
 $("#btn-hint").addEventListener("click", () => {
   if (!current || progress.solved[current.level]) return;
+  playHint();
   const box = $("#hint-box");
   hintStep = Math.min(hintStep + 1, 2);
   let html = "";
@@ -644,6 +656,31 @@ async function syncUp() {
 }
 
 btnSync.addEventListener("click", syncUp);
+
+/* ---------------- audio: mute button + first-interaction start ----------- */
+
+const btnMute = $("#btn-mute");
+
+function updateMuteBtn(muted) {
+  btnMute.textContent = muted ? "🔇" : "🔊";
+  btnMute.classList.toggle("muted", muted);
+  btnMute.title = muted ? "I-unmute ang tunog" : "I-mute ang tunog";
+}
+updateMuteBtn(isMuted());
+
+btnMute.addEventListener("click", () => {
+  updateMuteBtn(toggleMute());
+});
+
+// Start background music on first user interaction (AudioContext policy)
+let _audioStarted = false;
+function ensureAudio() {
+  if (_audioStarted) return;
+  _audioStarted = true;
+  if (!isMuted()) startBgMusic();
+}
+document.addEventListener("click", ensureAudio, { once: true });
+document.addEventListener("keydown", ensureAudio, { once: true });
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("controllerchange", () => {

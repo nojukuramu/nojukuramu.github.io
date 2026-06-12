@@ -120,6 +120,10 @@ button { touch-action: manipulation; }
   .topbar .btn-label { display: none; }
 }
 
+/* Mute toggle */
+#btn-mute { font-size: 15px; padding: 7px 10px; }
+#btn-mute.muted { opacity: 0.55; }
+
 /* Sync Up: update-available indicator */
 #btn-sync { position: relative; }
 .sync-dot { display: none; }
@@ -372,9 +376,6 @@ button { touch-action: manipulation; }
   white-space: nowrap;
 }
 .badge.kind { background: var(--sage-soft); color: var(--sage); }
-@media (max-width: 430px) {
-  .badge.kind { display: none; } /* the lesson overlay / manual covers it */
-}
 
 .clue {
   flex: 1 1 auto;
@@ -398,6 +399,18 @@ button { touch-action: manipulation; }
   font-weight: 700;
   letter-spacing: 1px;
   color: var(--peach);
+}
+.clue-kind {
+  font-family: "Baloo 2", sans-serif;
+  font-size: clamp(12px, 1.9vh, 14px);
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  color: var(--sage);
+  text-transform: uppercase;
+  align-self: stretch;
+  text-align: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
 }
 
 /* hint area lives inside the column, stays compact */
