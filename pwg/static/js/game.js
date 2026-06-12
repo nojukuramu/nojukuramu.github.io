@@ -3,34 +3,66 @@
  * Single-screen layout: lessons/reminders and the win screen are overlays,
  * and input comes from the in-game keyboard (the OS virtual keyboard never
  * opens — the inputs are readonly + inputmode="none").
- * Progress lives in localStorage; the question bank comes from Firestore
- * (front-end only) with the bundled bank as fallback.
+ *
+ * Anti-cheat model (frontend-only):
+ *  - The bank ships no answers, only salted SHA-256 hashes per word;
+ *    guesses are hashed locally and compared (works offline too).
+ *  - Progress must prove itself: each solved entry stores the answer the
+ *    player typed, and it is re-verified against the hashes on every boot.
+ *    Editing localStorage to "unlocked: 100" does nothing — unlocks are
+ *    recomputed from verified solves only.
  */
 
 import { PWG_QUESTIONS, typeLabel } from "./questions.js";
 import { loadBank } from "./firebase.js";
 
-/* ---------------- progress (localStorage) ---------------- */
+/* ---------------- answer hashing (matches mysite/pwg_bank/build.mjs) ------ */
 
-const PROGRESS_KEY = "pwg:v1:progress";
+const HASH_SALT = "pwg-v1";
 
-function loadProgress() {
-  try {
-    const p = JSON.parse(localStorage.getItem(PROGRESS_KEY) || "{}");
-    return {
-      unlocked: Math.max(1, p.unlocked | 0),
-      solved: p.solved && typeof p.solved === "object" ? p.solved : {}
-    };
-  } catch (e) {
-    return { unlocked: 1, solved: {} };
+async function sha256Hex(s) {
+  const data = new TextEncoder().encode(s);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+const hashWord = (level, slot, word) => sha256Hex(`${HASH_SALT}|${level}|${slot}|${word}`);
+
+/* ---------------- progress (localStorage, self-proving) ---------------- */
+
+const PROGRESS_KEY = "pwg:v2:progress";
+
+let progress = { unlocked: 1, solved: {} };
+
+function recomputeUnlocked() {
+  let n = 1;
+  while (progress.solved[n]) n++;
+  progress.unlocked = Math.min(n, TOTAL());
+}
+
+/* Each stored solve must carry the answer; entries whose answer no longer
+ * hashes to the bank's h1/h2 are dropped. */
+async function loadAndVerifyProgress() {
+  let raw;
+  try { raw = JSON.parse(localStorage.getItem(PROGRESS_KEY) || "{}"); } catch (e) { raw = {}; }
+  const solved = {};
+  const entries = Object.entries(raw.solved && typeof raw.solved === "object" ? raw.solved : {});
+  for (const [key, rec] of entries) {
+    const lv = parseInt(key, 10);
+    const it = bankByLevel.get(lv);
+    if (!it || !rec || typeof rec.a !== "string") continue;
+    const [g1, g2] = rec.a.split("-").map(normalizeWord);
+    if (!g1 || !g2) continue;
+    const [c1, c2] = await Promise.all([hashWord(lv, 1, g1), hashWord(lv, 2, g2)]);
+    if (c1 === it.h1 && c2 === it.h2) solved[lv] = { ts: rec.ts || Date.now(), a: g1 + " - " + g2 };
   }
+  progress = { unlocked: 1, solved };
+  recomputeUnlocked();
 }
 
 function saveProgress() {
   try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch (e) { /* ok */ }
 }
-
-const progress = loadProgress();
 
 /* ---------------- bank ---------------- */
 
@@ -73,53 +105,68 @@ function normalizeWord(s) {
     .replace(/[^A-ZÑ]/g, "");
 }
 
-function splitAnswer(a) {
-  const [w1, w2] = a.split("-").map((w) => normalizeWord(w));
-  return [w1, w2];
-}
-
 /* ---------------- letter-tile mechanic visualizer ----------------
- * Renders the two answer words as tile rows with the mechanic highlighted:
  * DL = added tiles at the end, BL = removed tiles at the end,
  * KL = swapped positions, BS = inserted tiles in the middle.
- * With revealed=false the tiles stay blank, so it teaches the *shape*
- * of the answer without giving the letters away. */
+ * Blank tiles come from the bank's hint metadata (len/kl/bs) — the
+ * answers themselves are not available client-side until solved. */
 
-function mechanicRows(a1, a2, type) {
-  const kind = (/(DL|BL|KL|BS)$/.exec(type) || [])[1];
-  const row1 = a1.split("").map((ch) => ({ ch, cls: "" }));
-  const row2 = a2.split("").map((ch) => ({ ch, cls: "" }));
+function kindOf(type) { return (/(DL|BL|KL|BS)$/.exec(type) || [])[1]; }
+
+function decorateRows(row1, row2, type, klPos, bsIdx) {
+  const kind = kindOf(type);
   if (kind === "DL") {
-    for (let i = a1.length; i < a2.length; i++) row2[i].cls = "add";
+    for (let i = row1.length; i < row2.length; i++) row2[i].cls = "add";
   } else if (kind === "BL") {
-    for (let i = a2.length; i < a1.length; i++) row1[i].cls = "cut";
+    for (let i = row2.length; i < row1.length; i++) row1[i].cls = "cut";
   } else if (kind === "KL") {
-    for (let i = 0; i < a1.length; i++) {
-      if (a1[i] !== a2[i]) { row1[i].cls = "swap"; row2[i].cls = "swap"; }
+    for (const p of klPos || []) {
+      if (row1[p]) row1[p].cls = "swap";
+      if (row2[p]) row2[p].cls = "swap";
     }
-  } else if (kind === "BS") {
-    // several splits can be valid (K+ALAP+ATI vs KA+LAPA+TI) — show the most
-    // balanced one, which matches how the clues are meant to be read
-    const valid = [];
-    for (let p = 1; p < a1.length; p++) {
-      if (a2.startsWith(a1.slice(0, p)) && a2.endsWith(a1.slice(p))) valid.push(p);
-    }
-    if (valid.length) {
-      const mid = a1.length / 2;
-      const p = valid.reduce((best, x) => Math.abs(x - mid) < Math.abs(best - mid) ? x : best);
-      for (let i = p; i < p + (a2.length - a1.length); i++) row2[i].cls = "ins";
+  } else if (kind === "BS" && typeof bsIdx === "number") {
+    for (let i = bsIdx; i < bsIdx + (row2.length - row1.length); i++) {
+      if (row2[i]) row2[i].cls = "ins";
     }
   }
   return [row1, row2];
 }
 
-function tilesHTML(answer, type, revealed) {
-  const [a1, a2] = splitAnswer(answer);
-  const [row1, row2] = mechanicRows(a1, a2, type);
+const blankRow = (n) => Array.from({ length: n }, () => ({ ch: "", cls: "" }));
+const wordRow = (w) => w.split("").map((ch) => ({ ch, cls: "" }));
+
+/* blank tiles for an unsolved level, from hint metadata */
+function rowsFromMeta(it) {
+  return decorateRows(blankRow(it.len[0]), blankRow(it.len[1]), it.type, it.kl, it.bs);
+}
+
+/* revealed tiles from known words (tutorial examples, win screen, replays) */
+function rowsFromWords(a1, a2, type) {
+  let kl = [], bs;
+  const kind = kindOf(type);
+  if (kind === "KL") {
+    for (let i = 0; i < a1.length; i++) if (a1[i] !== a2[i]) kl.push(i);
+  } else if (kind === "BS") {
+    const valid = [];
+    for (let p = 1; p < a1.length; p++) {
+      if (a2.startsWith(a1.slice(0, p)) && a2.endsWith(a1.slice(p))) valid.push(p);
+    }
+    const mid = a1.length / 2;
+    bs = valid.length ? valid.reduce((b, x) => Math.abs(x - mid) < Math.abs(b - mid) ? x : b) : undefined;
+  }
+  return decorateRows(wordRow(a1), wordRow(a2), type, kl, bs);
+}
+
+function tilesHTML(rows) {
   const row = (tiles) => '<div class="tiles">' +
-    tiles.map((t) => `<b class="tile ${t.cls}">${revealed ? t.ch : ""}</b>`).join("") +
+    tiles.map((t) => `<b class="tile ${t.cls}">${t.ch}</b>`).join("") +
     "</div>";
-  return `<div class="tiles-wrap">${row(row1)}<span class="tiles-arrow">→</span>${row(row2)}</div>`;
+  return `<div class="tiles-wrap">${row(rows[0])}<span class="tiles-arrow">→</span>${row(rows[1])}</div>`;
+}
+
+function tilesFromAnswer(answer, type) {
+  const [a1, a2] = answer.split("-").map(normalizeWord);
+  return tilesHTML(rowsFromWords(a1, a2, type));
 }
 
 /* ---------------- floating cozy bits ---------------- */
@@ -204,7 +251,7 @@ function openLessonOverlay() {
     if (t.example) {
       html += `<div class="tut-example">` +
         `<div class="tut-eq">Q: ${t.example.q}</div>` +
-        tilesHTML(t.example.a, current.type, true) +
+        tilesFromAnswer(t.example.a, current.type) +
         `<div class="tut-ea">A: <b>${t.example.a}</b></div>` +
         `<p class="tut-note">${t.example.note}</p>` +
         `</div>`;
@@ -221,7 +268,7 @@ $("#btn-lesson").addEventListener("click", openLessonOverlay);
 function openWinOverlay(opts) {
   $("#win-title").textContent = opts.title;
   $("#win-answer").textContent = opts.answer;
-  $("#win-tiles").innerHTML = tilesHTML(opts.answer, opts.type, true);
+  $("#win-tiles").innerHTML = tilesFromAnswer(opts.answer, opts.type);
   $("#win-sub").textContent = opts.sub || "";
   $("#btn-win-next").textContent = opts.hasNext ? "Susunod →" : "🏆 Tapos na lahat!";
   $("#overlay-win").classList.add("show");
@@ -290,6 +337,7 @@ $("#level-grid").addEventListener("click", (e) => {
 
 let current = null;   // current question object
 let hintStep = 0;
+let checking = false; // guard against double-submits while hashing
 const seenLessons = new Set(); // auto-open each lesson once per visit
 
 const w1 = $("#word1");
@@ -308,6 +356,7 @@ w2.addEventListener("click", () => { if (!w2.disabled) setActive(w2); });
 function renderPlay(level) {
   current = bankByLevel.get(level);
   hintStep = 0;
+  checking = false;
   $("#play-level").textContent = "Level " + level;
   $("#play-type").textContent = current.type;
   $("#play-kind").textContent = typeLabel(current.type);
@@ -323,18 +372,19 @@ function renderPlay(level) {
   if (current.tut || current.tip) {
     hintStep = 1;
     $("#hint-box").innerHTML =
-      `<div class="hint-line">Hugis ng sagot:</div>` + tilesHTML(current.a, current.type, false);
+      `<div class="hint-line">Hugis ng sagot:</div>` + tilesHTML(rowsFromMeta(current));
   }
 
-  const solved = !!progress.solved[level];
+  const rec = progress.solved[level];
   w1.value = "";
   w2.value = "";
-  w1.disabled = w2.disabled = solved;
-  $("#kb").style.display = solved ? "none" : "";
-  $("#solved-bar").classList.toggle("show", solved);
+  w1.disabled = w2.disabled = !!rec;
+  $("#kb").style.display = rec ? "none" : "";
+  $("#solved-bar").classList.toggle("show", !!rec);
 
-  if (solved) {
-    const [a1, a2] = splitAnswer(current.a);
+  if (rec) {
+    // the verified answer the player earned, stored in their progress
+    const [a1, a2] = rec.a.split("-").map(normalizeWord);
     w1.value = a1; w2.value = a2;
     w1.classList.remove("active"); w2.classList.remove("active");
     $("#btn-next-inline").textContent = bankByLevel.has(level + 1) ? "Susunod →" : "🏆 Tapos!";
@@ -430,11 +480,10 @@ document.addEventListener("paste", (e) => {
   }
 });
 
-/* --- checking --- */
+/* --- checking (guesses are hashed; the answer never exists in the code) --- */
 
-function checkAnswer() {
-  if (!current || progress.solved[current.level]) return;
-  const [a1, a2] = splitAnswer(current.a);
+async function checkAnswer() {
+  if (!current || progress.solved[current.level] || checking) return;
   const g1 = normalizeWord(w1.value);
   const g2 = normalizeWord(w2.value);
   const fb = $("#feedback");
@@ -445,23 +494,40 @@ function checkAnswer() {
     return;
   }
 
-  if (g1 === a1 && g2 === a2) {
+  checking = true;
+  let ok1 = false, ok2 = false;
+  try {
+    const [c1, c2] = await Promise.all([
+      hashWord(current.level, 1, g1),
+      hashWord(current.level, 2, g2)
+    ]);
+    ok1 = c1 === current.h1;
+    ok2 = c2 === current.h2;
+  } catch (e) {
+    checking = false;
+    toast("⚠️ Kailangan ng secure (https) na koneksyon para makapaglaro");
+    return;
+  }
+  checking = false;
+
+  if (ok1 && ok2) {
     const isGrad = !!(current.tut && current.tut.grad);
-    progress.solved[current.level] = { ts: Date.now() };
-    progress.unlocked = Math.max(progress.unlocked, Math.min(current.level + 1, TOTAL()));
+    const answer = g1 + " - " + g2;
+    progress.solved[current.level] = { ts: Date.now(), a: answer };
+    recomputeUnlocked();
     saveProgress();
     fb.textContent = "";
     w1.disabled = w2.disabled = true;
     $("#kb").style.display = "none";
     openWinOverlay({
       title: isGrad ? "🎓 Pasado ka!" : "🎉 Tama!",
-      answer: current.a,
+      answer,
       type: current.type,
       sub: isGrad ? "Tapos na ang tutorial — handa ka na sa totoong laban!" : "",
       hasNext: bankByLevel.has(current.level + 1)
     });
     celebrate();
-  } else if (g1 === a1 || g2 === a2) {
+  } else if (ok1 || ok2) {
     fb.textContent = "Malapit na! Tama na ang isang salita 👀";
     fb.className = "feedback no";
   } else {
@@ -475,18 +541,17 @@ function checkAnswer() {
 
 $("#btn-check").addEventListener("click", checkAnswer);
 
-/* --- hints: 1) answer-shape tiles, 2) first letters --- */
+/* --- hints: 1) answer-shape tiles, 2) first letters (from hint metadata) --- */
 $("#btn-hint").addEventListener("click", () => {
   if (!current || progress.solved[current.level]) return;
-  const [a1, a2] = splitAnswer(current.a);
   const box = $("#hint-box");
   hintStep = Math.min(hintStep + 1, 2);
   let html = "";
   if (hintStep >= 1) {
-    html += `<div class="hint-line">💡 Hugis ng sagot:</div>` + tilesHTML(current.a, current.type, false);
+    html += `<div class="hint-line">💡 Hugis ng sagot:</div>` + tilesHTML(rowsFromMeta(current));
   }
-  if (hintStep >= 2) {
-    html += `<div class="hint-line">💡 Unang letra: <b>${a1[0]}…</b> — <b>${a2[0]}…</b></div>`;
+  if (hintStep >= 2 && current.f) {
+    html += `<div class="hint-line">💡 Unang letra: <b>${current.f[0]}…</b> — <b>${current.f[1]}…</b></div>`;
   }
   box.innerHTML = html;
 });
@@ -534,5 +599,11 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => { /* offline play is a bonus */ });
 }
 
-/* ---------------- boot ---------------- */
-route();
+/* ---------------- boot: verify stored progress, then route ---------------- */
+loadAndVerifyProgress().then(() => {
+  saveProgress(); // persist the cleaned-up state
+  route();
+}).catch(() => {
+  // crypto unavailable (non-https) — start locked at level 1
+  route();
+});
