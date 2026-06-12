@@ -114,8 +114,42 @@ button { touch-action: manipulation; }
   color: var(--coral);
   box-shadow: 0 2px 0 rgba(122,92,60,.12);
 }
-@media (max-width: 420px) {
+@media (max-width: 480px) {
   .brand .brand-name { display: none; }
+  /* keep the top bar from crowding: icons only on narrow screens */
+  .topbar .btn-label { display: none; }
+}
+
+/* Sync Up: update-available indicator */
+#btn-sync { position: relative; }
+.sync-dot { display: none; }
+#btn-sync.has-update {
+  color: var(--coral);
+  box-shadow: 0 4px 0 #ecbfae, var(--shadow);
+}
+#btn-sync.has-update .sync-dot {
+  display: block;
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: var(--coral);
+  border: 2px solid var(--bg);
+  animation: sync-pulse 1.4s ease-in-out infinite;
+}
+#btn-sync.syncing > span[aria-hidden] { display: inline-block; animation: sync-spin .8s linear infinite; }
+@keyframes sync-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: .65; }
+}
+@keyframes sync-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sync-dot, #btn-sync.syncing > span[aria-hidden] { animation: none; }
 }
 
 /* stage hosts the views; views never push the page taller */

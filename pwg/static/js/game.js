@@ -595,8 +595,70 @@ window.addEventListener("appinstalled", () => {
   toast("🏠 Na-install ang Pinoy Word Games!");
 });
 
+/* ---------------- Sync Up: pull the latest version ----------------
+ * Installed PWAs keep serving the cached app shell, so we (a) auto-check for
+ * a new service worker on every load and when the app regains focus, (b) nudge
+ * the player with a dot on the Sync Up button when one is ready, and (c) let
+ * Sync Up activate the waiting worker and reload into the fresh version. */
+
+const btnSync = $("#btn-sync");
+let swReg = null;
+let userTriggeredSync = false;
+
+function markUpdateReady() {
+  btnSync.classList.add("has-update");
+  btnSync.title = "May bagong bersyon — pindutin para mag-update";
+  toast("✨ May bagong bersyon — pindutin ang Sync Up");
+}
+
+function watchRegistration(reg) {
+  swReg = reg;
+  // a worker already waiting from a previous visit
+  if (reg.waiting && navigator.serviceWorker.controller) markUpdateReady();
+  reg.addEventListener("updatefound", () => {
+    const incoming = reg.installing;
+    if (!incoming) return;
+    incoming.addEventListener("statechange", () => {
+      // "installed" + an existing controller == update (not first install)
+      if (incoming.state === "installed" && navigator.serviceWorker.controller) markUpdateReady();
+    });
+  });
+}
+
+async function syncUp() {
+  btnSync.classList.add("syncing");
+  toast("🔄 Sina-sync sa pinakabago…");
+  try {
+    if (swReg) {
+      await swReg.update();
+      if (swReg.waiting) {
+        // hand off to controllerchange, which reloads us into the new version
+        userTriggeredSync = true;
+        swReg.waiting.postMessage({ type: "SKIP_WAITING" });
+        return;
+      }
+    }
+  } catch (e) { /* fall through to a plain reload */ }
+  // already current (or no service worker): a reload still re-pulls assets
+  setTimeout(() => location.reload(), 300);
+}
+
+btnSync.addEventListener("click", syncUp);
+
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js").catch(() => { /* offline play is a bonus */ });
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    // ignore the first-install clients.claim(); only reload when the player
+    // chose to sync, so we never interrupt play unexpectedly
+    if (!userTriggeredSync) return;
+    location.reload();
+  });
+  navigator.serviceWorker.register("sw.js").then((reg) => {
+    watchRegistration(reg);
+    reg.update().catch(() => {});                 // auto-check on load
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") reg.update().catch(() => {});
+    });
+  }).catch(() => { /* offline play is a bonus */ });
 }
 
 /* ---------------- boot: verify stored progress, then route ---------------- */
