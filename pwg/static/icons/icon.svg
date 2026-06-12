@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="110" fill="#fdf6ec"/>
+  <g font-family="'Baloo 2','Arial Rounded MT Bold',Arial,sans-serif" font-weight="700" text-anchor="middle">
+    <rect x="76" y="150" width="120" height="130" rx="26" fill="#fffdf8" stroke="#f4a261" stroke-width="14"/>
+    <text x="136" y="248" font-size="86" fill="#e76f51">P</text>
+    <rect x="216" y="150" width="120" height="130" rx="26" fill="#fffdf8" stroke="#e76f51" stroke-width="14"/>
+    <text x="276" y="248" font-size="86" fill="#e76f51">W</text>
+    <rect x="356" y="150" width="120" height="130" rx="26" fill="#fffdf8" stroke="#7fa86f" stroke-width="14"/>
+    <text x="416" y="248" font-size="86" fill="#7fa86f">G</text>
+    <rect x="146" y="310" width="100" height="110" rx="22" fill="#e6f0df" stroke="#7fa86f" stroke-width="12"/>
+    <text x="196" y="392" font-size="70" fill="#7fa86f">+</text>
+    <rect x="266" y="310" width="100" height="110" rx="22" fill="#fbe3da" stroke="#e76f51" stroke-width="12"/>
+    <text x="316" y="392" font-size="70" fill="#e76f51">S</text>
+  </g>
+</svg>

@@ -18,7 +18,7 @@ const FIREBASE_CONFIG = {
 
 export const PWG_COLLECTION = "pwg_levels";
 
-const CACHE_KEY = "pwg:v1:bank";
+const CACHE_KEY = "pwg:v2:bank";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // refresh from cloud every 6h
 
 function readCache() {
@@ -50,8 +50,13 @@ async function fetchFromFirestore() {
   const items = [];
   snap.forEach((doc) => {
     const d = doc.data();
-    if (d && typeof d.level === "number" && d.q && d.a && d.type) {
-      items.push({ level: d.level, type: d.type, q: d.q, a: d.a });
+    // hashed bank shape: answers never travel, only hashes + hint metadata
+    if (d && typeof d.level === "number" && d.q && d.type && d.h1 && d.h2 && Array.isArray(d.len)) {
+      const it = { level: d.level, type: d.type, q: d.q, h1: d.h1, h2: d.h2, len: d.len };
+      if (Array.isArray(d.f)) it.f = d.f;
+      if (Array.isArray(d.kl)) it.kl = d.kl;
+      if (typeof d.bs === "number") it.bs = d.bs;
+      items.push(it);
     }
   });
   return items;
@@ -63,7 +68,9 @@ async function fetchFromFirestore() {
 export async function loadBank(localItems) {
   const merge = (cloudItems) => {
     const byLevel = new Map(localItems.map((it) => [it.level, it]));
-    for (const it of cloudItems) byLevel.set(it.level, it);
+    // overlay cloud fields on top of local ones so tutorial copy (tut/tip),
+    // which never travels through Firestore, survives the merge
+    for (const it of cloudItems) byLevel.set(it.level, Object.assign({}, byLevel.get(it.level), it));
     return [...byLevel.values()].sort((a, b) => a.level - b.level);
   };
 
