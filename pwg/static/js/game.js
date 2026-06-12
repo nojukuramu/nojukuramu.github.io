@@ -368,12 +368,15 @@ function renderPlay(level) {
   $("#feedback").textContent = "";
   $("#feedback").className = "feedback";
   $("#hint-box").innerHTML = "";
-  $("#btn-lesson").style.display = (current.tut || current.tip) ? "" : "none";
+  const isTutorial = !!(current.tut || current.tip);
+  $("#btn-lesson").style.display = isTutorial ? "" : "none";
+  // hints are training wheels: only tutorial levels get the 💡 key
+  $("#btn-hint").style.display = isTutorial ? "" : "none";
   closeOverlays();
 
   // Tutorial levels get the answer-shape tiles for free (that's hint step 1,
   // so the 💡 button goes straight to first letters there).
-  if (current.tut || current.tip) {
+  if (isTutorial) {
     hintStep = 1;
     $("#hint-box").innerHTML =
       `<div class="hint-line">Hugis ng sagot:</div>` + tilesHTML(rowsFromMeta(current));
@@ -552,9 +555,10 @@ async function checkAnswer() {
 
 $("#btn-check").addEventListener("click", checkAnswer);
 
-/* --- hints: 1) answer-shape tiles, 2) first letters (from hint metadata) --- */
+/* --- hints (tutorial levels only): 1) answer-shape tiles, 2) first letters --- */
 $("#btn-hint").addEventListener("click", () => {
   if (!current || progress.solved[current.level]) return;
+  if (!current.tut && !current.tip) return; // no training wheels past the tutorial
   playHint();
   const box = $("#hint-box");
   hintStep = Math.min(hintStep + 1, 2);
