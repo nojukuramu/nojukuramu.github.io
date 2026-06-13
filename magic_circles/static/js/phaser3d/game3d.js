@@ -121,7 +121,7 @@ const gameConfig3D = {
     },
 
     // Scene list — BootScene3D is first so it preloads assets before menu
-    scene: [BootScene3D, MenuScene3D, GameScene3D, HUDScene3D, MagicEditorScene],
+    scene: [BootScene3D, MenuScene3D, GameScene3D, MagicEditorScene],
 
     // Enable3D canvas/renderer overrides (THREE WebGLRenderer backing Phaser)
     ...ENABLE3D.Canvas()
