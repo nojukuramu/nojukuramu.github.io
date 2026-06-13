@@ -5,7 +5,7 @@
  * q = clue, len/f/kl/bs = hint metadata, tut/tip = tutorial copy.
  */
 
-export const PWG_BANK_VERSION = 3;
+export const PWG_BANK_VERSION = 4;
 
 export const PWG_QUESTIONS = [
   {
@@ -1670,6 +1670,1623 @@ export const PWG_QUESTIONS = [
     ],
     "h1": "ed994fc5e3cfdd58d2cda6bfbaebc073544a3ee5b2c31cf483cb8dca5aca8cd7",
     "h2": "36d842f1b4ebe059d39577739e81108ba11a91cb7039bbf8ed70516113847b68"
+  },
+  {
+    "level": 101,
+    "type": "1DL",
+    "q": "TURING SA SOBRANG KARAMIHAN na ISINUSUOT PANG-TAKIP SA KATAWAN TUWING LALABAS NG BAHAY",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "65e046d8f4bb62f28c71e6e4eaf903c32fb2159af58c6b5518bebfd2d03739aa",
+    "h2": "be0ade552c48f383e6dbbb049113abcead8c1d7ada451575c3c0adf5d6e8183c"
+  },
+  {
+    "level": 102,
+    "type": "1KL",
+    "q": "MALAWAK NA TUBIG-ALAT na ANG IBIG SABIHIN AY NARARAPAT GAWIN",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "6071d0e7f2eaf62f3bab8e41d6513baf7a98d59745df5089774cc9332227a19f",
+    "h2": "8816a862a8c739177378341ef8a1ef03cefc65695e20534ccaa3ba0840238aa4",
+    "kl": [
+      2
+    ]
+  },
+  {
+    "level": 103,
+    "type": "1BL",
+    "q": "NAIWANG MARKA NG YAPAK SA LUPA na HAYOP NA KINAKATAY PARA SA KARNE",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "db477cca6b205b8ad1b8d5a3cbfaf57d30cb5a501e73918df647ba8abaf0483c",
+    "h2": "0bba123b0ae52273bda49a3b29709174603022a9bb3f7f4d2bc38b43f9fb185c"
+  },
+  {
+    "level": 104,
+    "type": "BS",
+    "q": "PUTOL GAMIT ANG ITAK na SALITANG NANGANGAHULUGANG TOTOO NGA",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "54fa5c4b0228a81a1bbb025d306d1f9b2913a7808e0c4ab8b5dc6d174ce76b58",
+    "h2": "9cdfba441e3858b3f8b811df996a92f7e9ad448cdb583808dfe82b7555a3f1e0",
+    "bs": 2
+  },
+  {
+    "level": 105,
+    "type": "1DL",
+    "q": "BITBIT SA KAMAY na PAGPUNTA SA BAHAY NG KAIBIGAN PARA KUMUSTAHIN",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "f7d4660fcb31eb5b59fbbcd088afe4b54187917eeaf1f116e8c1fd8d69e75b26",
+    "h2": "7add6776cb79b03f2b62cb30365b0e0dbc7e97c53895cb48cd5bc2643e835968"
+  },
+  {
+    "level": 106,
+    "type": "1KL",
+    "q": "PANAHON NG DILIM AT TULOG na UTOS NA UMUSOG PARA MAY PUWANG",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "G",
+      "T"
+    ],
+    "h1": "027473c0a603b73923b8d570760292ddf3ab173a8f3bf8286507cd86c5052b8e",
+    "h2": "59155d3059f226008494570810fcdbb3e062dcfd70ec269128e9419dd22e2e86",
+    "kl": [
+      0
+    ]
+  },
+  {
+    "level": 107,
+    "type": "1BL",
+    "q": "NAKAMAMATAY KAPAG NAINOM na PAMPAGANDANG IGINAGAYAK SA BUHOK O REGALO",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "3ae3b755e31df3de3dd76a78abb635d441a68ce6e515f38dff884fbc83144b10",
+    "h2": "34e7412272bc69a7026fc88f95d9a4b2539b22bf53d4f2edc8220f9438f205c8"
+  },
+  {
+    "level": 108,
+    "type": "1DL",
+    "q": "PWERSANG PAGGUYOD PALAPIT na KALAGAYAN NG PAGKAING HINDI PA NALULUTO",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "H",
+      "H"
+    ],
+    "h1": "1affc655745ed5384c1c4ba911b28da38bc49d800d65fa17f3e61c0e0f734eb0",
+    "h2": "e4947eb2a8d5fde7d38c5ada8945f6f41691490c5664ef756a26aee27c8e9365"
+  },
+  {
+    "level": 109,
+    "type": "BS",
+    "q": "TANAW NG MATA na PINAGHIRAPANG SAHOD MATAPOS MAGTRABAHO",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "K",
+      "K"
+    ],
+    "h1": "e980a99ef35ea7696ff1f9a2b6910ecc4af8eaa8086eea812fa16c746b04a6c8",
+    "h2": "e55dd19476a28ec764786ca3461110624c5c40abd457f1916bf8100bec7ee94e",
+    "bs": 2
+  },
+  {
+    "level": 110,
+    "type": "1KL",
+    "q": "MUSMOS PA AT MAKULIT na MATIGAS NA NASA ILALIM NG ILOG",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "a9a941182ab792a933488e9063fe98c6ab17d9179649c57069a051b46161ad80",
+    "h2": "6e6528944723161083056075e5b89eccbcc312f0f5dc6d6e8dc72909f641f2a7",
+    "kl": [
+      3
+    ]
+  },
+  {
+    "level": 111,
+    "type": "1BL",
+    "q": "MALABNAW NA BAHAGI NG NILAGA na KLASE NG SAGING NA PINIPIRITO",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "a482471f5a3b1d3df2213bcc6cfdba89ce63afb7193611b9d950368f7bd8218c",
+    "h2": "71c98dc979a8cce72f1cc383ab12e8e564f6f4b9331878311cd3ccf4b9eaa4d1"
+  },
+  {
+    "level": 112,
+    "type": "1DL",
+    "q": "GAWAIN NG MAGBUBUKID SA LUPA na MAHIGPIT NA PAGPIGA SA LEEG",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "6d73e22c21394b67a595fac437e8c35b29405c4a593e1e0b13ef6ac2a9df7445",
+    "h2": "befcdfe1aebbf19acb30d19382a21e92e2e3a6676ed2eacdc9754cf6ed8244e3"
+  },
+  {
+    "level": 113,
+    "type": "1KL",
+    "q": "MATAMIS NA TANGKAY NA INAASUKAL na INUMING-NAKALALASING MULA SA NIYOG",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "a1201fc3fbc2fe90c5e0f2ab9312d97facaa33f67ca73625c5b644716d1cee8e",
+    "h2": "8c8ee34a0618441b4536041253d5d21e30ef3e9de83d32852374d5efe564607d",
+    "kl": [
+      3
+    ]
+  },
+  {
+    "level": 114,
+    "type": "BS",
+    "q": "PAGKA-MALAKING-MALAKI NG SUKAT na KASARIANG KABALIGTARAN NG BABAE",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "e1461c50e76c445e1a1acd278d9851b7e0be9fc9d3ef466d996e7a0217b60247",
+    "h2": "606bcaab13e5eef5c63e06d96227852a7b011741307717bfc2928f4c2d65e10a",
+    "bs": 2
+  },
+  {
+    "level": 115,
+    "type": "1BL",
+    "q": "TIRAHAN NG MGA ISDA AT PATING na MALIIT NA HAYOP NA HINAHABOL NG PUSA SA KUSINA",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "3ce983597bd806f8b51507c0841d9a213a45a61dae8e18327413e2a850325496",
+    "h2": "ea0eadfd2deca76d2ddb7a15dfe720da014f24d1316c6ba05561ee0bf3a1332b"
+  },
+  {
+    "level": 116,
+    "type": "1DL",
+    "q": "PAGKUKUBLI PARA HINDI MAKITA na PAGLAGOS HANGGANG SA KABILANG DULO",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "d49dfd6f8f7c92bf43d979251a3b7b7fc828bb240d18e80476cf91f582033ac2",
+    "h2": "50512f2e5138828b7807c4154f2c75cdde9a60216e18a7a20bb749fbeb230861"
+  },
+  {
+    "level": 117,
+    "type": "1KL",
+    "q": "PANTIKIM NA NASA LOOB NG BIBIG na BITBIT-BITBIT SAAN MAN PUMUNTA",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "96af2118b7afc5f22edd559b0eeb3730b8105ce45ae22d47d248e972af75902e",
+    "h2": "c0259272ba0dcd3f027bb5bcbbd3b4482532fe381ee2f10ca94217d2c006f211",
+    "kl": [
+      1
+    ]
+  },
+  {
+    "level": 118,
+    "type": "1BL",
+    "q": "BALIW O SIRA ANG ISIP na PINAKAITAAS NA BAHAGI NG KATAWAN, KINALOLOOBAN NG UTAK",
+    "len": [
+      4,
+      3
+    ],
+    "f": [
+      "U",
+      "U"
+    ],
+    "h1": "64af194092938b9fa78857f62a132e45e33a2068778339fe16584d949b57bd74",
+    "h2": "67d6a1a183b595f7921380a8acf98bc5c1523e8e796e7d8dcb3641a528200819"
+  },
+  {
+    "level": 119,
+    "type": "1DL",
+    "q": "MAASIM NA PAMPALINAMNAM SA ADOBO na TAKSIL NA NAGKANULO SA KAPWA",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "4428222ad143848de0523a1659b5dbc853afa9604868852beb5c777a30d1e509",
+    "h2": "fd9eeddffed29c759f802c3ef9cb47c8af791ad560fdcca195f99e868027c0f2"
+  },
+  {
+    "level": 120,
+    "type": "BS",
+    "q": "MATAMIS NA TANIM NA GINAGAWANG ASUKAL na NANG SUMIBOL ANG BINHI MULA SA LUPA",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "5448c050c794e6fc0b86859601f3ca513c62ba6c5dde1a11dcd19f44fba17de6",
+    "h2": "5b36e10b14a93f01bafa5ca8c393682e6d2f67188352c594f2ca3b45fd187597",
+    "bs": 2
+  },
+  {
+    "level": 121,
+    "type": "1KL",
+    "q": "GINAGAMIT SA PAGHAWAK na GALAW NG PALIKPIK O PAKPAK PARA LUMUTANG",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "K",
+      "K"
+    ],
+    "h1": "d0cb03e58749048606b421e6b55ee7fd0146cd80fcb25ec2bea19d0aa1234519",
+    "h2": "edeb8016f5d9a06d82ecf6bff2a05e227af10fd69654c2940b19b96efcb35cea",
+    "kl": [
+      2
+    ]
+  },
+  {
+    "level": 122,
+    "type": "1DL",
+    "q": "WASTO AT HINDI MALI na BATUGAN, AYAW GUMALAW O MAGTRABAHO",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "7e4d03e459fc528473884c726e6ccf6243e01ae06f796a72186b4cb4dc10c43b",
+    "h2": "be7db6a689df606aeea40b73c6ef5040b6e8c092a0c206d2280fd2a1cc000465"
+  },
+  {
+    "level": 123,
+    "type": "1BL",
+    "q": "TUGON SA TANONG na BILOG-BILOG NA PALAMAN SA PALAMIG O TAHO",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "ca6a26e4c22c8cf0a0bf0b4fb2a25a80c77096954bc282fad60aff906382d0c6",
+    "h2": "0fc611be8b7804cfa94348c4aa904997a9b1b399f0be783bcb591d0836240b9a"
+  },
+  {
+    "level": 124,
+    "type": "1KL",
+    "q": "MALIIT NA INSEKTONG UMUUNGOL SA TENGA na MARUPOK NA SA TAGAL NG PANAHON",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "cd1dc6a1ba8d94fab24f6c0fb5a65891980a774429c797334ac053965693e101",
+    "h2": "91e9e5c54e3d01b2a9d5bd4469c9f04ed1355ddab01015b1520f5153f59b8062",
+    "kl": [
+      2
+    ]
+  },
+  {
+    "level": 125,
+    "type": "BS",
+    "q": "KILOS SA PALENGKE GAMIT ANG PERA na ANG NAGING BUNGA NG NASABING KILOS KAHAPON",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "db262040606bf99cbe3da3a3a3676a9cc95810d08abed8c7f5435b41931dd417",
+    "h2": "6bd8633a2760f8123430db7d34158c8ad91b4c84194e68e3902b530efea90dbd",
+    "bs": 2
+  },
+  {
+    "level": 126,
+    "type": "1DL",
+    "q": "PANTUKOY SA MAHIGIT ISANG TAO na SULYAP NG LIWANAG MULA SA ARAW",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "3e507188736816304e062fc12fc8ac0d67a7d5c88198cde6844b145b0c7e817a",
+    "h2": "9094a29e830b427ecb22d913794d57b45c29566c766d55eedcbbaf3ae3f6fb3c"
+  },
+  {
+    "level": 127,
+    "type": "1BL",
+    "q": "PAGSISIKAP NANG TODO PARA KUMITA na PANTUKOY SA MARAMI O TELANG PANTAHI",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "K",
+      "K"
+    ],
+    "h1": "2ebfb6b1cfb4ed90f48e2c737537b2e2ee86709605bd67a387320449216aedaf",
+    "h2": "8f2196b15f71bc52b8f8d19ce3570ee670d52737b8342497375db12b4402d737"
+  },
+  {
+    "level": 128,
+    "type": "1KL",
+    "q": "PANSAWSAW NA MAASIM na GAWAIN SA LUPANG TINATAMNAN",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "0b0539d3c6b2d53e8633c6cb97d86ee90244a64d6ff178136510e018e90327f9",
+    "h2": "dd85343c3253ff9e9d274ddc26865fa3365f7f589ba033cf8dc035c32f0f22c4",
+    "kl": [
+      1
+    ]
+  },
+  {
+    "level": 129,
+    "type": "1DL",
+    "q": "PINSALA MULA SA INIT O APOY na PAGTUNGO SA LOOB NG SILID-ARALAN",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "6a9e5febb135b72bdd32bdbd4bba770d70a02388a5657bb624387a212dcf8963",
+    "h2": "b56fee662b42b82a43dd5b1e11c5f350e3cd3a83a57b72a4efb3655c97286a57"
+  },
+  {
+    "level": 130,
+    "type": "BS",
+    "q": "TRABAHO SA BUKIRIN na PANLILINLANG GAMIT ANG KAMAY, PARANG MAHIKA",
+    "len": [
+      4,
+      10
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "25fd5f58ba7da702adb82da4341ccd1e31f797c4a3a3df0a960442659720d81c",
+    "h2": "5332287a74cb3206f50eb19a4946f2acd7909ace3bcccebe23a3e274ee833cbe",
+    "bs": 2
+  },
+  {
+    "level": 131,
+    "type": "1BL",
+    "q": "PATID NA SA SOBRANG HIGPIT na MASAGANANG PAGSULPOT NG MGA DAHON",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "3d91cb820b7e71ea60f7c66f6ece6e2ee5c67a5e470a950b730c88f5f340a627",
+    "h2": "1f6cff8e44236edcf5848840c048527af85f89ecb279360ed2e8dd56a8337063"
+  },
+  {
+    "level": 132,
+    "type": "1KL",
+    "q": "SISIDLANG SALAMIN NG INUMIN na KARAPATANG GAMITIN TUWING ELEKSIYON",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "8b78208ee09c493cabe8062d92438c96d89558f4af8040effcc1c2fa2b8adb02",
+    "h2": "d6b07834419deaf8e74a0ab642e6dacfc5a24fca6afda18450ba1666b66af429",
+    "kl": [
+      3
+    ]
+  },
+  {
+    "level": 133,
+    "type": "1DL",
+    "q": "PAGKAMANGHA SA HINDI MAUNAWAAN na PAGTANAN PALAYO SA BILANGGUAN",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "e6f13aa92d84a3d7aeaacb2a402fb6c1f866e5d3b03d7af31f8e0c937e95db42",
+    "h2": "0a669f11453a3001760dab0ee708f0210705f184dec4e236c1fa59b157279cbc"
+  },
+  {
+    "level": 134,
+    "type": "1BL",
+    "q": "PAGSUSULIT KUNG KAKAYANIN na ISANG KAGAT NA INILALAGAY NG NANAY SA BIBIG NG SANGGOL",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "dfae9bf2384e1c869716a456e6b5d420fafeec4a0dcf376d3c61bb21a767d1e3",
+    "h2": "cc25dbf4c9029e889129a7daf0d7665131f2dfb48e2d846d9d11606339bebf16"
+  },
+  {
+    "level": 135,
+    "type": "BS",
+    "q": "KUMIKINTAB SA LANGIT TUWING GABI na MABIGAT NA KADENANG PANGGAPOS SA BILANGGO",
+    "len": [
+      4,
+      8
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "6069648b39506e447cb2ac58ce6b4881374ffd8b071b1a6e2be2e095b16798ed",
+    "h2": "9540b3a69d5a57aa53f1c8a49e0aa0766db140ed15d3f855ccc41b00b4f9d734",
+    "bs": 2
+  },
+  {
+    "level": 136,
+    "type": "1KL",
+    "q": "HAYOP NA NAGBIBIGAY NG GATAS na PAGKAMANGHA SA BAGAY NA KAKAIBA",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "B",
+      "T"
+    ],
+    "h1": "3de19d8dc9a1df4cb07138a63c3867c4cc4755534d97e307b10fde2cb5fda655",
+    "h2": "b8cab920c6a3c67bec6977a03baf29889bcbd4672e993e51469384eccaa32bfa",
+    "kl": [
+      0
+    ]
+  },
+  {
+    "level": 137,
+    "type": "1DL",
+    "q": "BULALAS NG PAGKAGULAT na KAAGAPAY NG IKAKASAL SA SIMBAHAN",
+    "len": [
+      3,
+      4
+    ],
+    "f": [
+      "A",
+      "A"
+    ],
+    "h1": "e4216c95ff1dd5ef87ab43afa22055a429479013b1087fc7b61aa49b8e807ebb",
+    "h2": "4be373f767b485b6537e5c775de6ff0ac17e5daec04d1731c283bf90a4b690ea"
+  },
+  {
+    "level": 138,
+    "type": "1KL",
+    "q": "INIINOM PARA GUMALING SA SAKIT na BAGAY NA PINAKIKINABANGAN ARAW-ARAW",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "G",
+      "G"
+    ],
+    "h1": "b02e5dc5929a5974d60da12760b80f58a665883453fb3c50bb7d4ec1df439005",
+    "h2": "7cea743dcf7d3ba68d9576902887e38a94a83bd7f4ad8e64e1f0c31512a8db6f",
+    "kl": [
+      3
+    ]
+  },
+  {
+    "level": 139,
+    "type": "1BL",
+    "q": "KATAASAN NG ISANG GUSALI na PANTUKOY SA SARILI AT KAUSAP NANG SABAY",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "850fba7359ffa62b5d7f45f272f20bc5fa0223ac1fcf23019b69adda467b8fd4",
+    "h2": "b0bb485a05891588cd16b38cc50bd7385883dbadaf0cbb0c8c0d9d61f4443e83"
+  },
+  {
+    "level": 140,
+    "type": "BS",
+    "q": "NILALANG NA MAY ISIP AT KALULUWA na DAHONG PINATUTUYO, BINABALOT, AT HINIHITHIT",
+    "len": [
+      3,
+      6
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "c2b154377eb02e6d39d08b652bc63c24d55b28730912e8b7eaebec89e4c16c70",
+    "h2": "fbeab62ca14ee4910abb1dd9104c7caff3303de1139bfb968e96209021351887",
+    "bs": 2
+  },
+  {
+    "level": 141,
+    "type": "1DL",
+    "q": "LIKHA NG SARILING SIKAP na PARANGAL NA IPINAGKAKALOOB SA NAGWAGI",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "G",
+      "G"
+    ],
+    "h1": "8870288aa3b58168ce263ae9c180948230d1436f82f2cd6719e1fd55fb8f360c",
+    "h2": "818db962a8ccd488a30a378552607233f19c6c392fa88424a7108d38a6635686"
+  },
+  {
+    "level": 142,
+    "type": "1KL",
+    "q": "NATUPOK NG APOY na PAGTALIMA SA UTOS O KAHALILI SA PILA",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "8a53a50b63768b5110c627a1d7ee375d2a1d8e3515ee2d086e066411271c851f",
+    "h2": "3b8157f8e45102ec35a1a0bd2bea1af8ca858ef06ec771250e99da725ffcdf21",
+    "kl": [
+      4
+    ]
+  },
+  {
+    "level": 143,
+    "type": "1BL",
+    "q": "ANUMANG ABUBOT O KASANGKAPAN na NAG-AALAB NA UMUUGONG NA ULING SA APOY",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "0d8da42edbd855c1ebe618ecad8f7a23911ebeb00e5377e1979c4fcd5567dc0f",
+    "h2": "0f2bfbff4a379b86203be78bd0dc68eb524e755d28891c609517505cea29c829"
+  },
+  {
+    "level": 144,
+    "type": "1DL",
+    "q": "PAGSASAMA-SAMA NG MGA SANGKAP na PARANG, MEDYO KULANG NA LANG",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "H",
+      "H"
+    ],
+    "h1": "6c664c6e6c2b4ba402bf1735de2bcc91a97717d5d40eac1945c360797a893e05",
+    "h2": "c1491adde13f4fba56f41faf42da5af271ed5da04b168138558500fe8a2eb186"
+  },
+  {
+    "level": 145,
+    "type": "BS",
+    "q": "PAGLAMON NG ULAM na ANG GAGAWIN PA LAMANG MAMAYA KAPAG GUTOM",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "K",
+      "K"
+    ],
+    "h1": "25587aed905749fb3420b4851779527568d1a795f58b805a6ca9853418d0fc7d",
+    "h2": "5f816e585244a7ec1f03cd407521818a65101a9d79d7ae1089e4bfead451872c",
+    "bs": 2
+  },
+  {
+    "level": 146,
+    "type": "1KL",
+    "q": "MALAWAK NA TANIMAN NG PALAY SA LALAWIGAN na PAGBUKA NG TALULOT NG ROSAS TUWING UMAGA",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "b821b5e7fe36f4b2a3d12d535184cecd1c0a75e08a5eaa07f57851279baa4c26",
+    "h2": "04e5a1f296282c62dd72d64e834db8c2e7259673eebd6e55316ecaab57dcb564",
+    "kl": [
+      3
+    ]
+  },
+  {
+    "level": 147,
+    "type": "1DL",
+    "q": "PAGKAKAHANAY NG NAGHIHINTAY na MAHALAGANG METAL NA KULAY-PUTI, KASINGKINANG NG GINTO",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "5592c85ddcd1f7852c118ad70080e53b7c9d8e3c3daf94327edb694bb874ec86",
+    "h2": "370b1cfd6639d027094dcac1539c75e0ffba586b371c8842a4277fd3fef51731"
+  },
+  {
+    "level": 148,
+    "type": "1BL",
+    "q": "HINDI PEKE AT TOTOO na ISDANG DE-LATA NA PALAMAN SA TINAPAY",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "d068ad4c4aab93f36939c62df9ea37ede56119c688ec15af332403b03ed82077",
+    "h2": "fbc3d2e60ed1116d200d6963a9cb5bcd3ead8744f52850d1a23f9e82ea46e787"
+  },
+  {
+    "level": 149,
+    "type": "1KL",
+    "q": "TIRAHAN NG PAMILYA na SINAUNANG TAPIS NA PANTAKIP SA PRIBADONG BAHAGI",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "7e2909559737ce43d9530845b8159eb8bc43ff5984f8bfa085133a84f7a5989c",
+    "h2": "b5bded9392c8603adb119fbc3c55747c012f0bc9e7bbcb64270fd7073841f0b4",
+    "kl": [
+      4
+    ]
+  },
+  {
+    "level": 150,
+    "type": "BS",
+    "q": "LIHAM NA IPINADADALA SA KORREO na ANG GAGAWIN PA LAMANG BUKAS SA KWADERNO",
+    "len": [
+      5,
+      7
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "b4b5a1c19d9a3a6d6579b94f6f3b6385709fa68ad9c68c296d5cee382ae880ac",
+    "h2": "7e5c1a999a874c5feac7a679708a312ffccdbec43d02e9aa145a989ed34823a5",
+    "bs": 2
+  },
+  {
+    "level": 151,
+    "type": "1DL",
+    "q": "PANSIN SA MALING NAGAWA na PAGLILINIS SA PAWIS O DUMI GAMIT ANG BASAHAN",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "4e61ed5fb6dc9f2482c4e6cbae52082cf764d54f9e54a5c6d7d413c9882dd3ee",
+    "h2": "5bc4f79a73de583cdceca3682bc2f47e86719bcfe7902fe26ad5ec0595ba1b4b"
+  },
+  {
+    "level": 152,
+    "type": "1KL",
+    "q": "KEMIKAL NA NAKAMAMATAY KAPAG NAINOM na MATAKAW NA PAGSUBO NANG WALANG MODO",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "d673a50f811af66245cc7d72b0413a060395471aae4fdbfcf7a90dbaa6873474",
+    "h2": "0730c716837030c41365af289ecda4232ee7535cc6fc70a8a3c05d2ac4162a47",
+    "kl": [
+      2
+    ]
+  },
+  {
+    "level": 153,
+    "type": "1BL",
+    "q": "BIGLAANG KALABIT NG HININGA SA LALAMUNAN na PANANONG KUNG ANONG TAO",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "4c826c0ab618df2184a6b5ac3af73a5cca2dff34652733d903f5f30049776d89",
+    "h2": "8b6ad568cc47fc1a1ca16317a13e6dc08dfceb71def1e2b55a710bb6ce63d7f0"
+  },
+  {
+    "level": 154,
+    "type": "1DL",
+    "q": "PINDOT SA TEKLADO O PIYANO na MALAKING PUTOL NG YELO O BATO",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "d6a5ccb762b0295b99e6e11b6b291c89e14f1a89f0ab739ee091b611df0905ae",
+    "h2": "5cdf05a5a09a68956bb124457a0e9b1586ffedcae86776ec3b3eb7aab11c0d91"
+  },
+  {
+    "level": 155,
+    "type": "BS",
+    "q": "PAGTUNGGA NG TUBIG O ALAK na ANG GAGAWIN MAMAYA KAPAG NAUHAW SA INIT",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "I",
+      "I"
+    ],
+    "h1": "7b69c9a5d99157c14f701088e1bb6a85327211a8c67f2f9cf7fc8e2ba1495f9e",
+    "h2": "7e663d1adb3154dc3d50400fa9880d62edc0e8fe15cd60cfc0b87a844ae11d8b",
+    "bs": 1
+  },
+  {
+    "level": 156,
+    "type": "2KL",
+    "q": "MABAGAL NA PAGGALAW NG PAA na PAGTANAN PALAYO SA NAGBABANTAY",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "L",
+      "T"
+    ],
+    "h1": "a2343ef168aa9a26ffc2a472cc15a8ad7177909d61dfcb4a84785ea0b3a8d688",
+    "h2": "5d7724df6aa531da82735adc9ea04944b4483f27503ca730cad369c6ffd0025e",
+    "kl": [
+      0,
+      4
+    ]
+  },
+  {
+    "level": 157,
+    "type": "1DL",
+    "q": "SUKAT MULA DULO HANGGANG DULO na AWA SA NAGHIHIRAP NA KAPWA",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "H",
+      "H"
+    ],
+    "h1": "bfc0aad537648b707b52765503fed7c9ef2a0ae4ae223e5c4968d9d50bb5b702",
+    "h2": "14c4fa0c44965b1908d6878ae164f645a708425a614a2e4d574ce9f5f2760b82"
+  },
+  {
+    "level": 158,
+    "type": "1BL",
+    "q": "NAKAUSLING UMBOK SA NOO MATAPOS MAUNTOG na MURANG NIYOG NA MALAMBOT ANG LAMAN",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "16ce4280cc3e4b0abe66e55094c8312196e6dd03c33b72d802dbdc4bfaa2ffb7",
+    "h2": "07b92ca9f0bb85dcd319bd065650fe0cf6ef26adc9cf334a3605db93b86cbaba"
+  },
+  {
+    "level": 159,
+    "type": "BS",
+    "q": "PAG-USAL SA AKLAT O PAHAYAGAN na ANG GAGAWIN PA LAMANG SA SUSUNOD NA PAHINA",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "aaf09db056bba26ab48f489f5aee06a427e3f2b141ac2d1205ca9a5da8779375",
+    "h2": "c789bf335ce1516d046691475fb68803ce135162b6a9fe6e6ef3d091d20025f9",
+    "bs": 2
+  },
+  {
+    "level": 160,
+    "type": "2KL",
+    "q": "KABALIGTARAN NG KAMATAYAN na ANUMANG ABUBOT O KASANGKAPAN SA TAHANAN",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "a0ab78d10d2723c3a4c5c5574ae5596987d33defd9a4a34b8176f67a4df8e3de",
+    "h2": "38d7aaf54c8a57c88a99e886fcff74dd8892963a1bd1d18135d1ca141f9fb029",
+    "kl": [
+      1,
+      2
+    ]
+  },
+  {
+    "level": 161,
+    "type": "1DL",
+    "q": "PANTUKOY SA MGA TAONG PINAG-UUSAPAN na NAKAKABULAG NA SOBRANG LIWANAG",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "196ab4cf8c3d192894014332aff74d248790f66841d773c4f4b6d6502fe0f380",
+    "h2": "0876f0193b884da8ea9ee28f7d51f669cf314d7a156ce5a8dd3c4d6cc299baf4"
+  },
+  {
+    "level": 162,
+    "type": "1BL",
+    "q": "PAGTIKIM NANG MAY KASIYAHAN na PANLINAMNAM NA NADARAMA NG DILA",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "00b91298b3e11b3a7a341c1f270847772526cb9d8a4c311b97a898ec16e18900",
+    "h2": "1be3073be1f759e6e7b12e971c8d158a0ad29429919dba00f1fc1d623f4f1c17"
+  },
+  {
+    "level": 163,
+    "type": "2KL",
+    "q": "ISINUSUOT PANG-TAKIP SA KATAWAN na KATANGIAN NG ASUKAL O PULOT",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "D",
+      "T"
+    ],
+    "h1": "9c902792607932901d4326ee1ec372bfd06f332190209d106473ab2857a888b6",
+    "h2": "9726ca810ce47e296079bf6e32a0835110e0abb2d331210b4bbbce90451224a0",
+    "kl": [
+      0,
+      4
+    ]
+  },
+  {
+    "level": 164,
+    "type": "BS",
+    "q": "HALAKHAK SA NAKAKATUWA na ANG GAGAWIN KAPAG NARINIG ANG BIRO MAMAYA",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "b33fd3605abfcec9e7febdef82ab870ab4b23161f01c117b6a5de926bf2ef7d1",
+    "h2": "a68129d071e372f6fa5b5ecec1530220fde649c408165736b57caf3abc1e7a5b",
+    "bs": 2
+  },
+  {
+    "level": 165,
+    "type": "1DL",
+    "q": "PANGGAPOS O PAMBIGKIS na KATALASAN NG GILID NG ITAK",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "ecfa958ee79d27a5109a5ddf22fa07af3eb47655e0fc7cb9c1bd58f633187ddc",
+    "h2": "05c0ec583bd07b834e3550ab03e85731c8d1f0c9f601c4f1cd1e8a308530c647"
+  },
+  {
+    "level": 166,
+    "type": "1BL",
+    "q": "NAKAUPONG PASAHERO SA LULAN NG DYIP na GAWAIN SA LUPANG TINATAMNAN",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "24e547bacf7cc361426e6f4c14132dbb7309cf29f15b96dd59cc7917a1da2596",
+    "h2": "73b415533c3b39e89871ae3255fed342e5d4ee0dc19fafc8d32ffb4c61b53176"
+  },
+  {
+    "level": 167,
+    "type": "2KL",
+    "q": "TAHANAN NG MGA ANGHEL SA ITAAS na MALANGSANG INSEKTONG DUMADAPO SA BULOK",
+    "len": [
+      6,
+      6
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "9c173ff2fbb62e09f55b92ff71f65d7f9cf404a698fd78ba4db9b6249e741ab5",
+    "h2": "6dd0b5650dcc17d1908f73493f22f3ab57b3befc25a4f950e50c44cabb386303",
+    "kl": [
+      4,
+      5
+    ]
+  },
+  {
+    "level": 168,
+    "type": "1DL",
+    "q": "NAG-AALAB NA ULING SA APOY na PAGKILOS NA KASINGTAMAD NG PAGONG",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "95f284def7c9e83cd3250ac6f8a351beec33ca603760b6313bd6810bf7f09fe8",
+    "h2": "0adde9c4634a8a7039f3245d327ee3597630c4caffbee64f99f99d3502857443"
+  },
+  {
+    "level": 169,
+    "type": "BS",
+    "q": "LUMANG ALINDOG O TABING SA UNANG TINGIN na ANG MANGYAYARI PA LAMANG PAGSAPIT NG BISITA",
+    "len": [
+      6,
+      8
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "4e79366fd8ae3ab526ac426a247c738162e8bcf813bff6eca10ca2f18ad40c5c",
+    "h2": "c26edb0e42fb3212d6c526163ae6b6e0efc19526336a11631897c7f7955ee516",
+    "bs": 2
+  },
+  {
+    "level": 170,
+    "type": "2KL",
+    "q": "MALAWAK NA TUBIG-ALAT na KURIPOT, AYAW MAGBAHAGI",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "3554974de6eb0d1434667c0f29329025a7cc04c80b6a5ca52eb20ee0628d43da",
+    "h2": "5c3a5bb9ddc43b8b7fcc8be1b6ffdf12ce9d7b47737bfe42c79cb710f3ba7810",
+    "kl": [
+      2,
+      3
+    ]
+  },
+  {
+    "level": 171,
+    "type": "2DL",
+    "q": "KASANGKAPANG PANGHUKAY NG LUPA na HAYOP NA PALUKSO-LUKSO, KUMOKOKAK SA SAPA",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "f6603ab402dffe2ca23d51b021906ac7a15c4fa1771b0ada8e0651000d045e7b",
+    "h2": "f7552bc83a251640fea4b08a8f52ebc24d0116282d5c3f4ab8be2251d6036dd8"
+  },
+  {
+    "level": 172,
+    "type": "2BL",
+    "q": "KAPIRASONG NAHATI MULA SA KABUUAN na PAG-APAW NG TUBIG SA KALSADA TUWING MALAKAS ANG ULAN",
+    "len": [
+      6,
+      4
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "cb9e6699ef1e03e73d83ff58225c3ff29477cd7d20c0fb50a5aa5f3b30cb26ef",
+    "h2": "855c907004e145026b640964fbafcbce8b24656a6feb0afc26c2e9662dd1c20b"
+  },
+  {
+    "level": 173,
+    "type": "2KL",
+    "q": "MALALIM NA BUTAS SA LUPANG GINAWA NG PALA na KABALIGTARAN NG PAGKAMATAY",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "H",
+      "B"
+    ],
+    "h1": "a1938a42848bfd65c522c7ed91d9aa250d01aab1f3f39b2386366952597c5926",
+    "h2": "39144d91368798935defd3b1ce0ad20668b31bc843df396a0a3de7a5826ef359",
+    "kl": [
+      0,
+      2
+    ]
+  },
+  {
+    "level": 174,
+    "type": "BS",
+    "q": "INDAK SA SALIW NG TUGTUGIN na ANG GAGAWIN SA ENTABLADO MAMAYANG GABI",
+    "len": [
+      5,
+      7
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "0274f193e34f6ff94ab6ff54fddc8037f3b787671efb550b9b698cdd61cf981a",
+    "h2": "43dab301b7c8b19d21316b2c5a7e5b9101994c704e635aa244eeaa467c8a632b",
+    "bs": 2
+  },
+  {
+    "level": 175,
+    "type": "2DL",
+    "q": "PANGKULAY NA ISINASAWSAW SA TELA na ISDANG PINAUSUKAN, ULAM SA ALMUSAL",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "73765f7eb82a876799b177cda60da036237b16c6c1b5f1d5992b17dda8ceddea",
+    "h2": "14cb71b1f5cb6eb1747c85e1b6de4d061647bda954cffd125f22602720f311d3"
+  },
+  {
+    "level": 176,
+    "type": "2BL",
+    "q": "BIGAT NA SINUSUKAT SA KILO na SISIDLANG PANG-IGIB NG TUBIG SA BALON",
+    "len": [
+      7,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "206ab13a6a4cc38a4540004f16e0e830e6bc109cee5e58390ad0693bcbbeee89",
+    "h2": "f50b68af068ccbc85b6cd3463c17ea313d3c0d5934cbea1452e6b8732a8205be"
+  },
+  {
+    "level": 177,
+    "type": "2KL",
+    "q": "KASUKASUAN SA GITNA NG BINTI na PAGLUBOG SANDALI SA TUBIG",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "304e18819eadfa12b253f80acb9d74c4fd197e85e6dfd4b7af28e64ffdcee750",
+    "h2": "40caad0b4a1d241f2ec437a4f139259de15ea6128e5ec934c4f1a72d998540ff",
+    "kl": [
+      2,
+      4
+    ]
+  },
+  {
+    "level": 178,
+    "type": "BS",
+    "q": "PAGPAPAHINGA NANG NAKAUNAT SA KAMA na ANG GAGAWIN MAMAYA KAPAG INANTOK",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "H",
+      "H"
+    ],
+    "h1": "ad42f9e60bfaa2933730335607e272acfc934cc83a65b5075ca08e6b69c32dcb",
+    "h2": "349df0395b743d7f75f59d09d230e309ee7d17ff36be387911eafc3c1278619f",
+    "bs": 2
+  },
+  {
+    "level": 179,
+    "type": "2DL",
+    "q": "BITUING KUMIKINANG SA GABI na KABIBENG NAKADIKIT SA BATO, NILULUTO NA HALABOS",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "1a727dc5cac71228b90e9e4015a4f972c71d4fa2dbbcbd71944607285c4d1356",
+    "h2": "14fb84822f4c34d7a18f18334e23867a0a84afdae0b08d53dbcd53ebf7d7236e"
+  },
+  {
+    "level": 180,
+    "type": "2BL",
+    "q": "SABAW NA MANOK NA MAY SAYOTE AT LUYA na WASTONG PAG-IISIP NG TAONG HINDI NASISIRAAN",
+    "len": [
+      6,
+      4
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "cf9ebd2c9bc4b28e999abf0cb03dc98c9191bf37a19d179ab826f8836f06c978",
+    "h2": "770e7cd15eea6918fd6b1e53614a8a89f4e9c0de2b76251ce4521a8aa1524f32"
+  },
+  {
+    "level": 181,
+    "type": "2KL",
+    "q": "MALALIM NA PINAGKUKUNAN NG TUBIG SA PROBINSYA na PAGTATAKIP NG LUPA SA BUTAS",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "B",
+      "T"
+    ],
+    "h1": "921e94babe4276af82554a740e4e16d9badc4493a120ee03dc4bd908817f2716",
+    "h2": "ad2b86b153ac90068b8b96a60917a1cec5644208ec4217fc36810c61a3bcd0c9",
+    "kl": [
+      0,
+      2
+    ]
+  },
+  {
+    "level": 182,
+    "type": "BS",
+    "q": "AWIT NA INDAYOG NG BOSES na ANG GAGAWIN SA VIDEOKE MAMAYANG GABI",
+    "len": [
+      5,
+      7
+    ],
+    "f": [
+      "K",
+      "K"
+    ],
+    "h1": "27df12913a06e8eda95b780791a9542e3607cdda73c9fdc0e9b96f934b490503",
+    "h2": "e05ec8ea257df6c06667bed1f3666f5741afb56f365bba5b4017598ea614f408",
+    "bs": 2
+  },
+  {
+    "level": 183,
+    "type": "2DL",
+    "q": "PAG-APAW NG TUBIG-ULAN SA LANSANGAN na PANANAGUTAN O PAG-AALAGA SA ISANG BAGAY",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "ec1afde47aab72a7e9fd62eeb1f2d768ec61a20245ba4107a3511999a4842c31",
+    "h2": "259e4bb2ef42b821621478dcfa385078685a3dac8022c8ae4b7a87cf8b4ba39c"
+  },
+  {
+    "level": 184,
+    "type": "2BL",
+    "q": "SILONG NA UWIAN NG PAMILYA TUWING GABI na UTOS SA UMIIYAK NA HUMINTO NA",
+    "len": [
+      7,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "a7de4533f89cfcc3946971068ab307681b77991d4828f92ad30323ae88ab9ae1",
+    "h2": "ad043e0acae497b376420239496c2d6d30f6da1d703c0e5907aaf9c945c00186"
+  },
+  {
+    "level": 185,
+    "type": "2KL",
+    "q": "NANUNUOT NA GINAW SA BALAT TUWING MADALING-ARAW na ISINUSUOT PANG-TAKIP SA KATAWAN",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "L",
+      "D"
+    ],
+    "h1": "7dbb5d0bd874a0a3ae29e770bc640272bc940acf053a553ca6b036f9617fe017",
+    "h2": "c8dec20809f592139f38ae644600a866989f27de9e5976c29af9380c52a13edd",
+    "kl": [
+      0,
+      4
+    ]
+  },
+  {
+    "level": 186,
+    "type": "BS",
+    "q": "HALAMANG ITINUSOK SA LUPA UPANG TUMUBO na ANG GAGAWIN SA HARDIN BUKAS NG UMAGA",
+    "len": [
+      5,
+      7
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "50cf7b9d8a205b9b1f4ab1ca46379a1c9b91b0f4124df3f1552e96677ddc9751",
+    "h2": "b2d2b047c44bcb2c92d6d9895048349d87751391d2517cee3e3cee23af03ac04",
+    "bs": 2
+  },
+  {
+    "level": 187,
+    "type": "2DL",
+    "q": "NILASING-LASING NA KARNENG PINATUYO, ULAM SA AGAHAN na KAWALAN NG TAKOT SA PANGANIB",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "62927563872907f4c40c9b754bbfaa4d3ad36c4eb6614b4c966bff7f23387fcf",
+    "h2": "e943b4e61a7e1e931b7a099ee3229db3015d3067ddc6034727c5b1aaa720f222"
+  },
+  {
+    "level": 188,
+    "type": "2BL",
+    "q": "LUTUAN NA YARI SA LUWAD na BUTIL NA HINDI PA NABABAYO, MULA SA PALAYAN",
+    "len": [
+      7,
+      5
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "03eb9d3295528515c54e00cb5478a4a577e9f773676e37794fdf8eacb8db31ab",
+    "h2": "fcc8d3e6295db68dc00523ca49bf9e617136728166949394c1b0b37bdcc42204"
+  },
+  {
+    "level": 189,
+    "type": "3KL",
+    "q": "BINHING IBINAON SA LUPA PARA SUMIBOL na MABILIS NA PAGGALAW NG PAA PALAYO",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "0ce47550e217ca8829f334d28dd6f86cb6dd6de2539af73509e1d55fa980bdf1",
+    "h2": "0bbd85be50d943df783983b5ba84a4e4d60e08ad1a73fd8d5090156f42fec075",
+    "kl": [
+      2,
+      3,
+      4
+    ]
+  },
+  {
+    "level": 190,
+    "type": "BS",
+    "q": "PANINDIGAN NANG NAKAUNAT ANG MGA PAA na ANG GAGAWIN KAPAG TINAWAG ANG PANGALAN MAMAYA",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "49938713ddb99bfc03eaa1ada84d864710fed16a2c3df187139d4b9552f6cfd2",
+    "h2": "0fe71cf6f7ab2afb73960f4c180e80c30974c2f853656603bee13558ba668bf1",
+    "bs": 2
+  },
+  {
+    "level": 191,
+    "type": "2DL",
+    "q": "PAGNGANGA NG BIBIG O BULAKLAK na PINTUAN O PASUKAN SA SIMULA NG DAAN",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "140e74bc81b3acaa92956ba7ff1bb3c7a85c6e413aea3b660bf4d432dc142f59",
+    "h2": "32b790c4d4b1ba052c91fef29b0a475c85418057bfada11dd0a04ba04d728613"
+  },
+  {
+    "level": 192,
+    "type": "2BL",
+    "q": "MAASIM NA BUNGANG PANG-SINIGANG na BIGLANG HAMPAS NG PALAD SA PISNGI",
+    "len": [
+      8,
+      6
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "c3504f82c699ebcc1dd61e09a804824d765909266b5fdfab3cec11ee81d2154b",
+    "h2": "b9fb093e2df0148713a786fc12c63b2016b844e0dcbc6ad1f615d291af140293"
+  },
+  {
+    "level": 193,
+    "type": "3KL",
+    "q": "KAPANGYARIHAN NG MATIPUNONG KATAWAN na NAKAMAMATAY KAPAG NAINOM NA KEMIKAL",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "d578fb9cd0236938bd83b6452f67c237917b1573b56b400c7ab67d2d59a14840",
+    "h2": "0650bec5df698bbc5ccf6aa348aff6889f00028c9271bb436d8419adf4d2a1bd",
+    "kl": [
+      2,
+      3,
+      4
+    ]
+  },
+  {
+    "level": 194,
+    "type": "BS",
+    "q": "NILAGA O PRINITO SA KUSINA na ANG GAGAWIN SA HAPUNAN MAMAYANG GABI",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "6463d8dc9d4352ecaf3e91d1d812451b13f1d3b98a34642ae1b11c77a6c26a1e",
+    "h2": "c6f905ad4b2e09766059b0a0f6a795783c47eb0bd086b82ec465419032fe9fb7",
+    "bs": 2
+  },
+  {
+    "level": 195,
+    "type": "2DL",
+    "q": "PULA AT ITIM NA MALIIT NA BUTO NG HALAMAN na MARANGYA AT PUNO ANG ANI, WALANG KAKULANGAN",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "b8b39d9c07c70a9d95fa4c8e502ad79b3c2af83481ed4cca645421130cd0408b",
+    "h2": "c05c98bc019b9af964fb6478b5e7337d22d34dbec83060f359ce7e33486a9ee6"
+  },
+  {
+    "level": 196,
+    "type": "3BL",
+    "q": "PANSIT NA MAY MALAPOT NA SARSA AT CHICHARON na KASANGKAPANG PANGHUKAY NG LUPA",
+    "len": [
+      7,
+      4
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "f49657b5a5cb568aa91faf9cddb180fdeccd88f90f21c60c433bb3a5d89a8750",
+    "h2": "1164e3f8ff1380bba3b6f3c32568127663dce0ac092c8ebf2964bb392f35259c"
+  },
+  {
+    "level": 197,
+    "type": "3KL",
+    "q": "TIRAHAN NG MAG-ANAK na PAGSALIN NG TUBIG MULA SA TIMBA",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "625294c713fa403ce54c81b0bf8b35dd7daae2243e0c9cff21411fe7593102f0",
+    "h2": "add2d871e44d4766c2064269756b8a9b42bddf95b19825c52a6423f4c4cdc1b0",
+    "kl": [
+      1,
+      3,
+      4
+    ]
+  },
+  {
+    "level": 198,
+    "type": "BS",
+    "q": "PAG-AHON PATAAS SA HAGDAN O BUNDOK na ANG GAGAWIN SA PUNO PARA PUMITAS NG BUNGA MAMAYA",
+    "len": [
+      5,
+      6
+    ],
+    "f": [
+      "A",
+      "A"
+    ],
+    "h1": "741fd548d89dc81a6496f46b39af5fbe185269194da1c44f3c7ddee71a42edff",
+    "h2": "8b91d800bcd66b309cecfd23607ba1e338bccbf33146cd7f06f6a5bd909e65b1",
+    "bs": 1
+  },
+  {
+    "level": 199,
+    "type": "2DL",
+    "q": "BULALAS NG PAGPAPAALALA O PAGTATAKA na PRESYO O KABULUHAN NG ISANG BAGAY",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "H",
+      "H"
+    ],
+    "h1": "8372f7b469a8df0ead03fb626c2e167c76e3126773d98984895f8c0311fb7972",
+    "h2": "0795ce38200379e9dad646256970dd63e3b50b6ffc2f0e4bab04eebfea46c567"
+  },
+  {
+    "level": 200,
+    "type": "3BL",
+    "q": "BAGAY NA PINAGMUMUKHAAN PARA MAKITA ANG SARILI na SILID-TANGGAPAN NG BISITA SA BAHAY",
+    "len": [
+      7,
+      4
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "54548a4fe8f861941081a5eaab75cc21397251353afb60691ed2b8bc15b9fe3e",
+    "h2": "4ebfcc996b738e56237f17db1c77ee0dd2f3ec29cdc6cbaed52f040fccd0a03b"
   }
 ];
 

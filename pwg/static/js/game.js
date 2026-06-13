@@ -58,7 +58,10 @@ async function loadAndVerifyProgress() {
     const [g1, g2] = rec.a.split("-").map(normalizeWord);
     if (!g1 || !g2) continue;
     const [c1, c2] = await Promise.all([hashWord(lv, 1, g1), hashWord(lv, 2, g2)]);
-    if (c1 === it.h1 && c2 === it.h2) solved[lv] = { ts: rec.ts || Date.now(), a: g1 + " - " + g2 };
+    if (c1 === it.h1 && c2 === it.h2) {
+      const t = Number(rec.time);
+      solved[lv] = { ts: rec.ts || Date.now(), a: g1 + " - " + g2, time: t > 0 ? t : 0 };
+    }
   }
   progress = { unlocked: 1, solved };
   recomputeUnlocked();
@@ -226,6 +229,8 @@ const views = {
 };
 
 function show(name) {
+  // leaving the play screen freezes (and persists) the level clock
+  if (name !== "play") pauseLevelTimer();
   for (const key of Object.keys(views)) views[key].classList.toggle("active", key === name);
   if (name !== "play") closeOverlays();
 }
@@ -292,14 +297,63 @@ function openLessonOverlay() {
 
 $("#btn-lesson").addEventListener("click", openLessonOverlay);
 
+let lastWin = null; // context for the Share button
+
 function openWinOverlay(opts) {
+  lastWin = opts;
   $("#win-title").textContent = opts.title;
   $("#win-answer").textContent = opts.answer;
   $("#win-tiles").innerHTML = tilesFromAnswer(opts.answer, opts.type);
+  const t = $("#win-time");
+  if (typeof opts.time === "number" && opts.time > 0) {
+    t.innerHTML = `⏱ Naisip mo ito nang <b>${fmtTime(opts.time)}</b>`;
+    t.style.display = "";
+  } else {
+    t.style.display = "none";
+  }
   $("#win-sub").textContent = opts.sub || "";
   $("#btn-win-next").textContent = opts.hasNext ? "Susunod →" : "🏆 Tapos na lahat!";
   $("#overlay-win").classList.add("show");
 }
+
+/* ---- share: native share sheet where available, clipboard otherwise ---- */
+
+const SHARE_URL = "https://nojukuramu.github.io/pwg/";
+
+function buildShareText(win) {
+  const lines = [
+    `🎯 Pinoy Word Games — nalutas ko ang Level ${win.level}!`,
+    `🧩 ${typeLabel(win.type)} (${win.type})`
+  ];
+  if (typeof win.time === "number" && win.time > 0) {
+    lines.push(`⏱ Sa loob lang ng ${fmtTime(win.time)} ang pag-iisip ko.`);
+  }
+  lines.push(`Kaya mo bang tapatan? 👀`, SHARE_URL);
+  return lines.join("\n");
+}
+
+async function shareWin() {
+  if (!lastWin) return;
+  const text = buildShareText(lastWin);
+  const data = { title: "Pinoy Word Games", text, url: SHARE_URL };
+  try {
+    if (navigator.share && (!navigator.canShare || navigator.canShare(data))) {
+      await navigator.share(data);
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === "AbortError") return; // player cancelled the sheet
+    /* fall through to clipboard */
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("📋 Nakopya ang share text — i-paste mo na lang!");
+  } catch (e) {
+    toast("⚠️ Hindi ma-share dito — i-screenshot na lang muna 🙂");
+  }
+}
+
+$("#btn-win-share").addEventListener("click", shareWin);
 
 $("#btn-win-levels").addEventListener("click", () => {
   closeOverlays();
@@ -367,6 +421,93 @@ let hintStep = 0;
 let checking = false; // guard against double-submits while hashing
 const seenLessons = new Set(); // auto-open each lesson once per visit
 
+/* ---------------- level timer (how long the player thinks per level) -------
+ * Tracks ACTIVE thinking time only: it ticks while the play screen is the
+ * foreground tab and the level is unsolved, and pauses when the tab is hidden
+ * or the level is solved. The total (ms) is saved into the solve record so it
+ * survives reloads and can later feed online stats/analysis. */
+
+let timer = { level: 0, elapsed: 0, startedAt: 0, running: false };
+let timerTick = null;
+
+/* partial times for UNSOLVED levels persist here, so leaving a level and
+ * coming back resumes the clock instead of restarting from zero */
+const TIMERS_KEY = "pwg:v2:timers";
+
+function loadTimers() {
+  try { return JSON.parse(localStorage.getItem(TIMERS_KEY) || "{}") || {}; }
+  catch (e) { return {}; }
+}
+function savePartialTime(level, ms) {
+  try {
+    const all = loadTimers();
+    all[level] = ms;
+    localStorage.setItem(TIMERS_KEY, JSON.stringify(all));
+  } catch (e) { /* ok */ }
+}
+function clearPartialTime(level) {
+  try {
+    const all = loadTimers();
+    if (level in all) { delete all[level]; localStorage.setItem(TIMERS_KEY, JSON.stringify(all)); }
+  } catch (e) { /* ok */ }
+}
+
+function fmtTime(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(s / 60);
+  return m + ":" + String(s % 60).padStart(2, "0");
+}
+
+function timerTotal() {
+  return timer.elapsed + (timer.running ? Date.now() - timer.startedAt : 0);
+}
+
+function paintTimer() {
+  const el = $("#play-timer");
+  if (!el) return;
+  el.textContent = "⏱ " + fmtTime(timerTotal());
+  el.classList.toggle("paused", !timer.running);
+}
+
+function startLevelTimer(level) {
+  stopLevelTimer();
+  const prior = Number(loadTimers()[level]) || 0;
+  timer = { level, elapsed: prior, startedAt: Date.now(), running: true };
+  paintTimer();
+  timerTick = setInterval(paintTimer, 1000);
+}
+
+function pauseLevelTimer() {
+  if (!timer.running) return;
+  timer.elapsed += Date.now() - timer.startedAt;
+  timer.running = false;
+  if (timer.level && !progress.solved[timer.level]) savePartialTime(timer.level, timer.elapsed);
+  paintTimer();
+}
+
+function resumeLevelTimer() {
+  if (timer.running || !timer.level || progress.solved[timer.level]) return;
+  timer.startedAt = Date.now();
+  timer.running = true;
+  paintTimer();
+}
+
+function stopLevelTimer() {
+  if (timerTick) { clearInterval(timerTick); timerTick = null; }
+  if (timer.running) {
+    timer.elapsed += Date.now() - timer.startedAt;
+    timer.running = false;
+  }
+  if (timer.level && !progress.solved[timer.level]) savePartialTime(timer.level, timer.elapsed);
+  return timer.elapsed;
+}
+
+// freeze the clock when the player leaves the tab, resume when they return
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") pauseLevelTimer();
+  else if (views.play.classList.contains("active")) resumeLevelTimer();
+});
+
 const w1 = $("#word1");
 const w2 = $("#word2");
 let active = w1;      // which word box the keyboard types into
@@ -411,6 +552,15 @@ function renderPlay(level) {
   w1.disabled = w2.disabled = !!rec;
   $("#kb").style.display = rec ? "none" : "";
   $("#solved-bar").classList.toggle("show", !!rec);
+
+  // timer: live for unsolved levels, frozen at the saved time for solved ones
+  if (rec) {
+    stopLevelTimer();
+    timer = { level, elapsed: rec.time || 0, startedAt: 0, running: false };
+    paintTimer();
+  } else {
+    startLevelTimer(level);
+  }
 
   if (rec) {
     // the verified answer the player earned, stored in their progress
@@ -547,7 +697,9 @@ async function checkAnswer() {
   if (ok1 && ok2) {
     const isGrad = !!(current.tut && current.tut.grad);
     const answer = g1 + " - " + g2;
-    progress.solved[current.level] = { ts: Date.now(), a: answer };
+    const spent = stopLevelTimer();
+    clearPartialTime(current.level);
+    progress.solved[current.level] = { ts: Date.now(), a: answer, time: spent };
     recomputeUnlocked();
     saveProgress();
     fb.textContent = "";
@@ -556,8 +708,10 @@ async function checkAnswer() {
     if (isGrad) playGrad(); else playWin();
     openWinOverlay({
       title: isGrad ? "🎓 Pasado ka!" : "🎉 Tama!",
+      level: current.level,
       answer,
       type: current.type,
+      time: spent,
       sub: isGrad ? "Tapos na ang tutorial — handa ka na sa totoong laban!" : "",
       hasNext: bankByLevel.has(current.level + 1)
     });
