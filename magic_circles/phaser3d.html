@@ -255,7 +255,15 @@
 
     <!-- Engines -->
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@enable3d/phaser-extension@0.25.4/bundles/enable3d.phaserExtension.0.25.4.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@enable3d/phaser-extension@0.25.4/dist/enable3d.phaserExtension.0.25.4.min.js"></script>
+    <script>
+        // Resilience: if the primary CDN bundle failed (404/offline), pull the
+        // same Enable3D build from a fallback CDN before any game script runs.
+        // document.write during initial parse blocks until the fallback loads.
+        if (typeof ENABLE3D === 'undefined') {
+            document.write('<scr' + 'ipt src="https://unpkg.com/@enable3d/phaser-extension@0.25.4/dist/enable3d.phaserExtension.0.25.4.min.js"><\/scr' + 'ipt>');
+        }
+    </script>
     <script>window.STATIC_URL = "static/";</script>
 
     <!-- reused 2D core -->

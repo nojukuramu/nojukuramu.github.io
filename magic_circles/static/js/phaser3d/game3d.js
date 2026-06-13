@@ -102,57 +102,83 @@ const GameState = {
 // ---------------------------------------------------------------------------
 // 4.  Phaser + Enable3D bootstrap
 // ---------------------------------------------------------------------------
-const gameConfig3D = {
-    type: Phaser.WEBGL,
-    parent: 'game-container',
-    transparent: true,
-    width: window.innerWidth,
-    height: window.innerHeight,
 
-    // Enable DOM element support for text inputs (MagicEditorScene, WorldSettings)
-    dom: {
-        createContainer: true
-    },
-
-    // Scaling
-    scale: {
-        mode: Phaser.Scale.RESIZE,
-        autoCenter: Phaser.Scale.CENTER_BOTH
-    },
-
-    // Scene list — BootScene3D is first so it preloads assets before menu
-    scene: [BootScene3D, MenuScene3D, GameScene3D, MagicEditorScene],
-
-    // Enable3D canvas/renderer overrides (THREE WebGLRenderer backing Phaser)
-    ...ENABLE3D.Canvas()
-};
+// Convert a silent black screen into a readable on-page message. Without this,
+// a missing engine (CDN 404 / ad-blocker / offline) just throws into the void.
+function showFatalOverlay(msg) {
+    try {
+        var ls = document.getElementById('loading-screen');
+        if (ls) ls.remove();
+        var d = document.createElement('div');
+        d.id = 'fatal-overlay';
+        d.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#15151f;color:#ffd0d0;'
+            + 'font-family:monospace;font-size:14px;padding:24px;overflow:auto;white-space:pre-wrap;'
+            + 'line-height:1.6;box-sizing:border-box';
+        d.textContent = msg;
+        document.body.appendChild(d);
+    } catch (e) { /* nothing more we can do */ }
+    console.error(msg);
+}
 
 window.addEventListener('load', function () {
-    // Detect mobile for multi-touch input
+    // --- Engine sanity checks (a real message instead of a black screen) ---
+    if (typeof Phaser === 'undefined') {
+        showFatalOverlay('Could not load Phaser from the CDN.\n\nCheck your network connection or ad-blocker, then reload.');
+        return;
+    }
+    if (typeof ENABLE3D === 'undefined' || !ENABLE3D.Scene3D || !ENABLE3D.Canvas || !ENABLE3D.enable3d) {
+        showFatalOverlay('Could not load the Enable3D extension from the CDN.\n\n'
+            + 'The 3D build needs the global "ENABLE3D" (Scene3D / Canvas / enable3d) '
+            + 'from @enable3d/phaser-extension 0.25.4.\n\n'
+            + 'Check your network connection or ad-blocker, then reload.');
+        return;
+    }
+
+    // Re-alias THREE now that ENABLE3D is guaranteed present.
+    if (!THREE) { THREE = ENABLE3D.THREE; }
+
+    // Detect mobile for multi-touch input.
     GameState.isMobile = (typeof Platform !== 'undefined') && Platform.isMobile();
+
+    // Build the Phaser config here (not at top level) so ENABLE3D.Canvas() is
+    // only evaluated after the guard above confirms Enable3D is present.
+    var gameConfig3D = {
+        type: Phaser.WEBGL,                 // 3D requires WebGL (no Canvas fallback)
+        parent: 'game-container',
+        transparent: true,                  // let the THREE render show through Phaser's 2D layer
+        width: window.innerWidth,
+        height: window.innerHeight,
+        dom: { createContainer: true },     // text inputs (MagicEditorScene, WorldSettings)
+        scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
+        scene: [BootScene3D, MenuScene3D, GameScene3D, MagicEditorScene]
+    };
+    // Merge Enable3D's canvas/renderer config (WebGLRenderer backing Phaser).
+    var canvasCfg = ENABLE3D.Canvas();
+    for (var k in canvasCfg) { if (Object.prototype.hasOwnProperty.call(canvasCfg, k)) gameConfig3D[k] = canvasCfg[k]; }
     if (GameState.isMobile) {
-        // Up to 5 simultaneous touches so claw-grip (two thumbs + two index
-        // fingers) and pinch-zoom in the Spellforge all work at once
+        // Up to 5 simultaneous touches so claw-grip and pinch-zoom all work.
         gameConfig3D.input = { activePointers: 5 };
     }
 
-    // Bootstrap via Enable3D factory form (preferred — lets enable3d wire up
-    // THREE renderer before Phaser Scene constructors run).
-    const { enable3d } = ENABLE3D;
-    enable3d(function () {
-        window.game = new Phaser.Game(gameConfig3D);
-        return window.game;
-    });
+    // Bootstrap via the Enable3D factory form (wires the THREE renderer to Phaser).
+    try {
+        ENABLE3D.enable3d(function () {
+            window.game = new Phaser.Game(gameConfig3D);
+            return window.game;
+        });
+    } catch (err) {
+        showFatalOverlay('Enable3D bootstrap failed:\n\n' + ((err && err.stack) || err));
+        return;
+    }
 
-    // R1 robustness fallback: if the enable3d() factory form did not construct
-    // the game within 1200 ms (e.g. THREE already loaded, factory skipped),
-    // construct it directly.  Scene3D / accessThirdDimension only needs THREE,
-    // not Ammo, so this path is always safe.
+    // Fallback: if the factory form didn't construct the game shortly, do it
+    // directly (Scene3D / accessThirdDimension needs only THREE, not Ammo).
     setTimeout(function () {
         if (!window.game) {
-            window.game = new Phaser.Game(gameConfig3D);
+            try { window.game = new Phaser.Game(gameConfig3D); }
+            catch (err) { showFatalOverlay('Phaser.Game construction failed:\n\n' + ((err && err.stack) || err)); }
         }
-    }, 1200);
+    }, 1500);
 
     // --- Robust viewport sizing -------------------------------------------
     // Keep the canvas resolution locked to the *true* visible viewport so the
