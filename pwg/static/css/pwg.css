@@ -385,6 +385,13 @@ button { touch-action: manipulation; }
   white-space: nowrap;
 }
 .badge.kind { background: var(--sage-soft); color: var(--sage); }
+.badge.timer {
+  background: var(--bg-soft);
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.badge.timer.paused { opacity: .55; }
 
 .clue {
   flex: 1 1 auto;
@@ -654,6 +661,13 @@ button { touch-action: manipulation; }
   color: var(--sage);
   margin: 6px 0 2px;
 }
+.sheet.win .win-time {
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin: 8px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.sheet.win .win-time b { color: var(--coral); }
 .sheet.win .win-sub { color: var(--ink-soft); font-size: 13.5px; margin: 4px 0 0; }
 
 /* letter-tile mechanic visualizer (lessons + hints) */
