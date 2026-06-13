@@ -356,8 +356,8 @@ class Projectile3D {
         }
 
         // Damage the object through the chunk manager
-        if (this.scene && this.scene.chunks) {
-            this.scene.chunks.damageObject(objRecord, this.damage);
+        if (this.scene && this.scene.chunkManager) {
+            this.scene.chunkManager.damageObject(objRecord, this.damage);
         }
 
         if (this.scene && this.body) {
