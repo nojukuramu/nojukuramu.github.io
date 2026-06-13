@@ -75,7 +75,12 @@ button { touch-action: manipulation; }
 .wrap {
   position: relative;
   z-index: 1;
+  /* --app-h is set from the *visible* viewport in JS; in an installed
+     (standalone) PWA on Android, 100dvh can resolve taller than what's on
+     screen (the bottom system bar), pushing the keyboard off-screen. The
+     dvh value is the fallback before/without JS. */
   height: 100dvh;
+  height: var(--app-h, 100dvh);
   max-width: 760px;
   margin: 0 auto;
   padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
