@@ -306,16 +306,17 @@ button { touch-action: manipulation; }
 .view-head .meta { color: var(--ink-soft); font-size: 13px; white-space: nowrap; }
 .view-head .spacer { flex: 1; }
 
-/* ---------- levels grid: 10×10, fits one screen ---------- */
+/* ---------- levels grid: scrollable for any number of levels ---------- */
 #view-levels { min-height: 0; }
 .level-grid {
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(10, 1fr);
-  grid-template-rows: repeat(10, 1fr);
+  grid-auto-rows: clamp(26px, 3.6vh, 46px);
   gap: clamp(3px, 0.8vh, 8px);
-  overflow-y: auto; /* fallback for very short screens */
+  overflow-y: auto;
+  align-content: start;
 }
 .lvl {
   position: relative;
@@ -323,14 +324,13 @@ button { touch-action: manipulation; }
   border-radius: clamp(7px, 1.2vh, 12px);
   background: var(--card);
   box-shadow: 0 2px 0 var(--line);
-  font-size: clamp(11px, 2vh, 16px);
+  font-size: clamp(10px, 1.7vh, 15px);
   font-weight: 700;
   color: var(--ink);
   cursor: pointer;
   display: grid;
   place-items: center;
   padding: 0;
-  min-height: 26px;
   transition: transform .12s ease;
 }
 .lvl:hover { transform: translateY(-2px); }

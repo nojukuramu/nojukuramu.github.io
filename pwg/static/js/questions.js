@@ -1670,18 +1670,2421 @@ export const PWG_QUESTIONS = [
     ],
     "h1": "ed994fc5e3cfdd58d2cda6bfbaebc073544a3ee5b2c31cf483cb8dca5aca8cd7",
     "h2": "36d842f1b4ebe059d39577739e81108ba11a91cb7039bbf8ed70516113847b68"
+  },
+  {
+    "level": 101,
+    "type": "PK",
+    "q": "PAGHANDA SA BARIL na PANGHUKAY",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "K",
+      "P"
+    ],
+    "h1": "79db40c1041adc9de9f35fd9e1fd1785fceae284d21e3d1f1af8181bae04bfdc",
+    "h2": "ac15a79b4a125c8d4148d523df9cd64b2357cd7285baad6d6cdabfcf88e56131",
+    "tut": {
+      "title": "Aralin 5 · Palit Katinig (PK)",
+      "text": "Sa PK, parehong haba ang dalawang salita. Pinalitan ang KATINIG, pero ang lahat ng PATINIG (A, E, I, O, U) ay NANATILI sa parehong posisyon.",
+      "example": {
+        "q": "LARO na MATIGAS NA BAGAY",
+        "a": "LARO - BATO",
+        "note": "LARO = L-A-R-O. Palitan ang L at R ng B at T (katinig lang): B-A-T-O = BATO, isang MATIGAS NA BAGAY. Ang A-O na patinig ay hindi nagbago."
+      }
+    }
+  },
+  {
+    "level": 102,
+    "type": "PK",
+    "q": "HAYOP na TUMUTULO",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "P",
+      "L"
+    ],
+    "h1": "8828e522813b554d08674a0190a7f83abe11d0f8ff961344bd22d2b8dd3cd8d9",
+    "h2": "6f17e020268b9cf7f87b92cad3c951729b9042821ab85f4b1cc30c4372e74e7b",
+    "tip": "Tandaan: PK — parehong haba ang dalawang salita; ang mga patinig (A/E/I/O/U) ay nanatili sa parehong posisyon, ang katinig lang ang nagbago."
+  },
+  {
+    "level": 103,
+    "type": "PK",
+    "q": "PRUTAS na MAPANLINLANG",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "B",
+      "T"
+    ],
+    "h1": "2a512b1ed986017994fa7244a967d4b76f7c17aab77684d99d3e42b5885a12a6",
+    "h2": "1c817001711ae4f54515cf6285df4a50464903a69eee174a1614c257c188e281",
+    "tip": "Huling PK practice! Subukan: hanapin muna ang unang salita gamit ang ikalawang bahagi ng clue, tapos palitan ang katinig para makuha ang isa pa."
+  },
+  {
+    "level": 104,
+    "type": "PP",
+    "q": "USAPIN na PALAMAN",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "K",
+      "K"
+    ],
+    "h1": "e3c140b0cced3377b5c8b6fbd56b14688ff431652f57e7f0f1fc11b956d14afe",
+    "h2": "b51da0082de9e00ef70c9adae4c4a3ef64b3d7e903525f6fc9bfdbdd2c0ba00e",
+    "tut": {
+      "title": "Aralin 6 · Palit Patinig (PP)",
+      "text": "Sa PP, parehong haba ang dalawang salita. Pinalitan ang PATINIG (A, E, I, O, U), pero ang lahat ng KATINIG ay NANATILI sa parehong posisyon.",
+      "example": {
+        "q": "BAGO na HINDI NAGTAGUMPAY",
+        "a": "BAGO - BIGO",
+        "note": "BAGO = B-A-G-O. Palitan ang A ng I (patinig lang): B-I-G-O = BIGO, ibig sabihin HINDI NAGTAGUMPAY. Ang B at G na katinig ay hindi nagbago."
+      }
+    }
+  },
+  {
+    "level": 105,
+    "type": "PP",
+    "q": "MATIGAS na NASA KATAWAN NG TAO",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "c57de23039396150996695c90497c98f9a0865fe673fb25f77691d7f3f5d0feb",
+    "h2": "2353f614c8b6589fbe4a653ef9b9fdc01326dae053e88804a5eb9e29e61864cd",
+    "tip": "Tandaan: PP — parehong haba; ang katinig ay nananatili, ang patinig (A/E/I/O/U) lang ang nagbabago."
+  },
+  {
+    "level": 106,
+    "type": "PP",
+    "q": "TUGON na MASAKIT",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "c86dcff48b8d13439da69b2c975686ce3126e4ed6340c14b7c5bc01ba01f3ee9",
+    "h2": "08d691a6b1471e45b5727f5318ca1d0ad1b40bb3f03bfd95beb1739780cc2eeb",
+    "tip": "Huling PP practice! Minsan higit sa isang patinig ang nagbabago — tingnan ang lahat ng A, E, I, O, U sa unang salita."
+  },
+  {
+    "level": 107,
+    "type": "HW",
+    "q": "LASA na NASA ITAAS",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "A",
+      "T"
+    ],
+    "h1": "49e0efcef41b945fa924d13b7d0ae0b8ebc31f4fc61b09c17de913df28778b71",
+    "h2": "f3ef06b0f6daf729712b8797f7742169457a59ac77fe9e944ff04ed5ad8f3444",
+    "tut": {
+      "title": "Aralin 7 · Halo Word (HW)",
+      "text": "Sa HW, ang dalawang salita ay may PAREHONG mga LETRA — iba lang ang pagkakasunod-sunod (anagram). I-ayos muli ang lahat ng letra ng unang salita para mabuo ang pangalawa.",
+      "example": {
+        "q": "PABABA ng ORAS na SILID-ARALAN",
+        "a": "SALA - ALAS",
+        "note": "SALA = S-A-L-A. I-ayos muli: A-L-A-S = ALAS, ibig sabihin PABABA NG ORAS. Parehong letra lang, naiayos nang iba."
+      }
+    }
+  },
+  {
+    "level": 108,
+    "type": "HW",
+    "q": "KONSUMO na PAG-AARI",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "K",
+      "A"
+    ],
+    "h1": "173ae165b714ab107b9ab21b1fb1af25455399091a97cae117e119bf6f880687",
+    "h2": "8582f9726dc46c27f47f331a6c807335c2d60924ba82341efb932b67e7845aba",
+    "tip": "Tandaan: HW — anagram. Parehong set ng letra ang dalawang salita, iba lang ang pagkakasunod."
+  },
+  {
+    "level": 109,
+    "type": "HW",
+    "q": "BILIN na NINGAS",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "P",
+      "A"
+    ],
+    "h1": "2b353128293823bed96e092e09737bb02b5dd3a6cea7b0c5fb1cb57df9ada548",
+    "h2": "f6535a2d562baaf3dbb27093dc26ebca46da1a2e01f06e6a833d3f4712537dd6",
+    "tip": "Huling HW practice! Subukan: isulat ang lahat ng letra ng unang salita, tapos i-rearrange hanggang mabuo ang pangalawang salita."
+  },
+  {
+    "level": 110,
+    "type": "TDL",
+    "q": "LIWANAG na PANGLINIS",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "I",
+      "W"
+    ],
+    "h1": "9735c9cb18a4cb3d746d59c3eb555c60ae7ee4b2ddf7d1d34c6142cd5450900c",
+    "h2": "479cc5528f12115d8479e71f2580f2a3ddd0cd3767d49d4a95fbd6c2468f52f1",
+    "tut": {
+      "title": "Aralin 8 · Twisted Types (T-)",
+      "text": "Ang T- types ay DALAWANG HAKBANG: una, i-anagram ang Word1; ikalawa, i-apply ang DL/BL/KL sa bagong ayos. Sa TDL: anagram muna, tapos dagdag ng letra.",
+      "example": {
+        "q": "MUSMOS na SANDATA",
+        "a": "BATA - TABAK",
+        "note": "MUSMOS = BATA. Dagdagan ng K at i-anagram: BATA + K = TABAK, isang SANDATA (malaking kutsilyo). Pansinin: hindi simpleng dagdag — nahaluan ang mga letra."
+      }
+    }
+  },
+  {
+    "level": 111,
+    "type": "3KL",
+    "q": "NILALANG na BABAE",
+    "len": [
+      3,
+      3
+    ],
+    "f": [
+      "T",
+      "A"
+    ],
+    "h1": "1d8cfcceedb657e86b5ec50a71f0cce122cf9596a35b51c670524afefb126853",
+    "h2": "f5a9e63e66b09233e83c051eea1cddccaac708dbf9894db0aab817fae17e88cc",
+    "kl": [
+      0,
+      1,
+      2
+    ],
+    "tip": "Tandaan: para sa T- types, anagram muna bago ang normal na operasyon. Sa 3KL na ito, parehong haba — tatlong letra ang nagbago."
+  },
+  {
+    "level": 112,
+    "type": "TBL",
+    "q": "HALAMAN na HUKAYAN",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "T",
+      "M"
+    ],
+    "h1": "fe07e73072a51ba54268b0a1c0e28ff685aa7cdfa40e94393364d2cd12d1ee58",
+    "h2": "be8c0f5f6f835c3c77079f70818f3be1754ccb1d4e8c1b56c50df00561d05399",
+    "tut": {
+      "title": "Aralin 9 · Twisted Bawas Letra (TBL)",
+      "text": "Sa TBL: bawasan ng letra ang Word1, tapos i-anagram ang natitira. Ang Word2 ay mas maikli ng isang letra kaysa Word1, at nahaluan ang mga letra.",
+      "example": {
+        "q": "PAGBIBIGAY na GABI",
+        "a": "BIGAY - GABI",
+        "note": "PAGBIBIGAY = BIGAY. Bawasan ng Y, i-anagram: BIGAY - Y = {B,I,G,A} = GABI (gabi = night). Hindi lang basta tinanggal — nahaluan din ang mga natirang letra."
+      }
+    }
+  },
+  {
+    "level": 113,
+    "type": "PK",
+    "q": "PANINGIN na MARUMING DAMIT",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "M",
+      "L"
+    ],
+    "h1": "37303163a1c471da269f2ca48a7e1f71a21e38da3bbf8672bfdc5607a98e2ff5",
+    "h2": "8a0ccd4b1a6736162e4234302544da9f55c4b534cf889392a1eae77112a26dc1"
+  },
+  {
+    "level": 114,
+    "type": "HW",
+    "q": "MATIGAS na PROTEKSYON",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "B",
+      "K"
+    ],
+    "h1": "1a6e759c7b6423cfcbe36e61b751c0094536ccdf048985cd30564e3b13f5a36c",
+    "h2": "506e4fe0d5e9225f9c006942636722d0fc4291f5cb3c1a54226d06e29ba98f7f"
+  },
+  {
+    "level": 115,
+    "type": "2DL",
+    "q": "APAW na KAHATI",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "e2f007c28d2fff191b3510560443449b219e138cc412adc18dfaaf1814554bc8",
+    "h2": "38cf85c1295673e6a40508817e508006da51080aa12f3109338eaf567776263e"
+  },
+  {
+    "level": 116,
+    "type": "PP",
+    "q": "HININGA na TIRAHAN",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "d24f390c56f583eacdbb1056906aa7abe33439e02526f86fb4a6ebd1ec03c5fb",
+    "h2": "197a20acb4203ff9b034fb570ae5f7f6ac0b49e3b914f789f8fa8cc7cbc23288"
+  },
+  {
+    "level": 117,
+    "type": "BS",
+    "q": "PESTE na DILAG",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "b60d58e7ead38527119f479aa5caa85dcc648048b5182c99836c0613f6bd9f7d",
+    "h2": "ffe49a63dc971bea761ae9a64f292fa27a0d247da05df26687c9ad8c5c829870",
+    "bs": 2
+  },
+  {
+    "level": 118,
+    "type": "KL",
+    "q": "HALAMAN na BILANG",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "1c186a2a60053048a9265657c3c2ca6aebd7d1ffaf4b188ce4fc1692d523cb32",
+    "h2": "1afc52518878e63cb69416c4440c64b9d4fd211f5d7a63881dfb46561d931fc8",
+    "kl": [
+      3
+    ]
+  },
+  {
+    "level": 119,
+    "type": "PK",
+    "q": "HIGAAN na TANGGAPAN",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "K",
+      "S"
+    ],
+    "h1": "5826e6be638808356430ed5e52588395ffa2e807fc1a906a8d80c75c82fb2d42",
+    "h2": "16cdbafa01c673deaa15c01f017984fa8f998e0dbd2051971c578ace989d567a"
+  },
+  {
+    "level": 120,
+    "type": "TDL",
+    "q": "SISIDLAN na MATALIM",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "L",
+      "T"
+    ],
+    "h1": "effd932809aa2f14a43b78de3084f5444255c115ab6a6cd535c8fca36e745cf0",
+    "h2": "a1c25d88f37bc7a61ec7d80b13e11703e2ca0f94093c761a043b1452c4bf310d"
+  },
+  {
+    "level": 121,
+    "type": "HW",
+    "q": "PIGA na LAYAS",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "K",
+      "T"
+    ],
+    "h1": "f31c67ab64d8da128cb331824b4788e82ac66efa02a50592c817f2c418a5fda5",
+    "h2": "dd72b837293d904248205497b85b5c2a25ada691ba563bdea3c3cc90dfcb2b65"
+  },
+  {
+    "level": 122,
+    "type": "BL",
+    "q": "TIYAN na DAMDAMIN",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "42d0066673659b0c9cc650a62bcc9b1343b01d829067a7b0ed467ae7a2b8a67b",
+    "h2": "23ec3db7530cd4292482aa95d672c4a42172bb2872478d85024831928db67e61"
+  },
+  {
+    "level": 123,
+    "type": "PP",
+    "q": "HAKBANG na TALIKURAN",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "284da4f3f789d5873dfd1c889279ad5ed92cea49767484799f782cb22dc868ff",
+    "h2": "67c3cc9f334cbe5b283b111db1125dd76bec50b3f0c75922e96c3ad1fd683842"
+  },
+  {
+    "level": 124,
+    "type": "PK",
+    "q": "PAMPAHINTO na PUNGLO",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "P",
+      "B"
+    ],
+    "h1": "112928d6d6f2bceb0779a4888d0a9d4803508609526c4edacef9df948c8748b7",
+    "h2": "ad59e959ef21091ecd96df913fdae304763e81ea9f4b0bf77aa8e2b94ecf8f83"
+  },
+  {
+    "level": 125,
+    "type": "BS",
+    "q": "MALAKING TUKA na PAMBANSA",
+    "len": [
+      5,
+      7
+    ],
+    "f": [
+      "K",
+      "K"
+    ],
+    "h1": "b475b382660a760e1b5983bdbc9f4e0dd5ba86f45f57bf87dbb0709d4bb32b5a",
+    "h2": "819f43c13c0ffdda37a2dbe9f5586eb6af6cdb0d95cfd4b2b5cf26375e80cdfa",
+    "bs": 3
+  },
+  {
+    "level": 126,
+    "type": "HW",
+    "q": "PUWERSA na BIGTI",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "L",
+      "S"
+    ],
+    "h1": "c2bc749275eaebbe88cf5e3a0831c785b3de3f3709d9c6f0adbb6b7a31fa9271",
+    "h2": "bce34578d7a13f54b9fd8975044bc99e22915fb99e058400a6cba4814d2df331"
+  },
+  {
+    "level": 127,
+    "type": "2KL",
+    "q": "PELIKULA na HILING",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "269e1b7cbb1615aeb58574db36ee8f7d6291f6e02e27b4d5cfc01755b265f0f0",
+    "h2": "ff11b565fc50d8616fd34010327a9340b970ce64349ce5e37ee10337a5c647d8",
+    "kl": [
+      1,
+      3
+    ]
+  },
+  {
+    "level": 128,
+    "type": "PP",
+    "q": "BANAAG na TUPOK",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "b829f2cf4c30a247bceaa1cf7a08f34b7ac9977676f4fcb47936ef5cc955e2dc",
+    "h2": "8875173b33e797029c4649324bd5ff9d250eb0f5b4a7a9312218b181c2c5eae7"
+  },
+  {
+    "level": 129,
+    "type": "TBL",
+    "q": "TIBAY na BUKIRIN",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "L",
+      "S"
+    ],
+    "h1": "07260f0e636f4972c4148e18461ca088bc4827c57adeac55c281990a2f2d9b85",
+    "h2": "5371536035de1beafe0ad8ea3b7ec4f9621bc4ed02800ff2c71dd93b3465c118"
+  },
+  {
+    "level": 130,
+    "type": "DL",
+    "q": "ALMUSAL na MATUWID",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "9d1265a155a2afaa7d7d374d8c915111c0edda8e61f00d03e0f0d6bb44c261bf",
+    "h2": "2a8a751b8ef2fcef657e7050f99443b519726dc984e4e39e796191d2a516608d"
+  },
+  {
+    "level": 131,
+    "type": "PK",
+    "q": "PUKOL na TELA",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "B",
+      "K"
+    ],
+    "h1": "79dd892a83b7e7fbec3d0a25078087e5d6080ea0c40f2e0176869a4984d8c968",
+    "h2": "10ea5f4bd38d26aa4e2a8f2171e1ab01dcf6ce59743b350e094db77ab00fb269"
+  },
+  {
+    "level": 132,
+    "type": "HW",
+    "q": "SAHOD na HALINA",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "K",
+      "A"
+    ],
+    "h1": "f8759f14367f04f31cad81c0c92c6f7c87df1e29a26a19d8106326f8b7fbca57",
+    "h2": "91ce7c2c68f8c3c9a2347f64f421456f07116d1f5f7f32c8fb0ffa7a37b06a96"
+  },
+  {
+    "level": 133,
+    "type": "PP",
+    "q": "HIMPAPAWID na LUWANG",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "eb923d76a3d286c3153645fa1198ceccbe173124762039a8f7492afca45b53af",
+    "h2": "579f3184b0cb7afa1d131e7a30c43a029f7157369f5e257c0e8841cb70d00623"
+  },
+  {
+    "level": 134,
+    "type": "BS",
+    "q": "HIPAN na PASUKAN",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "a11db5aeca5da2c21867495caae457aaf7c486bfbae8b6468e05347884c035f4",
+    "h2": "179626df78984d7c957408714cb2c9d350e5be994bb189e04d2241e8a92de7e4",
+    "bs": 2
+  },
+  {
+    "level": 135,
+    "type": "2BL",
+    "q": "PALIGSAHAN na PANGHUKAY",
+    "len": [
+      6,
+      4
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "5e9f3e2baa72d725167b16b762a3acf67abbdaf3c58f9a4d8d52991d66e24fc2",
+    "h2": "c4bd6890c7587c322224ec3f904631d02c0842fe54c349d11e336897c541c4a9"
+  },
+  {
+    "level": 136,
+    "type": "KL",
+    "q": "MAASIM na PAROKYANO",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "1c717c633e1b9c726bc54f5ccd0b179a90fd02f66984db0604ff56fdc4f66b7b",
+    "h2": "46cffd3b6243618d75c9d9390b33f589d582c5d1bda1038ee68a8d7406b940c5",
+    "kl": [
+      3
+    ]
+  },
+  {
+    "level": 137,
+    "type": "PK",
+    "q": "SULYAP na PANGMARAMIHAN",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "K",
+      "S"
+    ],
+    "h1": "f4bfe7c2f22e39540c4e2e110b21f299ee77e8105fceb81f7b8fe3479ccc4d95",
+    "h2": "fecb755066dab379dc2e52cc59857798ee71fb4028e74914eb8a29c289dd3410"
+  },
+  {
+    "level": 138,
+    "type": "HW",
+    "q": "HANGAD na PAMPAALAT",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "N",
+      "A"
+    ],
+    "h1": "9c0eddbf930585cf349d5a97b6cd9dd52e5a571554103caaa1ac2d9ddbab5b2b",
+    "h2": "dec07a6f15b8b25bf5859f8b48f14febfbf8e94235a8864d5d3d9015417b3c8b"
+  },
+  {
+    "level": 139,
+    "type": "3KL",
+    "q": "SUBO na HALINA",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "K",
+      "A"
+    ],
+    "h1": "10c34e9726357d7b88c9c374c88241de6ac4674e44e814ea2a2b3ce397ba8684",
+    "h2": "8576c164aff37c021de8493e59a162857dfb6dfe8d31dca3a755cf5a50b4d103",
+    "kl": [
+      0,
+      1,
+      3
+    ]
+  },
+  {
+    "level": 140,
+    "type": "PP",
+    "q": "HANAY na KULAY NG DUGO",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "52eb6fd279a3670d2f119ea0cf0de89ff36d61a898b1f0e30d2a4291aff3f61c",
+    "h2": "16d640529fe74ad76f32f6afb5f19a6c674d944e9a8a3f6ba447d7e7554db078"
+  },
+  {
+    "level": 141,
+    "type": "BS",
+    "q": "LUTO na PRUTAS",
+    "len": [
+      5,
+      6
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "fe5b26298635431ee82d8f22e1e48730d6d8a617aba4623e3c99b59415bb489f",
+    "h2": "066337e512add415d3bc2aa2a8b28316160d3dabc72fa5dfa5ea915797891820",
+    "bs": 2
+  },
+  {
+    "level": 142,
+    "type": "DL",
+    "q": "LIPAS na TULOY SA LOOB",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "e2ccd5dac9927b29bca42ce1f460774cf9a58862f78bc57e447ab90eb8884ced",
+    "h2": "733a9472339cb9166dc764f25c82a1a9a9a4ab181c171e1647c128a3b255b5b3"
+  },
+  {
+    "level": 143,
+    "type": "PK",
+    "q": "ASTIG na TIGIL NG ULAN",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "S",
+      "T"
+    ],
+    "h1": "176c49b799c5be57d40f88fdb96b1a87d134e32bc1e195b0cc97cb25243a3cc2",
+    "h2": "9b28ead3c68996798c882c6b6f4e12b9c062125c8b3231d19bda705de3a68773"
+  },
+  {
+    "level": 144,
+    "type": "HW",
+    "q": "WASAK na IBA'T IBA",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "ae5d31c1e58905fa90bda975247bb0e042f3375bb00f2d8a9c06b5475480186f",
+    "h2": "208eb7b0741043ea2563d7cf7008e42efcdba27921f09d4a9f07bf5e21e95920"
+  },
+  {
+    "level": 145,
+    "type": "3DL",
+    "q": "PRUTAS na BIBIG",
+    "len": [
+      5,
+      8
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "e8428e624b8cfd380f4ca575a830703d271e37b95b01f71cff6ea95ac190d506",
+    "h2": "6c1f11cf417523ee96be080437c879537a268f0c4e4a043319c27ccb66ca2f2a"
+  },
+  {
+    "level": 146,
+    "type": "PP",
+    "q": "BILANG na LIBAG",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "3e4a3129d09fc8d764cb32befc77303355d52c4ed4ddace4cae042cbc6335757",
+    "h2": "2f3924506e5e8b657c8acc7ef7f113445cb368293eaa0c512e09ac150ed3ad5c"
+  },
+  {
+    "level": 147,
+    "type": "TDL",
+    "q": "BOLUNTARYO na TAKSIL",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "K",
+      "S"
+    ],
+    "h1": "7450bfef80f8d1b455ac4db0d3e63fc009d6df4de6a17ccf4a54d5be7a45e1af",
+    "h2": "6ca488bfd376da4ed31f90583eb04e7d83eb242f5996543d9f4f365c7007b0a2"
+  },
+  {
+    "level": 148,
+    "type": "KL",
+    "q": "GAPOS na BITUIN",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "7d6b81e6854d61ad7489a3ea6fe70a384804e0d1c75094a140bae515a26fcc9c",
+    "h2": "585137346280143e703805c5922141e0319559493bde36879eb9f50fb92e460c",
+    "kl": [
+      3
+    ]
+  },
+  {
+    "level": 149,
+    "type": "HW",
+    "q": "SOBRA na PANABONG",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "ffc31ca429f1d2319463ddbba0207735243664221374732883a358a2763a27b8",
+    "h2": "38faa9c782f0fb97c91979fc3f2e2d79bceb7ec24b65be22b957dbaf9c19a20d"
+  },
+  {
+    "level": 150,
+    "type": "PK",
+    "q": "PAGGALANG na PANG-IGIB",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "M",
+      "T"
+    ],
+    "h1": "7f3e78b6d916dd4c1d1faf46e1b8a0ddb90669533bb1ea7653753156765d531c",
+    "h2": "8add4ea5a54bc94bcf8aec62462b3e9dbc9ec8fcc2e8629847f91842842e4584"
+  },
+  {
+    "level": 151,
+    "type": "PK",
+    "q": "ALAK na PAMPAPUTI",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "T",
+      "K"
+    ],
+    "h1": "af97942ae3cb5e7e1180929c78561edd78b7ad0c857954367ddf3e50ee4225ca",
+    "h2": "86468cc897012b39709a99b5685e57cbbe99d9fab8939183bd06fcae31cc8d81"
+  },
+  {
+    "level": 152,
+    "type": "HW",
+    "q": "TUGON na LUSOT",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "S",
+      "T"
+    ],
+    "h1": "a25010887e1731c768ce7987c3c24b452da0c3c7f9062027cbd658e84575ea0d",
+    "h2": "90658b0cfab42008b03e0508cef6ec1e39c34ece9fa34679f56aaaa67350367c"
+  },
+  {
+    "level": 153,
+    "type": "PP",
+    "q": "SISIDLAN na PAGPAPATALO",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "91c3e47fca431a5afffe10fd0b589131bd95db3e7ae892b54a4eb68092ee437c",
+    "h2": "87f3cda7de25f0f1f4f6daff2985a1b3b2a540c395293de45a730562231f22f7"
+  },
+  {
+    "level": 154,
+    "type": "1DL",
+    "q": "LISTAHAN na BISA",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "f3110d913dca80a7cbd4f0a4a368b82af1e9ad9523f976509dfc0d25a713ca1c",
+    "h2": "fe97bd8a91db35fed7cfbbd66f919858c7a9839fe0df0fd734d7c5999bc10976"
+  },
+  {
+    "level": 155,
+    "type": "1KL",
+    "q": "TIGAS na MUSMOS",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "becb69ed9d06030668bf1ed91da083b07d1951cef4e6f63743f4dcb91e01be49",
+    "h2": "65614cb37e8e4e12c54cac73f3000fb5deaa9ea75531c3cc05136bcf68799e6e",
+    "kl": [
+      3
+    ]
+  },
+  {
+    "level": 156,
+    "type": "TBL",
+    "q": "LANTAD na MAASIM",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "B",
+      "S"
+    ],
+    "h1": "c6bf48c1f0567a4b623c90c7539b4f510e69a247a48558a287e680ee1d029c9c",
+    "h2": "e8fbfaeec911bd33ac313714ac64e80ffb80669d8626686bc369d4270d618ede"
+  },
+  {
+    "level": 157,
+    "type": "PK",
+    "q": "KAKANIN na TANGA",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "P",
+      "L"
+    ],
+    "h1": "3f9a940ace0dfe3909bed0d263a6630c81da3c9bdc01e49ad0d08136358ae687",
+    "h2": "6480a92c315bad74c8b7a8d56d50b6cdb8fb566640d66aecbe3ab67fc22e465c"
+  },
+  {
+    "level": 158,
+    "type": "BS",
+    "q": "PAGPUTOL na SIGURADO",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "e2bf7b3f02190b092d918cd85e146e97211cc30ce4c360690cb02152b950202f",
+    "h2": "944ba9745908a2361db8e3e2a1741232db921b41f1dccd690812c8dfc97c1070",
+    "bs": 2
+  },
+  {
+    "level": 159,
+    "type": "HW",
+    "q": "NERBIYOS na HAYOP",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "K",
+      "B"
+    ],
+    "h1": "f9d5f67ff68c003a2da4cc9e17f57e81b55188c9d1155b648014d1a737b6aaf8",
+    "h2": "4558504470f4e42da285707fcd489067dee2cf0d58d740a1f0041f51e7d13341"
+  },
+  {
+    "level": 160,
+    "type": "PP",
+    "q": "TIBOK NG DIBDIB na LIPAS",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "3579ed50f7f3403f2d02f7de9cea74f1a7a958d9f555168e0255bd00c04b397b",
+    "h2": "99273866ddac9f4c1a2ac04e193035d09e6e91adcf6828cc569dec66b37d3cb2"
+  },
+  {
+    "level": 161,
+    "type": "1KL",
+    "q": "SUNOG SA BALAT na BARYA",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "0419400af4ee54409bf2a755911eba4e8b2db631c9dd057a8c98c0c16a348d17",
+    "h2": "9f997d32516dee05ea33a37692c2e2cb3cb0393f49ae8703eaee44919c2e8617",
+    "kl": [
+      1
+    ]
+  },
+  {
+    "level": 162,
+    "type": "TDL",
+    "q": "KARNENG ALMUSAL na YUMAO",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "T",
+      "P"
+    ],
+    "h1": "5607a680f1ca23bb99c901e5e57d97f973ffe48c4ac4fcf155ef373dc490ea10",
+    "h2": "3cf0c083dc3c38d480e9672a24426cda45bde16c720f3a0d92087f1c7fbdfb04"
+  },
+  {
+    "level": 163,
+    "type": "PK",
+    "q": "TINDA na SARIWA",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "L",
+      "B"
+    ],
+    "h1": "ecdfc7684297266b6e7da1d9ea773b8f29b005cf7f691636bd38e25fc7043424",
+    "h2": "19a696455787acad82df7c13d6356099df8ef0001291e611fe3d22651ce7cb91"
+  },
+  {
+    "level": 164,
+    "type": "1DL",
+    "q": "DAMIT na PRIMITIBO",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "ccea419f303dc3dd1037b215427feadbd5775f411440bcd3649f269382f4fe6f",
+    "h2": "0258832a2dddf405b50213d4634cc4fa43b07799b8486d61ef434ab0c5580ed8"
+  },
+  {
+    "level": 165,
+    "type": "HW",
+    "q": "TIKIM na SILID",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "L",
+      "S"
+    ],
+    "h1": "7fb89727469bee1866e9681cd42d37dec27bf04ce53e6535bfe339dd560a7b54",
+    "h2": "7ac4a5cd04c5f29e01dd21917afe59e92c6a6c1e928424fc106b8e9b4c8177dc"
+  },
+  {
+    "level": 166,
+    "type": "PP",
+    "q": "LAYAS na SADYA",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "5b41215a936f6112874e2bbc05ff854382556f846b93d07687a16af734d35543",
+    "h2": "882bc0b58ffb0985404d1ced455ae7d6e41fbc2b0ba0b3ecaa1aaadba967d106"
+  },
+  {
+    "level": 167,
+    "type": "1BL",
+    "q": "LIMANG DALIRI na TULUGAN",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "K",
+      "K"
+    ],
+    "h1": "3bc89fd6efc1c7751450e10ad143144178557c773ad21f388f35e7eebe02a459",
+    "h2": "cf228fe9ad0b3b9bd69aaec0a6bfc8886a628f5c6c55126148de64401d3cadf4"
+  },
+  {
+    "level": 168,
+    "type": "2KL",
+    "q": "MURANG NIYOG na GATASAN",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "5c341c2609418487505f94095d629b20500711c87535e69da1585fde97fa343a",
+    "h2": "639c07e990921d4e67704be39d8b0cbb26499b33cc8499ca8820f8001607014a",
+    "kl": [
+      1,
+      3
+    ]
+  },
+  {
+    "level": 169,
+    "type": "PK",
+    "q": "WIKA na LUBID",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "S",
+      "T"
+    ],
+    "h1": "895d9f2dce01da7dedc911227ca2eb82f58eeeac6b8296dc82aff6595f8b97c4",
+    "h2": "5bd6320b010111ddad0a69a715f4aef9b2bf4c384258086a0d792093aeb76427"
+  },
+  {
+    "level": 170,
+    "type": "1BL",
+    "q": "TUBIG-ALAT na HAYOP",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "3554974de6eb0d1434667c0f29329025a7cc04c80b6a5ca52eb20ee0628d43da",
+    "h2": "46aec63f274e623a86639b97b28988a10bbe0eaae660c611ecaa9bcd03c5161a"
+  },
+  {
+    "level": 171,
+    "type": "HW",
+    "q": "PATUBIG na KALANSAY",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "T",
+      "B"
+    ],
+    "h1": "93f6c1b278fb1ed8c5a267554a16139763ee6580dc31f15178bf13f012e4d98e",
+    "h2": "d449809076972bea99487aa605a9368df19d280830f44aac5106e3fd832c4ec3"
+  },
+  {
+    "level": 172,
+    "type": "PP",
+    "q": "NAKAAWANG na TANDA",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "820a4be01f908e624bc9abaab016446652bdbe22ace384873eb8bf8d997839f5",
+    "h2": "eac7ac5e1f28f6c82db7c6fb8ceec5277a2e5ba1a76cc531f43780c43c5f5e4b"
+  },
+  {
+    "level": 173,
+    "type": "BS",
+    "q": "TINATAPAKAN na MALUKSO",
+    "len": [
+      3,
+      6
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "7117a8b16aae45ca9bcc1fe486773801af7fc58d8605c07c577259f1c6af0a1c",
+    "h2": "3202404940f6ad19a8b2a4d38f07bc6eb30a362724ec37bc86acdc7368f18162",
+    "bs": 2
+  },
+  {
+    "level": 174,
+    "type": "1DL",
+    "q": "HANAY na METAL",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "42cb4cfbc321303c131a299e8a59e76c463f92fc2526d4f3165c10d4b8ea8887",
+    "h2": "f0ba09ad7167be39b80990ba2f34a6477bd5781a30bca9e2615c3481525512de"
+  },
+  {
+    "level": 175,
+    "type": "PK",
+    "q": "MARAHIL na PUSTA",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "B",
+      "T"
+    ],
+    "h1": "a6e4a3fadc0f9d6ed63d8f92a93420efab8749539cc8ebde2031a8eceea727cd",
+    "h2": "b553a1f8c764aeb52531fe4b1631eb6aaab54496d4ee016c9ed057efe4722e15"
+  },
+  {
+    "level": 176,
+    "type": "1KL",
+    "q": "BUKIRIN na SUPOT",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "6c8675beed91e8ca4202bc381a993a51203a7a556a893186942c3da3d75f47d8",
+    "h2": "bf90f1994c4cb3ff4b681441b5ae697c3a7c7c492552a0777ed577d48e8262b8",
+    "kl": [
+      3
+    ]
+  },
+  {
+    "level": 177,
+    "type": "HW",
+    "q": "TANGGAL na PANGKAT",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "A",
+      "S"
+    ],
+    "h1": "712bcad67e0659078f3c0cb547c8dcac8d7ec604a2757b327f1b6e0614b2eeb7",
+    "h2": "17eee546cd102b47ecf49c811ec960a5dc34d667d89850e271775561abfa3b24"
+  },
+  {
+    "level": 178,
+    "type": "PP",
+    "q": "PADRE na DANGAL",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "5e34f8d339b2fffcb07cc91d698b368d3d8970e558ca372abcbb406d90079150",
+    "h2": "119ebbb3afb80c39da378eddcb3a9def9a12860e41c6972e5511ee33fd2d80b1"
+  },
+  {
+    "level": 179,
+    "type": "TDL",
+    "q": "KATUWANG SA KASAL na UPA",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "A",
+      "B"
+    ],
+    "h1": "3bb9e5286d4bfbae4738cfd4aa406c9e8c0669f1a464582fb70fa1a19197b162",
+    "h2": "fe9a73e7c3a5b38be23374cb52d72a65604c7b7105e1a50acac70d0ab8e3511d"
+  },
+  {
+    "level": 180,
+    "type": "1BL",
+    "q": "TALINO na BITUIN",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "2e5bfbd54d14d97e0e6f0e34aa43a3478395149255e0cd4ccdfccce7adbaa19c",
+    "h2": "5404d2334fb0716c76ec04f21cd5e96b3a1aff1612afd71f89612b96581b8c97"
+  },
+  {
+    "level": 181,
+    "type": "PK",
+    "q": "LARO na PUNGLO",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "D",
+      "B"
+    ],
+    "h1": "ac6a771d37f4f26d5ca22ed2c9414ab41c032cfc865526a686c3c2a8ef133e5f",
+    "h2": "1f0b8f1401b7ce327f456bae2e74d190ef1f9aafc5f1e95e94c1689825786245"
+  },
+  {
+    "level": 182,
+    "type": "1KL",
+    "q": "LINIS NG DAMIT na NGUSO",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "5067af39633ce3e3a849406cd60c778a18318b9e7a00041227a10ce249b44eed",
+    "h2": "caca68c6f8699f64cc52ba40c606bb39a4b6229c2819f041f9e26e88f1ff3547",
+    "kl": [
+      3
+    ]
+  },
+  {
+    "level": 183,
+    "type": "HW",
+    "q": "DUROG na SIKAD",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "P",
+      "S"
+    ],
+    "h1": "b0bab369d1cfc0b5990d85eeedb7790f3d0cc1c5a50f78d9c8d7e2126b5246fb",
+    "h2": "4d28345d07c4daeea0b24026ad127c7d10b94249c18e6f96b717863182dbf599"
+  },
+  {
+    "level": 184,
+    "type": "PP",
+    "q": "MINAMAHAL na BANAL",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "d4314b87eb82ad604d5227ec5025040efdd68d7bf7478b7c05075d9c26467897",
+    "h2": "3f5dbf495998b09a8bf4ac5fcef40055f93d3f69570de8122ae56b2631c77fbf"
+  },
+  {
+    "level": 185,
+    "type": "3DL",
+    "q": "BULWAGAN na KRIMINAL",
+    "len": [
+      4,
+      7
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "42bf163a2e04b6621b185d42d021cba24fe0651c6ccb0d73f20a61b173496a9e",
+    "h2": "d5d3b36925d4b9e72231683b62110b77f8eea956cb3378321469c6c218fc844c"
+  },
+  {
+    "level": 186,
+    "type": "PP",
+    "q": "PANTIKIM na BITBIT",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "6a00073449a1c4036e374869dfd3e8fc70af3ec9bae889ebcd28dee39f351868",
+    "h2": "eec950838e2c4457c62d8e227b49b23f84032b3569edd4fd73ab65532b240d85"
+  },
+  {
+    "level": 187,
+    "type": "PK",
+    "q": "KASUKASUAN na PALPAK",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "S",
+      "B"
+    ],
+    "h1": "4062c78a49612110855a292e12233757c715897008776b4a83e3da8ac9566687",
+    "h2": "f005c3a581b7d0de75a302786e16dfff729b0cbd7a34cf9f5937fc6e10b437b3"
+  },
+  {
+    "level": 188,
+    "type": "BS",
+    "q": "MAINIT NA ULING na SALPUKAN",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "389c92af5f6879e7e442f5a6e5841b33e5c0c492d7188f318107c8ad1a1b74d8",
+    "h2": "db43ea3465a0a4755d6da0954470e4e83fbe36497b89432d57791430e4230e1f",
+    "bs": 2
+  },
+  {
+    "level": 189,
+    "type": "HW",
+    "q": "HUGAS NG KATAWAN na AGOS",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "L",
+      "I"
+    ],
+    "h1": "2ba373a49f66aea994caf6f1de5826b1cd9dafa341e598e98b47bcdb2971e82a",
+    "h2": "ec4c37b5637ca60c76f9bdb8d2a05c18e64cc7fae8a1bdab540735fb1f6ff0c4"
+  },
+  {
+    "level": 190,
+    "type": "3KL",
+    "q": "HALAMAN na INGAY",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "c97866547cf0733cc8f9110cf77a6d3aa7e409c15e38fe60824a62a6ad15df19",
+    "h2": "0187212160a580f48b406d9db40448320021360ecc8ff6d6305989a0ca704d3c",
+    "kl": [
+      1,
+      3,
+      4
+    ]
+  },
+  {
+    "level": 191,
+    "type": "PP",
+    "q": "DALOY SA UGAT na ILAGA",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "36836514b635477dfb69ef22f52ca1c880596065f611693304ecbdc36d6b4e53",
+    "h2": "24046c569ad97d489d2dd0ec282347ceb0f0255763e3318cfe5172ce5c50b6f5"
+  },
+  {
+    "level": 192,
+    "type": "TDL",
+    "q": "SAGIP na NAKAMAMATAY",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "S",
+      "L"
+    ],
+    "h1": "535bbbb59f8ede7973069fcfae0c386a0eac386e7b110381ee2cf3565ca4dcb7",
+    "h2": "9e35a498df727dcce68932ee27814b123ea38f8f4ea65452c3bda7455a4a868b"
+  },
+  {
+    "level": 193,
+    "type": "3BL",
+    "q": "BUBOG NG MUKHA na SILID NG BISITA",
+    "len": [
+      7,
+      4
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "a421e1c268a4826fb785e83783853799874bff8338a88b6e571b664738ece9d3",
+    "h2": "213b66dbff9d7b1e475b2cc91fc05c5b9817cee741a67f78753f0447538c517e"
+  },
+  {
+    "level": 194,
+    "type": "3DL",
+    "q": "PAPAG na PULANG PRUTAS",
+    "len": [
+      4,
+      7
+    ],
+    "f": [
+      "K",
+      "K"
+    ],
+    "h1": "8f575ac855b6a2c78c1eb19de8c0efa63f84ee81b720f284173d9288e877e965",
+    "h2": "9d8c5fa93f90d18da64b083ff1a46a870ee6cb3be0700a9b2c6b29c9f6ddfefd"
+  },
+  {
+    "level": 195,
+    "type": "PK",
+    "q": "BALABAL na PANG-INOM",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "K",
+      "T"
+    ],
+    "h1": "dde0e3b3c804f2ed22b4cdc63e61417388d36743d49236b83a0498156b23b4bf",
+    "h2": "20264d07f9e2726ca8a68a4a115235a99cb506c741e0360761d79d45e7c9c661"
+  },
+  {
+    "level": 196,
+    "type": "TDL",
+    "q": "HUGAS NG DAMIT na PLANO",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "L",
+      "B"
+    ],
+    "h1": "fb88b7395aa0a9026d742dd2cb9d1a3e3e62ed79f4af9f4b55fd9d9bf7c72e86",
+    "h2": "09926c06ef20955caf90bf342273d291b4c4f42f9d39b65149ce4224a7b15f89"
+  },
+  {
+    "level": 197,
+    "type": "BS",
+    "q": "SENTRO NG PAG-IBIG na BUNTON NG LUPA",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "29f75a3771da5bc7b38aed764859d07d131a80383af84e0e9c784268bc594301",
+    "h2": "a454960c8a9d799aeb9fec8e224a136b75caa8afaed84846c51e8081aaf900fd",
+    "bs": 2
+  },
+  {
+    "level": 198,
+    "type": "4DL",
+    "q": "KARGADA na HILING",
+    "len": [
+      4,
+      8
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "59f4da1908d4520b495f92673c5baabe542ee095b3d3245ef684f7eb18377f60",
+    "h2": "df17b5883229b3f84aa4e68fa0c40295ecb4dcf4fccf47a9a6b1d037409bb08b"
+  },
+  {
+    "level": 199,
+    "type": "3KL",
+    "q": "SISIDLAN na PISI",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "L",
+      "T"
+    ],
+    "h1": "0408307e26ba14b278ed39385c8cee8e44d55995e8337478ba81eb0e3cd95183",
+    "h2": "a03b10528a3790f8dad2c077dfd0872ac49a62b5f60250644e897d003feb9a56",
+    "kl": [
+      0,
+      2,
+      3
+    ]
+  },
+  {
+    "level": 200,
+    "type": "2BL",
+    "q": "BINIBINI na BUHATIN",
+    "len": [
+      6,
+      4
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "869c613bf83e2a74746a77221ecfa5fa6fea769924f78ea7d83af38db2d23f07",
+    "h2": "0adc77ec85bc5d4aa25d3bf4838678c4fe8eee1598299ad0550574a2f8bf6d04"
+  },
+  {
+    "level": 201,
+    "type": "PK",
+    "q": "PAMPAGALING na PANGHUGAS",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "G",
+      "S"
+    ],
+    "h1": "8f692f23dd4853e68cf01e56d1133cb3bf422d2a03d1da17cdc79bb2a8ecb915",
+    "h2": "67eb5f4b14209ace5d1e74cc16d00474a95f83de27b10e2e8b242bf3d480c5f1"
+  },
+  {
+    "level": 202,
+    "type": "T2DL",
+    "q": "METAL na PANG-ARARO",
+    "len": [
+      5,
+      7
+    ],
+    "f": [
+      "B",
+      "K"
+    ],
+    "h1": "ef80711abe7456bf6deaad9316828ffa3ed2c9eb098744a6216d9be717f35891",
+    "h2": "011e9170dad027e06f216ae157a2073bdd166df6cb1f12827c4a60b6380e62ac"
+  },
+  {
+    "level": 203,
+    "type": "PP",
+    "q": "KITA na PAMPALIGO",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "5af0d59743464390fa261c32c76e06ef901b353e856b45e2082927132629b44f",
+    "h2": "72d15091a6ea53457d3e5f211909638f9b1d3d78f38b83e97711cd5493069730"
+  },
+  {
+    "level": 204,
+    "type": "HW",
+    "q": "PASAHERO na PANTAPYAS NG KAHOY",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "S",
+      "K"
+    ],
+    "h1": "906f6ffd197748f25c460f83ca95f4e2f5c15d5a5b1a296cc1582d2c6f0a188c",
+    "h2": "db22ed514771658c7b933752f0fd4fe3afb79f3e59c04d1811fa176d95cdaf70"
+  },
+  {
+    "level": 205,
+    "type": "T3DL",
+    "q": "LUBID na HINDI MAKAPAL",
+    "len": [
+      4,
+      7
+    ],
+    "f": [
+      "P",
+      "M"
+    ],
+    "h1": "7b4a7550a8f0f4a7de2c391752d7b6dae4cf1e7b070725d2a4ac3ae6ce03af7f",
+    "h2": "048f2e10f8f2616d57de3969be59adbab2a38618011c5cab7df90c0e7a11244e"
+  },
+  {
+    "level": 206,
+    "type": "KL",
+    "q": "TINATAPAKANG IBABAW na TUMUTULO SA IYAK",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "1cbc4378271f618a0b67b8416df6421448a3db89be7c6199517cf1ae190c29ec",
+    "h2": "97c678b7809a95aa599f3fd91d9103d4a064fea5b1d1d3935ee20f3984f559ed",
+    "kl": [
+      2
+    ]
+  },
+  {
+    "level": 207,
+    "type": "PK",
+    "q": "BINHI SA LUPA na KASUOTAN",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "T",
+      "D"
+    ],
+    "h1": "d06918d2eb68cad9263a31cd1aca0f12f4e6ba02b114f8085b1091644f50517e",
+    "h2": "a138ed798cc39975773353ec1be781216ce28e71cd50e7d76fcc112bf3b35e42"
+  },
+  {
+    "level": 208,
+    "type": "4KL",
+    "q": "PAKINABANG na MUSMOS",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "T",
+      "B"
+    ],
+    "h1": "f0bb20e9645ffc6b5748e0f4ee98d45870c1986a7172c7e2e135f29defe5c9ea",
+    "h2": "a0eca909fca268f86b2db70d7e424c27e2344e6f6ba5e8521cfd6279c2555fe8",
+    "kl": [
+      0,
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "level": 209,
+    "type": "PP",
+    "q": "LIHAM na KAKAPUSAN",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "3cdf105fb29e3643d2dac7bdc65877e50219ad77acae6dc37794488c74104367",
+    "h2": "86a721d36a5cbe31db2d0d7b572ebf57ae4a2bc717cba658332a6b20ba72d4ad"
+  },
+  {
+    "level": 210,
+    "type": "BS",
+    "q": "TIGAS na BONUS NG NAGWAGI",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "c1bde9187bd28529b77e63aa968a5fcf61f25a52cefd2df3589e1c5690da1be0",
+    "h2": "b239720a95cfd6e72165f6b27a91072575787c54b7630441e7fe97706ca029ef",
+    "bs": 2
+  },
+  {
+    "level": 211,
+    "type": "T2DL",
+    "q": "TIKIM na KUWARTA",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "L",
+      "S"
+    ],
+    "h1": "0457dd14b49f12233fa1fa6a1a7bd2fbf5ec55b8dbc1234f6b87f66f250e9546",
+    "h2": "4fdb120ac41356342759ec8d46023386ff486982cdc7f663c8afa3710549a056"
+  },
+  {
+    "level": 212,
+    "type": "HW",
+    "q": "PALABAS SA TANGHALAN na PUTIK NA HINUHUBOG",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "D",
+      "L"
+    ],
+    "h1": "1221a25106460abef21cd4ed57832c1a510c12d72b92c73fabd2312a2098721c",
+    "h2": "50bca833f99c9e9731c4ecb616d7e831b78e13eff50b86eb7bd2956c83cc5439"
+  },
+  {
+    "level": 213,
+    "type": "PK",
+    "q": "HIBLA SA ULO na NARIRINIG",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "B",
+      "T"
+    ],
+    "h1": "0ba375191137807ce10bdbc0b8e06be1b2cee63e64e5ec9fe40e8721dde6d822",
+    "h2": "d5f2155f1c673a3103a157d2c389414f74e29e9f645e32538bd38ff4c26746a9"
+  },
+  {
+    "level": 214,
+    "type": "T2BL",
+    "q": "PRUTAS NG UNGGOY na PAMPAALAT",
+    "len": [
+      6,
+      4
+    ],
+    "f": [
+      "S",
+      "A"
+    ],
+    "h1": "952a98d3118cd4dcd5c6bb850ad91d558a763512ef2dcbc98be76e091f1b333f",
+    "h2": "16e874ba84c062cd66224a9a5c90d2538671219a0a07247c47d6237b0b58a8fa"
+  },
+  {
+    "level": 215,
+    "type": "1DL",
+    "q": "MARAMING TAO na SOBRANG LIWANAG SA MATA",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "222b11d754a1c194dc649f46dfb3618336c4b5b1a498b12c72db7e3e8268d2e3",
+    "h2": "d917d13bc12f9adbc1408773d6361581c43f667fb4fd3d3f603acc327e2168b2"
+  },
+  {
+    "level": 216,
+    "type": "PP",
+    "q": "NAMNAM na ITLOG NG KUTO",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "2d9d659e1d278306e3f195411787be3590210392629db1bb829868c8d2371a01",
+    "h2": "44759c4261333a62b113a50172795c4efc72661476496e1a57379c65d01a6de3"
+  },
+  {
+    "level": 217,
+    "type": "2KL",
+    "q": "PANLASA na PAMPAPUTI",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "D",
+      "K"
+    ],
+    "h1": "678fa44a9abdaf2749dd94bfa43d2d8bb3c303ac54bb279d0fd8deeca920f3cb",
+    "h2": "07ea29ff667b8a8be91613018d9a77fec04899aa507e8260a9089a1cfdf840e0",
+    "kl": [
+      0,
+      1
+    ]
+  },
+  {
+    "level": 218,
+    "type": "HW",
+    "q": "TANGLAW na SAKSAK",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "S",
+      "U"
+    ],
+    "h1": "15a63bc872ee355070f1429a0d73feb4450391c6bf8cd7c208ad6f5891ddbc04",
+    "h2": "4b6c965e65c801add171188febd444cebf310f54a4f617c4c8e8cd9587a6bac4"
+  },
+  {
+    "level": 219,
+    "type": "KL",
+    "q": "KAHOY na PINTAS",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "5bb40116e7ceb53af08ea39d5fedf6ebf307a7e1ac1c96aa39b9032f94c8b1f2",
+    "h2": "89ca48073493a1298ea404f9b86335b6364af36492d93441ce477774bfb9fd2c",
+    "kl": [
+      3
+    ]
+  },
+  {
+    "level": 220,
+    "type": "T3DL",
+    "q": "KONSUMO na PINO",
+    "len": [
+      4,
+      7
+    ],
+    "f": [
+      "K",
+      "M"
+    ],
+    "h1": "b840fabf600bb039de35c442799bd5d4054210b8cbe4ea27a8ef553831680853",
+    "h2": "7e39eb0b438b4f0e7081ec216f247f7a5d67bc6fe72e5f6afb9580c9ae1ec6ae"
+  },
+  {
+    "level": 221,
+    "type": "PK",
+    "q": "PAMPAASIM na PINAGMULAN",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "S",
+      "M"
+    ],
+    "h1": "77a11c8cd700730fbdd117f83a14e1522dd7b6092c7af9851a512b6078712513",
+    "h2": "9d686753cc13e7281caafb8a581bc556d6240027c76aeed0e22d8099b0be8241"
+  },
+  {
+    "level": 222,
+    "type": "PP",
+    "q": "AKMA na PILYO",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "3a91d883bf2f8805b75008d23eb03f29a5ea4ad79ca2c9d1d41bb00a8a4d3eb0",
+    "h2": "60db6115b472f3f176edcec0391a378fff109fe86803a99e39d656368ff6f2bd"
+  },
+  {
+    "level": 223,
+    "type": "T2BL",
+    "q": "SASAKYAN SA TUBIG na GATASAN",
+    "len": [
+      6,
+      4
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "9df971f5956c512b9eb0e4984ca8f5c56d9e2d03f555261cc542521838ff5bd8",
+    "h2": "1694f51778da8a7e38ef08c9057dd4f943f04195d1da18fd197a66726377d312"
+  },
+  {
+    "level": 224,
+    "type": "HW",
+    "q": "ARI-ARIAN na TUNOG NG PAA",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "B",
+      "Y"
+    ],
+    "h1": "a4d2369b23c164fb5506247e98df8150f2f2e4e9d26c4c6d80b3a08ba022ac30",
+    "h2": "b43112030bcfe038c04ac1b97624f498f08350c3f64eb89e99dab2697d711e8e"
+  },
+  {
+    "level": 225,
+    "type": "1BL",
+    "q": "KASUOTAN na KARAMIHAN",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "D",
+      "D"
+    ],
+    "h1": "72dfa389481ea2257f361370afbdd28dcb15ca1487381023ed0820d0a589bc31",
+    "h2": "a172e53a9dbeeb5198f860e46e82a2482d8aa200aaa99b3c7eeaae87df1d7e5c"
+  },
+  {
+    "level": 226,
+    "type": "TDL",
+    "q": "TIGAS NA PINUPUKOL na PANYAPAK SA PAA",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "B",
+      "B"
+    ],
+    "h1": "4a408b746c9e8e0b2bb9f987962ee6096346bd4faf3bd8d419e181a1bb393c2a",
+    "h2": "7c2f689aec83b0f1cd213d5776aa2818f42801be1921bb970133c60b9e2d6a5a"
+  },
+  {
+    "level": 227,
+    "type": "PK",
+    "q": "DAANAN PAPASOK na SANDAANG TAON",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "P",
+      "S"
+    ],
+    "h1": "58f1f036e371cdc50a21c92984e0cc732f77efb6ab4cc0c1c16b4e62fa49a321",
+    "h2": "bf52218ddae5527b0aa033942487657531b3fdf4583d0a8016e8c10e51a5108c"
+  },
+  {
+    "level": 228,
+    "type": "PP",
+    "q": "KLASE na PADALOS-DALOS",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "f12a09e82f6af3779f69a5f4485577730902bd8a36233e73d2edfcfdb3b02877",
+    "h2": "ee8f140e669795c69bc5bd4460aeca2751bdfa50b5fc9a354f8a80f4fe808539"
+  },
+  {
+    "level": 229,
+    "type": "TBL",
+    "q": "PAGSAPIT na PANINDA",
+    "len": [
+      6,
+      5
+    ],
+    "f": [
+      "D",
+      "T"
+    ],
+    "h1": "c05b00eabdf81fd44aa37fd163706c63df8e359e1ddbc949357df9f642a3ae1b",
+    "h2": "2d3c37c6e3d5d216e759e82416f7cb70b0dcd24453d73da46285e938d2049ca6"
+  },
+  {
+    "level": 230,
+    "type": "HW",
+    "q": "KLASENG SAGING na HINDI TUYO",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "S",
+      "B"
+    ],
+    "h1": "b4f606f53468da09e9513731b71329281b8c5f79beace247b40edfc3be2f40ee",
+    "h2": "3473fe551b68f15cdd5024d63a08dc16fdba78ca64e4b61b776998071145d9b9"
+  },
+  {
+    "level": 231,
+    "type": "KL",
+    "q": "KUWARTO na TINGIN NANG PATAGO",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "bc4b3b003c81ac14f377582d1f4929075f2409694fdbf85e65a9c3c05be0d3fa",
+    "h2": "73ed64d2d3e481c0d9de7143771595d5356483186058802f0f4cf82572364492",
+    "kl": [
+      4
+    ]
+  },
+  {
+    "level": 232,
+    "type": "T2DL",
+    "q": "INUMING NAKAKALANGO na MALUKSO",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "A",
+      "P"
+    ],
+    "h1": "fece7229424f8e570d8e5f552a5173f58db2367f3d5d0962e3f6a28af3ee7056",
+    "h2": "ca4be3f4bc31590eb9b46bc48cab89592bfabaefcac7961a4202e8f15d27a310"
+  },
+  {
+    "level": 233,
+    "type": "PK",
+    "q": "DALOY SA UGAT na PANG-AAKIT",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "D",
+      "S"
+    ],
+    "h1": "05d4d245dfe2952e20d93feb413ebf8b8a3b6556df4fdb5eaf66d7c6c7ce16d2",
+    "h2": "2b8183a49613ddaec1a634b3eb3a0173b139fc5fd1cba77c9c42f3d22c871fc6"
+  },
+  {
+    "level": 234,
+    "type": "BS",
+    "q": "ILIHIM na PAGSANG-AYON NG ULO",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "a02ce97b018f3ea6ab7cffb06529852ac94caf6a659dc78dd7bcc9e96fe759fe",
+    "h2": "5b382cc0463df7b4120b5e5b083b452fab98fce8f7479bc9cbcfa4eb06e62921",
+    "bs": 2
+  },
+  {
+    "level": 235,
+    "type": "4KL",
+    "q": "KUMONSUMO na PELIKULA",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "K",
+      "S"
+    ],
+    "h1": "e36505adf6884f90bc857eaea0bb6e6ed0fb6dda02059e7b7e44b0c7f10d82b3",
+    "h2": "f7b8f85abd91e1e05366c1df275530546bf515c624017d49b47614d163c3154a",
+    "kl": [
+      0,
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "level": 236,
+    "type": "1DL",
+    "q": "DEMANDA na BUTONG MERYENDA",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "K",
+      "K"
+    ],
+    "h1": "8a5e0a4d1a6c238990854442a410f7cb5059f76d54f605c3ad5020cda0f21d5f",
+    "h2": "425d7834d7e6e394345db8f70ffd59c0adf2eb76ea0fe27eac4e43aa2a4df0a5"
+  },
+  {
+    "level": 237,
+    "type": "PK",
+    "q": "KASAGANAAN na PAGKUMUSTA",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "D",
+      "B"
+    ],
+    "h1": "df8cdf3540899565362ac6d0a7bc42106fd3688147bc4655faf9958b6e0d9ceb",
+    "h2": "b7a2c399e28cdc305b38f1aa6ba29573c631c604963e519f0c252a772d3ff69c"
+  },
+  {
+    "level": 238,
+    "type": "T3DL",
+    "q": "PANLASA na WALANG LIWANAG",
+    "len": [
+      4,
+      7
+    ],
+    "f": [
+      "D",
+      "M"
+    ],
+    "h1": "31f897b754e62476e991cc242859d2affa3abccb2c21dc88fc05d3d022b1ba69",
+    "h2": "8d7cedfcf59fca7a90af865ff747b8076a2939f5d8d2f91509e0b28fde0a61ea"
+  },
+  {
+    "level": 239,
+    "type": "PP",
+    "q": "LAON na BILANG KASUNOD NG APAT",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "9a293a950545c328d1ecfbd0537cf9d6c26ea57a3c7b1dee83a1491aa81336c4",
+    "h2": "f41a4b1abce9d46e1d171a865f87bce337e013f0e4357bba39e6bccd7a367b94"
+  },
+  {
+    "level": 240,
+    "type": "HW",
+    "q": "PAGBUBUKID na PAGHANDA NG BARIL",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "S",
+      "K"
+    ],
+    "h1": "d8abbdaad1b4b2a15b99d33553ba444d900618023438082a3ec9172f042ac4f0",
+    "h2": "b0c0de66f4e595234f9f0272edbf625ed276640ae83c5c18a6f7357b6635f85f"
+  },
+  {
+    "level": 241,
+    "type": "T2BL",
+    "q": "DILAG na LAKWATSA",
+    "len": [
+      6,
+      4
+    ],
+    "f": [
+      "D",
+      "G"
+    ],
+    "h1": "a2833896fff2a65b304d4fd39b2a57d3214b9383813a96a69171e404186485bf",
+    "h2": "8a7fe61ad92c4b4b685c81c20b855f3315193ac15ea813fc3dd676f1b1aea81f"
+  },
+  {
+    "level": 242,
+    "type": "2DL",
+    "q": "PANGBIGKIS na KARUNUNGAN",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "06a0b593434fdadfcbdb7a4aa10177aac9338ad44263dbdde977f27931dc8d70",
+    "h2": "3314d919eca34f5987368e8b480a18754e38c686d21bbf0d2a664f9d7eabcefc"
+  },
+  {
+    "level": 243,
+    "type": "2KL",
+    "q": "KARAMDAMAN na PANUKAT",
+    "len": [
+      5,
+      5
+    ],
+    "f": [
+      "S",
+      "S"
+    ],
+    "h1": "a2beb21715183582a2a6bd27b4ab1bfb2457bea2053983da8098e259d05eff84",
+    "h2": "11d6d8b7c207a904f6bcbbd88ea0ed8df11861250cd94675d945ddc4b7c61684",
+    "kl": [
+      1,
+      3
+    ]
+  },
+  {
+    "level": 244,
+    "type": "T2DL",
+    "q": "NGUSO na ULAT",
+    "len": [
+      4,
+      6
+    ],
+    "f": [
+      "L",
+      "B"
+    ],
+    "h1": "0192538a44a14ed5c492bc7ba4dacad9d58862feb7db15b1af6eedd36ca87f64",
+    "h2": "82f06afe41b7603cc7237915e364ee3b717e600c8220c0bf420af26898852ef5"
+  },
+  {
+    "level": 245,
+    "type": "1BL",
+    "q": "KEMIKAL NA PAMATAY na PANTALI SA REGALO",
+    "len": [
+      5,
+      4
+    ],
+    "f": [
+      "L",
+      "L"
+    ],
+    "h1": "75e74bf4f6c840ac0e89ad6f193507f9237158d8be0d7f88023c060b0c0f19cb",
+    "h2": "cdda4372f15903f7fd31ebb443610e1efd64170b6496c4955ffac51e6d3491ed"
+  },
+  {
+    "level": 246,
+    "type": "1DL",
+    "q": "KULAY NG PINTURA na BATIKOS",
+    "len": [
+      5,
+      6
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "27972f7e9f1b9f12631f58a4da9343b100543df4baaaf14e5c6364cc2921a88b",
+    "h2": "b0d140f2ea81af235ec7efd5eba063c3f64a6dd68db7857621c203484d39d419"
+  },
+  {
+    "level": 247,
+    "type": "3KL",
+    "q": "INUMING MALAMIG SA INIT na BALUKTOT ANG LIKOD",
+    "len": [
+      4,
+      4
+    ],
+    "f": [
+      "B",
+      "K"
+    ],
+    "h1": "9913e14ee86313440ddfaa29e528a6ea2f8bdcc1d358b4125601a7fa0d5422d8",
+    "h2": "2ff9581e7e6674b9d5e2208370acd932d01fae96bed421a9bcf0cb0146213273",
+    "kl": [
+      0,
+      2,
+      3
+    ]
+  },
+  {
+    "level": 248,
+    "type": "BS",
+    "q": "SISIDLAN SA BANYO na DAMO NG WALIS",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "T",
+      "T"
+    ],
+    "h1": "94f670e3c1da5d02e0d46cf7403c4178943f6c50905a114170681ee187609013",
+    "h2": "ed0cba0694a1e9285626b2b7a0273e0b86b263cb5a8626a50bd7521b845da313",
+    "bs": 2
+  },
+  {
+    "level": 249,
+    "type": "2BL",
+    "q": "KUMOKOKAK na PANGHUKAY",
+    "len": [
+      6,
+      4
+    ],
+    "f": [
+      "P",
+      "P"
+    ],
+    "h1": "440384f031fab1b914543cf40fbeb9af0faac51498c12b43d7564d0e193cea40",
+    "h2": "f32330717de27fd2522ad685bea89aa5aae70bf6614107a385616c93d775bdf4"
+  },
+  {
+    "level": 250,
+    "type": "TDL",
+    "q": "LINYA NG TAO na PAGLUTANG SA HANGIN",
+    "len": [
+      4,
+      5
+    ],
+    "f": [
+      "P",
+      "L"
+    ],
+    "h1": "d04118697ce8316257a8123d7d7b8ca701ee6e42b524b12874f2363d6ba81338",
+    "h2": "3de9b71457fa9231ab0e64c3c18a9b7e93b32d75166286bde18d5fb18eea8e55"
   }
 ];
 
 /* Human-readable label per type code, e.g. "2DL" -> "2 Dagdag Letra". */
 export function typeLabel(type) {
-  const m = /^(\d*)(DL|BL|KL|BS)$/.exec(type) || [];
+  if (/^T/.test(type)) {
+    const inner = type.replace(/^T\d*/, "");
+    return "Twisted " + typeLabel(inner);
+  }
+  const m = /^(\d*)(DL|BL|KL|BS|PK|PP|HW)$/.exec(type) || [];
   const n = m[1] || "";
   const names = {
     DL: "Dagdag Letra",
     BL: "Bawas Letra",
     KL: "Kislap Letra",
-    BS: "Banat Salita"
+    BS: "Banat Salita",
+    PK: "Palit Katinig",
+    PP: "Palit Patinig",
+    HW: "Halo Word"
   };
   const base = names[m[2]] || type;
   return n ? n + " " + base : base;
