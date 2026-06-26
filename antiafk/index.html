@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Anti-AFK · Keep Awake</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f0f0f;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 28px;
+      padding-top: 56px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      color: #aaa;
+    }
+
+    /* Fake video player shell */
+    .player {
+      width: 480px;
+      max-width: 95vw;
+      background: #1a1a1a;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+      transition: box-shadow 0.3s;
+    }
+
+    .screen {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* Subtle animated content so browser registers activity */
+    .noise {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 30% 40%, #1a2a1a 0%, #000 70%);
+      animation: pulse 4s ease-in-out infinite alternate;
+      opacity: 0.6;
+    }
+    @keyframes pulse {
+      from { opacity: 0.4; transform: scale(1); }
+      to   { opacity: 0.7; transform: scale(1.04); }
+    }
+
+    .play-icon {
+      position: relative;
+      z-index: 2;
+      width: 56px;
+      height: 56px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .play-icon svg { width: 24px; height: 24px; fill: #fff; margin-left: 4px; }
+
+    /* Controls bar */
+    .controls {
+      padding: 10px 14px 14px;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 4px;
+      background: #333;
+      border-radius: 2px;
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: #00b3a4;
+      border-radius: 2px;
+      transition: width 1s linear;
+    }
+
+    .bar-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.78rem;
+      color: #888;
+    }
+
+    .time { font-variant-numeric: tabular-nums; }
+
+    /* Status badge */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      border: 1px solid;
+      transition: all 0.3s;
+    }
+    .badge.active   { color: #00b3a4; border-color: #00b3a4; background: rgba(0,179,164,0.08); }
+    .badge.inactive { color: #888; border-color: #444; background: transparent; }
+    .badge.warning  { color: #f59e0b; border-color: #f59e0b; background: rgba(245,158,11,0.08); }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .badge.active .dot { animation: blink 1.2s step-start infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* Toggle button */
+    .toggle {
+      padding: 10px 32px;
+      border: none;
+      border-radius: 8px;
+      background: #00b3a4;
+      color: #000;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .toggle:hover { background: #009e90; }
+    .toggle:active { transform: scale(0.97); }
+    .toggle.stop { background: #c0392b; color: #fff; }
+    .toggle.stop:hover { background: #a93226; }
+
+    .note {
+      font-size: 0.75rem;
+      color: #555;
+      text-align: center;
+      max-width: 420px;
+      line-height: 1.5;
+    }
+
+    .back-link {
+      position: fixed;
+      top: 14px;
+      left: 18px;
+      font-size: 0.8rem;
+      color: #555;
+      text-decoration: none;
+      transition: color 0.2s;
+      z-index: 10;
+    }
+    .back-link:hover { color: #aaa; }
+
+    /* ── Focus warning banner (shown when returning after tab was hidden) ── */
+    #focus-banner {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 200;
+      background: #f59e0b;
+      color: #000;
+      padding: 10px 16px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+    }
+    #focus-banner.visible { display: flex; }
+    #focus-banner .banner-text { flex: 1; }
+    #focus-banner .banner-text strong { display: block; }
+    #focus-banner .banner-text span { font-weight: 400; font-size: 0.8rem; }
+    #focus-banner .banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    #focus-banner .banner-actions button {
+      padding: 5px 14px;
+      border: 2px solid #000;
+      border-radius: 6px;
+      background: transparent;
+      color: #000;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.02em;
+    }
+    #focus-banner .banner-actions button:hover { background: rgba(0,0,0,0.1); }
+    #focus-banner .banner-actions .resume-btn {
+      background: #000;
+      color: #f59e0b;
+    }
+    #focus-banner .banner-actions .resume-btn:hover { background: #222; }
+
+    /* ── Blur overlay (window not focused while tab is still visible) ── */
+    #blur-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 150;
+      background: rgba(0,0,0,0.78);
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      text-align: center;
+      cursor: pointer;
+    }
+    #blur-overlay.visible { display: flex; }
+    #blur-overlay .blur-icon {
+      font-size: 3rem;
+      animation: warningPulse 1.4s ease-in-out infinite alternate;
+    }
+    @keyframes warningPulse {
+      from { opacity: 0.6; transform: scale(1); }
+      to   { opacity: 1;   transform: scale(1.1); }
+    }
+    #blur-overlay .blur-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #f59e0b;
+    }
+    #blur-overlay .blur-sub {
+      font-size: 0.875rem;
+      color: #aaa;
+      max-width: 320px;
+      line-height: 1.5;
+    }
+    #blur-overlay .blur-hint {
+      margin-top: 8px;
+      font-size: 0.75rem;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+
+  <a class="back-link" href="../">← The Atelier</a>
+
+  <!-- Focus warning banner: shown when returning after tab was hidden while running -->
+  <div id="focus-banner" role="alert" aria-live="assertive">
+    <div class="banner-text">
+      <strong>⚠️ Page was not in focus</strong>
+      <span id="banner-sub">Wake Lock may have been released. Click Resume to re-activate protection.</span>
+    </div>
+    <div class="banner-actions">
+      <button id="banner-resume-btn" class="resume-btn">Resume</button>
+      <button id="banner-dismiss-btn">Dismiss</button>
+    </div>
+  </div>
+
+  <!-- Blur overlay: shown when window loses focus while tab is still visible -->
+  <div id="blur-overlay" role="status" aria-live="polite">
+    <div class="blur-icon">👁️</div>
+    <div class="blur-title">Click here — page not active</div>
+    <div class="blur-sub">This window is not in focus. The Screen Wake Lock requires an active window to keep working.</div>
+    <div class="blur-hint">click anywhere to return</div>
+  </div>
+
+  <h1>Keep Awake</h1>
+
+  <div class="player">
+    <div class="screen">
+      <div class="noise"></div>
+      <div class="play-icon">
+        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="progress-track"><div class="progress-fill" id="fill"></div></div>
+      <div class="bar-row">
+        <span class="time" id="elapsed">0:00</span>
+        <span>Anti-AFK Stream</span>
+        <span class="time" id="total">—</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="badge inactive" id="badge">
+    <div class="dot"></div>
+    <span id="badge-text">Inactive</span>
+  </div>
+
+  <button class="toggle" id="btn" onclick="toggle()">Start</button>
+
+  <p class="note">
+    Uses the <strong>Screen Wake Lock API</strong> to prevent your screen from sleeping.
+    Works in Chromium-based browsers and Firefox 126+.
+    <strong>Keep this tab active and in focus</strong> — the indicator above will warn you if you leave.
+  </p>
+
+<script>
+  let wakeLock  = null;
+  let running   = false;
+  let seconds   = 0;
+  let ticker    = null;
+  let wasHidden = false;
+
+  const fill        = document.getElementById('fill');
+  const elapsed     = document.getElementById('elapsed');
+  const total       = document.getElementById('total');
+  const badge       = document.getElementById('badge');
+  const badgeTx     = document.getElementById('badge-text');
+  const btn         = document.getElementById('btn');
+  const focusBanner = document.getElementById('focus-banner');
+  const bannerSub   = document.getElementById('banner-sub');
+  const blurOverlay = document.getElementById('blur-overlay');
+
+  const LOOP_SECS = 7200;
+
+  function fmt(s) {
+    const h   = Math.floor(s / 3600);
+    const m   = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    return h > 0
+      ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+      : `${m}:${String(sec).padStart(2,'0')}`;
+  }
+
+  function setActive(on) {
+    badge.className  = 'badge ' + (on ? 'active' : 'inactive');
+    badgeTx.textContent = on ? 'Screen Wake Lock active' : 'Inactive';
+    btn.textContent  = on ? 'Stop' : 'Start';
+    btn.className    = on ? 'toggle stop' : 'toggle';
+  }
+
+  function setWarning(msg) {
+    badge.className     = 'badge warning';
+    badgeTx.textContent = msg;
+  }
+
+  async function acquireWakeLock() {
+    if (!('wakeLock' in navigator)) return false;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => {
+        wakeLock = null;
+        if (running && document.visibilityState === 'visible') acquireWakeLock();
+      });
+      return true;
+    } catch (e) {
+      console.warn('Wake lock denied:', e);
+      return false;
+    }
+  }
+
+  async function toggle() {
+    if (!running) {
+      running = true;
+      seconds = 0;
+      total.textContent = fmt(LOOP_SECS);
+      await acquireWakeLock();
+      setActive(true);
+      ticker = setInterval(tick, 1000);
+    } else {
+      stop();
+    }
+  }
+
+  function tick() {
+    seconds = (seconds + 1) % LOOP_SECS;
+    elapsed.textContent = fmt(seconds);
+    fill.style.width = ((seconds / LOOP_SECS) * 100).toFixed(2) + '%';
+    if (document.hidden) {
+      document.title = seconds % 2 === 0 ? '⚠️ Not in focus — Anti-AFK' : '⚠️ Click back! — Anti-AFK';
+    } else {
+      document.title = seconds % 2 === 0 ? 'Keep Awake ◉' : 'Keep Awake ○';
+    }
+  }
+
+  function stop() {
+    running = false;
+    clearInterval(ticker);
+    ticker  = null;
+    seconds = 0;
+    elapsed.textContent = '0:00';
+    fill.style.width    = '0%';
+    total.textContent   = '—';
+    document.title      = 'Anti-AFK · Keep Awake';
+    if (wakeLock) { wakeLock.release(); wakeLock = null; }
+    setActive(false);
+    hideFocusBanner();
+    hideBlurOverlay();
+  }
+
+  /* ── Focus banner (returned after tab was hidden while running) ── */
+  function showFocusBanner(lockRecovered) {
+    bannerSub.textContent = lockRecovered
+      ? 'Wake Lock re-acquired automatically — you are protected again.'
+      : 'Wake Lock may have been released. Click Resume to re-activate protection.';
+    focusBanner.classList.add('visible');
+    if (lockRecovered) {
+      setTimeout(hideFocusBanner, 4000);
+    }
+  }
+
+  function hideFocusBanner() {
+    focusBanner.classList.remove('visible');
+  }
+
+  document.getElementById('banner-resume-btn').addEventListener('click', async () => {
+    if (running && !wakeLock) {
+      const ok = await acquireWakeLock();
+      if (ok) setActive(true);
+    }
+    hideFocusBanner();
+  });
+
+  document.getElementById('banner-dismiss-btn').addEventListener('click', hideFocusBanner);
+
+  /* ── Blur overlay (window not focused, tab still visible) ── */
+  function showBlurOverlay() {
+    blurOverlay.classList.add('visible');
+    setWarning('Not in focus — click this page');
+  }
+
+  function hideBlurOverlay() {
+    blurOverlay.classList.remove('visible');
+    if (running) setActive(true);
+  }
+
+  blurOverlay.addEventListener('click', () => {
+    hideBlurOverlay();
+    window.focus();
+  });
+
+  /* ── Visibility change: tab hidden / shown ── */
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'hidden') {
+      if (running) wasHidden = true;
+    } else {
+      hideBlurOverlay();
+      if (running && wasHidden) {
+        wasHidden = false;
+        const recovered = wakeLock ? true : await acquireWakeLock();
+        if (recovered) setActive(true);
+        showFocusBanner(recovered);
+      }
+    }
+  });
+
+  /* ── Window blur / focus (different app or window) ── */
+  window.addEventListener('blur', () => {
+    if (running) showBlurOverlay();
+  });
+
+  window.addEventListener('focus', () => {
+    hideBlurOverlay();
+  });
+</script>
+</body>
+</html>
