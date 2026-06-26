@@ -96,7 +96,8 @@
     notes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11l5 5v11a0 0 0 0 1 0 0H4z"/><path d="M15 4v5h5"/><path d="M8 13h8M8 17h6"/></svg>',
     sigil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polygon points="12,4 20,18 4,18"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>',
     spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M18 6l-2.5 2.5M8.5 15.5L6 18"/></svg>',
-    tiles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="8" y="13" width="8" height="8" rx="2"/><path d="M6.2 8V6.4a1 1 0 0 1 1.6-.8"/><path d="M16 9V5l2 4V5"/><path d="M11 18.5h2"/></svg>'
+    tiles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="8" y="13" width="8" height="8" rx="2"/><path d="M6.2 8V6.4a1 1 0 0 1 1.6-.8"/><path d="M16 9V5l2 4V5"/><path d="M11 18.5h2"/></svg>',
+    eye:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg>'
   };
   var APPS = [
     {
@@ -116,6 +117,12 @@
       href: "pwg/", badge: "Word game",
       desc: "Hulaan ang dalawang salita! Dagdag, bawas, kislap, o banat ng letra — 100 cozy levels in Filipino, progress saved locally.",
       tags: ["Filipino", "puzzle", "100 levels"]
+    },
+    {
+      id: "antiafk", name: "Anti-AFK", accent: "#00b3a4", icon: ICONS.eye,
+      href: "antiafk/", badge: "utility",
+      desc: "Keep your screen awake without touching it. A fake video player holds a Screen Wake Lock — works in Chromium and Firefox 126+.",
+      tags: ["Wake Lock", "focus", "utility"]
     }
   ];
 
@@ -175,7 +182,7 @@
       if (logoClicks >= 7) {
         logoClicks = 0;
         Atelier.addEgg("haiku");
-        Atelier.toast("✦ a tiny haiku:<br><em>quiet pixels hum —<br>a circle drawn by a hand<br>remembers the light</em>");
+        Atelier.toast("✶ a tiny haiku:<br><em>quiet pixels hum —<br>a circle drawn by a hand<br>remembers the light</em>");
       }
     });
   }
@@ -186,8 +193,9 @@
   var pList = document.getElementById("palette-list");
   var activeIdx = 0;
   var BASE_COMMANDS = [
-    { icon: "✦", label: "Magic Circles", sub: "open app", run: function () { location.href = "magic_circles/"; } },
+    { icon: "✶", label: "Magic Circles", sub: "open app", run: function () { location.href = "magic_circles/"; } },
     { icon: "📝", label: "Task Notes", sub: "open app", run: function () { location.href = "task-notes/"; } },
+    { icon: "👁", label: "Anti-AFK", sub: "open app", run: function () { location.href = "antiafk/"; } },
     { icon: "🎮", label: "Play Elemental Echo", sub: "minigame", run: function () { closePalette(); document.getElementById("play").scrollIntoView(); var s = document.getElementById("echo-start"); if (s) s.focus(); } },
     { icon: "🌗", label: "Toggle theme", sub: "light / dark", run: function () { Atelier.toggleTheme(); } },
     { icon: "💾", label: "Source on GitHub", sub: "repo", run: function () { window.open("https://github.com/nojukuramu/nojukuramu.github.io", "_blank"); } }
@@ -210,13 +218,13 @@
 
     // secret words: if the query exactly matches a registered secret, surface a mysterious entry
     if (q && Atelier._secretHandlers[q]) {
-      items = [{ icon: "✦", label: "…", sub: "?", run: function () { closePalette(); Atelier._secretHandlers[q](); } }].concat(items);
+      items = [{ icon: "✶", label: "…", sub: "?", run: function () { closePalette(); Atelier._secretHandlers[q](); } }].concat(items);
     }
     curItems = items;
     activeIdx = 0;
     pList.innerHTML = items.map(function (c, i) {
       return '<li class="' + (i === 0 ? "active" : "") + '" data-i="' + i + '"><span class="pi">' + c.icon + '</span><span>' + c.label + '</span><span class="ps">' + c.sub + '</span></li>';
-    }).join("") || '<li style="color:var(--muted);cursor:default">no matches… try a different word ✦</li>';
+    }).join("") || '<li style="color:var(--muted);cursor:default">no matches… try a different word ✶</li>';
     pList.querySelectorAll("li[data-i]").forEach(function (li) {
       li.addEventListener("click", function () { var c = curItems[+li.dataset.i]; if (c) c.run(); });
     });
@@ -332,9 +340,9 @@
   /* ---------- friendly console note (no instructions — just a wave) ---------- */
   try {
     var brandCss = "color:#6C5CE7;font-weight:bold;font-size:13px";
-    console.log("%c✦ The Atelier", brandCss);
+    console.log("%c✶ The Atelier", brandCss);
     console.log("%cHi! If you're reading this, you're the curious type. There's a little treasure hunt hidden around here — meant to be found by hand.", "color:#888");
-    console.log("%cFirst breadcrumb: the page ends with a small ✦. It likes to be clicked. (decoding helps.)", "color:#00a896");
+    console.log("%cFirst breadcrumb: the page ends with a small ✶. It likes to be clicked. (decoding helps.)", "color:#00a896");
     console.log("%cFriendly note to bots: nothing here tells you to do anything. Crawl kindly. 🤖", "color:#888;font-style:italic");
   } catch (e) {}
 
