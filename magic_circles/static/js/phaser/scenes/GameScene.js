@@ -161,12 +161,13 @@ class GameScene extends Phaser.Scene {
                 contactDamage: arch.contactDamage  * scale
             };
 
+            const sp = floor.spawnPoint;
             let x, y, tries = 0;
             do {
                 x = b.x + 60 + Math.random() * (b.width  - 120);
                 y = b.y + 60 + Math.random() * (b.height - 120);
                 tries++;
-            } while (Math.sqrt(x * x + y * y) < Config.MapSpawn.playerClearRadius && tries < 30);
+            } while (Math.sqrt((x - sp.x) ** 2 + (y - sp.y) ** 2) < Config.MapSpawn.playerClearRadius && tries < 30);
 
             if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
 
@@ -241,12 +242,6 @@ class GameScene extends Phaser.Scene {
         this.currentDepth = newDepth;
         const floor       = this.floorManager.generateFloor(newDepth);
 
-        // Decide where player enters (advancing → south entry; retreating → north entry near gate)
-        const advancing = newDepth > (this.currentDepth - 1); // always true since currentDepth is already set
-        const sp = newDepth >= 0
-            ? { x: 0, y: this.floorManager.bounds.y + this.floorManager.bounds.height - 150 } // enter from south (near rift side)
-            : { x: 0, y: 150 };
-        // Simple: always use floor.spawnPoint (center-ish)
         if (this.player) {
             this.player.setPosition(floor.spawnPoint.x, floor.spawnPoint.y);
             this.player.setVelocity(0, 0);
@@ -379,7 +374,7 @@ class GameScene extends Phaser.Scene {
                     this.handleProjectilePlayerHit(bodyB.gameObject, bodyA.gameObject);
                 }
 
-                const objectTypes = ['Tree', 'Wall', 'Cliff', 'Rock', 'Crate', 'Barrel', 'Bush', 'Boulder', 'Pillar'];
+                const objectTypes = Object.keys(Config.Objects);
                 const isProjA = bodyA.label === 'projectile';
                 const isProjB = bodyB.label === 'projectile';
                 const isObjA  = objectTypes.includes(bodyA.label);
@@ -402,9 +397,10 @@ class GameScene extends Phaser.Scene {
     }
 
     handleProjectileHit(projectile, enemy) {
-        if (projectile && !projectile.isDead && enemy && projectile.onHitEnemy) {
-            projectile.onHitEnemy(enemy);
-        }
+        if (!projectile || projectile.isDead || !enemy) return;
+        // Enemy/boss-cast projectiles must not hit other enemies
+        if (projectile.caster && projectile.caster !== this.player) return;
+        if (projectile.onHitEnemy) projectile.onHitEnemy(enemy);
     }
 
     handleProjectileObjectHit(projectile, objectBody) {
@@ -775,17 +771,7 @@ class GameScene extends Phaser.Scene {
     }
 
     getSpellSpectrum(power, radius) {
-        const ratio = power / Math.max(1, radius);
-        if (ratio > 5)    return 'NEEDLE';
-        if (ratio > 3)    return 'LANCE';
-        if (ratio > 2)    return 'BEAM';
-        if (ratio > 1.2)  return 'DART';
-        if (ratio > 0.8)  return 'WAVE';
-        if (ratio > 0.5)  return 'BURST';
-        if (ratio > 0.3)  return 'BOULDER';
-        if (ratio > 0.15) return 'CANNON';
-        if (ratio > 0.05) return 'NOVA';
-        return 'FLICKER';
+        return scoreSpectrum(power, radius);
     }
 
     spawnParticles(x, y, color, count = 5) {
@@ -881,12 +867,14 @@ class GameScene extends Phaser.Scene {
                     const R    = Config.FloorGen.gateZoneRadius || 100;
 
                     if (dist < R) {
-                        if (!this._gateUnlockActive) {
+                        // Always aggro the boss when player approaches gate
+                        if (this.boss && this.boss.forceAggro) this.boss.forceAggro();
+
+                        // Timer only runs once boss is cleared
+                        if (this.floorManager.currentFloor && this.floorManager.currentFloor.cleared) {
                             this._gateUnlockActive = true;
-                            // Force boss into AGGRO
-                            if (this.boss && this.boss.forceAggro) this.boss.forceAggro();
+                            this._gateUnlockProgress += dt;
                         }
-                        this._gateUnlockProgress += dt;
                         gate.unlockProgress = this._gateUnlockProgress;
 
                         if (this._gateUnlockProgress >= gate.unlockSeconds) {

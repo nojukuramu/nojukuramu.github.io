@@ -4,7 +4,7 @@
  */
 class EnemySprite extends Phaser.Physics.Matter.Sprite {
     constructor(scene, x, y, archetype) {
-        const arch = archetype || EnemyArchetypes && EnemyArchetypes.Chaser || {};
+        const arch = archetype || (typeof EnemyArchetypes !== 'undefined' && EnemyArchetypes.Chaser) || {};
         super(scene.matter.world, x, y, arch.texture || 'enemy');
 
         scene.add.existing(this);

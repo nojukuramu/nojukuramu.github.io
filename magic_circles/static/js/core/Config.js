@@ -210,6 +210,7 @@ const Config = {
     // Floor Generation
     FloorGen: {
         cols: 5, rows: 5,
+        cellSize: 320,          // px per arena cell; independent of legacy Chunks.size
         baseEnemies: 4,
         enemiesPerDepth: 1,
         maxEnemies: 16,

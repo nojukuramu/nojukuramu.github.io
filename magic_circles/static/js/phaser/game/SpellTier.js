@@ -48,3 +48,19 @@ const TIER_COLORS = {
     A:   '#88ff44', B:  '#44ffdd', C: '#44aaff',
     D:   '#8888ff', E:  '#888888'
 };
+
+// Single source of truth for power/radius → spectrum name.
+// Matches Config.SpellSpectrum.thresholds (kept in sync here).
+function scoreSpectrum(power, radius) {
+    const ratio = power / Math.max(1, radius);
+    if (ratio > 5)    return 'NEEDLE';
+    if (ratio > 3)    return 'LANCE';
+    if (ratio > 2)    return 'BEAM';
+    if (ratio > 1.2)  return 'DART';
+    if (ratio > 0.8)  return 'WAVE';
+    if (ratio > 0.5)  return 'BURST';
+    if (ratio > 0.3)  return 'BOULDER';
+    if (ratio > 0.15) return 'CANNON';
+    if (ratio > 0.05) return 'NOVA';
+    return 'FLICKER';
+}

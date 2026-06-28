@@ -720,29 +720,23 @@ class MagicEditorScene extends Phaser.Scene {
             // Tier preview
             if (this.tierText && typeof computeThreatScore !== 'undefined') {
                 const layers = GameState.magic.layers;
-                const circles = layers.flatMap(l => l.items.filter(i => i.type === 'CIRCLE').map(i => i.data));
-                const shapes  = layers.flatMap(l => l.items.filter(i => i.type === 'SHAPE').map(i => i.data));
-                const circleCount    = circles.length;
-                const payloadLayers  = layers.filter(l => l.items.some(i => i.type === 'CIRCLE')).length;
+                // Mirror GameScene's cast logic: first circle-layer is the container; rest are payloads
+                const circleLayers   = layers.filter(l => l.items.some(i => i.type === 'CIRCLE'));
+                const circleCount    = circleLayers.length > 0
+                    ? circleLayers[0].items.filter(i => i.type === 'CIRCLE').length : 0;
+                const payloadLayers  = Math.max(0, circleLayers.length - 1);
+                const shapes         = layers.flatMap(l => l.items.filter(i => i.type === 'SHAPE').map(i => i.data));
                 const uniqueElements = new Set(shapes.map(s => s.element)).size;
-                const powerMult  = GameState.magic.powerMultiplier || 1;
-                const basePower  = (50 + shapes.length * 25) * powerMult;
-                const firstRad   = circles.length > 0 ? circles[0].rad : 30;
-                const ratio      = basePower / Math.max(1, firstRad);
-                let spectrum;
-                if      (ratio > 5)    spectrum = 'NEEDLE';
-                else if (ratio > 3)    spectrum = 'LANCE';
-                else if (ratio > 2)    spectrum = 'BEAM';
-                else if (ratio > 1.2)  spectrum = 'DART';
-                else if (ratio > 0.8)  spectrum = 'WAVE';
-                else if (ratio > 0.5)  spectrum = 'BURST';
-                else if (ratio > 0.3)  spectrum = 'BOULDER';
-                else if (ratio > 0.15) spectrum = 'CANNON';
-                else if (ratio > 0.05) spectrum = 'NOVA';
-                else                   spectrum = 'FLICKER';
-                const score     = computeThreatScore({ basePower, spectrum, uniqueElements, payloadLayers, circleCount, stability });
-                const { tier }  = scoreToTier(score);
-                const tierColor = (typeof TIER_COLORS !== 'undefined' && TIER_COLORS[tier]) || '#888888';
+                const powerMult      = GameState.magic.powerMultiplier || 1;
+                const basePower      = (50 + shapes.length * 25) * powerMult;
+                const firstCircle    = circleLayers.length > 0
+                    ? circleLayers[0].items.find(i => i.type === 'CIRCLE') : null;
+                const firstRad       = firstCircle ? firstCircle.data.rad : 30;
+                const spectrum       = (typeof scoreSpectrum !== 'undefined')
+                    ? scoreSpectrum(basePower, firstRad) : 'DART';
+                const score          = computeThreatScore({ basePower, spectrum, uniqueElements, payloadLayers, circleCount, stability });
+                const { tier }       = scoreToTier(score);
+                const tierColor      = (typeof TIER_COLORS !== 'undefined' && TIER_COLORS[tier]) || '#888888';
                 this.tierText.setText(`TIER: ${tier}`).setColor(tierColor);
             }
 

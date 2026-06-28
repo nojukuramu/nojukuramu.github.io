@@ -130,8 +130,7 @@ class BossSprite extends EnemySprite {
 
     _doEnrage(dt, playerPos) {
         if (playerPos) this._moveToward(playerPos, this.baseSpeed * 1.6);
-        this._attackCooldown -= dt * 0.5; // attack timer runs 2× faster
-        this._tryAttack(dt, playerPos);
+        this._tryAttack(dt, playerPos); // 2× faster via 0.5× cooldown set in _tryAttack
     }
 
     _moveToward(target, speed) {
@@ -159,7 +158,7 @@ class BossSprite extends EnemySprite {
 
         const atk = this.bossConfig.attack;
         this._attackCooldown = this.bossState === 'ENRAGE'
-            ? atk.cooldown * 0.6
+            ? atk.cooldown * 0.5   // 2× faster in enrage
             : atk.cooldown;
 
         const dx  = playerPos.x - this.x;
@@ -258,6 +257,9 @@ class BossSprite extends EnemySprite {
     die() {
         if (this.isDead) return;
         this.bossState = 'DEAD';
+
+        // Nullify-cast gimmick flag must not linger after the boss is gone
+        GameState.bossNullifyCast = false;
 
         if (this._bossHpLabel) {
             try { this._bossHpLabel.destroy(); } catch(e) {}

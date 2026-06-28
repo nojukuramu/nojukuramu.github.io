@@ -1,14 +1,12 @@
 /**
- * MinimapSystem - 12x12 chunk-based minimap for GameScene
- * Ported from original main.js render function
+ * MinimapSystem - Floor-aware minimap for GameScene.
+ * Renders the bounded floor arena with gate, return rift, boss, and player POI markers.
  */
 class MinimapSystem {
     constructor(scene) {
         this.scene = scene;
-        this.size = 12;          // Grid size (12x12 chunks)
-        this.cellSize = 8;       // Pixel size per cell
-        this.mapWidth = this.size * this.cellSize;  // 96px
-        this.mapHeight = this.size * this.cellSize; // 96px
+        this.mapWidth  = 96;
+        this.mapHeight = 96;
 
         // Position (top-right corner)
         this.x = 0;

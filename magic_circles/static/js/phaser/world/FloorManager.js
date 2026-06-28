@@ -59,7 +59,7 @@ class FloorManager {
 
     generateFloor(depth) {
         const cfg        = Config.FloorGen;
-        const chunkSize  = Config.Chunks.size; // 320
+        const chunkSize  = cfg.cellSize || 320;
         const seed       = this.floorSeed(depth);
 
         // Pick theme deterministically
@@ -186,9 +186,8 @@ class FloorManager {
                 mass: cfg.mass || 100,
                 collisionFilter: collFilter
             });
-        } else {
-            // Non-solid decoration — no physics body
         }
+        // Non-solid decorations: no physics body
 
         const scene = this.scene;
         const obj = {
@@ -212,6 +211,9 @@ class FloorManager {
                 }
             }
         };
+
+        // Link body → obj for O(1) collision lookup (avoids linear scan in getObjectByBody)
+        if (matterBody) matterBody.gameObject = obj;
 
         return obj;
     }
