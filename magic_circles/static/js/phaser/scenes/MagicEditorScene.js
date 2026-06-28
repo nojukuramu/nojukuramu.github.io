@@ -199,6 +199,10 @@ class MagicEditorScene extends Phaser.Scene {
             fontFamily: 'Arial', fontSize: '13px', color: '#88ff88'
         }).setOrigin(0.5, 0).setScrollFactor(0);
 
+        this.tierText = this.add.text(0, 0, 'TIER: —', {
+            fontFamily: 'Arial', fontSize: '13px', color: '#888888'
+        }).setOrigin(0.5, 0).setScrollFactor(0);
+
         this.updateToolButtons();
         this.updateLeyBtn();
     }
@@ -291,6 +295,7 @@ class MagicEditorScene extends Phaser.Scene {
 
         // ---- readouts ----
         this.stabilityText.setPosition(W / 2, portrait ? 90 : 100);
+        this.tierText.setPosition(W / 2, portrait ? 108 : 118);
         this.legendText.setPosition(W / 2, H - 8);
 
         this.applyView();
@@ -711,6 +716,35 @@ class MagicEditorScene extends Phaser.Scene {
             const pct = Math.round(stability * 100);
             const col = stability > 0.7 ? '#88ff88' : stability > 0.4 ? '#ffdd55' : '#ff6666';
             if (this.stabilityText) { this.stabilityText.setText(`HARMONY: ${pct}%`).setColor(col); }
+
+            // Tier preview
+            if (this.tierText && typeof computeThreatScore !== 'undefined') {
+                const layers = GameState.magic.layers;
+                const circles = layers.flatMap(l => l.items.filter(i => i.type === 'CIRCLE').map(i => i.data));
+                const shapes  = layers.flatMap(l => l.items.filter(i => i.type === 'SHAPE').map(i => i.data));
+                const circleCount    = circles.length;
+                const payloadLayers  = layers.filter(l => l.items.some(i => i.type === 'CIRCLE')).length;
+                const uniqueElements = new Set(shapes.map(s => s.element)).size;
+                const powerMult  = GameState.magic.powerMultiplier || 1;
+                const basePower  = (50 + shapes.length * 25) * powerMult;
+                const firstRad   = circles.length > 0 ? circles[0].rad : 30;
+                const ratio      = basePower / Math.max(1, firstRad);
+                let spectrum;
+                if      (ratio > 5)    spectrum = 'NEEDLE';
+                else if (ratio > 3)    spectrum = 'LANCE';
+                else if (ratio > 2)    spectrum = 'BEAM';
+                else if (ratio > 1.2)  spectrum = 'DART';
+                else if (ratio > 0.8)  spectrum = 'WAVE';
+                else if (ratio > 0.5)  spectrum = 'BURST';
+                else if (ratio > 0.3)  spectrum = 'BOULDER';
+                else if (ratio > 0.15) spectrum = 'CANNON';
+                else if (ratio > 0.05) spectrum = 'NOVA';
+                else                   spectrum = 'FLICKER';
+                const score     = computeThreatScore({ basePower, spectrum, uniqueElements, payloadLayers, circleCount, stability });
+                const { tier }  = scoreToTier(score);
+                const tierColor = (typeof TIER_COLORS !== 'undefined' && TIER_COLORS[tier]) || '#888888';
+                this.tierText.setText(`TIER: ${tier}`).setColor(tierColor);
+            }
 
             // stars (nodes)
             for (let n of this.nodes) {
