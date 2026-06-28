@@ -111,6 +111,7 @@ const GameState = {
     // Game flags
     isMagicOpen: false,
     timeScale: 1.0,
+    bossNullifyCast: false,
 
     // Inventory system instance (set on GameScene create)
     inventorySystem: null,

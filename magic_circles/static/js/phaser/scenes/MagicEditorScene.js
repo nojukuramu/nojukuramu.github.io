@@ -199,6 +199,10 @@ class MagicEditorScene extends Phaser.Scene {
             fontFamily: 'Arial', fontSize: '13px', color: '#88ff88'
         }).setOrigin(0.5, 0).setScrollFactor(0);
 
+        this.tierText = this.add.text(0, 0, 'TIER: —', {
+            fontFamily: 'Arial', fontSize: '13px', color: '#888888'
+        }).setOrigin(0.5, 0).setScrollFactor(0);
+
         this.updateToolButtons();
         this.updateLeyBtn();
     }
@@ -291,6 +295,7 @@ class MagicEditorScene extends Phaser.Scene {
 
         // ---- readouts ----
         this.stabilityText.setPosition(W / 2, portrait ? 90 : 100);
+        this.tierText.setPosition(W / 2, portrait ? 108 : 118);
         this.legendText.setPosition(W / 2, H - 8);
 
         this.applyView();
@@ -711,6 +716,29 @@ class MagicEditorScene extends Phaser.Scene {
             const pct = Math.round(stability * 100);
             const col = stability > 0.7 ? '#88ff88' : stability > 0.4 ? '#ffdd55' : '#ff6666';
             if (this.stabilityText) { this.stabilityText.setText(`HARMONY: ${pct}%`).setColor(col); }
+
+            // Tier preview
+            if (this.tierText && typeof computeThreatScore !== 'undefined') {
+                const layers = GameState.magic.layers;
+                // Mirror GameScene's cast logic: first circle-layer is the container; rest are payloads
+                const circleLayers   = layers.filter(l => l.items.some(i => i.type === 'CIRCLE'));
+                const circleCount    = circleLayers.length > 0
+                    ? circleLayers[0].items.filter(i => i.type === 'CIRCLE').length : 0;
+                const payloadLayers  = Math.max(0, circleLayers.length - 1);
+                const shapes         = layers.flatMap(l => l.items.filter(i => i.type === 'SHAPE').map(i => i.data));
+                const uniqueElements = new Set(shapes.map(s => s.element)).size;
+                const powerMult      = GameState.magic.powerMultiplier || 1;
+                const basePower      = (50 + shapes.length * 25) * powerMult;
+                const firstCircle    = circleLayers.length > 0
+                    ? circleLayers[0].items.find(i => i.type === 'CIRCLE') : null;
+                const firstRad       = firstCircle ? firstCircle.data.rad : 30;
+                const spectrum       = (typeof scoreSpectrum !== 'undefined')
+                    ? scoreSpectrum(basePower, firstRad) : 'DART';
+                const score          = computeThreatScore({ basePower, spectrum, uniqueElements, payloadLayers, circleCount, stability });
+                const { tier }       = scoreToTier(score);
+                const tierColor      = (typeof TIER_COLORS !== 'undefined' && TIER_COLORS[tier]) || '#888888';
+                this.tierText.setText(`TIER: ${tier}`).setColor(tierColor);
+            }
 
             // stars (nodes)
             for (let n of this.nodes) {

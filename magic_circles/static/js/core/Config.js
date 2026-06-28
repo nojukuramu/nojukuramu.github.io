@@ -207,6 +207,20 @@ const Config = {
         symTolerance: 30        // Pixel tolerance when checking for mirror feature points
     },
 
+    // Floor Generation
+    FloorGen: {
+        cols: 5, rows: 5,
+        cellSize: 320,          // px per arena cell; independent of legacy Chunks.size
+        baseEnemies: 4,
+        enemiesPerDepth: 1,
+        maxEnemies: 16,
+        statScalePerDepth: 0.12,
+        gateUnlockSeconds: 30,
+        gateZoneRadius: 100,
+        riftZoneRadius: 80,
+        perimeter: 'Wall'
+    },
+
     // Chunk-Based World Generation
     Chunks: {
         size: 320,          // 320x320 pixels per chunk (40px tiles)
