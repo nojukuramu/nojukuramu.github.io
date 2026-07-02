@@ -97,7 +97,8 @@
     sigil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polygon points="12,4 20,18 4,18"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>',
     spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M18 6l-2.5 2.5M8.5 15.5L6 18"/></svg>',
     tiles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="8" y="13" width="8" height="8" rx="2"/><path d="M6.2 8V6.4a1 1 0 0 1 1.6-.8"/><path d="M16 9V5l2 4V5"/><path d="M11 18.5h2"/></svg>',
-    eye:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg>'
+    eye:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg>',
+    tower: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 3-3 3-3-3z"/><path d="M7 8h10l1 5H6z"/><path d="M6 13h12l1.5 8h-15z"/><path d="M10 21v-4M14 21v-4"/></svg>'
   };
   var APPS = [
     {
@@ -105,6 +106,12 @@
       href: "magic_circles/", badge: "RPG",
       desc: "A magic-based RPG where spells are drawn, not picked. Trace polygons into elements, wrap them in circles, stack layers, and cast.",
       tags: ["Phaser", "canvas", "procedural"]
+    },
+    {
+      id: "magic-sandbox", name: "Magic Sandbox", accent: "#9d8cff", icon: ICONS.tower,
+      href: "magic_sandbox/", badge: "3D roguelite",
+      desc: "The Loom Tower: a 3D top-down spell-crafting roguelite. Weave runes into elemental circles in the Spellforge, then ascend floor by floor.",
+      tags: ["Three.js", "canvas", "roguelite"]
     },
     {
       id: "task-notes", name: "Task Notes", accent: "#f59e0b", icon: ICONS.notes,
@@ -194,6 +201,7 @@
   var activeIdx = 0;
   var BASE_COMMANDS = [
     { icon: "✶", label: "Magic Circles", sub: "open app", run: function () { location.href = "magic_circles/"; } },
+    { icon: "🗼", label: "Magic Sandbox", sub: "open app", run: function () { location.href = "magic_sandbox/"; } },
     { icon: "📝", label: "Task Notes", sub: "open app", run: function () { location.href = "task-notes/"; } },
     { icon: "👁", label: "Anti-AFK", sub: "open app", run: function () { location.href = "antiafk/"; } },
     { icon: "🎮", label: "Play Elemental Echo", sub: "minigame", run: function () { closePalette(); document.getElementById("play").scrollIntoView(); var s = document.getElementById("echo-start"); if (s) s.focus(); } },
