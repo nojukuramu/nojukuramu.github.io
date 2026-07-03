@@ -54,6 +54,15 @@ canvas#gl{display:block;position:fixed;inset:0}
   animation:tfade 2.6s forwards}
 @keyframes tfade{0%{opacity:0;transform:translateY(8px)}10%{opacity:1;transform:none}75%{opacity:1}100%{opacity:0}}
 #help{position:fixed;bottom:10px;left:10px;z-index:5;font-size:11px;color:var(--dim);pointer-events:none;line-height:1.5}
+#combo{position:fixed;top:100px;left:10px;z-index:5;pointer-events:none;display:none;
+  font-size:14px;color:#ffd97a;text-shadow:0 1px 3px #000;letter-spacing:.06em}
+#combo b{font-size:19px}
+.dnum{position:fixed;z-index:7;pointer-events:none;transform:translate(-50%,-50%);
+  font-family:ui-monospace,monospace;font-weight:bold;font-size:14px;
+  text-shadow:0 1px 3px #000;animation:dfloat .8s forwards}
+.dnum.big{font-size:20px}
+@keyframes dfloat{0%{opacity:0;transform:translate(-50%,-30%)}15%{opacity:1}
+  100%{opacity:0;transform:translate(-50%,-190%)}}
 
 /* ---------- touch controls ---------- */
 #touchUI{position:fixed;inset:0;z-index:8;display:none;pointer-events:none}
@@ -67,6 +76,7 @@ canvas#gl{display:block;position:fixed;inset:0}
 #tCast{right:150px;bottom:150px;width:74px;height:74px;border-color:var(--lilac);font-size:13px}
 #tTrig{right:52px;bottom:210px;width:58px;height:58px}
 #tInt{right:230px;bottom:110px;width:52px;height:52px;display:none}
+#tDash{right:236px;bottom:186px;width:56px;height:56px}
 #tCraft{right:14px;top:52px;width:54px;height:54px;border-radius:10px}
 #tInv{right:14px;top:114px;width:54px;height:54px;border-radius:10px}
 
@@ -160,13 +170,15 @@ input[type=range]{width:100%;accent-color:var(--brass)}
 <div id="hint"></div>
 <div id="toasts"></div>
 <div id="help">WASD move · mouse aim · Click/Space cast · F/RClick trigger<br>
-E interact · M spellforge · I inventory · Shift sprint</div>
+Q dash · 1/2/3 spell slots · E interact · M spellforge · I inventory · Shift sprint</div>
+<div id="combo">×<b id="comboN">2</b> combo</div>
 
 <div id="touchUI">
   <div class="stick" id="joyL"><div class="nub" id="nubL"></div></div>
   <div class="stick" id="joyR"><div class="nub" id="nubR"></div></div>
   <button class="tbtn" id="tCast">CAST</button>
   <button class="tbtn" id="tTrig">TRIG</button>
+  <button class="tbtn" id="tDash">DASH</button>
   <button class="tbtn" id="tInt">USE</button>
   <button class="tbtn" id="tCraft">FORGE</button>
   <button class="tbtn" id="tInv">BAG</button>
@@ -182,6 +194,7 @@ E interact · M spellforge · I inventory · Shift sprint</div>
   <div id="forgeBody">
     <div id="forgeCanvasWrap"><canvas id="forgeCanvas"></canvas></div>
     <div id="forgePanel">
+      <div class="fSec"><h3>SPELL SLOT</h3><div class="layerRow" id="slotTabs"></div></div>
       <div class="fSec"><h3>TOOL</h3><div class="toolRow">
         <button class="tool on" data-t="weave">Weave</button>
         <button class="tool" data-t="seal">Seal</button>
@@ -231,6 +244,29 @@ const pick=arr=>arr[Math.floor(Math.random()*arr.length)];
 const dist=(x1,z1,x2,z2)=>Math.hypot(x2-x1,z2-z1);
 const $=id=>document.getElementById(id);
 const IS_TOUCH=('ontouchstart' in window)||navigator.maxTouchPoints>0;
+
+/* ---------- sfx (tiny synth, no assets) ---------- */
+let AC=null;
+function beep(f0,f1,dur,type,vol,delay){
+  const t=AC.currentTime+(delay||0);
+  const o=AC.createOscillator(),g=AC.createGain();
+  o.type=type||'square';o.frequency.setValueAtTime(f0,t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(1,f1),t+dur);
+  g.gain.setValueAtTime(vol||.08,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  o.connect(g);g.connect(AC.destination);o.start(t);o.stop(t+dur+.02);}
+function sfx(n){try{
+  AC=AC||new (window.AudioContext||window.webkitAudioContext)();
+  if(AC.state==='suspended')AC.resume();
+  if(n==='cast')beep(520,180,.12,'square',.05);
+  else if(n==='hit')beep(260,80,.06,'sawtooth',.04);
+  else if(n==='kill'){beep(300,600,.09,'square',.06);beep(600,900,.1,'square',.05,.06);}
+  else if(n==='hurt')beep(160,60,.2,'sawtooth',.09);
+  else if(n==='dash')beep(900,200,.15,'sine',.07);
+  else if(n==='orb')beep(880,1400,.07,'sine',.04);
+  else if(n==='level'){[440,554,659,880].forEach((f,i)=>beep(f,f,.12,'triangle',.07,i*.09));}
+  else if(n==='shrine'){[523,659,784].forEach((f,i)=>beep(f,f*1.01,.18,'sine',.06,i*.05));}
+  else if(n==='swap')beep(700,900,.06,'square',.04);
+}catch(e){}}
 
 /* ---------- constants ---------- */
 const ELEMS=['fire','water','earth','air'];
@@ -304,9 +340,12 @@ const THEMES=[
  {name:'Storm',ground:0x2c3140,gA:'#2c3140',gB:'#414a61',fog:0x171b26,amb:0x90a0c0,prop:'obelisk',pc:0x5a6580,ec:0xe8e07a}];
 
 /* ---------- game state ---------- */
-const G={floor:1,theme:THEMES[0],half:30,paused:false,over:false,time:0};
+const G={floor:1,theme:THEMES[0],half:30,paused:false,over:false,time:0,
+  buffs:{dmg:0,spd:0,regen:0},slowT:0};
 let floorGroup=null, enemies=[], projs=[], eProjs=[], chests=[], particles=[];
 let portal=null, bossRef=null;
+let orbs=[], shrines=[];
+let combo=0, comboT=0;
 
 const player={
   x:0,z:0,ang:0,aim:0,
@@ -316,16 +355,16 @@ const player={
   mana:{fire:100,water:100,earth:100,air:100},
   inv:[],mats:{essence:2,shard:0},potions:1,crystals:0,
   eq:{focus:null,armor:null,accessory:null},
-  iframe:0,castCd:0,mesh:null,arrow:null,
+  iframe:0,castCd:0,dashCd:0,dashT:0,dashAng:0,mesh:null,arrow:null,
   lastPlan:null
 };
 function stat_maxHp(){return 100+player.alloc.hp*20+eqMod('hp');}
 function stat_maxSt(){return 100+player.alloc.st*15+eqMod('st');}
 function stat_maxManaEl(el){return 100+player.alloc['mana_'+el]*25+eqMod('mana');}
-function stat_spd(){return 8+player.alloc.spd*0.4+eqMod('spd');}
+function stat_spd(){return (8+player.alloc.spd*0.4+eqMod('spd'))*(1+G.buffs.spd);}
 function eqMod(k){let v=0;for(const s in player.eq){const it=player.eq[s];if(it&&it.mods[k])v+=it.mods[k];}return v;}
 function eqElemBias(el){let v=0;for(const s in player.eq){const it=player.eq[s];if(it&&it.mods.bias&&it.mods.bias[0]===el)v+=it.mods.bias[1];}return v;}
-function dmgMult(){return 1+eqMod('dmg')/100;}
+function dmgMult(){return (1+eqMod('dmg')/100)*(1+G.buffs.dmg);}
 function costRed(){return clamp(eqMod('cost')/100,0,0.6);}
 
 /* ---------- player mesh ---------- */
@@ -349,12 +388,13 @@ function buildPlayer(){
 function clearFloor(){
   if(floorGroup){scene.remove(floorGroup);
     floorGroup.traverse(o=>{if(o.geometry)o.geometry.dispose();});}
-  enemies=[];projs=[];eProjs=[];chests=[];particles=[];portal=null;bossRef=null;
+  enemies=[];projs=[];eProjs=[];chests=[];particles=[];orbs=[];shrines=[];portal=null;bossRef=null;
   $('bossBar').style.display='none';
 }
 function buildFloor(n){
   clearFloor();
   G.floor=n; G.theme=THEMES[(n-1)%THEMES.length];
+  G.buffs={dmg:0,spd:0,regen:0};
   G.half=Math.min(96,44+n*2.6);
   const T=G.theme,H=G.half;
   scene.background=new THREE.Color(T.fog);
@@ -402,6 +442,18 @@ function buildFloor(n){
     lid.position.set(0,.72,0);g.add(lid);
     g.position.set(cx,0,cz);floorGroup.add(g);
     chests.push({x:cx,z:cz,open:false,mesh:g,lid});}
+  // blessing shrines
+  for(let i=0;i<randi(1,2);i++){
+    const sx=rand(-H+6,H-6),sz=rand(-H+6,H-6);
+    if(dist(sx,sz,0,H-6)<7||dist(sx,sz,0,-H+6)<9)continue;
+    const g=new THREE.Group();
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(.9,1.1,.4,7),mat(0x3a4a58));
+    base.position.y=.2;g.add(base);
+    const ob=new THREE.Mesh(new THREE.ConeGeometry(.45,1.7,5),mat(0x4a5a6a,0x9d8cff,.8));
+    ob.position.y=1.2;g.add(ob);
+    const gl=makeGlow(0x9d8cff,4);gl.position.y=1.6;g.add(gl);
+    g.position.set(sx,0,sz);floorGroup.add(g);
+    shrines.push({x:sx,z:sz,used:false,mesh:g,glow:gl,ob});}
   // enemies
   let budget=8+n*2.6;
   const costs={rusher:2,swarmer:1,caster:3,brute:4};
@@ -450,6 +502,16 @@ function spawnEnemy(t,x,z,fl){
     xp:Math.round(def.xp*(1+0.1*fl)),atkCd:rand(0,1),kx:0,kz:0,burn:null,slow:null,
     boss:t==='boss',home:{x,z},agro:def.agro,wA:rand(0,TAU),wT:rand(1,3),state:'chase',stateT:rand(1,3),shotCd:rand(1,2.5),wob:rand(0,TAU),
     mesh:makeEnemyMesh(t,def,G.theme)};
+  e.baseScale=1;
+  if(t!=='boss'&&Math.random()<0.10+fl*0.015){
+    e.elite=pick(['swift','hardy','volatile']);
+    e.xp=Math.round(e.xp*2.2);
+    if(e.elite==='swift')e.spd*=1.55;
+    else if(e.elite==='hardy'){e.hp*=2.2;e.maxhp*=2.2;e.baseScale=1.3;}
+    else e.dmg*=1.2;
+    const gl=makeGlow(e.elite==='swift'?0xbfe4ff:e.elite==='hardy'?0xffd97a:0xff7043,3.4);
+    gl.position.y=1;e.mesh.add(gl);}
+  e.mesh.scale.setScalar(e.baseScale);
   e.mesh.position.set(x,0,z);floorGroup.add(e.mesh);
   if(e.boss){bossRef=e;$('bossBar').style.display='block';
     $('bossName').textContent='WARDEN OF '+G.theme.name.toUpperCase();}
@@ -463,6 +525,10 @@ addEventListener('keydown',e=>{if(e.repeat)return;keys[e.code]=true;
   if(e.code==='KeyE')doInteract();
   if(e.code==='KeyF')triggerPayloads();
   if(e.code==='Space'){e.preventDefault();tryCast();}
+  if(e.code==='KeyQ')tryDash();
+  if(e.code==='Digit1')switchSpell(0);
+  if(e.code==='Digit2')switchSpell(1);
+  if(e.code==='Digit3')switchSpell(2);
   if(e.code==='KeyL'&&player.pts>0)openAlloc();});
 addEventListener('keyup',e=>keys[e.code]=false);
 $('gl').addEventListener('mousemove',e=>{mouseNdc.x=(e.clientX/innerWidth)*2-1;mouseNdc.y=-(e.clientY/innerHeight)*2+1;});
@@ -476,6 +542,17 @@ function mouseAim(){
   if(Math.abs(d.y)<1e-4)return player.aim;
   const t=-o.y/d.y,gx=o.x+d.x*t,gz=o.z+d.z*t;
   return Math.atan2(gz-player.z,gx-player.x);}
+
+/* dash: quick burst with brief i-frames; direction = movement, else aim */
+function tryDash(){
+  if(G.paused||G.over||player.dashT>0||player.dashCd>0)return;
+  if(player.st<15){toast('Too winded to dash');return;}
+  let mx=0,mz=0;
+  if(joy.L.id!==null){mx=joy.L.x;mz=joy.L.y;}
+  else{mx=(keys.KeyD?1:0)-(keys.KeyA?1:0);mz=(keys.KeyS?1:0)-(keys.KeyW?1:0);}
+  player.dashAng=Math.hypot(mx,mz)>0.1?Math.atan2(mz,mx):player.aim;
+  player.dashT=0.16;player.dashCd=1.1;player.st-=15;
+  player.iframe=Math.max(player.iframe,0.3);sfx('dash');}
 
 /* touch joysticks */
 const joy={L:{id:null,x:0,y:0},R:{id:null,x:0,y:0}};
@@ -494,6 +571,7 @@ if(IS_TOUCH){
   bindStick($('joyL'),$('nubL'),'L');bindStick($('joyR'),$('nubR'),'R');
   $('tCast').addEventListener('pointerdown',e=>{e.preventDefault();tryCast();});
   $('tTrig').addEventListener('pointerdown',e=>{e.preventDefault();triggerPayloads();});
+  $('tDash').addEventListener('pointerdown',e=>{e.preventDefault();tryDash();});
   $('tInt').addEventListener('pointerdown',e=>{e.preventDefault();doInteract();});
   $('tCraft').addEventListener('pointerdown',e=>{e.preventDefault();toggleForge();});
   $('tInv').addEventListener('pointerdown',e=>{e.preventDefault();toggleInv();});
@@ -513,7 +591,27 @@ addEventListener('orientationchange',()=>setTimeout(()=>{
 const FORGE_BASE_R=160;
 const nodeScale=p=>lerp(0.5,1.45,(p-1)/9);
 function newLayer(){return{potency:1,shapes:[],circles:[]};}
-const spell={layers:[newLayer()],active:0};
+/* three saved spell slots; two starters so casting is fun from the first floor */
+function starterBolt(){const L=newLayer();
+  L.shapes.push({points:[0,4,8],element:'air'},{points:[2,6,10],element:'air'});
+  L.circles.push({x:0,y:0,r:40,runes:[-Math.PI/2]});
+  return{layers:[L],active:0};}
+function starterSpread(){const L=newLayer();
+  L.shapes.push({points:[0,3,6,9],element:'fire'});
+  [-0.45,0,0.45].forEach(off=>L.circles.push(
+    {x:off*200,y:0,r:28,runes:[-Math.PI/2+off]}));
+  return{layers:[L],active:0};}
+const spellbook=[starterBolt(),starterSpread(),{layers:[newLayer()],active:0}];
+let spellSlot=0;
+let spell=spellbook[0];
+function switchSpell(i){
+  if(i===spellSlot||G.over)return;
+  spellSlot=i;spell=spellbook[i];sfx('swap');toast('Spell slot '+(i+1));
+  if(forge.open){renderSlotTabs();renderLayerTabs();
+    $('potSlider').value=spell.layers[spell.active].potency;
+    $('potN').textContent=spell.layers[spell.active].potency;
+    drawForge();updateReadout();}
+  else flashChip(buildPlan(false));}
 function nodePos(i,layer){const R=FORGE_BASE_R*nodeScale(layer.potency);
   const a=-Math.PI/2+i*(TAU/12);return{x:Math.cos(a)*R,y:Math.sin(a)*R};}
 /* rune angles are stored in canvas space (0 = screen-right, +PI/2 = screen-down).
@@ -617,7 +715,7 @@ function tryCast(){
   if(player.st<8){toast('Too winded to cast');return;}
   const plan=buildPlan(true);
   player.st-=8;
-  if(plan.fallback){fireFallback();player.castCd=0.4;flashChip(plan);return;}
+  if(plan.fallback){fireFallback();sfx('cast');player.castCd=0.4;flashChip(plan);return;}
   if(!plan.affordable){toast('Not enough mana for tier '+plan.tier+' tax');return;}
   for(const el of ELEMS)player.mana[el]-=plan.finalCost[el];
   player.castCd=plan.cd;
@@ -629,6 +727,7 @@ function tryCast(){
       fireOne(player.x,player.z,player.aim+avgRuneAngle(c)+spread(),
         plan.basePower,plan.baseDmg,c.r,perPay,plan.stack,plan.spdMod);}}
   else fireOne(player.x,player.z,player.aim+spread(),plan.basePower,plan.baseDmg,30,payload,plan.stack,plan.spdMod);
+  sfx('cast');
   if(plan.ti>=3)addShake(.12+plan.ti*.07);
   flashChip(plan);}
 function flashChip(p){
@@ -649,6 +748,39 @@ function triggerPayloads(){
       p.payload=null;}}
   if(!any)toast('No payload in flight');}
 
+/* ---------- floating damage numbers ---------- */
+function dmgNum(x,z,txt,col,big){
+  const v=new THREE.Vector3(x,1.7,z).project(camera);
+  if(v.z>1||Math.abs(v.x)>1.1||Math.abs(v.y)>1.1)return;
+  const d=document.createElement('div');
+  d.className='dnum'+(big?' big':'');d.textContent=txt;d.style.color=col;
+  d.style.left=((v.x+1)/2*innerWidth)+'px';d.style.top=((1-v.y)/2*innerHeight)+'px';
+  document.body.appendChild(d);setTimeout(()=>d.remove(),820);}
+
+/* ---------- pickups (health / mana / xp orbs) ---------- */
+const orbGeo=new THREE.SphereGeometry(.16,8,6);
+function spawnOrb(x,z,type){
+  const col=type==='hp'?0xe05555:type==='xp'?0x9d8cff:ECOL[type];
+  const m=new THREE.Mesh(orbGeo,mat(col,col,2));
+  m.position.set(x+rand(-.8,.8),.5,z+rand(-.8,.8));
+  m.add(makeGlow(col,4));floorGroup.add(m);
+  orbs.push({x:m.position.x,z:m.position.z,type,mesh:m,ttl:14,bob:rand(0,TAU)});}
+function collectOrb(o){sfx('orb');
+  if(o.type==='hp'){player.hp=Math.min(stat_maxHp(),player.hp+6);
+    dmgNum(player.x,player.z,'+6','#8fd3a0');}
+  else if(o.type==='xp'){gainXp(4);}
+  else{player.mana[o.type]=Math.min(stat_maxManaEl(o.type),player.mana[o.type]+22);
+    dmgNum(player.x,player.z,'+'+o.type,ECSS[o.type]);}}
+function updateOrbs(dt){
+  for(let i=orbs.length-1;i>=0;i--){const o=orbs[i];o.ttl-=dt;o.bob+=dt*4;
+    const d=dist(o.x,o.z,player.x,player.z);
+    if(d<7){const a=Math.atan2(player.z-o.z,player.x-o.x);
+      const pull=lerp(16,4,d/7);o.x+=Math.cos(a)*pull*dt;o.z+=Math.sin(a)*pull*dt;}
+    o.mesh.position.set(o.x,.5+Math.sin(o.bob)*.15,o.z);
+    o.mesh.visible=o.ttl>3||Math.floor(o.ttl*6)%2===0;
+    if(d<1.1){collectOrb(o);floorGroup.remove(o.mesh);orbs.splice(i,1);continue;}
+    if(o.ttl<=0){floorGroup.remove(o.mesh);orbs.splice(i,1);}}}
+
 /* ---------- combat ---------- */
 function applyElems(e,elems,power,ang){
   for(const el of elems){
@@ -662,7 +794,8 @@ function applyElems(e,elems,power,ang){
       e.hp-=(5+power*0.1);
       spawnBurst(e.x,0.2,e.z,ECOL.earth,10,3);}}}
 function damageEnemy(e,dmg,ang,kb,power){
-  e.hp-=dmg;
+  e.hp-=dmg;e.hitT=.09;sfx('hit');
+  dmgNum(e.x,e.z,Math.round(dmg),dmg>=60?'#ffd97a':'#e8ddc8',dmg>=60);
   const k=kb*(1+power/300)*(e.boss?0.15:1);
   e.kx+=Math.cos(ang)*k;e.kz+=Math.sin(ang)*k;
   e.mesh.traverse(o=>{if(o.material&&o.material.emissive)o.material.emissiveIntensity=(o.material.emissiveIntensity||0)+0;});
@@ -671,7 +804,15 @@ function killEnemy(e){
   const i=enemies.indexOf(e);if(i<0)return;
   enemies.splice(i,1);floorGroup.remove(e.mesh);
   spawnBurst(e.x,.8,e.z,e.boss?0xc9a45c:0xffffff,e.boss?26:10,e.boss?7:4);
-  gainXp(e.xp);
+  sfx('kill');combo++;comboT=4;
+  G.slowT=Math.max(G.slowT,e.boss?0.3:0.05);
+  if(e.elite==='volatile'){
+    spawnBurst(e.x,.8,e.z,ECOL.fire,20,6);addShake(.4);
+    for(let k=0;k<8;k++)fireEnemyBolt(e.x,e.z,k*TAU/8,10,e.dmg);
+    if(dist(e.x,e.z,player.x,player.z)<3)damagePlayer(e.dmg);}
+  const nOrb=e.boss?10:randi(1,2);
+  for(let k=0;k<nOrb;k++)spawnOrb(e.x,e.z,pick(['hp','xp',pick(ELEMS),pick(ELEMS)]));
+  gainXp(Math.round(e.xp*(1+Math.min(combo,20)*0.05)));
   const r=Math.random();
   if(e.boss){player.mats.shard+=2;addItem(makeEquipment(G.floor));
     toast('The Warden falls — the way opens');addShake(1);
@@ -687,7 +828,8 @@ function damagePlayer(d){
   if(player.iframe>0||G.over)return;
   const armor=eqMod('armor');
   d=d*100/(100+armor);
-  player.hp-=d;player.iframe=0.45;addShake(.45);
+  player.hp-=d;player.iframe=0.45;addShake(.45);sfx('hurt');
+  dmgNum(player.x,player.z,'-'+Math.round(d),'#e05555',true);
   spawnBurst(player.x,1,player.z,0xe05555,7,3);
   if(player.hp<=0){player.hp=0;die();}}
 function die(){G.over=true;$('deathFloor').textContent=G.floor;$('deathOvl').classList.add('open');}
@@ -696,7 +838,7 @@ function gainXp(x){
   let need=xpNeed();
   while(player.xp>=need){player.xp-=need;player.level++;player.pts+=3;
     player.hp=Math.min(stat_maxHp(),player.hp+stat_maxHp()*0.25);
-    toast('Level '+player.level+'! +3 points');need=xpNeed();}
+    sfx('level');toast('Level '+player.level+'! +3 points');need=xpNeed();}
   if(player.pts>0&&!G.paused)openAlloc();}
 const xpNeed=()=>Math.round(40*Math.pow(player.level,1.3));
 
@@ -743,7 +885,15 @@ const fc=$('forgeCanvas'),fg=fc.getContext('2d');
 const forge={open:false,tool:'weave',path:null,seal:null,scale:1,cx:0,cy:0,vx:0,vy:0,zoom:1,grid:false,gStep:40};
 function toggleForge(){forge.open?closeForge():openForge();}
 function openForge(){if(G.over)return;forge.open=true;G.paused=true;
-  $('forgeOvl').classList.add('open');sizeForge();renderLayerTabs();drawForge();updateReadout();}
+  $('forgeOvl').classList.add('open');sizeForge();renderSlotTabs();renderLayerTabs();
+  $('potSlider').value=spell.layers[spell.active].potency;
+  $('potN').textContent=spell.layers[spell.active].potency;
+  drawForge();updateReadout();}
+function renderSlotTabs(){
+  const box=$('slotTabs');box.innerHTML='';
+  for(let i=0;i<3;i++){const b=document.createElement('button');
+    b.className='ltab'+(i===spellSlot?' on':'');b.textContent='S'+(i+1);
+    b.onclick=()=>switchSpell(i);box.appendChild(b);}}
 function closeForge(){forge.open=false;G.paused=$('invOvl').classList.contains('open')||$('lvOvl').classList.contains('open');
   $('forgeOvl').classList.remove('open');}
 $('fDone').onclick=closeForge;
@@ -1018,6 +1168,7 @@ window.allocPt=k=>{if(player.pts<1)return;player.pts--;player.alloc[k]++;
 /* ---------- interact ---------- */
 function nearestInteract(){
   for(const c of chests)if(!c.open&&dist(player.x,player.z,c.x,c.z)<2.6)return{t:'chest',c};
+  for(const s of shrines)if(!s.used&&dist(player.x,player.z,s.x,s.z)<2.6)return{t:'shrine',s};
   if(portal&&portal.active&&dist(player.x,player.z,portal.x,portal.z)<3.4)return{t:'portal'};
   return null;}
 function doInteract(){
@@ -1031,7 +1182,16 @@ function doInteract(){
     else if(r<0.76){const q=randi(1,3);player.mats.shard+=q;toast('+'+q+' shard');}
     else if(r<0.9){player.crystals++;toast('+1 mana crystal');}
     else{player.potions++;toast('+1 potion');}}
-  else if(n.t==='portal'){buildFloor(G.floor+1);}}
+  else if(n.t==='shrine'){
+    n.s.used=true;n.s.glow.material.opacity=.04;
+    n.s.ob.material.emissiveIntensity=.1;sfx('shrine');
+    spawnBurst(n.s.x,1.5,n.s.z,0x9d8cff,16,4);
+    const b=pick(['dmg','spd','regen','heal']);
+    if(b==='heal'){player.hp=stat_maxHp();toast('The shrine mends your wounds');}
+    else if(b==='dmg'){G.buffs.dmg+=0.25;toast('Blessing: +25% damage this floor');}
+    else if(b==='spd'){G.buffs.spd+=0.15;toast('Blessing: +15% speed this floor');}
+    else{G.buffs.regen+=0.8;toast('Blessing: +80% mana regen this floor');}}
+  else if(n.t==='portal'){sfx('level');buildFloor(G.floor+1);}}
 
 /* ---------- toast ---------- */
 function toast(msg){const d=document.createElement('div');d.className='toast';d.textContent=msg;
@@ -1040,17 +1200,24 @@ function toast(msg){const d=document.createElement('div');d.className='toast';d.
 
 /* ---------- update loop ---------- */
 function updatePlayer(dt){
+  comboT=Math.max(0,comboT-dt);if(comboT<=0)combo=0;
+  player.dashCd=Math.max(0,player.dashCd-dt);
   let mx=0,mz=0,sprint=false;
   if(joy.L.id!==null){mx=joy.L.x;mz=joy.L.y;sprint=Math.hypot(mx,mz)>0.92;}
   else{mx=(keys.KeyD?1:0)-(keys.KeyA?1:0);mz=(keys.KeyS?1:0)-(keys.KeyW?1:0);
     sprint=!!(keys.ShiftLeft||keys.ShiftRight);}
   const m=Math.hypot(mx,mz);
-  if(m>0.01){mx/=Math.max(1,m);mz/=Math.max(1,m);
+  if(player.dashT>0){player.dashT-=dt;
+    player.x+=Math.cos(player.dashAng)*38*dt;
+    player.z+=Math.sin(player.dashAng)*38*dt;
+    spawnBurst(player.x,0.5,player.z,0x9d8cff,2,1.5);}
+  else if(m>0.01){mx/=Math.max(1,m);mz/=Math.max(1,m);
     let spd=stat_spd();
     if(sprint&&player.st>1){spd*=1.6;player.st-=20*dt;}
     player.x+=mx*spd*dt;player.z+=mz*spd*dt;}
   player.st=Math.min(stat_maxSt(),player.st+12*dt);
-  for(const e of ELEMS){const cap=stat_maxManaEl(e);player.mana[e]=Math.min(cap,player.mana[e]+8*dt);}
+  for(const e of ELEMS){const cap=stat_maxManaEl(e);
+    player.mana[e]=Math.min(cap,player.mana[e]+8*(1+G.buffs.regen)*dt);}
   const H=G.half-1;player.x=clamp(player.x,-H,H);player.z=clamp(player.z,-H,H);
   if(joy.R.id!==null&&Math.hypot(joy.R.x,joy.R.y)>0.25)
     player.aim=Math.atan2(joy.R.y,joy.R.x);
@@ -1071,6 +1238,7 @@ function updateEnemies(dt){
     if(e.burn){e.burn.t-=dt;e.burn.acc+=dt;
       if(e.burn.acc>=1){e.burn.acc-=1;e.hp-=e.burn.dmg;
         spawnBurst(e.x,1,e.z,ECOL.fire,3,2);
+        dmgNum(e.x,e.z,Math.round(e.burn.dmg),'#ff7043');
         if(e.hp<=0){killEnemy(e);continue;}}
       if(e.burn&&e.burn.t<=0)e.burn=null;}
     const dP=dist(e.x,e.z,player.x,player.z);
@@ -1099,6 +1267,8 @@ function updateEnemies(dt){
         e.x+=Math.cos(a)*push;e.z+=Math.sin(a)*push;}}
     e.atkCd-=dt;
     if(e.type!=='caster'&&dP<e.r+0.95&&e.atkCd<=0){e.atkCd=0.9;damagePlayer(e.dmg);}
+    if(e.hitT>0)e.hitT-=dt;
+    e.mesh.scale.setScalar((e.baseScale||1)*(e.hitT>0?1.16:1));
     e.mesh.position.set(e.x,0,e.z);
     e.mesh.rotation.y=-aP+Math.PI/2;
     // hp tint
@@ -1192,18 +1362,22 @@ function updateHUD(){
   $('xpF').style.width=(100*player.xp/xpNeed())+'%';
   $('lvN').textContent=player.level;
   $('ptsN').textContent=player.pts>0?('+'+player.pts+' pts (L)'):'';
+  if(comboT>0&&combo>1){$('combo').style.display='block';$('comboN').textContent=combo;}
+  else $('combo').style.display='none';
   const n=nearestInteract();
   $('hint').style.display=n?'block':'none';
   if(IS_TOUCH)$('tInt').style.display=n?'block':'none';
   if(n)$('hint').textContent=n.t==='chest'?(IS_TOUCH?'Tap USE — open chest':'E — open chest')
+    :n.t==='shrine'?(IS_TOUCH?'Tap USE — commune':'E — commune with the shrine')
     :(IS_TOUCH?'Tap USE — ascend':'E — ascend the tower');}
 let last=performance.now();
 function animate(now){
   requestAnimationFrame(animate);
-  const dt=Math.min(0.05,(now-last)/1000);last=now;
+  let dt=Math.min(0.05,(now-last)/1000);last=now;
+  if(G.slowT>0){G.slowT-=dt;dt*=0.3;}
   if(!G.paused&&!G.over){
     G.time+=dt;
-    updatePlayer(dt);updateEnemies(dt);updateProjs(dt);updateParticles(dt);
+    updatePlayer(dt);updateEnemies(dt);updateProjs(dt);updateParticles(dt);updateOrbs(dt);
     if(portal){portal.ring.rotation.z+=dt*(portal.active?2:0.3);
       if(portal.active){portal.beam.material.opacity=0.25+Math.sin(G.time*3)*0.12;
         portal.glow.material.opacity=0.45+Math.sin(G.time*2.4)*0.22;}}
@@ -1216,16 +1390,19 @@ function animate(now){
 $('restartBtn').onclick=()=>{
   $('deathOvl').classList.remove('open');G.over=false;
   Object.assign(player,{level:1,xp:0,pts:0,hp:100,st:100,iframe:1,castCd:0,
+    dashCd:0,dashT:0,
     alloc:{hp:0,st:0,mana_fire:0,mana_water:0,mana_earth:0,mana_air:0,spd:0},inv:[],potions:1,crystals:0,
     mats:{essence:2,shard:0},eq:{focus:null,armor:null,accessory:null},
     mana:{fire:100,water:100,earth:100,air:100}});
-  spell.layers=[newLayer()];spell.active=0;
+  combo=0;comboT=0;G.slowT=0;
   buildFloor(1);};
 
 /* ---------- boot ---------- */
 buildPlayer();
 buildFloor(1);
 toast('Aim, weave, ascend. Open the Spellforge ('+(IS_TOUCH?'FORGE':'M')+') to craft magic.');
+toast('Two starter spells are woven in — '+(IS_TOUCH?'swap slots in the forge (S1-S3)':'swap with keys 1 · 2 · 3'));
+flashChip(buildPlan(false));
 requestAnimationFrame(animate);
 </script>
 </body>
