@@ -368,7 +368,11 @@ let orbs=[], shrines=[], nodes=[], structures=[];
 let combo=0, comboT=0;
 let fogCtx=null, fogTex=null, fogMesh=null, fogAccum=0;
 let discovered=new Set();
-try{discovered=new Set(JSON.parse(localStorage.getItem('msandbox:types'))||[]);}catch(e){}
+try{
+  // only accept well-formed type keys (e.g. "EARTH NOVA") — localStorage is user-editable
+  const raw=JSON.parse(localStorage.getItem('msandbox:types'))||[];
+  discovered=new Set(raw.filter(t=>typeof t==='string'&&/^[A-Z]+ [A-Z]+$/.test(t)));
+}catch(e){}
 
 const player={
   x:0,z:0,ang:0,aim:0,
@@ -1142,7 +1146,7 @@ const HOT=[
 function hotCount(kind){
   return kind==='potion'?player.potions:kind==='crystal'?player.crystals:(player.structs[kind]|0);}
 function useHot(kind){
-  if(G.over)return;
+  if(G.paused||G.over)return;
   if(kind==='potion')window.usePotion();
   else if(kind==='crystal')window.useCrystal();
   else placeStruct(kind);}
@@ -1150,14 +1154,14 @@ function buildHotbar(){
   const bar=$('hotbar');bar.innerHTML='';
   HOT.forEach(h=>{
     const b=document.createElement('button');b.className='hslot';
+    b.setAttribute('aria-label',h.kind+' (key '+h.key+')');
     b.innerHTML='<span class="hk">'+h.key+'</span>'+h.icon+'<span class="hn"></span>';
     b.onclick=()=>useHot(h.kind);
     b.addEventListener('pointerdown',e=>e.stopPropagation());
-    h.el=b;bar.appendChild(b);});}
+    h.el=b;h.nEl=b.querySelector('.hn');bar.appendChild(b);});}
 function updateHotbar(){
   HOT.forEach(h=>{const n=hotCount(h.kind);
-    h.el.querySelector('.hn').textContent=n;
-    h.el.classList.toggle('empty',n<1);});}
+    if(h.n!==n){h.n=n;h.nEl.textContent=n;h.el.classList.toggle('empty',n<1);}});}
 
 /* ---------- FORGE EDITOR ---------- */
 const fc=$('forgeCanvas'),fg=fc.getContext('2d');
@@ -1467,10 +1471,13 @@ function renderInv(){
   else h+='<div class="mods" style="width:100%">Stand near a crafting table for parchment & structure recipes.</div>';
   h+='</div></div>';
   h+='<div class="invSec"><h3>GRIMOIRE — SPELL TYPES ('+discovered.size+'/40)</h3>';
-  h+=discovered.size?('<div class="mods">'+[...discovered].sort().join(' · ')+'</div>')
+  h+=discovered.size?('<div class="mods">'+
+      [...discovered].sort().map(escHtml).join(' · ')+'</div>')
     :'<div class="mods">Cast spells to discover their types. Each new type grants essence.</div>';
   h+='</div>';
   $('invBody').innerHTML=h;}
+function escHtml(s){return String(s).replace(/[&<>"']/g,
+  c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 window.craftParch=()=>{
   if(!nearTable())return toast('Need a crafting table nearby');
   if(player.mats.essence<2||player.mats.wood<2)return toast('Need 2 essence + 2 wood');
