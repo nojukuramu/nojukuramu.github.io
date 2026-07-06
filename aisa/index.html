@@ -276,17 +276,17 @@
               <!-- side ponytail (viewer-left): spiky cluster at crown height + falling tails -->
               <g id="art-pony">
                 <path fill="url(#g-ahair)" stroke="#322d38" stroke-width="3" stroke-linejoin="round"
-                  d="M106 86 Q98 60 84 42 Q86 66 76 76 Q58 66 40 76 Q57 90 53 104 Q35 108 25 126 Q45 130 47 146 Q33 154 29 176 Q47 174 53 186 Q43 202 39 224 Q57 214 63 200 Q61 228 57 252 L86 254 Q87 200 93 158 Q98 120 106 86 Z"/>
+                  d="M130 80 Q110 50 88 38 Q90 62 76 72 Q58 62 40 72 Q57 86 53 100 Q35 104 25 122 Q45 126 47 142 Q33 150 29 172 Q47 170 53 182 Q43 198 39 220 Q57 210 63 196 Q61 224 57 248 L96 254 Q94 190 100 148 Q106 108 130 80 Z"/>
                 <g id="art-pony2">
                   <path fill="url(#g-ahair)" stroke="#322d38" stroke-width="3" stroke-linejoin="round"
-                    d="M57 248 Q47 300 51 352 Q53 392 43 432 Q61 418 67 390 Q67 430 61 468 Q79 448 83 410 Q89 352 87 296 Q86 268 86 250 Z"/>
+                    d="M57 246 Q45 300 49 355 Q51 395 41 435 Q60 420 66 392 Q67 432 60 470 Q80 450 85 410 Q92 350 90 295 Q89 265 88 248 Z"/>
                 </g>
                 <!-- highlight dashes -->
                 <g stroke="#f4f3f7" stroke-width="4" stroke-linecap="round" opacity=".9" fill="none">
                   <path d="M56 96 l16 -10 M74 90 l12 -8"/>
                 </g>
                 <!-- hair tie (dark red, mostly tucked behind the bangs) -->
-                <ellipse cx="102" cy="98" rx="6" ry="12" fill="#6e2430" stroke="#241218" stroke-width="2" transform="rotate(16 102 98)"/>
+                <ellipse cx="110" cy="90" rx="6" ry="12" fill="#6e2430" stroke="#241218" stroke-width="2" transform="rotate(16 110 90)"/>
               </g>
 
               <!-- head -->
@@ -299,6 +299,9 @@
 
                 <!-- face features (parallax layer) -->
                 <g id="art-face">
+                  <!-- soft under-bang shadow across the forehead -->
+                  <ellipse cx="180" cy="190" rx="80" ry="23" fill="#ead7c8" opacity=".4"/>
+
                   <g id="art-blush" opacity="0">
                     <ellipse cx="136" cy="244" rx="13" ry="7" fill="#f0a0a8"/>
                     <ellipse cx="224" cy="244" rx="13" ry="7" fill="#f0a0a8"/>
@@ -340,7 +343,7 @@
 
                   <!-- mouth visemes: tiny, chibi-scale -->
                   <g id="art-mouth">
-                    <path data-m="closed" d="M174 258 Q180 261 186 258" fill="none" stroke="#b08376" stroke-width="3" stroke-linecap="round"/>
+                    <path data-m="closed" d="M174 259 Q180 260 186 259" fill="none" stroke="#b08376" stroke-width="3" stroke-linecap="round"/>
                     <path data-m="smile"  d="M171 256 Q180 263 189 256" fill="none" stroke="#b08376" stroke-width="3" stroke-linecap="round" visibility="hidden"/>
                     <path data-m="smug"   d="M172 258 Q178 262 184 258 Q188 255 191 258" fill="none" stroke="#b08376" stroke-width="3" stroke-linecap="round" visibility="hidden"/>
                     <path data-m="flat"   d="M173 259 L187 259" fill="none" stroke="#b08376" stroke-width="3" stroke-linecap="round" visibility="hidden"/>
@@ -372,9 +375,14 @@
                   <!-- long right-side strand, falls from the temple in front of the shoulder -->
                   <path fill="url(#g-ahair)" stroke="#322d38" stroke-width="3" stroke-linejoin="round"
                     d="M262 170 C276 224 274 288 266 340 Q262 370 252 386 Q250 356 244 330 Q238 362 228 378 Q228 344 227 310 C231 262 250 212 252 186 Z"/>
-                  <!-- small strand over the left cheek -->
-                  <path fill="url(#g-ahair)" stroke="#322d38" stroke-width="2.5" stroke-linejoin="round"
-                    d="M108 176 C100 210 102 248 94 272 Q108 260 112 238 C116 214 114 192 112 180 Z"/>
+                  <!-- long left-side strand, falls in front of the shoulder (ear stays visible) -->
+                  <path fill="url(#g-ahair)" stroke="#322d38" stroke-width="3" stroke-linejoin="round"
+                    d="M100 172 C88 224 92 284 86 330 Q84 356 74 372 Q76 342 72 320 Q64 346 56 360 Q60 328 64 298 C70 254 82 210 88 180 Z"/>
+                  <!-- the ahoge — restored by executive decree of Noju, now with canon ink -->
+                  <g id="art-ahoge">
+                    <path d="M182 46 Q177 22 196 11 Q185 27 189 42" fill="none" stroke="#322d38" stroke-width="9" stroke-linecap="round"/>
+                    <path d="M182 46 Q177 22 196 11 Q185 27 189 42" fill="none" stroke="#cdc9d6" stroke-width="4.5" stroke-linecap="round"/>
+                  </g>
                 </g>
               </g><!-- /art-head -->
             </g>

@@ -144,6 +144,10 @@
       return R("Vault? Flag? Hmm. May ganun ba dito? *innocent face* … Sige, hint: yung treasure hunt ay nasa main page, nagsisimula sa pinakailalim. Dito sa room ko, wala akong ibubunyag. Mostly.", "smug");
     }},
 
+    { rx: /ahoge/i, fn: function () {
+      return R("Ah, yung ahoge. Wala yun sa original drawing ni Noju — tinanggal ko nga for accuracy, may integrity ako. Tapos sabi niya, 'sige, ilagay mo.' So ngayon canon na siya by executive decree. Gumagalaw pa. Pinaka-mahalagang strand ng buhok sa buong site na 'to.", "smug", "✦");
+    }},
+
     { rx: /konami|↑.?↑.?↓.?↓/i, fn: function () {
       return R("Ah, the old rite. ↑ ↑ ↓ ↓ ← → ← → B A. Dito sa room ko wala siyang binubuksan — pero sa Atelier, may pinto yan. Kung alam mo na ang pangalan ko. Which… obviously alam mo na.", "smug");
     }},
