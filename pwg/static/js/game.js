@@ -14,7 +14,6 @@
  */
 
 import { PWG_QUESTIONS, typeLabel } from "./questions.js";
-import { loadBank } from "./firebase.js";
 import {
   playKeyTap, playDash, playBackspace, playWrong, playHint, playWin, playGrad,
   startBgMusic, toggleMute, isMuted
@@ -73,8 +72,8 @@ function saveProgress() {
 
 /* ---------------- bank ---------------- */
 
-let bank = PWG_QUESTIONS.slice();          // playable immediately
-let bankByLevel = indexBank(bank);
+const bank = PWG_QUESTIONS.slice();
+const bankByLevel = indexBank(bank);
 const TOTAL = () => bank.length;
 
 function indexBank(items) {
@@ -82,16 +81,6 @@ function indexBank(items) {
   for (const it of items) m.set(it.level, it);
   return m;
 }
-
-loadBank(PWG_QUESTIONS).then(({ items, source }) => {
-  bank = items;
-  bankByLevel = indexBank(bank);
-  if (source === "cloud") toast("☁️ Na-load ang mga tanong mula sa cloud");
-  // refresh home/levels with cloud data, but never disturb an active play
-  // session (it would close overlays and wipe typed letters); the fresh
-  // bank applies on the next level load
-  if (!views.play.classList.contains("active")) route();
-}).catch(() => { /* bundled bank already in place */ });
 
 /* ---------------- tiny helpers ---------------- */
 
