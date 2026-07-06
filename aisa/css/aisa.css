@@ -130,6 +130,20 @@ body {
 .holder-3d { position: absolute; inset: 0; }
 .holder-3d canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
+/* ART stage — canon Aisa (full-body, Live2D-style rig) */
+.holder-art {
+  position: absolute; inset: 0;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+#avatar-art {
+  height: 90%; max-width: 92%;
+  margin-bottom: 46px; /* keep her boots above the subtitle bar */
+  filter: drop-shadow(0 16px 38px rgba(30, 26, 48, .55));
+}
+#art-head, #art-body, #art-backhair, #art-pony, #art-pony2,
+#art-face, #art-bangs, .art-pupil, .art-eye { will-change: transform; }
+.art-eye { transform-box: fill-box; transform-origin: center; }
+
 .icon-btn.mode-btn {
   width: auto; padding: 0 14px;
   font-family: var(--mono); font-size: .78rem; letter-spacing: .1em;
@@ -278,6 +292,8 @@ body {
 
 .field-hint { font-size: .72rem; color: var(--muted); line-height: 1.5; margin-bottom: 16px; }
 .field-hint code { font-family: var(--mono); color: var(--teal); font-size: .95em; }
+.field-hint a { color: var(--violet); }
+.art-credit { border-top: 1px solid var(--line); padding-top: 12px; }
 
 .drawer-row { display: flex; gap: 10px; margin: 8px 0 14px; }
 .btn-sm {

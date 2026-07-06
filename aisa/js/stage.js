@@ -1,8 +1,11 @@
 /* ============================================================
-   stage.js — dimension switch. Wraps the 2D SVG rig and the
-   lazy-loaded 3D rig behind one window.AisaRig facade so
-   app.js/brain.js never care which body Aisa is wearing.
-   Load order: avatar.js → avatar3d.js → stage.js → brain → app.
+   stage.js — dimension switch. Wraps the three rigs behind one
+   window.AisaRig facade so app.js/brain.js never care which
+   body Aisa is wearing. Cycle: 2D → 3D → ART → 2D.
+     · 2D  — the violet SVG vtuber (avatar.js)
+     · 3D  — toon chibi figurine, lazy three.js (avatar3d.js)
+     · ART — Noju's canon Aisa, Live2D-style rig (avatar-art.js)
+   Load order: avatar.js → avatar3d.js → avatar-art.js → stage.js.
    ============================================================ */
 (function () {
   "use strict";
@@ -14,12 +17,24 @@
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 
-  var holder2d = document.getElementById("avatar-holder");
-  var holder3d = document.getElementById("holder-3d");
+  var holders = {
+    "2d": document.getElementById("avatar-holder"),
+    "3d": document.getElementById("holder-3d"),
+    "art": document.getElementById("holder-art")
+  };
   var btn = document.getElementById("mode-btn");
+
+  var ORDER = ["2d", "3d", "art"];
+  var LABEL = { "2d": "2D", "3d": "3D", "art": "ART" };
+  var TITLE = {
+    "2d": "back to 2D",
+    "3d": "switch to 3D (drag to orbit)",
+    "art": "switch to ART — Noju's canon Aisa"
+  };
 
   var rig3d = null;
   var loading = false;
+  var webglDead = false;
   var mode = "2d";
   var last = { expression: "neutral", speaking: false };
 
@@ -29,12 +44,24 @@
     expressions: rig2d.expressions,
     setExpression: function (n) { last.expression = n; active().setExpression(n); },
     setSpeaking: function (on) { last.speaking = on; active().setSpeaking(on); },
-    /* the emote bubble is a DOM overlay on the stage — works over both rigs */
+    /* the emote bubble is a DOM overlay on the stage — works over every rig */
     emote: function (g, ms) { rig2d.emote(g, ms); }
   };
   window.AisaRig = facade;
 
-  function active() { return (mode === "3d" && rig3d) ? rig3d : rig2d; }
+  function rigFor(m) {
+    if (m === "3d") return rig3d;
+    if (m === "art") return window.AisaRigArt || null;
+    return rig2d;
+  }
+  function active() { return rigFor(mode) || rig2d; }
+
+  function nextMode(from) {
+    var n = ORDER[(ORDER.indexOf(from) + 1) % ORDER.length];
+    if (n === "3d" && webglDead) n = "art"; /* skip a dead 3D on the cycle */
+    if (n === "art" && !window.AisaRigArt) n = "2d";
+    return n;
+  }
 
   function sysLine(text) {
     var log = document.getElementById("chat-log");
@@ -48,24 +75,33 @@
 
   function apply() {
     lsSet(K_MODE, mode);
-    btn.textContent = mode === "2d" ? "3D" : "2D";
-    btn.title = mode === "2d" ? "switch to 3D (drag to orbit)" : "back to 2D";
-    holder2d.hidden = mode === "3d";
-    holder3d.hidden = mode !== "3d";
+    var nxt = nextMode(mode);
+    btn.textContent = LABEL[nxt];
+    btn.title = TITLE[nxt];
+    for (var m in holders) holders[m].hidden = (m !== mode);
     if (rig3d) rig3d.setVisible(mode === "3d");
+    if (window.AisaRigArt) window.AisaRigArt.setVisible(mode === "art");
     var a = active();
     a.setExpression(last.expression);
     a.setSpeaking(last.speaking);
   }
 
-  function to3d(silent) {
-    if (rig3d) { mode = "3d"; apply(); return; }
+  function switchTo(target, silent) {
+    if (target === "3d" && !rig3d) { load3d(silent); return; }
+    mode = target;
+    apply();
+    if (!silent && target === "art") {
+      sysLine("ART mode · canon Aisa, from Noju's own drawing · she blinks now");
+    }
+  }
+
+  function load3d(silent) {
     if (loading) return;
-    if (!window.AisaRig3DInit) { fail(silent); return; }
+    if (!window.AisaRig3DInit) { fail3d(silent); return; }
     loading = true;
     btn.textContent = "…";
     btn.disabled = true;
-    window.AisaRig3DInit(holder3d).then(function (r) {
+    window.AisaRig3DInit(holders["3d"]).then(function (r) {
       rig3d = r;
       loading = false;
       btn.disabled = false;
@@ -75,25 +111,27 @@
     }).catch(function (err) {
       loading = false;
       btn.disabled = false;
-      mode = "2d";
-      apply();
+      webglDead = true;
       try { console.warn("Aisa 3D init failed:", err); } catch (e) {}
-      fail(silent);
+      fail3d(silent);
     });
   }
 
-  function fail(silent) {
-    if (!silent) sysLine("3D failed to load (WebGL o network issue) — staying in 2D. Classic never dies naman.");
+  function fail3d(silent) {
+    webglDead = true;
+    if (!silent) sysLine("3D failed to load (WebGL o network issue) — skipping it sa cycle.");
+    /* keep the cycle moving: land on the next viable mode */
+    switchTo(nextMode("3d"), silent);
   }
 
   btn.addEventListener("click", function () {
-    if (mode === "2d") to3d(false);
-    else { mode = "2d"; apply(); }
+    switchTo(nextMode(mode), false);
   });
 
   /* read the saved preference BEFORE apply() persists the default */
   var saved = lsGet(K_MODE);
   apply();
-  /* honor a saved 3D preference: warm up quietly, swap when ready */
-  if (saved === "3d") to3d(true);
+  /* honor a saved preference: 3D warms up quietly, ART is instant */
+  if (saved === "3d") load3d(true);
+  else if (saved === "art" && window.AisaRigArt) switchTo("art", true);
 })();
