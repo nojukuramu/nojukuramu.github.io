@@ -126,9 +126,20 @@ body {
 #body, #hair-back { transform-origin: 180px 380px; }
 .eye { transform-box: fill-box; transform-origin: center; }
 
-/* emote bubble */
+/* 3D stage */
+.holder-3d { position: absolute; inset: 0; }
+.holder-3d canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+.icon-btn.mode-btn {
+  width: auto; padding: 0 14px;
+  font-family: var(--mono); font-size: .78rem; letter-spacing: .1em;
+  color: var(--teal);
+}
+.icon-btn.mode-btn:disabled { opacity: .5; cursor: wait; }
+
+/* emote bubble (stage-level — floats over either rig) */
 .emote {
-  position: absolute; top: 4%; right: 8%;
+  position: absolute; top: 9%; right: 26%;
   font-size: 2rem;
   opacity: 0; transform: translateY(8px) scale(.8);
   transition: opacity .18s, transform .18s;

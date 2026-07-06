@@ -19,6 +19,9 @@
   <meta name="theme-color" content="#0b0c16" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3l3.2 9.8L29 16l-9.8 3.2L16 29l-3.2-9.8L3 16l9.8-3.2z' fill='%237c6cf0'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="css/aisa.css" />
+
+  <!-- three.js is vendored (js/vendor/) — the 3D rig imports it lazily via this map -->
+  <script type="importmap">{ "imports": { "three": "./js/vendor/three.module.min.js" } }</script>
 </head>
 
 <body>
@@ -35,6 +38,7 @@
         <span class="live-badge" id="live-badge" title="local mode — walang backend na nakasaksak (yet)">
           <span class="live-dot"></span><span id="live-label">LOCAL</span>
         </span>
+        <button class="icon-btn mode-btn" id="mode-btn" aria-label="Switch between 2D and 3D" title="switch to 3D (drag to orbit)">3D</button>
         <button class="icon-btn" id="tts-btn" aria-label="Toggle voice" title="Toggle voice (TTS)">🔇</button>
         <button class="icon-btn" id="settings-btn" aria-label="Settings" title="Settings">⚙</button>
       </div>
@@ -169,10 +173,13 @@
               </g><!-- /head -->
             </g>
           </svg>
-
-          <!-- emote bubble (❗ 💢 💤 ♪ …) -->
-          <div class="emote" id="emote" aria-hidden="true"></div>
         </div>
+
+        <!-- 3D stage (lazy — filled by avatar3d.js on first switch) -->
+        <div class="holder-3d" id="holder-3d" hidden></div>
+
+        <!-- emote bubble (❗ 💢 💤 ♪ …) — floats over either rig -->
+        <div class="emote" id="emote" aria-hidden="true"></div>
 
         <!-- subtitle / speech line -->
         <div class="subtitle" id="subtitle" aria-live="polite">
@@ -228,6 +235,8 @@
   </div>
 
   <script defer src="js/avatar.js"></script>
+  <script defer src="js/avatar3d.js"></script>
+  <script defer src="js/stage.js"></script>
   <script defer src="js/brain.js"></script>
   <script defer src="js/app.js"></script>
 </body>
