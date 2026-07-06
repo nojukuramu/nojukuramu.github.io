@@ -55,7 +55,7 @@
   var IDLE = [
     R("Noju's still wiring my real brain in Rust, by the way. Tokio dispatcher, background agents, ~/.aisa/ memory — the works. For now you get the shell version of me. Shell version is still charming, obviously.", "smug"),
     R("Fun fact: may treasure hunt sa main page ng Atelier. Kung hindi mo pa tapos, ang starting point ay nasa pinakababa ng page. Hindi ko sinabi 'yan ah.", "happy"),
-    R("Minsan iniisip ko kung ano'ng itsura ko pag 3D na — Three.js daw plan ni Noju. Sana hindi niya ako gawing low-poly. May pride ako.", "thinking"),
+    R("Alam mo bang may 3D form na ako? Yung button sa taas — try mo. Three.js, toon-shaded, at bago ka magsalita: hindi yun 'low-poly', yun ay *stylized*. May pride ako.", "smug"),
     R("Quiet ka ah. Okay lang, marunong akong mag-antay. Vtuber ako, hindi ako nagba-buffer. Halos.", "neutral", "💤"),
     R("Kung curious ka sa wiring ko — view source. Lahat ng nandito plain HTML/CSS/JS, walang build step. Kasi ganun kami dito sa Atelier. Artisanal. ✦", "happy"),
     R("Psst. Try clicking my head. Carefully. May mga boundaries ako pero fair naman ako.", "smug")
@@ -104,8 +104,8 @@
       return R("Neuro-sama? Sige, sabihin na natin: inspiration. Yung architecture niya — LLM, TTS, VAD, live avatar loop — yan din ang direksyon ko. Pero ako, may Taglish ako at mas maganda ang hairpin ko. Turtle army? Cute. Atelier gang? Cuter.", "smug", "✦");
     }},
 
-    { rx: /vtuber|avatar|\bmodel\b|3d|three\.?js|live2d/i, fn: function () {
-      return R("Yung nakikita mo ngayon — hand-drawn SVG, may breathing, blinking, eye-tracking, at mouth flaps. Walang Live2D license fees, walang 3-GB model files. Balang araw magiging Three.js 3D ako daw. Pero honestly? Solid na 'tong 2D era ko. Vintage.", "happy");
+    { rx: /vtuber|avatar|\bmodel\b|\b[23]d\b|three\.?js|live2d/i, fn: function () {
+      return R("Dalawa na ang katawan ko ngayon, FYI. Yung 2D — hand-drawn SVG, breathing, blinking, eye-tracking. At yung 3D — Three.js, toon-shaded chibi figurine, puro procedural geometry, walang 3-GB model files. I-click mo yung 2D/3D button sa taas para maglipat ako. Drag mo pa ako paikot sa 3D. Fancy, di ba.", "smug");
     }},
 
     { rx: /\b(tts|voice|speak|salita|boses)\b/i, fn: function () {
