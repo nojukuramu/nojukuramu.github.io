@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  ╭──────────────────────────────────────────────────────────────╮
+  │  You found the door that doesn't announce itself. ✦          │
+  │  This is Aisa's room. She keeps the Atelier tidy;            │
+  │  this is where she actually lives.                           │
+  │                                                              │
+  │  Front-end only — the "brain" here is a small local persona  │
+  │  engine. The real dispatcher (Rust/Tokio) plugs into the     │
+  │  socket in Settings when it's ready.                         │
+  ╰──────────────────────────────────────────────────────────────╯
+-->
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>✦ Aisa</title>
+  <meta name="theme-color" content="#0b0c16" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3l3.2 9.8L29 16l-9.8 3.2L16 29l-3.2-9.8L3 16l9.8-3.2z' fill='%237c6cf0'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/aisa.css" />
+</head>
+
+<body>
+  <div class="room">
+    <!-- ambient background -->
+    <canvas id="stars" aria-hidden="true"></canvas>
+
+    <!-- top bar -->
+    <header class="topbar">
+      <a class="wordmark" href="/" title="back to the Atelier">
+        <span class="star">✦</span> <strong>Aisa</strong><span class="wm-sub">'s room</span>
+      </a>
+      <div class="topbar-right">
+        <span class="live-badge" id="live-badge" title="local mode — walang backend na nakasaksak (yet)">
+          <span class="live-dot"></span><span id="live-label">LOCAL</span>
+        </span>
+        <button class="icon-btn" id="tts-btn" aria-label="Toggle voice" title="Toggle voice (TTS)">🔇</button>
+        <button class="icon-btn" id="settings-btn" aria-label="Settings" title="Settings">⚙</button>
+      </div>
+    </header>
+
+    <main class="stage-wrap">
+      <!-- the stage -->
+      <section class="stage" aria-label="Aisa's avatar">
+        <div class="stage-glow" aria-hidden="true"></div>
+
+        <div class="avatar-holder" id="avatar-holder">
+          <!-- ============ AISA (hand-drawn SVG vtuber) ============ -->
+          <svg id="avatar" viewBox="0 0 360 460" aria-label="Aisa, a violet-haired vtuber" role="img">
+            <defs>
+              <linearGradient id="g-hair" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#8d7cff"/>
+                <stop offset="1" stop-color="#5b4bd6"/>
+              </linearGradient>
+              <linearGradient id="g-hair-dark" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#6a59e0"/>
+                <stop offset="1" stop-color="#43349f"/>
+              </linearGradient>
+              <linearGradient id="g-iris" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#35e0cf"/>
+                <stop offset=".55" stop-color="#7c6cf0"/>
+                <stop offset="1" stop-color="#4a3bbd"/>
+              </linearGradient>
+              <linearGradient id="g-hoodie" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#262a44"/>
+                <stop offset="1" stop-color="#16182a"/>
+              </linearGradient>
+              <clipPath id="clip-eye-l"><path d="M96 208 Q114 190 138 200 Q142 218 132 230 Q110 238 98 226 Q93 216 96 208 Z"/></clipPath>
+              <clipPath id="clip-eye-r"><path d="M264 208 Q246 190 222 200 Q218 218 228 230 Q250 238 262 226 Q267 216 264 208 Z"/></clipPath>
+            </defs>
+
+            <g id="rig">
+              <!-- hair, back layer -->
+              <g id="hair-back">
+                <path fill="url(#g-hair-dark)" d="M180 40 C96 40 62 108 62 176 C62 250 46 300 40 342 C70 330 84 320 92 300 C96 330 90 356 84 378 C112 366 124 348 130 322 L230 322 C236 348 248 366 276 378 C270 356 264 330 268 300 C276 320 290 330 320 342 C314 300 298 250 298 176 C298 108 264 40 180 40 Z"/>
+              </g>
+
+              <!-- body -->
+              <g id="body">
+                <!-- neck -->
+                <path fill="#f3c9ad" d="M162 296 L198 296 L198 336 Q180 348 162 336 Z"/>
+                <path fill="#e0ae8f" d="M162 296 L198 296 L198 312 Q180 322 162 312 Z"/>
+                <!-- hoodie torso -->
+                <path fill="url(#g-hoodie)" d="M76 460 C78 404 96 366 138 348 Q180 380 222 348 C264 366 282 404 284 460 Z"/>
+                <!-- hood + collar -->
+                <path fill="#1e2138" d="M118 372 C126 344 150 330 180 330 C210 330 234 344 242 372 C222 360 200 356 180 356 C160 356 138 360 118 372 Z"/>
+                <!-- drawstrings -->
+                <path stroke="#35e0cf" stroke-width="4" stroke-linecap="round" fill="none" d="M166 366 L163 402"/>
+                <path stroke="#35e0cf" stroke-width="4" stroke-linecap="round" fill="none" d="M194 366 L197 402"/>
+                <circle cx="163" cy="406" r="4" fill="#35e0cf"/>
+                <circle cx="197" cy="406" r="4" fill="#35e0cf"/>
+                <!-- chest sigil -->
+                <path id="chest-star" fill="#35e0cf" opacity=".9" d="M180 418 l4.5 12 12 4.5 -12 4.5 -4.5 12 -4.5 -12 -12 -4.5 12 -4.5 z"/>
+              </g>
+
+              <!-- head group (sways / tilts) -->
+              <g id="head">
+                <!-- ears -->
+                <ellipse cx="92"  cy="222" rx="12" ry="16" fill="#f3c9ad"/>
+                <ellipse cx="268" cy="222" rx="12" ry="16" fill="#f3c9ad"/>
+
+                <!-- face -->
+                <path fill="#f7d3b8" d="M180 92 C244 92 272 140 270 200 C268 258 234 302 180 302 C126 302 92 258 90 200 C88 140 116 92 180 92 Z"/>
+                <!-- jaw shade -->
+                <path fill="#f0c3a4" opacity=".55" d="M120 268 C140 292 160 300 180 300 C200 300 220 292 240 268 C222 288 200 294 180 294 C160 294 138 288 120 268 Z"/>
+
+                <!-- blush -->
+                <g id="blush" opacity=".35">
+                  <ellipse cx="118" cy="248" rx="17" ry="9" fill="#ff8fa3"/>
+                  <ellipse cx="242" cy="248" rx="17" ry="9" fill="#ff8fa3"/>
+                </g>
+
+                <!-- eyes -->
+                <g id="eye-l" class="eye">
+                  <path d="M96 208 Q114 190 138 200 Q142 218 132 230 Q110 238 98 226 Q93 216 96 208 Z" fill="#fff"/>
+                  <g class="pupil-g" clip-path="url(#clip-eye-l)">
+                    <circle class="iris" cx="118" cy="215" r="15" fill="url(#g-iris)"/>
+                    <circle class="pupil" cx="118" cy="215" r="7" fill="#171233"/>
+                    <circle class="spark" cx="112" cy="208" r="4" fill="#fff"/>
+                    <circle class="spark2" cx="124" cy="221" r="2" fill="#fff" opacity=".8"/>
+                  </g>
+                  <path class="lash" d="M92 206 Q114 186 140 197" fill="none" stroke="#2c2350" stroke-width="6" stroke-linecap="round"/>
+                </g>
+                <g id="eye-r" class="eye">
+                  <path d="M264 208 Q246 190 222 200 Q218 218 228 230 Q250 238 262 226 Q267 216 264 208 Z" fill="#fff"/>
+                  <g class="pupil-g" clip-path="url(#clip-eye-r)">
+                    <circle class="iris" cx="242" cy="215" r="15" fill="url(#g-iris)"/>
+                    <circle class="pupil" cx="242" cy="215" r="7" fill="#171233"/>
+                    <circle class="spark" cx="236" cy="208" r="4" fill="#fff"/>
+                    <circle class="spark2" cx="248" cy="221" r="2" fill="#fff" opacity=".8"/>
+                  </g>
+                  <path class="lash" d="M268 206 Q246 186 220 197" fill="none" stroke="#2c2350" stroke-width="6" stroke-linecap="round"/>
+                </g>
+
+                <!-- brows (paths swapped per expression) -->
+                <path id="brow-l" d="M98 184 Q116 174 136 180" fill="none" stroke="#4a3bbd" stroke-width="5" stroke-linecap="round"/>
+                <path id="brow-r" d="M262 184 Q244 174 224 180" fill="none" stroke="#4a3bbd" stroke-width="5" stroke-linecap="round"/>
+
+                <!-- nose -->
+                <path d="M178 238 Q182 242 179 246" fill="none" stroke="#dda583" stroke-width="3" stroke-linecap="round"/>
+
+                <!-- mouth visemes (one visible at a time) -->
+                <g id="mouth">
+                  <path data-m="closed" d="M164 268 Q180 276 196 268" fill="none" stroke="#b56576" stroke-width="4" stroke-linecap="round"/>
+                  <path data-m="smile"  d="M160 264 Q180 282 200 264" fill="none" stroke="#b56576" stroke-width="4" stroke-linecap="round" visibility="hidden"/>
+                  <path data-m="smug"   d="M164 268 Q174 276 184 270 Q192 266 198 270" fill="none" stroke="#b56576" stroke-width="4" stroke-linecap="round" visibility="hidden"/>
+                  <path data-m="flat"   d="M166 270 L194 270" fill="none" stroke="#b56576" stroke-width="4" stroke-linecap="round" visibility="hidden"/>
+                  <ellipse data-m="small" cx="180" cy="270" rx="7" ry="5"  fill="#8e3b52" visibility="hidden"/>
+                  <path data-m="open"   d="M166 264 Q180 262 194 264 Q192 282 180 284 Q168 282 166 264 Z" fill="#8e3b52" visibility="hidden"/>
+                  <path data-m="wide"   d="M160 262 Q180 258 200 262 Q198 290 180 292 Q162 290 160 262 Z" fill="#8e3b52" visibility="hidden"/>
+                  <ellipse data-m="o"    cx="180" cy="272" rx="8" ry="10" fill="#8e3b52" visibility="hidden"/>
+                </g>
+                <path id="tongue" d="M170 280 Q180 288 190 280 L190 284 Q180 292 170 284 Z" fill="#e77" visibility="hidden"/>
+
+                <!-- front hair -->
+                <g id="hair-front">
+                  <path fill="url(#g-hair)" d="M180 48 C110 48 84 104 86 168 C88 150 96 136 104 128 C102 150 104 164 110 176 C116 152 128 136 142 128 C138 148 140 162 148 172 C158 152 172 142 180 140 C188 142 202 152 212 172 C220 162 222 148 218 128 C232 136 244 152 250 176 C256 164 258 150 256 128 C264 136 272 150 274 168 C276 104 250 48 180 48 Z"/>
+                  <!-- side locks -->
+                  <path fill="url(#g-hair)" d="M86 160 C80 210 82 252 74 286 C92 278 100 258 102 238 C106 216 104 186 100 164 Z"/>
+                  <path fill="url(#g-hair)" d="M274 160 C280 210 278 252 286 286 C268 278 260 258 258 238 C254 216 256 186 260 164 Z"/>
+                  <!-- ahoge -->
+                  <path id="ahoge" fill="none" stroke="url(#g-hair)" stroke-width="7" stroke-linecap="round" d="M180 46 Q176 24 196 14 Q182 26 188 40"/>
+                  <!-- star pin -->
+                  <path id="hairpin" fill="#35e0cf" d="M250 96 l5 13 13 5 -13 5 -5 13 -5 -13 -13 -5 13 -5 z">
+                    <animate attributeName="opacity" values="1;.6;1" dur="3s" repeatCount="indefinite"/>
+                  </path>
+                </g>
+              </g><!-- /head -->
+            </g>
+          </svg>
+
+          <!-- emote bubble (❗ 💢 💤 ♪ …) -->
+          <div class="emote" id="emote" aria-hidden="true"></div>
+        </div>
+
+        <!-- subtitle / speech line -->
+        <div class="subtitle" id="subtitle" aria-live="polite">
+          <span class="sub-name">Aisa</span>
+          <span class="sub-text" id="sub-text">…booting.</span>
+        </div>
+      </section>
+
+      <!-- chat panel -->
+      <aside class="chat" aria-label="Chat with Aisa">
+        <div class="chat-head">
+          <span>chat</span>
+          <span class="chat-mode" id="chat-mode">persona shell · local brain</span>
+        </div>
+        <div class="chat-log" id="chat-log"></div>
+        <form class="chat-form" id="chat-form" autocomplete="off">
+          <input type="text" id="chat-input" placeholder="say something… (or /help)" maxlength="400" spellcheck="false" />
+          <button type="submit" class="send-btn" aria-label="Send">➤</button>
+        </form>
+      </aside>
+    </main>
+
+    <footer class="roomfoot">
+      <span>✦ hidden room · not listed anywhere at the Atelier · you found it yourself</span>
+    </footer>
+  </div>
+
+  <!-- settings drawer -->
+  <div class="drawer-backdrop" id="drawer-backdrop" hidden>
+    <div class="drawer" role="dialog" aria-modal="true" aria-label="Settings">
+      <div class="drawer-head">
+        <h3>⚙ rig settings</h3>
+        <button class="icon-btn" id="drawer-close" aria-label="Close">✕</button>
+      </div>
+
+      <label class="field">
+        <span>voice (TTS)</span>
+        <select id="voice-select"><option value="">— pick a voice —</option></select>
+      </label>
+
+      <label class="field">
+        <span>brain socket <small>(POST endpoint of the real dispatcher — leave blank for local persona)</small></span>
+        <input type="url" id="endpoint-input" placeholder="http://localhost:7700/chat" />
+      </label>
+      <p class="field-hint">contract: <code>POST { message, history }</code> → <code>{ reply, emotion? }</code>. Kapag naka-saksak na si Rust/Tokio dispatcher, dito siya kumakabit.</p>
+
+      <div class="drawer-row">
+        <button class="btn-sm" id="save-settings">save</button>
+        <button class="btn-sm btn-danger" id="wipe-memory">wipe my memory</button>
+      </div>
+      <p class="field-hint">memory is local-first — name, chat log, at settings ay nasa browser mo lang.</p>
+    </div>
+  </div>
+
+  <script defer src="js/avatar.js"></script>
+  <script defer src="js/brain.js"></script>
+  <script defer src="js/app.js"></script>
+</body>
+</html>
