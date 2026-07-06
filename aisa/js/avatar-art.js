@@ -178,7 +178,7 @@
       head.setAttribute("transform", "translate(" + headX.toFixed(2) + "," + headY.toFixed(2) + ") rotate(" + tilt.toFixed(2) + " 180 280)");
       faceL.setAttribute("transform", "translate(" + (state.look.x * 6).toFixed(2) + "," + (state.look.y * 4).toFixed(2) + ")");
       bangs.setAttribute("transform", "translate(" + (state.look.x * 2.8).toFixed(2) + "," + (state.look.y * 1.8).toFixed(2) + ")");
-      if (ahoge) ahoge.setAttribute("transform", "rotate(" + (Math.sin(s * 2.1) * 4 + state.look.x * 3).toFixed(2) + " 183 46)");
+      if (ahoge) ahoge.setAttribute("transform", "rotate(" + (Math.sin(s * 2.1) * 4 + state.look.x * 3).toFixed(2) + " 183 78)");
 
       /* ponytail spring chain — driven by head motion */
       var drive = -(headX - state.prevHeadX) * 6 - tilt * 0.6;
@@ -186,7 +186,7 @@
       spring(state.p1, drive, 0.045, 0.90);
       spring(state.p2, state.p1.a * 1.35, 0.06, 0.88);
       pony.setAttribute("transform",
-        "translate(" + (headX * 0.8).toFixed(2) + "," + (headY * 0.8).toFixed(2) + ") rotate(" + state.p1.a.toFixed(2) + " 116 88)");
+        "translate(" + (headX * 0.8).toFixed(2) + "," + (headY * 0.8).toFixed(2) + ") rotate(" + state.p1.a.toFixed(2) + " 118 106)");
       pony2.setAttribute("transform", "rotate(" + state.p2.a.toFixed(2) + " 70 300)");
     }
 
