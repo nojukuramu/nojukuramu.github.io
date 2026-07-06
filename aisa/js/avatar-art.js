@@ -21,7 +21,6 @@
   var body = document.getElementById("art-body");
   var pony = document.getElementById("art-pony");
   var pony2 = document.getElementById("art-pony2");
-  var ahoge = document.getElementById("art-ahoge");
   var blush = document.getElementById("art-blush");
   var browL = document.getElementById("art-brow-l");
   var browR = document.getElementById("art-brow-r");
@@ -35,41 +34,42 @@
   /* ---------- expressions ----------
      Canon Aisa runs cooler than the violet one: neutral is deadpan,
      annoyed is basically the reference drawing. */
+  /* Brows are drawn inner→outer with the canon wing-kick at the outer end. */
   var EXPRESSIONS = {
     neutral: {
-      browL: "M116 186 Q138 180 160 184", browR: "M244 186 Q222 180 200 184",
+      browL: "M162 179 Q144 176 128 178 L118 171", browR: "M198 179 Q216 176 232 178 L242 171",
       mouth: "closed", blush: 0, eyes: 0.94
     },
     happy: {
-      browL: "M116 182 Q138 174 160 179", browR: "M244 182 Q222 174 200 179",
+      browL: "M162 174 Q144 170 128 172 L118 165", browR: "M198 174 Q216 170 232 172 L242 165",
       mouth: "smile", blush: 0.4, eyes: 1
     },
     smug: {
-      browL: "M116 186 Q138 182 160 188", browR: "M244 178 Q222 172 200 177",
+      browL: "M162 181 Q144 179 128 181 L118 175", browR: "M198 172 Q216 167 232 169 L242 161",
       mouth: "smug", blush: 0.15, eyes: 0.68
     },
     surprised: {
-      browL: "M116 178 Q138 168 160 175", browR: "M244 178 Q222 168 200 175",
+      browL: "M162 170 Q144 164 128 166 L118 158", browR: "M198 170 Q216 164 232 166 L242 158",
       mouth: "o", blush: 0.25, eyes: 1.14
     },
     thinking: {
-      browL: "M116 184 Q138 182 160 190", browR: "M244 186 Q222 178 200 182",
+      browL: "M162 183 Q144 179 128 180 L118 173", browR: "M198 178 Q216 174 232 176 L242 168",
       mouth: "flat", blush: 0, eyes: 0.82
     },
     annoyed: {
-      browL: "M116 182 Q138 188 160 192", browR: "M244 182 Q222 188 200 192",
+      browL: "M162 186 Q144 179 128 176 L118 168", browR: "M198 186 Q216 179 232 176 L242 168",
       mouth: "flat", blush: 0, eyes: 0.6
     },
     shy: {
-      browL: "M116 184 Q138 179 160 184", browR: "M244 184 Q222 179 200 184",
+      browL: "M162 177 Q144 174 128 176 L118 170", browR: "M198 177 Q216 174 232 176 L242 170",
       mouth: "small", blush: 0.85, eyes: 0.85
     },
     sleepy: {
-      browL: "M116 188 Q138 184 160 187", browR: "M244 188 Q222 184 200 187",
+      browL: "M162 183 Q144 182 128 183 L118 178", browR: "M198 183 Q216 182 232 183 L242 178",
       mouth: "small", blush: 0, eyes: 0.3
     },
     serious: {
-      browL: "M116 184 Q138 180 160 186", browR: "M244 184 Q222 180 200 186",
+      browL: "M162 182 Q144 178 128 179 L118 172", browR: "M198 182 Q216 178 232 179 L242 172",
       mouth: "closed", blush: 0, eyes: 0.9
     }
   };
@@ -177,7 +177,6 @@
       head.setAttribute("transform", "translate(" + headX.toFixed(2) + "," + headY.toFixed(2) + ") rotate(" + tilt.toFixed(2) + " 180 280)");
       faceL.setAttribute("transform", "translate(" + (state.look.x * 6).toFixed(2) + "," + (state.look.y * 4).toFixed(2) + ")");
       bangs.setAttribute("transform", "translate(" + (state.look.x * 2.8).toFixed(2) + "," + (state.look.y * 1.8).toFixed(2) + ")");
-      ahoge.setAttribute("transform", "rotate(" + (Math.sin(s * 2.1) * 4 + state.look.x * 3).toFixed(2) + " 186 64)");
 
       /* ponytail spring chain — driven by head motion */
       var drive = -(headX - state.prevHeadX) * 6 - tilt * 0.6;
@@ -185,8 +184,8 @@
       spring(state.p1, drive, 0.045, 0.90);
       spring(state.p2, state.p1.a * 1.35, 0.06, 0.88);
       pony.setAttribute("transform",
-        "translate(" + (headX * 0.8).toFixed(2) + "," + (headY * 0.8).toFixed(2) + ") rotate(" + state.p1.a.toFixed(2) + " 97 142)");
-      pony2.setAttribute("transform", "rotate(" + state.p2.a.toFixed(2) + " 66 324)");
+        "translate(" + (headX * 0.8).toFixed(2) + "," + (headY * 0.8).toFixed(2) + ") rotate(" + state.p1.a.toFixed(2) + " 102 96)");
+      pony2.setAttribute("transform", "rotate(" + state.p2.a.toFixed(2) + " 68 300)");
     }
 
     /* pupils */
