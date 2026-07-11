@@ -169,19 +169,6 @@
       "license": "CC0",
       "author": "Kenney"
     },
-    "cloud": {
-      "file": "models/cloud.glb",
-      "box": [
-        1.0,
-        1.0,
-        1.0
-      ],
-      "minY": 0.0,
-      "r": 0.5,
-      "src": "KenneyNL/Starter-Kit-3D-Platformer (cloud.glb)",
-      "license": "CC0",
-      "author": "Kenney"
-    },
     "grass-a": {
       "file": "models/grass-a.glb",
       "box": [

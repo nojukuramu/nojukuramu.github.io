@@ -40,7 +40,6 @@ are Kenney's standard CC0 release. All are copied unmodified.
 | File | Source kit / original filename | License |
 |---|---|---|
 | `banner.glb` | Starter-Kit-3D-Platformer / `flag.glb` | CC0 |
-| `cloud.glb` | Starter-Kit-3D-Platformer / `cloud.glb` | CC0 |
 | `grass-a.glb` | Starter-Kit-3D-Platformer / `grass-small.glb` | CC0 |
 | `grass-b.glb` | Starter-Kit-3D-Platformer / `grass.glb` | CC0 |
 | `shrine.glb` | Starter-Kit-City-Builder / `pavement-fountain.glb` | CC0 |
