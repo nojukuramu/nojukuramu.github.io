@@ -361,19 +361,30 @@ function groundTex(hexA,hexB){
 
 /* ---------- model loading ---------- */
 const MODELS={};
+const TEXTURES={};
 const gltfLoader=new GLTFLoader();
+const texLoader=new THREE.TextureLoader();
 function loadGlb(key,entry){
   return new Promise(res=>{
     gltfLoader.load('./assets/'+entry.file,
       gltf=>{MODELS[key]={scene:gltf.scene,box:entry.box,minY:entry.minY,r:entry.r};res();},
       undefined,()=>res());}); /* missing/broken model -> MODELS[key] stays unset, callers fall back */}
+function loadTex(key,entry){
+  return new Promise(res=>{
+    texLoader.load('./assets/'+entry.file,
+      tex=>{tex.wrapS=tex.wrapT=THREE.RepeatWrapping; /* grayscale detail map: sample as linear data, not sRGB */
+        TEXTURES[key]=tex;res();},
+      undefined,()=>res());}); /* missing/broken texture -> TEXTURES[key] stays unset, callers fall back */}
 async function preloadAssets(onProgress){
-  let manifest={models:{}};
+  let manifest={models:{},textures:{}};
   try{manifest=await (await fetch('./assets/manifest.json')).json();}catch(e){}
-  const entries=Object.entries(manifest.models||{});
+  const mEntries=Object.entries(manifest.models||{});
+  const tEntries=Object.entries(manifest.textures||{});
+  const total=mEntries.length+tEntries.length;
   let done=0;
-  const jobs=entries.map(([k,e])=>loadGlb(k,e).then(()=>{done++;
-    if(onProgress)onProgress(done/Math.max(1,entries.length));}));
+  const bump=()=>{done++;if(onProgress)onProgress(done/Math.max(1,total));};
+  const jobs=[...mEntries.map(([k,e])=>loadGlb(k,e).then(bump)),
+    ...tEntries.map(([k,e])=>loadTex(k,e).then(bump))];
   const timeout=new Promise(res=>setTimeout(res,10000));
   await Promise.race([Promise.allSettled(jobs),timeout]);}
 /* clone a template model scaled so its native height maps to world unit h;
@@ -393,14 +404,18 @@ function spawnModel(key,opts){
       if(opts.emissive!==undefined){o.material.emissive=new THREE.Color(opts.emissive);
         o.material.emissiveIntensity=opts.ei!==undefined?opts.ei:1;}}});
   const wrap=new THREE.Group();wrap.add(inst);return wrap;}
+/* Kenney character GLBs face -Z natively; rotate 180 so they face +Z, matching the
+   -aim+PI/2 convention the rest of the game uses for both player and enemies */
+const MODEL_FACE_FIX=Math.PI;
+function faceFix(mdl){if(mdl)mdl.children[0].rotation.y=MODEL_FACE_FIX;return mdl;}
 
 /* ---------- themes ---------- */
 const THEMES=[
- {name:'Verdant',ground:0x24402c,gA:'#24402c',gB:'#39543a',fog:0x14231a,amb:0x7fa080,prop:'tree',pc:0x3f6b45,ec:0x69a06b},
- {name:'Ember',ground:0x3c2420,gA:'#3c2420',gB:'#5a3226',fog:0x2a140f,amb:0xb07860,prop:'shard',pc:0x8a3f2c,ec:0xff8a50},
- {name:'Frost',ground:0x27394a,gA:'#27394a',gB:'#3c5b73',fog:0x18242f,amb:0x8ea8c0,prop:'pillar',pc:0x7fa8c8,ec:0xbfe4ff},
- {name:'Void',ground:0x241f33,gA:'#241f33',gB:'#372e50',fog:0x120f1e,amb:0x8a7ab0,prop:'cube',pc:0x554a80,ec:0xb49aff},
- {name:'Storm',ground:0x2c3140,gA:'#2c3140',gB:'#414a61',fog:0x171b26,amb:0x90a0c0,prop:'obelisk',pc:0x5a6580,ec:0xe8e07a}];
+ {name:'Verdant',ground:0x24402c,gA:'#24402c',gB:'#39543a',fog:0x14231a,amb:0x7fa080,prop:'tree',pc:0x3f6b45,ec:0x69a06b,gtex:'ground-grass'},
+ {name:'Ember',ground:0x3c2420,gA:'#3c2420',gB:'#5a3226',fog:0x2a140f,amb:0xb07860,prop:'shard',pc:0x8a3f2c,ec:0xff8a50,gtex:'ground-lava'},
+ {name:'Frost',ground:0x27394a,gA:'#27394a',gB:'#3c5b73',fog:0x18242f,amb:0x8ea8c0,prop:'pillar',pc:0x7fa8c8,ec:0xbfe4ff,gtex:'ground-snow'},
+ {name:'Void',ground:0x241f33,gA:'#241f33',gB:'#372e50',fog:0x120f1e,amb:0x8a7ab0,prop:'cube',pc:0x554a80,ec:0xb49aff,gtex:'ground-void'},
+ {name:'Storm',ground:0x2c3140,gA:'#2c3140',gB:'#414a61',fog:0x171b26,amb:0x90a0c0,prop:'obelisk',pc:0x5a6580,ec:0xe8e07a,gtex:'ground-stone'}];
 
 /* ---------- game state ---------- */
 const G={floor:1,theme:THEMES[0],half:30,paused:false,over:false,time:0,runTime:0,
@@ -442,10 +457,15 @@ function costRed(){return clamp(eqMod('cost')/100,0,0.6);}
 /* ---------- player mesh ---------- */
 function buildPlayer(){
   const g=new THREE.Group();
-  const robe=new THREE.Mesh(new THREE.CylinderGeometry(.42,.62,1.15,8),mat(0x3a3f7a));robe.position.y=.58;g.add(robe);
-  const head=new THREE.Mesh(new THREE.SphereGeometry(.32,10,8),mat(0xe0c8a8));head.position.y=1.35;g.add(head);
-  const hat=new THREE.Mesh(new THREE.ConeGeometry(.44,.8,9),mat(0x2c3160));hat.position.y=1.85;g.add(hat);
-  const brim=new THREE.Mesh(new THREE.CylinderGeometry(.62,.62,.07,10),mat(0x2c3160));brim.position.y=1.5;g.add(brim);
+  // player-mage.glb is a Kenney "Pirate Captain" stand-in (no CC0 wizard exists) -- pull the
+  // coat toward wizard-blue so it reads as a mage; procedural staff/orb/glow always stay on top
+  const mdl=faceFix(spawnModel('player-mage',{h:2.0,lerp:[new THREE.Color(0x4a4f8a),0.45]}));
+  if(mdl){g.add(mdl);}
+  else{
+    const robe=new THREE.Mesh(new THREE.CylinderGeometry(.42,.62,1.15,8),mat(0x3a3f7a));robe.position.y=.58;g.add(robe);
+    const head=new THREE.Mesh(new THREE.SphereGeometry(.32,10,8),mat(0xe0c8a8));head.position.y=1.35;g.add(head);
+    const hat=new THREE.Mesh(new THREE.ConeGeometry(.44,.8,9),mat(0x2c3160));hat.position.y=1.85;g.add(hat);
+    const brim=new THREE.Mesh(new THREE.CylinderGeometry(.62,.62,.07,10),mat(0x2c3160));brim.position.y=1.5;g.add(brim);}
   const staff=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,1.6,6),mat(0x6b4a2c));
   staff.position.set(.5,.85,0);g.add(staff);
   const orb=new THREE.Mesh(new THREE.SphereGeometry(.13,8,6),mat(0x9d8cff,0x9d8cff,1.6));
@@ -556,9 +576,18 @@ function buildFloor(n){
   scene.fog=new THREE.Fog(T.fog,H*1.1,H*3.2);
   amb.color.setHex(T.amb);
   floorGroup=new THREE.Group();scene.add(floorGroup);
-  const gt=groundTex(T.gA,T.gB);gt.repeat.set(H/6,H/6);
-  const gnd=new THREE.Mesh(new THREE.PlaneGeometry(H*2,H*2),
-    new THREE.MeshStandardMaterial({map:gt,roughness:.95}));
+  const realTex=TEXTURES[T.gtex];
+  let gndMat;
+  if(realTex){ // grayscale tile, mean~.54 -- x1.86 restores full theme-color brightness
+    realTex.repeat.set(H/8,H/8); // reused+re-set per floor; clearFloor never disposes materials/maps, only geometry
+    /* the old canvas path fed theme hex to the GPU unconverted (NoColorSpace texture);
+       match it: keep the hex out of color management, then compensate the gray mean */
+    gndMat=new THREE.MeshStandardMaterial({map:realTex,roughness:.95,
+      color:new THREE.Color().setHex(T.ground,THREE.LinearSRGBColorSpace).multiplyScalar(1.86)});
+  }else{
+    const gt=groundTex(T.gA,T.gB);gt.repeat.set(H/6,H/6);
+    gndMat=new THREE.MeshStandardMaterial({map:gt,roughness:.95});}
+  const gnd=new THREE.Mesh(new THREE.PlaneGeometry(H*2,H*2),gndMat);
   gnd.rotation.x=-Math.PI/2;floorGroup.add(gnd);
   const wallM=mat(T.pc);
   [[0,-H],[0,H],[-H,0],[H,0]].forEach((p,i)=>{
@@ -645,17 +674,38 @@ const EDEF={
   boss:{hp:560,spd:3.4,dmg:20,r:1.9,xp:110,c:0xb06ae0,agro:999}};
 function makeEnemyMesh(t,def,theme){
   const g=new THREE.Group();const c=t==='boss'?theme.ec:def.c;
-  if(t==='rusher'){const b=new THREE.Mesh(new THREE.BoxGeometry(.9,.9,.9),mat(c));b.position.y=.6;b.rotation.y=.7;g.add(b);
-    const h=new THREE.Mesh(new THREE.ConeGeometry(.35,.6,4),mat(c,c,.3));h.position.y=1.35;g.add(h);}
-  else if(t==='swarmer'){const b=new THREE.Mesh(new THREE.ConeGeometry(.42,.9,3),mat(c,c,.25));b.position.y=.5;g.add(b);}
-  else if(t==='caster'){const b=new THREE.Mesh(new THREE.CylinderGeometry(.3,.55,1.3,6),mat(c));b.position.y=.65;g.add(b);
-    const o=new THREE.Mesh(new THREE.SphereGeometry(.24,8,6),mat(c,c,1.2));o.position.y=1.6;g.add(o);}
-  else if(t==='brute'){const b=new THREE.Mesh(new THREE.BoxGeometry(1.8,1.7,1.4),mat(c));b.position.y=.9;g.add(b);
-    const h=new THREE.Mesh(new THREE.BoxGeometry(.9,.6,.9),mat(c,0x000000,0));h.position.y=2.0;g.add(h);}
-  else{const b=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.7,2.6,7),mat(c,c,.25));b.position.y=1.3;g.add(b);
-    const cr=new THREE.Mesh(new THREE.TorusGeometry(1.1,.14,6,18),mat(0xc9a45c,0xc9a45c,.7));
-    cr.rotation.x=Math.PI/2;cr.position.y=2.9;g.add(cr);
-    const eye=new THREE.Mesh(new THREE.SphereGeometry(.3,8,6),mat(0xffffff,c,2));eye.position.set(0,1.9,1.1);g.add(eye);}
+  if(t==='rusher'){
+    const mdl=faceFix(spawnModel('enemy-rusher',{h:1.5,lerp:[new THREE.Color(def.c),0.55]}));
+    if(mdl)g.add(mdl);
+    else{const b=new THREE.Mesh(new THREE.BoxGeometry(.9,.9,.9),mat(c));b.position.y=.6;b.rotation.y=.7;g.add(b);
+      const h=new THREE.Mesh(new THREE.ConeGeometry(.35,.6,4),mat(c,c,.3));h.position.y=1.35;g.add(h);}}
+  else if(t==='swarmer'){
+    const mdl=faceFix(spawnModel('enemy-swarmer',{h:.95,lerp:[new THREE.Color(def.c),0.55]}));
+    if(mdl)g.add(mdl);
+    else{const b=new THREE.Mesh(new THREE.ConeGeometry(.42,.9,3),mat(c,c,.25));b.position.y=.5;g.add(b);}}
+  else if(t==='caster'){
+    const mdl=faceFix(spawnModel('enemy-caster',{h:1.7,lerp:[new THREE.Color(def.c),0.55]}));
+    if(mdl)g.add(mdl);
+    else{const b=new THREE.Mesh(new THREE.CylinderGeometry(.3,.55,1.3,6),mat(c));b.position.y=.65;g.add(b);
+      const o=new THREE.Mesh(new THREE.SphereGeometry(.24,8,6),mat(c,c,1.2));o.position.y=1.6;g.add(o);}}
+  else if(t==='brute'){
+    const mdl=faceFix(spawnModel('enemy-brute',{h:2.4,lerp:[new THREE.Color(def.c),0.55]}));
+    if(mdl)g.add(mdl);
+    else{const b=new THREE.Mesh(new THREE.BoxGeometry(1.8,1.7,1.4),mat(c));b.position.y=.9;g.add(b);
+      const h=new THREE.Mesh(new THREE.BoxGeometry(.9,.6,.9),mat(c,0x000000,0));h.position.y=2.0;g.add(h);}}
+  else{ // boss — enemy-boss.glb reuses the brute's blocky pirate-family body (curator's allowance);
+        // crown + eye glow stay on top always, scaled to whichever body (model or fallback) is present
+    const mdl=faceFix(spawnModel('enemy-boss',{h:3.6,emissive:theme.ec,ei:.25}));
+    let bh=2.6;
+    if(mdl){ // widen the slender pirate body so its bulk matches the boss's r=1.9 hitbox
+      mdl.children[0].scale.x*=1.35;mdl.children[0].scale.z*=1.35;
+      g.add(mdl);bh=3.6;}
+    else{const b=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.7,2.6,7),mat(c,c,.25));b.position.y=1.3;g.add(b);}
+    const crR=mdl?0.7:1.1;
+    const cr=new THREE.Mesh(new THREE.TorusGeometry(crR,crR*.13,6,18),mat(0xc9a45c,0xc9a45c,.7));
+    cr.rotation.x=Math.PI/2;cr.position.y=bh+.3;g.add(cr);
+    const eye=new THREE.Mesh(new THREE.SphereGeometry(.3,8,6),mat(0xffffff,c,2));
+    eye.position.set(0,bh*.73,mdl?.75:1.1);g.add(eye);}
   return g;}
 function spawnEnemy(t,x,z,fl){
   const def=EDEF[t];const sc=1+0.4*(fl-1);const dsc=1+0.15*(fl-1);
@@ -1165,8 +1215,10 @@ function buildStructMesh(kind){
     b.position.y=.75;g.add(b);
     const s=new THREE.Mesh(new THREE.BoxGeometry(.5,.5,.5),mat(0x2c333e));s.position.y=.25;g.add(s);}
   else if(kind==='table'){
-    const t=new THREE.Mesh(new THREE.BoxGeometry(1.6,.15,1),mat(0x8a6238));t.position.y=.8;g.add(t);
-    const l=new THREE.Mesh(new THREE.BoxGeometry(1.3,.7,.7),mat(0x6b4a2c));l.position.y=.4;g.add(l);}
+    const mdl=spawnModel('table',{h:.9});
+    if(mdl)g.add(mdl);
+    else{const t=new THREE.Mesh(new THREE.BoxGeometry(1.6,.15,1),mat(0x8a6238));t.position.y=.8;g.add(t);
+      const l=new THREE.Mesh(new THREE.BoxGeometry(1.3,.7,.7),mat(0x6b4a2c));l.position.y=.4;g.add(l);}}
   else{const mdl=spawnModel('banner',{h:2.2});
     if(mdl)g.add(mdl);
     else{const pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,1.8,5),mat(0x6b4a2c));
