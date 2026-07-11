@@ -1,0 +1,373 @@
+{
+  "models": {
+    "tree-a": {
+      "file": "models/tree-a.glb",
+      "box": [
+        1.7026,
+        2.2946,
+        1.5114
+      ],
+      "minY": -0.49,
+      "r": 0.8513,
+      "src": "pmndrs/market-assets (Low Poly Tree)",
+      "license": "CC0",
+      "author": "saravieira"
+    },
+    "tree-b": {
+      "file": "models/tree-b.glb",
+      "box": [
+        0.2105,
+        0.767,
+        0.2365
+      ],
+      "minY": 0.0,
+      "r": 0.1182,
+      "src": "pmndrs/market-assets (Tree)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "tree-pine-a": {
+      "file": "models/tree-pine-a.glb",
+      "box": [
+        0.2599,
+        0.7,
+        0.2982
+      ],
+      "minY": 0.0,
+      "r": 0.1491,
+      "src": "pmndrs/market-assets (Tree)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "rock-a": {
+      "file": "models/rock-a.glb",
+      "box": [
+        1.0596,
+        1.2247,
+        1.0674
+      ],
+      "minY": 0.0,
+      "r": 0.5337,
+      "src": "pmndrs/market-assets (Foundation Rock)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "rock-b": {
+      "file": "models/rock-b.glb",
+      "box": [
+        1.0596,
+        1.2247,
+        1.0674
+      ],
+      "minY": 0.0,
+      "r": 0.5337,
+      "src": "pmndrs/market-assets (Foundation Stone)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "rock-c": {
+      "file": "models/rock-c.glb",
+      "box": [
+        1.3625,
+        1.3802,
+        0.9466
+      ],
+      "minY": 0.0,
+      "r": 0.6812,
+      "src": "pmndrs/market-assets (Foundation Large Rock)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "rock-large": {
+      "file": "models/rock-large.glb",
+      "box": [
+        1.3625,
+        1.3802,
+        0.9466
+      ],
+      "minY": 0.0,
+      "r": 0.6812,
+      "src": "pmndrs/market-assets (Foundation Large Stone)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "lava-rock": {
+      "file": "models/lava-rock.glb",
+      "box": [
+        1.3625,
+        1.3802,
+        0.9466
+      ],
+      "minY": 0.0,
+      "r": 0.6812,
+      "src": "pmndrs/market-assets (Foundation Large Rock, reused)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "chest": {
+      "file": "models/chest.glb",
+      "box": [
+        0.4896,
+        0.5493,
+        0.4375
+      ],
+      "minY": -0.0,
+      "r": 0.2448,
+      "src": "pmndrs/market-assets (Cannon Chest)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "pillar": {
+      "file": "models/pillar.glb",
+      "box": [
+        3.323,
+        3.715,
+        3.3404
+      ],
+      "minY": -0.0,
+      "r": 1.6702,
+      "src": "pmndrs/market-assets (Tower)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "mushroom-a": {
+      "file": "models/mushroom-a.glb",
+      "box": [
+        0.1249,
+        0.1392,
+        0.1442
+      ],
+      "minY": 0.0,
+      "r": 0.0721,
+      "src": "pmndrs/market-assets (Mushroom)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "mushroom-b": {
+      "file": "models/mushroom-b.glb",
+      "box": [
+        0.0624,
+        0.1392,
+        0.1442
+      ],
+      "minY": 0.0,
+      "r": 0.0721,
+      "src": "pmndrs/market-assets (Mushroom Half)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "banner": {
+      "file": "models/banner.glb",
+      "box": [
+        0.2,
+        1.235,
+        0.685
+      ],
+      "minY": 0.0,
+      "r": 0.3425,
+      "src": "KenneyNL/Starter-Kit-3D-Platformer (flag.glb)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "grass-a": {
+      "file": "models/grass-a.glb",
+      "box": [
+        0.2477,
+        0.2581,
+        0.3129
+      ],
+      "minY": 0.0,
+      "r": 0.1565,
+      "src": "KenneyNL/Starter-Kit-3D-Platformer (grass-small.glb)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "grass-b": {
+      "file": "models/grass-b.glb",
+      "box": [
+        0.511,
+        0.3093,
+        0.5356
+      ],
+      "minY": 0.0,
+      "r": 0.2678,
+      "src": "KenneyNL/Starter-Kit-3D-Platformer (grass.glb)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "shrine": {
+      "file": "models/shrine.glb",
+      "box": [
+        1.0,
+        0.536,
+        1.0
+      ],
+      "minY": 0.0,
+      "r": 0.5,
+      "src": "KenneyNL/Starter-Kit-City-Builder (pavement-fountain.glb)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "barricade": {
+      "file": "models/barricade.glb",
+      "box": [
+        2.2,
+        0.8,
+        0.7
+      ],
+      "minY": 0.0,
+      "r": 1.1,
+      "src": "KenneyNL/Starter-Kit-FPS (wall-low.glb)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "ruin-wall": {
+      "file": "models/ruin-wall.glb",
+      "box": [
+        1.5,
+        1.7,
+        0.7
+      ],
+      "minY": 0.0,
+      "r": 0.75,
+      "src": "KenneyNL/Starter-Kit-FPS (wall-high.glb)",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "player-mage": {
+      "file": "models/player-mage.glb",
+      "box": [
+        0.6239,
+        1.0938,
+        0.4096
+      ],
+      "minY": 0.0,
+      "r": 0.312,
+      "src": "pmndrs/market-assets (Pirate Captain) -- hooded/cloaked blocky humanoid used as a stand-in for a robed spellcaster; no CC0 wizard/mage model was found in any reachable source",
+      "license": "CC0",
+      "author": "Kenney",
+      "note": "not a literal wizard model -- closest style-appropriate CC0 humanoid found; consider a purple/blue recolor or a small staff prop to sell the mage read"
+    },
+    "enemy-rusher": {
+      "file": "models/enemy-rusher.glb",
+      "box": [
+        0.7713,
+        2.4094,
+        0.6709
+      ],
+      "minY": 0.0004,
+      "r": 0.3857,
+      "src": "pmndrs/market-assets (Zombie, variant 1) -- shipped in a custom arms-down idle pose (see note)",
+      "license": "CC0",
+      "author": "Kenney",
+      "note": "source asset is a skinned rig with ZERO baked animation clips (bind pose is a T-pose). Skin/joints were baked out via full linear-blend skinning into a static arms-down pose (shoulders rotated ~75deg) so it doesn't render as a scarecrow T-pose; shipped mesh has no skin/animations."
+    },
+    "enemy-swarmer": {
+      "file": "models/enemy-swarmer.glb",
+      "box": [
+        0.7713,
+        2.4094,
+        0.6709
+      ],
+      "minY": 0.0004,
+      "r": 0.3857,
+      "src": "pmndrs/market-assets (Zombie, variant 2) -- same rig family/pose treatment as enemy-rusher, different texture/palette (skull tee, backpack)",
+      "license": "CC0",
+      "author": "Kenney",
+      "note": "no CC0 tiny non-humanoid critter (slime/bee/spider/bat) was found in any reachable source; this reuses the rusher's rig with a different skin, scaled down by the integrator. A true tiny-critter role remains unfilled -- see report. Same static arms-down repose as enemy-rusher; no skin/animations shipped."
+    },
+    "enemy-caster": {
+      "file": "models/enemy-caster.glb",
+      "box": [
+        0.7713,
+        2.4094,
+        0.6709
+      ],
+      "minY": 0.0004,
+      "r": 0.3857,
+      "src": "pmndrs/market-assets (Female Cyborg) -- reposed arms-down idle, tech/arcane-construct look substituted for skeleton/ghost/cultist",
+      "license": "CC0",
+      "author": "Kenney",
+      "note": "same T-pose-bind / no-clips situation as enemy-rusher, fixed the same way (baked static arms-down pose, no skin/animations shipped)."
+    },
+    "enemy-brute": {
+      "file": "models/enemy-brute.glb",
+      "box": [
+        0.6239,
+        1.1745,
+        0.3047
+      ],
+      "minY": 0.0,
+      "r": 0.312,
+      "src": "pmndrs/market-assets (Pirate Officer) -- bulky blocky-body silhouette (tricorn hat, coat) used as a heavy/brute stand-in",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "enemy-boss": {
+      "file": "models/enemy-boss.glb",
+      "box": [
+        0.6239,
+        1.0618,
+        0.275
+      ],
+      "minY": 0.0,
+      "r": 0.3119,
+      "src": "pmndrs/market-assets (Pirate Crew) -- same blocky body family as enemy-brute with a different cap/color, per the brief's allowance for the boss to be 'a clearly-different variant of brute'; intended to be scaled up substantially by the integrator",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "table": {
+      "file": "models/table.glb",
+      "box": [
+        3.7,
+        1.4181,
+        1.3991
+      ],
+      "minY": 0.2545,
+      "r": 1.85,
+      "src": "pmndrs/market-assets (Table)",
+      "license": "CC0",
+      "author": "saravieira",
+      "note": "geometry only -- the source asset's large photo-real CC0Textures/Wood027 JPEG material (normal+color+roughness, ~4MB) was intentionally NOT embedded to respect the low-poly flat-shaded style rule and the size budget; replaced with a flat baseColorFactor sampled from the texture's mean color. Native footprint is a long picnic/banquet table (3.7x1.4), not a small round table -- scale down if a smaller table is wanted."
+    }
+  },
+  "textures": {
+    "ground-grass": {
+      "file": "textures/ground-grass.png",
+      "size": [256, 256],
+      "src": "mrdoob/three.js examples/textures/terrain/grasslight-big.jpg (examples/textures/terrain/readme.txt: sourced from opengameart.org/content/dark-grass)",
+      "license": "CC BY 3.0",
+      "author": "OpenGameArt.org contributor (via three.js terrain/readme.txt); repackaged by three.js authors"
+    },
+    "ground-lava": {
+      "file": "textures/ground-lava.png",
+      "size": [256, 256],
+      "src": "mrdoob/three.js examples/textures/lava/lavatile.jpg",
+      "license": "MIT (repo-level; no per-asset readme.txt exists for this file, unlike terrain/ and cube/*)",
+      "author": "three.js authors"
+    },
+    "ground-snow": {
+      "file": "textures/ground-snow.png",
+      "size": [256, 256],
+      "src": "mrdoob/three.js examples/textures/ambientcg/Ice002_1K-JPG_Color.jpg",
+      "license": "CC0",
+      "author": "ambientCG (ambientcg.com) -- all ambientCG materials are published CC0 1.0 Universal; the three.js repo mirrors it verbatim in a folder literally named 'ambientcg'"
+    },
+    "ground-stone": {
+      "file": "textures/ground-stone.png",
+      "size": [256, 256],
+      "src": "mrdoob/three.js examples/textures/brick_diffuse.jpg",
+      "license": "MIT (repo-level; no per-asset readme.txt found)",
+      "author": "three.js authors",
+      "note": "a brick-wall photo, not a natural rock/stone scan -- no CC0/CC-BY natural-rock ground texture was found in any reachable source. Reads as a flagstone/cobblestone floor after grayscale+tiling. Original crop had a visible seam at the brick coursing; fixed with an offset+heal (roll by half + localized blur at the new center seam)."
+    },
+    "ground-void": {
+      "file": "textures/ground-void.png",
+      "size": [256, 256],
+      "src": "mrdoob/three.js examples/textures/tri_pattern.jpg",
+      "license": "MIT (repo-level; no per-asset readme.txt found)",
+      "author": "three.js authors",
+      "note": "abstract regular triangle-grid pattern, used for the Void theme's ground; not a natural material so seamlessness is inherent (a regular repeating grid)."
+    }
+  }
+}

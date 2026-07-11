@@ -6,7 +6,7 @@
 <title>Magic Sandbox — The Loom Tower</title>
 <meta name="description" content="A 3D top-down spell-crafting roguelite. Draw runes, weave elements, and ascend the Loom Tower floor by floor.">
 <meta name="theme-color" content="#101a26">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.1/three.min.js"></script>
+<script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
 <style>
 :root{
   --night:#101a26; --panel:#16222f; --panel2:#1c2b3a;
@@ -149,6 +149,11 @@ input[type=range]{width:100%;accent-color:var(--brass)}
   letter-spacing:.08em;line-height:1.7}
 #rotateOvl span{font-size:12px;color:var(--dim)}
 @media (orientation:portrait) and (pointer:coarse){#rotateOvl{display:flex}}
+#loadOvl{position:fixed;inset:0;z-index:50;background:#080d14;display:flex;
+  align-items:center;justify-content:center;flex-direction:column;gap:12px}
+#loadOvl b{letter-spacing:.14em;color:var(--brass);font-size:15px;font-weight:normal}
+#loadBarWrap{width:180px;height:5px;background:#ffffff22;border-radius:3px;overflow:hidden}
+#loadBar{height:100%;width:0%;background:var(--brass);transition:width .25s}
 @media (max-width:700px){
   #forgeBody{flex-direction:column}
   #forgePanel{width:100%;border-left:none;border-top:1px solid #ffffff1a;max-height:44%}
@@ -158,6 +163,7 @@ input[type=range]{width:100%;accent-color:var(--brass)}
 </head>
 <body>
 <canvas id="gl"></canvas>
+<div id="loadOvl"><b>Warming the loom&hellip;</b><div id="loadBarWrap"><div id="loadBar"></div></div></div>
 <div id="vig"></div>
 <div id="rotateOvl"><div>&#10227;<br>Rotate your device<br><span>tap to go fullscreen &amp; lock landscape</span></div></div>
 
@@ -244,9 +250,11 @@ Q dash · 1/2/3 spell slots · 4-0 hotbar · E interact/gather · G pack up stru
   <button class="btn" id="restartBtn">Weave again — Floor 1</button>
 </div></div>
 
-<script>
+<script type="module">
 /* ================= MAGIC SANDBOX ================= */
 'use strict';
+import * as THREE from 'three';
+import {GLTFLoader} from './vendor/examples/jsm/loaders/GLTFLoader.js';
 /* ---------- utils ---------- */
 const TAU=Math.PI*2;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
@@ -337,7 +345,7 @@ const glowTex=(()=>{const c=document.createElement('canvas');c.width=c.height=64
   const g=c.getContext('2d');const gr=g.createRadialGradient(32,32,2,32,32,30);
   gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.4,'rgba(255,255,255,.32)');
   gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,64,64);
-  return new THREE.CanvasTexture(c);})();
+  const t=new THREE.CanvasTexture(c);t.userData.shared=true;return t;})();
 function makeGlow(col,size){const m=new THREE.SpriteMaterial({map:glowTex,color:col,
   transparent:true,blending:THREE.AdditiveBlending,depthWrite:false});
   const s=new THREE.Sprite(m);s.scale.setScalar(size);return s;}
@@ -351,13 +359,66 @@ function groundTex(hexA,hexB){
     g.beginPath();g.moveTo(0,i*32);g.lineTo(256,i*32);g.stroke();}
   const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;return t;}
 
+/* ---------- model loading ---------- */
+const MODELS={};
+const TEXTURES={};
+const gltfLoader=new GLTFLoader();
+const texLoader=new THREE.TextureLoader();
+function loadGlb(key,entry){
+  return new Promise(res=>{
+    gltfLoader.load('./assets/'+entry.file,
+      gltf=>{MODELS[key]={scene:gltf.scene,box:entry.box,minY:entry.minY,r:entry.r};res();},
+      undefined,()=>res());}); /* missing/broken model -> MODELS[key] stays unset, callers fall back */}
+function loadTex(key,entry){
+  return new Promise(res=>{
+    texLoader.load('./assets/'+entry.file,
+      tex=>{tex.wrapS=tex.wrapT=THREE.RepeatWrapping; /* grayscale detail map: sample as linear data, not sRGB */
+        tex.userData.shared=true; /* session cache — disposeFloorObj must not free it */
+        TEXTURES[key]=tex;res();},
+      undefined,()=>res());}); /* missing/broken texture -> TEXTURES[key] stays unset, callers fall back */}
+async function preloadAssets(onProgress){
+  let manifest={models:{},textures:{}};
+  try{manifest=await (await fetch('./assets/manifest.json')).json();}catch(e){}
+  const mEntries=Object.entries(manifest.models||{});
+  const tEntries=Object.entries(manifest.textures||{});
+  const total=mEntries.length+tEntries.length;
+  let done=0;
+  const bump=()=>{done++;if(onProgress)onProgress(done/Math.max(1,total));};
+  const jobs=[...mEntries.map(([k,e])=>loadGlb(k,e).then(bump)),
+    ...tEntries.map(([k,e])=>loadTex(k,e).then(bump))];
+  const timeout=new Promise(res=>setTimeout(res,10000));
+  await Promise.race([Promise.allSettled(jobs),timeout]);}
+/* clone a template model scaled so its native height maps to world unit h;
+   returns null (caller must fall back to a procedural mesh) if it never loaded */
+function spawnModel(key,opts){
+  opts=opts||{};
+  const src=MODELS[key];if(!src)return null;
+  const scale=(opts.h||1)/src.box[1];
+  const inst=src.scene.clone(true);
+  inst.scale.setScalar(scale);inst.position.y=-src.minY*scale;
+  inst.traverse(o=>{if(!o.isMesh)return;
+    o.userData.sharedGeo=true; // geometry is shared with the MODELS template — never dispose it
+    if(opts.tint||opts.lerp||opts.emissive!==undefined){
+      if(o.material.map)o.material.map.userData.shared=true; // clone borrows the template's texture
+      o.material=o.material.clone();
+      if(opts.tint)o.material.color.multiply(opts.tint);
+      if(opts.lerp)o.material.color.lerp(opts.lerp[0],opts.lerp[1]); // pull toward a color (multiply can't lighten)
+      if(opts.emissive!==undefined){o.material.emissive=new THREE.Color(opts.emissive);
+        o.material.emissiveIntensity=opts.ei!==undefined?opts.ei:1;}}
+    else o.userData.sharedMat=true;}); // material is the MODELS template's — never dispose it
+  const wrap=new THREE.Group();wrap.add(inst);return wrap;}
+/* Kenney character GLBs face -Z natively; rotate 180 so they face +Z, matching the
+   -aim+PI/2 convention the rest of the game uses for both player and enemies */
+const MODEL_FACE_FIX=Math.PI;
+function faceFix(mdl){if(mdl)mdl.children[0].rotation.y=MODEL_FACE_FIX;return mdl;}
+
 /* ---------- themes ---------- */
 const THEMES=[
- {name:'Verdant',ground:0x24402c,gA:'#24402c',gB:'#39543a',fog:0x14231a,amb:0x7fa080,prop:'tree',pc:0x3f6b45,ec:0x69a06b},
- {name:'Ember',ground:0x3c2420,gA:'#3c2420',gB:'#5a3226',fog:0x2a140f,amb:0xb07860,prop:'shard',pc:0x8a3f2c,ec:0xff8a50},
- {name:'Frost',ground:0x27394a,gA:'#27394a',gB:'#3c5b73',fog:0x18242f,amb:0x8ea8c0,prop:'pillar',pc:0x7fa8c8,ec:0xbfe4ff},
- {name:'Void',ground:0x241f33,gA:'#241f33',gB:'#372e50',fog:0x120f1e,amb:0x8a7ab0,prop:'cube',pc:0x554a80,ec:0xb49aff},
- {name:'Storm',ground:0x2c3140,gA:'#2c3140',gB:'#414a61',fog:0x171b26,amb:0x90a0c0,prop:'obelisk',pc:0x5a6580,ec:0xe8e07a}];
+ {name:'Verdant',ground:0x24402c,gA:'#24402c',gB:'#39543a',fog:0x14231a,amb:0x7fa080,prop:'tree',pc:0x3f6b45,ec:0x69a06b,gtex:'ground-grass'},
+ {name:'Ember',ground:0x3c2420,gA:'#3c2420',gB:'#5a3226',fog:0x2a140f,amb:0xb07860,prop:'shard',pc:0x8a3f2c,ec:0xff8a50,gtex:'ground-lava'},
+ {name:'Frost',ground:0x27394a,gA:'#27394a',gB:'#3c5b73',fog:0x18242f,amb:0x8ea8c0,prop:'pillar',pc:0x7fa8c8,ec:0xbfe4ff,gtex:'ground-snow'},
+ {name:'Void',ground:0x241f33,gA:'#241f33',gB:'#372e50',fog:0x120f1e,amb:0x8a7ab0,prop:'cube',pc:0x554a80,ec:0xb49aff,gtex:'ground-void'},
+ {name:'Storm',ground:0x2c3140,gA:'#2c3140',gB:'#414a61',fog:0x171b26,amb:0x90a0c0,prop:'obelisk',pc:0x5a6580,ec:0xe8e07a,gtex:'ground-stone'}];
 
 /* ---------- game state ---------- */
 const G={floor:1,theme:THEMES[0],half:30,paused:false,over:false,time:0,runTime:0,
@@ -399,10 +460,15 @@ function costRed(){return clamp(eqMod('cost')/100,0,0.6);}
 /* ---------- player mesh ---------- */
 function buildPlayer(){
   const g=new THREE.Group();
-  const robe=new THREE.Mesh(new THREE.CylinderGeometry(.42,.62,1.15,8),mat(0x3a3f7a));robe.position.y=.58;g.add(robe);
-  const head=new THREE.Mesh(new THREE.SphereGeometry(.32,10,8),mat(0xe0c8a8));head.position.y=1.35;g.add(head);
-  const hat=new THREE.Mesh(new THREE.ConeGeometry(.44,.8,9),mat(0x2c3160));hat.position.y=1.85;g.add(hat);
-  const brim=new THREE.Mesh(new THREE.CylinderGeometry(.62,.62,.07,10),mat(0x2c3160));brim.position.y=1.5;g.add(brim);
+  // player-mage.glb is a Kenney "Pirate Captain" stand-in (no CC0 wizard exists) -- pull the
+  // coat toward wizard-blue so it reads as a mage; procedural staff/orb/glow always stay on top
+  const mdl=faceFix(spawnModel('player-mage',{h:2.0,lerp:[new THREE.Color(0x4a4f8a),0.45]}));
+  if(mdl){g.add(mdl);}
+  else{
+    const robe=new THREE.Mesh(new THREE.CylinderGeometry(.42,.62,1.15,8),mat(0x3a3f7a));robe.position.y=.58;g.add(robe);
+    const head=new THREE.Mesh(new THREE.SphereGeometry(.32,10,8),mat(0xe0c8a8));head.position.y=1.35;g.add(head);
+    const hat=new THREE.Mesh(new THREE.ConeGeometry(.44,.8,9),mat(0x2c3160));hat.position.y=1.85;g.add(hat);
+    const brim=new THREE.Mesh(new THREE.CylinderGeometry(.62,.62,.07,10),mat(0x2c3160));brim.position.y=1.5;g.add(brim);}
   const staff=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,1.6,6),mat(0x6b4a2c));
   staff.position.set(.5,.85,0);g.add(staff);
   const orb=new THREE.Mesh(new THREE.SphereGeometry(.13,8,6),mat(0x9d8cff,0x9d8cff,1.6));
@@ -414,14 +480,102 @@ function buildPlayer(){
 }
 
 /* ---------- floor gen ---------- */
+/* GPU cleanup for anything leaving the scene graph. Geometry/materials/textures shared
+   beyond one floor are tagged (GLB templates via sharedGeo/sharedMat, module-const geos
+   via geometry.userData.sharedGeo, glow/ground-tile textures via map.userData.shared)
+   and skipped; everything else — cloned/tinted materials, per-shot projectile and
+   particle materials, canvas textures — is per-instance and freed here */
+function disposeFloorObj(root){root.traverse(o=>{
+  if(o.isMesh&&o.geometry&&!o.userData.sharedGeo&&!o.geometry.userData.sharedGeo)o.geometry.dispose();
+  if(o.material&&!o.userData.sharedMat){
+    if(o.material.map&&!o.material.map.userData.shared)o.material.map.dispose();
+    o.material.dispose();}});}
 function clearFloor(){
-  if(floorGroup){scene.remove(floorGroup);
-    floorGroup.traverse(o=>{if(o.geometry)o.geometry.dispose();});}
+  if(floorGroup){scene.remove(floorGroup);disposeFloorObj(floorGroup);}
   enemies=[];projs=[];eProjs=[];chests=[];particles=[];orbs=[];shrines=[];
   nodes=[];structures=[];portal=null;bossRef=null;bossBarrier=null;barrierFlash=0;
   fogCtx=null;fogTex=null;fogMesh=null;
   $('bossBar').style.display='none';
 }
+/* theme landmark props: models where we have them, procedural fallback otherwise.
+   height is capped at 4.8 so nothing pokes through the fog-of-war plane (y=5.2) */
+function buildPropMesh(T){
+  const g=new THREE.Group();g.rotation.y=rand(0,TAU);
+  let h,child=null;
+  if(T.prop==='tree'){ // Verdant
+    if(Math.random()<0.82){h=rand(2.5,4.5);child=spawnModel(pick(['tree-a','tree-b','tree-pine-a']),{h});}
+    else{h=rand(.8,1.8);child=spawnModel('rock-a',{h});}
+    if(!child){h=h||rand(2.5,4.5);const m=new THREE.Mesh(new THREE.ConeGeometry(rand(.8,1.6),h,7),mat(T.pc));
+      m.position.y=h/2;child=m;}}
+  else if(T.prop==='shard'){ // Ember — keep some procedural shard cones mixed with lava rocks
+    if(Math.random()<0.5){h=rand(1.5,3.5);
+      const m=new THREE.Mesh(new THREE.ConeGeometry(rand(.5,1.1),h,4),mat(T.pc,T.ec,.35));
+      m.rotation.z=rand(-.3,.3);m.position.y=h/2;child=m;}
+    else{h=rand(1.0,1.9);const tint=new THREE.Color(1,1,1).lerp(new THREE.Color(T.ec),.35);
+      child=spawnModel(pick(['lava-rock','rock-c']),{h,tint,emissive:T.ec,ei:.3});
+      if(!child){const m=new THREE.Mesh(new THREE.ConeGeometry(rand(.5,1.1),h,4),mat(T.pc,T.ec,.35));
+        m.rotation.z=rand(-.3,.3);m.position.y=h/2;child=m;}}}
+  else if(T.prop==='pillar'){ // Frost — pale pines + cool-tinted rocks
+    if(Math.random()<0.65){h=rand(2.2,4.0);
+      child=spawnModel(pick(['tree-pine-a','tree-b']),{h,lerp:[new THREE.Color(0xdfeeff),0.6]});}
+    else{h=rand(0.9,1.8);child=spawnModel(pick(['rock-b','rock-large']),{h,tint:new THREE.Color(0xcfe4ff)});}
+    if(!child){h=Math.min(h,4.8);const m=new THREE.Mesh(new THREE.CylinderGeometry(rand(.4,.8),rand(.5,.9),h,7),mat(T.pc,T.ec,.2));
+      m.position.y=h/2;child=m;}}
+  else if(T.prop==='cube'){ // Void — keep the floating cubes, mix in purple pillars/rocks
+    const r=Math.random();
+    if(r<0.6){const m=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.2,1.2),mat(T.pc,T.ec,.3));
+      m.rotation.y=rand(0,TAU);m.position.y=rand(1,3);child=m;}
+    else if(r<0.82){h=rand(1.3,1.86);child=spawnModel('pillar',{h,tint:new THREE.Color(0x9d7bff)});}
+    else{h=rand(0.9,1.8);child=spawnModel('rock-b',{h,tint:new THREE.Color(0x9d8cff)});}
+    if(!child){const m=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.2,1.2),mat(T.pc,T.ec,.3));
+      m.rotation.y=rand(0,TAU);m.position.y=rand(1,3);child=m;}}
+  else{ // Storm — ruined watchtowers, walls, grey stone
+    const r=Math.random();
+    if(r<0.4){h=rand(1.3,1.86);child=spawnModel('pillar',{h,tint:new THREE.Color(0xaab0bd)});}
+    else if(r<0.75){h=rand(1.4,1.9);child=spawnModel('ruin-wall',{h,tint:new THREE.Color(0xaab0bd)});}
+    else{h=rand(0.9,1.8);child=spawnModel('rock-large',{h,tint:new THREE.Color(0xaab0bd)});}
+    if(!child){h=Math.min(rand(3,5),4.8);const m=new THREE.Mesh(new THREE.BoxGeometry(.9,h,.9),mat(T.pc,T.ec,.25));
+      m.position.y=h/2;child=m;}}
+  g.add(child);return g;}
+/* non-interactive ground clutter: grass tufts, mushrooms, pebbles */
+function buildScatter(T,H,n){
+  for(let i=0;i<n;i++){
+    const px=rand(-H+3,H-3),pz=rand(-H+3,H-3);
+    if(dist(px,pz,0,H-6)<8)continue; // player spawn
+    if(dist(px,pz,0,-H+6)<4)continue; // portal
+    if(dist(px,pz,0,-H+14)<BOSS_LEASH+2)continue; // boss ring
+    const h=rand(.3,.7),r=Math.random();
+    const shroomy=T.prop==='tree'||T.prop==='cube'; // Verdant/Void
+    const key=r<0.55?pick(['grass-a','grass-b']):(shroomy&&r<0.78)?pick(['mushroom-a','mushroom-b']):
+      r<0.78?pick(['grass-a','grass-b']):pick(['rock-a','rock-b']);
+    let g=spawnModel(key,{h});
+    if(!g){g=new THREE.Group();const m=new THREE.Mesh(new THREE.ConeGeometry(h*.35,h,5),mat(T.pc));
+      m.position.y=h/2;g.add(m);}
+    g.rotation.y=rand(0,TAU);g.position.set(px,0,pz);floorGroup.add(g);}}
+/* chest.glb has no lid node — tilt the whole chest back + dim it on open instead */
+function buildChestMesh(){
+  const m=spawnModel('chest',{h:.9});
+  if(m){let lid=null;
+    m.traverse(o=>{if(!lid&&/lid|top/i.test(o.name))lid=o;});
+    if(!lid){lid=new THREE.Object3D();m.add(lid);}
+    return{mesh:m,lid,hasLid:lid.isMesh};}
+  const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(1.1,.6,.75),mat(0x6b4a2c));body.position.y=.3;g.add(body);
+  const lid=new THREE.Mesh(new THREE.BoxGeometry(1.1,.3,.75),mat(0x8a6238,0xc9a45c,.15));
+  lid.position.set(0,.72,0);g.add(lid);
+  return{mesh:g,lid,hasLid:true};}
+function buildShrineMesh(){
+  const m=spawnModel('shrine',{h:1.8,emissive:0x9d8cff,ei:.8});
+  if(m){let ob=null;m.traverse(o=>{if(!ob&&o.isMesh)ob=o;});
+    const gl=makeGlow(0x9d8cff,4);gl.position.y=1.6;m.add(gl);
+    return{mesh:m,ob,glow:gl};}
+  const g=new THREE.Group();
+  const base=new THREE.Mesh(new THREE.CylinderGeometry(.9,1.1,.4,7),mat(0x3a4a58));
+  base.position.y=.2;g.add(base);
+  const ob=new THREE.Mesh(new THREE.ConeGeometry(.45,1.7,5),mat(0x4a5a6a,0x9d8cff,.8));
+  ob.position.y=1.2;g.add(ob);
+  const gl=makeGlow(0x9d8cff,4);gl.position.y=1.6;g.add(gl);
+  return{mesh:g,ob,glow:gl};}
 function buildFloor(n){
   clearFloor();
   G.floor=n; G.theme=THEMES[(n-1)%THEMES.length];
@@ -432,9 +586,18 @@ function buildFloor(n){
   scene.fog=new THREE.Fog(T.fog,H*1.1,H*3.2);
   amb.color.setHex(T.amb);
   floorGroup=new THREE.Group();scene.add(floorGroup);
-  const gt=groundTex(T.gA,T.gB);gt.repeat.set(H/6,H/6);
-  const gnd=new THREE.Mesh(new THREE.PlaneGeometry(H*2,H*2),
-    new THREE.MeshStandardMaterial({map:gt,roughness:.95}));
+  const realTex=TEXTURES[T.gtex];
+  let gndMat;
+  if(realTex){ // grayscale tile, mean~.54 -- x1.86 restores full theme-color brightness
+    realTex.repeat.set(H/8,H/8); // reused+re-set per floor; clearFloor never disposes materials/maps, only geometry
+    /* the old canvas path fed theme hex to the GPU unconverted (NoColorSpace texture);
+       match it: keep the hex out of color management, then compensate the gray mean */
+    gndMat=new THREE.MeshStandardMaterial({map:realTex,roughness:.95,
+      color:new THREE.Color().setHex(T.ground,THREE.LinearSRGBColorSpace).multiplyScalar(1.86)});
+  }else{
+    const gt=groundTex(T.gA,T.gB);gt.repeat.set(H/6,H/6);
+    gndMat=new THREE.MeshStandardMaterial({map:gt,roughness:.95});}
+  const gnd=new THREE.Mesh(new THREE.PlaneGeometry(H*2,H*2),gndMat);
   gnd.rotation.x=-Math.PI/2;floorGroup.add(gnd);
   const wallM=mat(T.pc);
   [[0,-H],[0,H],[-H,0],[H,0]].forEach((p,i)=>{
@@ -444,14 +607,10 @@ function buildFloor(n){
   for(let i=0;i<Math.floor(G.half*0.7)+n;i++){
     const px=rand(-H+4,H-4),pz=rand(-H+4,H-4);
     if(dist(px,pz,0,H-6)<8||dist(px,pz,0,-H+6)<9)continue;
-    let m;
-    if(T.prop==='tree'){m=new THREE.Mesh(new THREE.ConeGeometry(rand(.8,1.6),rand(2.5,4.5),7),mat(T.pc));}
-    else if(T.prop==='shard'){m=new THREE.Mesh(new THREE.ConeGeometry(rand(.5,1.1),rand(1.5,3.5),4),mat(T.pc,T.ec,.35));m.rotation.z=rand(-.3,.3);}
-    else if(T.prop==='pillar'){m=new THREE.Mesh(new THREE.CylinderGeometry(rand(.4,.8),rand(.5,.9),rand(2,4),7),mat(T.pc,T.ec,.2));}
-    else if(T.prop==='cube'){m=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.2,1.2),mat(T.pc,T.ec,.3));m.rotation.y=rand(0,TAU);m.position.y=rand(1,3);}
-    else{m=new THREE.Mesh(new THREE.BoxGeometry(.9,rand(3,5),.9),mat(T.pc,T.ec,.25));}
-    if(m.position.y===0)m.position.y=m.geometry.parameters.height?m.geometry.parameters.height/2:1;
+    const m=buildPropMesh(T);
     m.position.x=px;m.position.z=pz;floorGroup.add(m);}
+  // ambient scatter: grass/mushrooms/pebbles, purely decorative
+  buildScatter(T,H,randi(25,45));
   // portal (inactive)
   portal={x:0,z:-H+6,active:false,mesh:new THREE.Group()};
   const ring=new THREE.Mesh(new THREE.TorusGeometry(1.6,.18,8,28),mat(0x555a66,0x222222,.5));
@@ -467,23 +626,15 @@ function buildFloor(n){
   for(let i=0;i<nc;i++){
     const cx=rand(-H+5,H-5),cz=rand(-H+5,H-5);
     if(dist(cx,cz,0,H-6)<6)continue;
-    const g=new THREE.Group();
-    const body=new THREE.Mesh(new THREE.BoxGeometry(1.1,.6,.75),mat(0x6b4a2c));body.position.y=.3;g.add(body);
-    const lid=new THREE.Mesh(new THREE.BoxGeometry(1.1,.3,.75),mat(0x8a6238,0xc9a45c,.15));
-    lid.position.set(0,.72,0);g.add(lid);
-    g.position.set(cx,0,cz);floorGroup.add(g);
-    chests.push({x:cx,z:cz,open:false,mesh:g,lid});}
+    const{mesh:g,lid,hasLid}=buildChestMesh();
+    g.rotation.y=rand(0,TAU);g.position.set(cx,0,cz);floorGroup.add(g);
+    chests.push({x:cx,z:cz,open:false,mesh:g,lid,hasLid});}
   // blessing shrines
   for(let i=0;i<randi(1,2);i++){
     const sx=rand(-H+6,H-6),sz=rand(-H+6,H-6);
     if(dist(sx,sz,0,H-6)<7||dist(sx,sz,0,-H+6)<9)continue;
-    const g=new THREE.Group();
-    const base=new THREE.Mesh(new THREE.CylinderGeometry(.9,1.1,.4,7),mat(0x3a4a58));
-    base.position.y=.2;g.add(base);
-    const ob=new THREE.Mesh(new THREE.ConeGeometry(.45,1.7,5),mat(0x4a5a6a,0x9d8cff,.8));
-    ob.position.y=1.2;g.add(ob);
-    const gl=makeGlow(0x9d8cff,4);gl.position.y=1.6;g.add(gl);
-    g.position.set(sx,0,sz);floorGroup.add(g);
+    const{mesh:g,ob,glow:gl}=buildShrineMesh();
+    g.rotation.y=rand(0,TAU);g.position.set(sx,0,sz);floorGroup.add(g);
     shrines.push({x:sx,z:sz,used:false,mesh:g,glow:gl,ob});}
   // enemies
   let budget=8+n*2.6;
@@ -533,17 +684,38 @@ const EDEF={
   boss:{hp:560,spd:3.4,dmg:20,r:1.9,xp:110,c:0xb06ae0,agro:999}};
 function makeEnemyMesh(t,def,theme){
   const g=new THREE.Group();const c=t==='boss'?theme.ec:def.c;
-  if(t==='rusher'){const b=new THREE.Mesh(new THREE.BoxGeometry(.9,.9,.9),mat(c));b.position.y=.6;b.rotation.y=.7;g.add(b);
-    const h=new THREE.Mesh(new THREE.ConeGeometry(.35,.6,4),mat(c,c,.3));h.position.y=1.35;g.add(h);}
-  else if(t==='swarmer'){const b=new THREE.Mesh(new THREE.ConeGeometry(.42,.9,3),mat(c,c,.25));b.position.y=.5;g.add(b);}
-  else if(t==='caster'){const b=new THREE.Mesh(new THREE.CylinderGeometry(.3,.55,1.3,6),mat(c));b.position.y=.65;g.add(b);
-    const o=new THREE.Mesh(new THREE.SphereGeometry(.24,8,6),mat(c,c,1.2));o.position.y=1.6;g.add(o);}
-  else if(t==='brute'){const b=new THREE.Mesh(new THREE.BoxGeometry(1.8,1.7,1.4),mat(c));b.position.y=.9;g.add(b);
-    const h=new THREE.Mesh(new THREE.BoxGeometry(.9,.6,.9),mat(c,0x000000,0));h.position.y=2.0;g.add(h);}
-  else{const b=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.7,2.6,7),mat(c,c,.25));b.position.y=1.3;g.add(b);
-    const cr=new THREE.Mesh(new THREE.TorusGeometry(1.1,.14,6,18),mat(0xc9a45c,0xc9a45c,.7));
-    cr.rotation.x=Math.PI/2;cr.position.y=2.9;g.add(cr);
-    const eye=new THREE.Mesh(new THREE.SphereGeometry(.3,8,6),mat(0xffffff,c,2));eye.position.set(0,1.9,1.1);g.add(eye);}
+  if(t==='rusher'){
+    const mdl=faceFix(spawnModel('enemy-rusher',{h:1.5,lerp:[new THREE.Color(def.c),0.55]}));
+    if(mdl)g.add(mdl);
+    else{const b=new THREE.Mesh(new THREE.BoxGeometry(.9,.9,.9),mat(c));b.position.y=.6;b.rotation.y=.7;g.add(b);
+      const h=new THREE.Mesh(new THREE.ConeGeometry(.35,.6,4),mat(c,c,.3));h.position.y=1.35;g.add(h);}}
+  else if(t==='swarmer'){
+    const mdl=faceFix(spawnModel('enemy-swarmer',{h:.95,lerp:[new THREE.Color(def.c),0.55]}));
+    if(mdl)g.add(mdl);
+    else{const b=new THREE.Mesh(new THREE.ConeGeometry(.42,.9,3),mat(c,c,.25));b.position.y=.5;g.add(b);}}
+  else if(t==='caster'){
+    const mdl=faceFix(spawnModel('enemy-caster',{h:1.7,lerp:[new THREE.Color(def.c),0.55]}));
+    if(mdl)g.add(mdl);
+    else{const b=new THREE.Mesh(new THREE.CylinderGeometry(.3,.55,1.3,6),mat(c));b.position.y=.65;g.add(b);
+      const o=new THREE.Mesh(new THREE.SphereGeometry(.24,8,6),mat(c,c,1.2));o.position.y=1.6;g.add(o);}}
+  else if(t==='brute'){
+    const mdl=faceFix(spawnModel('enemy-brute',{h:2.4,lerp:[new THREE.Color(def.c),0.55]}));
+    if(mdl)g.add(mdl);
+    else{const b=new THREE.Mesh(new THREE.BoxGeometry(1.8,1.7,1.4),mat(c));b.position.y=.9;g.add(b);
+      const h=new THREE.Mesh(new THREE.BoxGeometry(.9,.6,.9),mat(c,0x000000,0));h.position.y=2.0;g.add(h);}}
+  else{ // boss — enemy-boss.glb reuses the brute's blocky pirate-family body (curator's allowance);
+        // crown + eye glow stay on top always, scaled to whichever body (model or fallback) is present
+    const mdl=faceFix(spawnModel('enemy-boss',{h:3.6,emissive:theme.ec,ei:.25}));
+    let bh=2.6;
+    if(mdl){ // widen the slender pirate body so its bulk matches the boss's r=1.9 hitbox
+      mdl.children[0].scale.x*=1.35;mdl.children[0].scale.z*=1.35;
+      g.add(mdl);bh=3.6;}
+    else{const b=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.7,2.6,7),mat(c,c,.25));b.position.y=1.3;g.add(b);}
+    const crR=mdl?0.7:1.1;
+    const cr=new THREE.Mesh(new THREE.TorusGeometry(crR,crR*.13,6,18),mat(0xc9a45c,0xc9a45c,.7));
+    cr.rotation.x=Math.PI/2;cr.position.y=bh+.3;g.add(cr);
+    const eye=new THREE.Mesh(new THREE.SphereGeometry(.3,8,6),mat(0xffffff,c,2));
+    eye.position.set(0,bh*.73,mdl?.75:1.1);g.add(eye);}
   return g;}
 function spawnEnemy(t,x,z,fl){
   const def=EDEF[t];const sc=1+0.4*(fl-1);const dsc=1+0.15*(fl-1);
@@ -763,7 +935,7 @@ function buildPayload(layers,parentDmg,parentPow){
    fire  = LIGHT  — detonates on impact / end of range; AoE damage + blast knockback (rocket-jump!)
    air   = REPULSE— pops with a strong radial shove, little damage (launch pad)
    water/none = plain shot */
-const projGeo=new THREE.SphereGeometry(1,10,8);
+const projGeo=new THREE.SphereGeometry(1,10,8);projGeo.userData.sharedGeo=true;
 function projKind(elems){
   const el=elems.length?elems[elems.length-1]:null;
   return el==='earth'?'heavy':el==='fire'?'explode':el==='air'?'repulse':'plain';}
@@ -898,7 +1070,7 @@ function dmgNum(x,z,txt,col,big){
   document.body.appendChild(d);setTimeout(()=>d.remove(),820);}
 
 /* ---------- pickups (health / mana / xp orbs) ---------- */
-const orbGeo=new THREE.SphereGeometry(.16,8,6);
+const orbGeo=new THREE.SphereGeometry(.16,8,6);orbGeo.userData.sharedGeo=true;
 function spawnOrb(x,z,type){
   const col=type==='hp'?0xe05555:type==='xp'?0x9d8cff:ECOL[type];
   const m=new THREE.Mesh(orbGeo,mat(col,col,2));
@@ -918,8 +1090,8 @@ function updateOrbs(dt){
       const pull=lerp(16,4,d/7);o.x+=Math.cos(a)*pull*dt;o.z+=Math.sin(a)*pull*dt;}
     o.mesh.position.set(o.x,.5+Math.sin(o.bob)*.15,o.z);
     o.mesh.visible=o.ttl>3||Math.floor(o.ttl*6)%2===0;
-    if(d<1.1){collectOrb(o);floorGroup.remove(o.mesh);orbs.splice(i,1);continue;}
-    if(o.ttl<=0){floorGroup.remove(o.mesh);orbs.splice(i,1);}}}
+    if(d<1.1){collectOrb(o);floorGroup.remove(o.mesh);disposeFloorObj(o.mesh);orbs.splice(i,1);continue;}
+    if(o.ttl<=0){floorGroup.remove(o.mesh);disposeFloorObj(o.mesh);orbs.splice(i,1);}}}
 
 /* ---------- combat ---------- */
 function applyElems(e,elems,power,ang){
@@ -943,7 +1115,7 @@ function damageEnemy(e,dmg,ang,kb,power){
   if(e.hp<=0)killEnemy(e);}
 function killEnemy(e){
   const i=enemies.indexOf(e);if(i<0)return;
-  enemies.splice(i,1);floorGroup.remove(e.mesh);
+  enemies.splice(i,1);floorGroup.remove(e.mesh);disposeFloorObj(e.mesh);
   spawnBurst(e.x,.8,e.z,e.boss?0xc9a45c:0xffffff,e.boss?26:10,e.boss?7:4);
   sfx('kill');combo++;comboT=4;
   G.slowT=Math.max(G.slowT,e.boss?0.3:0.05);
@@ -957,7 +1129,7 @@ function killEnemy(e){
   const r=Math.random();
   if(e.boss){player.mats.shard+=2;addItem(makeEquipment(G.floor));
     dropParch(Math.min(7,2+Math.floor(G.floor/2)));
-    if(bossBarrier){floorGroup.remove(bossBarrier);bossBarrier=null;}
+    if(bossBarrier){floorGroup.remove(bossBarrier);disposeFloorObj(bossBarrier);bossBarrier=null;}
     toast('The Warden falls — the way opens');addShake(1);
     if(portal){portal.active=true;portal.beam.material.opacity=.35;
       portal.ring.material.color.setHex(G.theme.ec);
@@ -994,7 +1166,7 @@ function gainXp(x){
 const xpNeed=()=>Math.round(40*Math.pow(player.level,1.3));
 
 /* ---------- particles ---------- */
-const partGeo=new THREE.SphereGeometry(.12,5,4);
+const partGeo=new THREE.SphereGeometry(.12,5,4);partGeo.userData.sharedGeo=true;
 function spawnBurst(x,y,z,col,n,spd){
   for(let i=0;i<n;i++){
     const m=new THREE.Mesh(partGeo,new THREE.MeshBasicMaterial({color:col,transparent:true}));
@@ -1044,20 +1216,26 @@ function buildStructMesh(kind){
     const c=new THREE.Mesh(new THREE.ConeGeometry(1.3,1.5,4),mat(0x8a6238,0xc9a45c,.1));
     c.position.y=.75;c.rotation.y=Math.PI/4;g.add(c);}
   else if(kind==='wall'){
-    const w=new THREE.Mesh(new THREE.BoxGeometry(2.6,1.7,.6),mat(0x6a7280));
-    w.position.y=.85;g.add(w);}
+    const mdl=spawnModel('barricade',{h:1.6});
+    if(mdl)g.add(mdl);
+    else{const w=new THREE.Mesh(new THREE.BoxGeometry(2.6,1.7,.6),mat(0x6a7280));
+      w.position.y=.85;g.add(w);}}
   else if(kind==='anvil'){
     const b=new THREE.Mesh(new THREE.BoxGeometry(1.1,.5,.6),mat(0x3c434e,0x777777,.1));
     b.position.y=.75;g.add(b);
     const s=new THREE.Mesh(new THREE.BoxGeometry(.5,.5,.5),mat(0x2c333e));s.position.y=.25;g.add(s);}
   else if(kind==='table'){
-    const t=new THREE.Mesh(new THREE.BoxGeometry(1.6,.15,1),mat(0x8a6238));t.position.y=.8;g.add(t);
-    const l=new THREE.Mesh(new THREE.BoxGeometry(1.3,.7,.7),mat(0x6b4a2c));l.position.y=.4;g.add(l);}
-  else{const pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,1.8,5),mat(0x6b4a2c));
-    pole.position.y=.9;g.add(pole);
-    const pl=new THREE.Mesh(new THREE.PlaneGeometry(1.1,.8),
-      new THREE.MeshStandardMaterial({color:0xe8ddc8,emissive:0xc9a45c,emissiveIntensity:.15,side:THREE.DoubleSide}));
-    pl.position.y=1.2;g.add(pl);}
+    const mdl=spawnModel('table',{h:.9});
+    if(mdl)g.add(mdl);
+    else{const t=new THREE.Mesh(new THREE.BoxGeometry(1.6,.15,1),mat(0x8a6238));t.position.y=.8;g.add(t);
+      const l=new THREE.Mesh(new THREE.BoxGeometry(1.3,.7,.7),mat(0x6b4a2c));l.position.y=.4;g.add(l);}}
+  else{const mdl=spawnModel('banner',{h:2.2});
+    if(mdl)g.add(mdl);
+    else{const pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,1.8,5),mat(0x6b4a2c));
+      pole.position.y=.9;g.add(pole);
+      const pl=new THREE.Mesh(new THREE.PlaneGeometry(1.1,.8),
+        new THREE.MeshStandardMaterial({color:0xe8ddc8,emissive:0xc9a45c,emissiveIntensity:.15,side:THREE.DoubleSide}));
+      pl.position.y=1.2;g.add(pl);}}
   return g;}
 function placeStruct(kind){
   if(G.paused||G.over)return;
@@ -1077,7 +1255,7 @@ function gatherStruct(){
   if(G.paused||G.over)return;
   for(let i=structures.length-1;i>=0;i--){const s=structures[i];
     if(dist(player.x,player.z,s.x,s.z)<2.6){
-      structures.splice(i,1);floorGroup.remove(s.mesh);
+      structures.splice(i,1);floorGroup.remove(s.mesh);disposeFloorObj(s.mesh);
       player.structs[s.kind]++;sfx('gather');
       toast(STRUCT_DEF[s.kind].name+' packed up');return;}}
   toast('Nothing to pack up here');}
@@ -1090,15 +1268,27 @@ const NODE_DEF={
 function buildNodeMesh(kind,T){
   const g=new THREE.Group();
   if(kind==='tree'){
-    const tr=new THREE.Mesh(new THREE.CylinderGeometry(.22,.3,1.2,6),mat(0x6b4a2c));tr.position.y=.6;g.add(tr);
-    const c=new THREE.Mesh(new THREE.ConeGeometry(1,2,7),mat(T.pc,T.ec,.15));c.position.y=2.1;g.add(c);}
+    const small=(T.prop==='shard'||T.prop==='cube'); // Ember/Void get the small broadleaf
+    const key=small?'tree-a':pick(['tree-b','tree-pine-a']);
+    const frosty=T.prop==='pillar'; // Frost: match the snow-tinted prop pines
+    const mdl=spawnModel(key,{h:small?2.2:rand(1.8,2.6),
+      lerp:frosty?[new THREE.Color(0xdfeeff),0.6]:undefined});
+    if(mdl)g.add(mdl);
+    else{const tr=new THREE.Mesh(new THREE.CylinderGeometry(.22,.3,1.2,6),mat(0x6b4a2c));tr.position.y=.6;g.add(tr);
+      const c=new THREE.Mesh(new THREE.ConeGeometry(1,2,7),mat(T.pc,T.ec,.15));c.position.y=2.1;g.add(c);}}
   else if(kind==='rock'){
-    const r=new THREE.Mesh(new THREE.IcosahedronGeometry(.8,0),mat(0x7a828e));
-    r.position.y=.5;r.rotation.y=rand(0,TAU);g.add(r);}
+    const mdl=spawnModel(pick(['rock-a','rock-b']),{h:1.1});
+    if(mdl){mdl.rotation.y=rand(0,TAU);g.add(mdl);}
+    else{const r=new THREE.Mesh(new THREE.IcosahedronGeometry(.8,0),mat(0x7a828e));
+      r.position.y=.5;r.rotation.y=rand(0,TAU);g.add(r);}}
   else if(kind==='herb'){
-    for(let i=0;i<3;i++){const h=new THREE.Mesh(new THREE.ConeGeometry(.16,.7,5),mat(0x7fbf6a,0x9ccc65,.35));
+    const mush=spawnModel(pick(['mushroom-a','mushroom-b']),{h:.55});
+    if(mush){mush.position.set(rand(-.2,.2),0,rand(-.2,.2));g.add(mush);
+      const tuft=spawnModel(pick(['grass-a','grass-b']),{h:.4});
+      if(tuft){tuft.position.set(rand(-.3,.3),0,rand(-.3,.3));g.add(tuft);}}
+    else for(let i=0;i<3;i++){const h=new THREE.Mesh(new THREE.ConeGeometry(.16,.7,5),mat(0x7fbf6a,0x9ccc65,.35));
       h.position.set(rand(-.4,.4),.35,rand(-.4,.4));g.add(h);}}
-  else{const v=new THREE.Mesh(new THREE.ConeGeometry(.4,1.4,5),mat(0x9d8cff,0x9d8cff,.7));
+  else{const v=new THREE.Mesh(new THREE.ConeGeometry(.4,1.4,5),mat(0x9d8cff,0x9d8cff,.7)); // vein — keep procedural
     v.position.y=.7;v.rotation.z=rand(-.25,.25);g.add(v);
     const gl=makeGlow(0x9d8cff,2.5);gl.position.y=.8;g.add(gl);}
   return g;}
@@ -1110,7 +1300,7 @@ function gatherNode(n){
   toast('+'+q+' '+def.mat);sfx('gather');
   spawnBurst(n.x,.8,n.z,0xc9a45c,6,2.5);
   n.left--;n.mesh.scale.multiplyScalar(0.78);
-  if(n.left<=0){floorGroup.remove(n.mesh);nodes.splice(nodes.indexOf(n),1);}}
+  if(n.left<=0){floorGroup.remove(n.mesh);disposeFloorObj(n.mesh);nodes.splice(nodes.indexOf(n),1);}}
 
 /* ---------- fog of war ---------- */
 function buildFog(H){
@@ -1539,6 +1729,11 @@ function doInteract(){
   if(G.paused||G.over)return;
   const n=nearestInteract();if(!n)return;
   if(n.t==='chest'){n.c.open=true;n.c.lid.rotation.x=-1.2;
+    if(!n.c.hasLid){ // chest.glb has no lid node — tilt + dim the whole chest instead
+      n.c.mesh.rotation.x=-0.25;
+      n.c.mesh.traverse(o=>{if(o.isMesh){if(o.material.map)o.material.map.userData.shared=true;
+        o.material=o.material.clone();o.material.color.multiplyScalar(0.6);
+        o.userData.sharedMat=false;}});} // dimmed clone is per-chest now — let clearFloor free it
     spawnBurst(n.c.x,1,n.c.z,0xc9a45c,10,3);
     const r=Math.random();
     if(r<0.3)addItem(makeEquipment(G.floor));
@@ -1775,7 +1970,7 @@ function updateProjs(dt){
           if(enemies.includes(e))damageEnemy(e,p.dmg,p.ang,p.kb,p.power);
           spawnBurst(p.x,.9,p.z,p.mesh.material.color.getHex(),5,3);
           if(p.pierce>0)p.pierce--;else{dead=true;break;}}}}
-    if(dead){if(boom)endProj(p);floorGroup.remove(p.mesh);projs.splice(i,1);}}
+    if(dead){if(boom)endProj(p);floorGroup.remove(p.mesh);disposeFloorObj(p.mesh);projs.splice(i,1);}}
   for(let i=eProjs.length-1;i>=0;i--){const p=eProjs[i];
     const ox=p.x,oz=p.z;
     p.x+=Math.cos(p.ang)*p.spd*dt;p.z+=Math.sin(p.ang)*p.spd*dt;p.ttl-=dt;
@@ -1786,11 +1981,11 @@ function updateProjs(dt){
       if(s.kind==='wall'&&dist(p.x,p.z,s.x,s.z)<1.4){
         spawnBurst(p.x,1,p.z,0x8fa0ab,4,2);dead=true;break;}
     if(!dead&&dist(p.x,p.z,player.x,player.z)<0.85){damagePlayer(p.dmg);dead=true;}
-    if(dead){floorGroup.remove(p.mesh);eProjs.splice(i,1);}}}
+    if(dead){floorGroup.remove(p.mesh);disposeFloorObj(p.mesh);eProjs.splice(i,1);}}}
 function updateParticles(dt){
   for(let i=particles.length-1;i>=0;i--){const p=particles[i];
     p.life-=dt;
-    if(p.life<=0){floorGroup.remove(p.mesh);particles.splice(i,1);continue;}
+    if(p.life<=0){floorGroup.remove(p.mesh);disposeFloorObj(p.mesh);particles.splice(i,1);continue;}
     if(!p.glow)p.vy-=14*dt;
     p.mesh.position.x+=p.vx*dt;p.mesh.position.y=Math.max(.05,p.mesh.position.y+p.vy*dt);
     p.mesh.position.z+=p.vz*dt;p.mesh.material.opacity=Math.min(1,p.life*2.5);}}
@@ -1865,6 +2060,9 @@ function preScribeStarters(){
     const p=buildPlan(false,s.layers);
     s.scribed={layers:JSON.parse(JSON.stringify(s.layers)),rank:'C',uses:8,
       tier:p.tier,spectrum:p.spectrum,nCirc:p.nCirc,kind:projKind(p.stack)};}}
+const loadBar=$('loadBar');
+await preloadAssets(p=>{if(loadBar)loadBar.style.width=(p*100)+'%';});
+const loadOvl=$('loadOvl');if(loadOvl)loadOvl.remove();
 preScribeStarters();
 buildHotbar();
 buildPlayer();
@@ -1873,6 +2071,10 @@ toast('Aim, weave, ascend. Open the Spellforge ('+(IS_TOUCH?'FORGE':'M')+') to c
 toast('Two starter spells are scribed in — '+(IS_TOUCH?'swap slots in the forge (S1-S3)':'swap with keys 1 · 2 · 3'));
 flashChipSlot();
 requestAnimationFrame(animate);
+/* debug handle for external verification/automation */
+/* debug/test handle — opt in via #debug or localStorage so it isn't exposed by default */
+if(location.hash.includes('debug')||localStorage.getItem('msandbox:debug'))
+  window.MS={buildFloor,G,player,MODELS,scene,renderer};
 </script>
 </body>
 </html>
