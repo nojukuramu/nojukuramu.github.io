@@ -345,7 +345,7 @@ const glowTex=(()=>{const c=document.createElement('canvas');c.width=c.height=64
   const g=c.getContext('2d');const gr=g.createRadialGradient(32,32,2,32,32,30);
   gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.4,'rgba(255,255,255,.32)');
   gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,64,64);
-  return new THREE.CanvasTexture(c);})();
+  const t=new THREE.CanvasTexture(c);t.userData.shared=true;return t;})();
 function makeGlow(col,size){const m=new THREE.SpriteMaterial({map:glowTex,color:col,
   transparent:true,blending:THREE.AdditiveBlending,depthWrite:false});
   const s=new THREE.Sprite(m);s.scale.setScalar(size);return s;}
@@ -373,6 +373,7 @@ function loadTex(key,entry){
   return new Promise(res=>{
     texLoader.load('./assets/'+entry.file,
       tex=>{tex.wrapS=tex.wrapT=THREE.RepeatWrapping; /* grayscale detail map: sample as linear data, not sRGB */
+        tex.userData.shared=true; /* session cache — disposeFloorObj must not free it */
         TEXTURES[key]=tex;res();},
       undefined,()=>res());}); /* missing/broken texture -> TEXTURES[key] stays unset, callers fall back */}
 async function preloadAssets(onProgress){
@@ -398,11 +399,13 @@ function spawnModel(key,opts){
   inst.traverse(o=>{if(!o.isMesh)return;
     o.userData.sharedGeo=true; // geometry is shared with the MODELS template — never dispose it
     if(opts.tint||opts.lerp||opts.emissive!==undefined){
+      if(o.material.map)o.material.map.userData.shared=true; // clone borrows the template's texture
       o.material=o.material.clone();
       if(opts.tint)o.material.color.multiply(opts.tint);
       if(opts.lerp)o.material.color.lerp(opts.lerp[0],opts.lerp[1]); // pull toward a color (multiply can't lighten)
       if(opts.emissive!==undefined){o.material.emissive=new THREE.Color(opts.emissive);
-        o.material.emissiveIntensity=opts.ei!==undefined?opts.ei:1;}}});
+        o.material.emissiveIntensity=opts.ei!==undefined?opts.ei:1;}}
+    else o.userData.sharedMat=true;}); // material is the MODELS template's — never dispose it
   const wrap=new THREE.Group();wrap.add(inst);return wrap;}
 /* Kenney character GLBs face -Z natively; rotate 180 so they face +Z, matching the
    -aim+PI/2 convention the rest of the game uses for both player and enemies */
@@ -477,11 +480,18 @@ function buildPlayer(){
 }
 
 /* ---------- floor gen ---------- */
+/* GPU cleanup for anything leaving the scene graph. Geometry/materials/textures shared
+   beyond one floor are tagged (GLB templates via sharedGeo/sharedMat, module-const geos
+   via geometry.userData.sharedGeo, glow/ground-tile textures via map.userData.shared)
+   and skipped; everything else — cloned/tinted materials, per-shot projectile and
+   particle materials, canvas textures — is per-instance and freed here */
+function disposeFloorObj(root){root.traverse(o=>{
+  if(o.isMesh&&o.geometry&&!o.userData.sharedGeo&&!o.geometry.userData.sharedGeo)o.geometry.dispose();
+  if(o.material&&!o.userData.sharedMat){
+    if(o.material.map&&!o.material.map.userData.shared)o.material.map.dispose();
+    o.material.dispose();}});}
 function clearFloor(){
-  if(floorGroup){scene.remove(floorGroup);
-    /* GLB clones share geometry with MODELS templates (spawnModel marks userData.sharedGeo) —
-       skip those or the next floor's clones render with disposed buffers */
-    floorGroup.traverse(o=>{if(o.geometry&&!o.userData.sharedGeo)o.geometry.dispose();});}
+  if(floorGroup){scene.remove(floorGroup);disposeFloorObj(floorGroup);}
   enemies=[];projs=[];eProjs=[];chests=[];particles=[];orbs=[];shrines=[];
   nodes=[];structures=[];portal=null;bossRef=null;bossBarrier=null;barrierFlash=0;
   fogCtx=null;fogTex=null;fogMesh=null;
@@ -925,7 +935,7 @@ function buildPayload(layers,parentDmg,parentPow){
    fire  = LIGHT  — detonates on impact / end of range; AoE damage + blast knockback (rocket-jump!)
    air   = REPULSE— pops with a strong radial shove, little damage (launch pad)
    water/none = plain shot */
-const projGeo=new THREE.SphereGeometry(1,10,8);
+const projGeo=new THREE.SphereGeometry(1,10,8);projGeo.userData.sharedGeo=true;
 function projKind(elems){
   const el=elems.length?elems[elems.length-1]:null;
   return el==='earth'?'heavy':el==='fire'?'explode':el==='air'?'repulse':'plain';}
@@ -1060,7 +1070,7 @@ function dmgNum(x,z,txt,col,big){
   document.body.appendChild(d);setTimeout(()=>d.remove(),820);}
 
 /* ---------- pickups (health / mana / xp orbs) ---------- */
-const orbGeo=new THREE.SphereGeometry(.16,8,6);
+const orbGeo=new THREE.SphereGeometry(.16,8,6);orbGeo.userData.sharedGeo=true;
 function spawnOrb(x,z,type){
   const col=type==='hp'?0xe05555:type==='xp'?0x9d8cff:ECOL[type];
   const m=new THREE.Mesh(orbGeo,mat(col,col,2));
@@ -1080,8 +1090,8 @@ function updateOrbs(dt){
       const pull=lerp(16,4,d/7);o.x+=Math.cos(a)*pull*dt;o.z+=Math.sin(a)*pull*dt;}
     o.mesh.position.set(o.x,.5+Math.sin(o.bob)*.15,o.z);
     o.mesh.visible=o.ttl>3||Math.floor(o.ttl*6)%2===0;
-    if(d<1.1){collectOrb(o);floorGroup.remove(o.mesh);orbs.splice(i,1);continue;}
-    if(o.ttl<=0){floorGroup.remove(o.mesh);orbs.splice(i,1);}}}
+    if(d<1.1){collectOrb(o);floorGroup.remove(o.mesh);disposeFloorObj(o.mesh);orbs.splice(i,1);continue;}
+    if(o.ttl<=0){floorGroup.remove(o.mesh);disposeFloorObj(o.mesh);orbs.splice(i,1);}}}
 
 /* ---------- combat ---------- */
 function applyElems(e,elems,power,ang){
@@ -1105,7 +1115,7 @@ function damageEnemy(e,dmg,ang,kb,power){
   if(e.hp<=0)killEnemy(e);}
 function killEnemy(e){
   const i=enemies.indexOf(e);if(i<0)return;
-  enemies.splice(i,1);floorGroup.remove(e.mesh);
+  enemies.splice(i,1);floorGroup.remove(e.mesh);disposeFloorObj(e.mesh);
   spawnBurst(e.x,.8,e.z,e.boss?0xc9a45c:0xffffff,e.boss?26:10,e.boss?7:4);
   sfx('kill');combo++;comboT=4;
   G.slowT=Math.max(G.slowT,e.boss?0.3:0.05);
@@ -1119,7 +1129,7 @@ function killEnemy(e){
   const r=Math.random();
   if(e.boss){player.mats.shard+=2;addItem(makeEquipment(G.floor));
     dropParch(Math.min(7,2+Math.floor(G.floor/2)));
-    if(bossBarrier){floorGroup.remove(bossBarrier);bossBarrier=null;}
+    if(bossBarrier){floorGroup.remove(bossBarrier);disposeFloorObj(bossBarrier);bossBarrier=null;}
     toast('The Warden falls — the way opens');addShake(1);
     if(portal){portal.active=true;portal.beam.material.opacity=.35;
       portal.ring.material.color.setHex(G.theme.ec);
@@ -1156,7 +1166,7 @@ function gainXp(x){
 const xpNeed=()=>Math.round(40*Math.pow(player.level,1.3));
 
 /* ---------- particles ---------- */
-const partGeo=new THREE.SphereGeometry(.12,5,4);
+const partGeo=new THREE.SphereGeometry(.12,5,4);partGeo.userData.sharedGeo=true;
 function spawnBurst(x,y,z,col,n,spd){
   for(let i=0;i<n;i++){
     const m=new THREE.Mesh(partGeo,new THREE.MeshBasicMaterial({color:col,transparent:true}));
@@ -1245,7 +1255,7 @@ function gatherStruct(){
   if(G.paused||G.over)return;
   for(let i=structures.length-1;i>=0;i--){const s=structures[i];
     if(dist(player.x,player.z,s.x,s.z)<2.6){
-      structures.splice(i,1);floorGroup.remove(s.mesh);
+      structures.splice(i,1);floorGroup.remove(s.mesh);disposeFloorObj(s.mesh);
       player.structs[s.kind]++;sfx('gather');
       toast(STRUCT_DEF[s.kind].name+' packed up');return;}}
   toast('Nothing to pack up here');}
@@ -1290,7 +1300,7 @@ function gatherNode(n){
   toast('+'+q+' '+def.mat);sfx('gather');
   spawnBurst(n.x,.8,n.z,0xc9a45c,6,2.5);
   n.left--;n.mesh.scale.multiplyScalar(0.78);
-  if(n.left<=0){floorGroup.remove(n.mesh);nodes.splice(nodes.indexOf(n),1);}}
+  if(n.left<=0){floorGroup.remove(n.mesh);disposeFloorObj(n.mesh);nodes.splice(nodes.indexOf(n),1);}}
 
 /* ---------- fog of war ---------- */
 function buildFog(H){
@@ -1721,7 +1731,9 @@ function doInteract(){
   if(n.t==='chest'){n.c.open=true;n.c.lid.rotation.x=-1.2;
     if(!n.c.hasLid){ // chest.glb has no lid node — tilt + dim the whole chest instead
       n.c.mesh.rotation.x=-0.25;
-      n.c.mesh.traverse(o=>{if(o.isMesh){o.material=o.material.clone();o.material.color.multiplyScalar(0.6);}});}
+      n.c.mesh.traverse(o=>{if(o.isMesh){if(o.material.map)o.material.map.userData.shared=true;
+        o.material=o.material.clone();o.material.color.multiplyScalar(0.6);
+        o.userData.sharedMat=false;}});} // dimmed clone is per-chest now — let clearFloor free it
     spawnBurst(n.c.x,1,n.c.z,0xc9a45c,10,3);
     const r=Math.random();
     if(r<0.3)addItem(makeEquipment(G.floor));
@@ -1958,7 +1970,7 @@ function updateProjs(dt){
           if(enemies.includes(e))damageEnemy(e,p.dmg,p.ang,p.kb,p.power);
           spawnBurst(p.x,.9,p.z,p.mesh.material.color.getHex(),5,3);
           if(p.pierce>0)p.pierce--;else{dead=true;break;}}}}
-    if(dead){if(boom)endProj(p);floorGroup.remove(p.mesh);projs.splice(i,1);}}
+    if(dead){if(boom)endProj(p);floorGroup.remove(p.mesh);disposeFloorObj(p.mesh);projs.splice(i,1);}}
   for(let i=eProjs.length-1;i>=0;i--){const p=eProjs[i];
     const ox=p.x,oz=p.z;
     p.x+=Math.cos(p.ang)*p.spd*dt;p.z+=Math.sin(p.ang)*p.spd*dt;p.ttl-=dt;
@@ -1969,11 +1981,11 @@ function updateProjs(dt){
       if(s.kind==='wall'&&dist(p.x,p.z,s.x,s.z)<1.4){
         spawnBurst(p.x,1,p.z,0x8fa0ab,4,2);dead=true;break;}
     if(!dead&&dist(p.x,p.z,player.x,player.z)<0.85){damagePlayer(p.dmg);dead=true;}
-    if(dead){floorGroup.remove(p.mesh);eProjs.splice(i,1);}}}
+    if(dead){floorGroup.remove(p.mesh);disposeFloorObj(p.mesh);eProjs.splice(i,1);}}}
 function updateParticles(dt){
   for(let i=particles.length-1;i>=0;i--){const p=particles[i];
     p.life-=dt;
-    if(p.life<=0){floorGroup.remove(p.mesh);particles.splice(i,1);continue;}
+    if(p.life<=0){floorGroup.remove(p.mesh);disposeFloorObj(p.mesh);particles.splice(i,1);continue;}
     if(!p.glow)p.vy-=14*dt;
     p.mesh.position.x+=p.vx*dt;p.mesh.position.y=Math.max(.05,p.mesh.position.y+p.vy*dt);
     p.mesh.position.z+=p.vz*dt;p.mesh.material.opacity=Math.min(1,p.life*2.5);}}
@@ -2060,7 +2072,9 @@ toast('Two starter spells are scribed in — '+(IS_TOUCH?'swap slots in the forg
 flashChipSlot();
 requestAnimationFrame(animate);
 /* debug handle for external verification/automation */
-window.MS={buildFloor,G,player,MODELS,scene,renderer};
+/* debug/test handle — opt in via #debug or localStorage so it isn't exposed by default */
+if(location.hash.includes('debug')||localStorage.getItem('msandbox:debug'))
+  window.MS={buildFloor,G,player,MODELS,scene,renderer};
 </script>
 </body>
 </html>
