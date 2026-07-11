@@ -233,6 +233,141 @@
       "src": "KenneyNL/Starter-Kit-FPS (wall-high.glb)",
       "license": "CC0",
       "author": "Kenney"
+    },
+    "player-mage": {
+      "file": "models/player-mage.glb",
+      "box": [
+        0.6239,
+        1.0938,
+        0.4096
+      ],
+      "minY": 0.0,
+      "r": 0.312,
+      "src": "pmndrs/market-assets (Pirate Captain) -- hooded/cloaked blocky humanoid used as a stand-in for a robed spellcaster; no CC0 wizard/mage model was found in any reachable source",
+      "license": "CC0",
+      "author": "Kenney",
+      "note": "not a literal wizard model -- closest style-appropriate CC0 humanoid found; consider a purple/blue recolor or a small staff prop to sell the mage read"
+    },
+    "enemy-rusher": {
+      "file": "models/enemy-rusher.glb",
+      "box": [
+        0.7713,
+        2.4094,
+        0.6709
+      ],
+      "minY": 0.0004,
+      "r": 0.3857,
+      "src": "pmndrs/market-assets (Zombie, variant 1) -- shipped in a custom arms-down idle pose (see note)",
+      "license": "CC0",
+      "author": "Kenney",
+      "note": "source asset is a skinned rig with ZERO baked animation clips (bind pose is a T-pose). Skin/joints were baked out via full linear-blend skinning into a static arms-down pose (shoulders rotated ~75deg) so it doesn't render as a scarecrow T-pose; shipped mesh has no skin/animations."
+    },
+    "enemy-swarmer": {
+      "file": "models/enemy-swarmer.glb",
+      "box": [
+        0.7713,
+        2.4094,
+        0.6709
+      ],
+      "minY": 0.0004,
+      "r": 0.3857,
+      "src": "pmndrs/market-assets (Zombie, variant 2) -- same rig family/pose treatment as enemy-rusher, different texture/palette (skull tee, backpack)",
+      "license": "CC0",
+      "author": "Kenney",
+      "note": "no CC0 tiny non-humanoid critter (slime/bee/spider/bat) was found in any reachable source; this reuses the rusher's rig with a different skin, scaled down by the integrator. A true tiny-critter role remains unfilled -- see report. Same static arms-down repose as enemy-rusher; no skin/animations shipped."
+    },
+    "enemy-caster": {
+      "file": "models/enemy-caster.glb",
+      "box": [
+        0.7713,
+        2.4094,
+        0.6709
+      ],
+      "minY": 0.0004,
+      "r": 0.3857,
+      "src": "pmndrs/market-assets (Female Cyborg) -- reposed arms-down idle, tech/arcane-construct look substituted for skeleton/ghost/cultist",
+      "license": "CC0",
+      "author": "Kenney",
+      "note": "same T-pose-bind / no-clips situation as enemy-rusher, fixed the same way (baked static arms-down pose, no skin/animations shipped)."
+    },
+    "enemy-brute": {
+      "file": "models/enemy-brute.glb",
+      "box": [
+        0.6239,
+        1.1745,
+        0.3047
+      ],
+      "minY": 0.0,
+      "r": 0.312,
+      "src": "pmndrs/market-assets (Pirate Officer) -- bulky blocky-body silhouette (tricorn hat, coat) used as a heavy/brute stand-in",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "enemy-boss": {
+      "file": "models/enemy-boss.glb",
+      "box": [
+        0.6239,
+        1.0618,
+        0.275
+      ],
+      "minY": 0.0,
+      "r": 0.3119,
+      "src": "pmndrs/market-assets (Pirate Crew) -- same blocky body family as enemy-brute with a different cap/color, per the brief's allowance for the boss to be 'a clearly-different variant of brute'; intended to be scaled up substantially by the integrator",
+      "license": "CC0",
+      "author": "Kenney"
+    },
+    "table": {
+      "file": "models/table.glb",
+      "box": [
+        3.7,
+        1.4181,
+        1.3991
+      ],
+      "minY": 0.2545,
+      "r": 1.85,
+      "src": "pmndrs/market-assets (Table)",
+      "license": "CC0",
+      "author": "saravieira",
+      "note": "geometry only -- the source asset's large photo-real CC0Textures/Wood027 JPEG material (normal+color+roughness, ~4MB) was intentionally NOT embedded to respect the low-poly flat-shaded style rule and the size budget; replaced with a flat baseColorFactor sampled from the texture's mean color. Native footprint is a long picnic/banquet table (3.7x1.4), not a small round table -- scale down if a smaller table is wanted."
+    }
+  },
+  "textures": {
+    "ground-grass": {
+      "file": "textures/ground-grass.png",
+      "size": [256, 256],
+      "src": "mrdoob/three.js examples/textures/terrain/grasslight-big.jpg (examples/textures/terrain/readme.txt: sourced from opengameart.org/content/dark-grass)",
+      "license": "CC BY 3.0",
+      "author": "OpenGameArt.org contributor (via three.js terrain/readme.txt); repackaged by three.js authors"
+    },
+    "ground-lava": {
+      "file": "textures/ground-lava.png",
+      "size": [256, 256],
+      "src": "mrdoob/three.js examples/textures/lava/lavatile.jpg",
+      "license": "MIT (repo-level; no per-asset readme.txt exists for this file, unlike terrain/ and cube/*)",
+      "author": "three.js authors"
+    },
+    "ground-snow": {
+      "file": "textures/ground-snow.png",
+      "size": [256, 256],
+      "src": "mrdoob/three.js examples/textures/ambientcg/Ice002_1K-JPG_Color.jpg",
+      "license": "CC0",
+      "author": "ambientCG (ambientcg.com) -- all ambientCG materials are published CC0 1.0 Universal; the three.js repo mirrors it verbatim in a folder literally named 'ambientcg'"
+    },
+    "ground-stone": {
+      "file": "textures/ground-stone.png",
+      "size": [256, 256],
+      "src": "mrdoob/three.js examples/textures/brick_diffuse.jpg",
+      "license": "MIT (repo-level; no per-asset readme.txt found)",
+      "author": "three.js authors",
+      "note": "a brick-wall photo, not a natural rock/stone scan -- no CC0/CC-BY natural-rock ground texture was found in any reachable source. Reads as a flagstone/cobblestone floor after grayscale+tiling. Original crop had a visible seam at the brick coursing; fixed with an offset+heal (roll by half + localized blur at the new center seam)."
+    },
+    "ground-void": {
+      "file": "textures/ground-void.png",
+      "size": [256, 256],
+      "src": "mrdoob/three.js examples/textures/tri_pattern.jpg",
+      "license": "MIT (repo-level; no per-asset readme.txt found)",
+      "author": "three.js authors",
+      "note": "abstract regular triangle-grid pattern, used for the Void theme's ground; not a natural material so seamlessness is inherent (a regular repeating grid)."
     }
   }
 }
