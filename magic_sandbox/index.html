@@ -556,7 +556,7 @@ const THEMES=[
 /* ---------- game state ---------- */
 const G={floor:1,theme:THEMES[0],half:30,paused:false,over:false,time:0,runTime:0,
   buffs:{dmg:0,spd:0,regen:0},slowT:0,mobCap:10,waveT:90};
-let floorGroup=null, enemies=[], projs=[], eProjs=[], chests=[], particles=[];
+let floorGroup=null, enemies=[], projs=[], eProjs=[], chests=[], particles=[], dying=[];
 let portal=null, bossRef=null, bossBarrier=null, barrierFlash=0;
 let orbs=[], shrines=[], nodes=[], structures=[];
 let combo=0, comboT=0;
@@ -577,7 +577,9 @@ const player={
   slots:new Array(36).fill(null),hot:0,
   eq:{armor:null,accessory:null},
   iframe:0,castCd:0,dashCd:0,dashT:0,dashAng:0,mesh:null,arrow:null,
-  lastPlan:null
+  lastPlan:null,
+  body:null,heldGroup:null,heldOrb:null,heldVisKey:undefined,heldRestRot:new THREE.Euler(),
+  anim:{walkT:0,swingT:0,castT:0,hurtT:0}
 };
 function stat_maxHp(){return 100+player.alloc.hp*20+eqMod('hp');}
 function stat_maxSt(){return 100+player.alloc.st*15+eqMod('st');}
@@ -627,23 +629,72 @@ function heldItem(){return player.slots[player.hot];}
 /* ---------- player mesh ---------- */
 function buildPlayer(){
   const g=new THREE.Group();
+  const body=new THREE.Group();g.add(body);player.body=body;
   // player-mage.glb is a Kenney "Pirate Captain" stand-in (no CC0 wizard exists) -- pull the
-  // coat toward wizard-blue so it reads as a mage; procedural staff/orb/glow always stay on top
+  // coat toward wizard-blue so it reads as a mage
   const mdl=faceFix(spawnModel('player-mage',{h:2.0,lerp:[new THREE.Color(0x4a4f8a),0.45]}));
-  if(mdl){g.add(mdl);}
+  if(mdl){body.add(mdl);}
   else{
-    const robe=new THREE.Mesh(new THREE.CylinderGeometry(.42,.62,1.15,8),mat(0x3a3f7a));robe.position.y=.58;g.add(robe);
-    const head=new THREE.Mesh(new THREE.SphereGeometry(.32,10,8),mat(0xe0c8a8));head.position.y=1.35;g.add(head);
-    const hat=new THREE.Mesh(new THREE.ConeGeometry(.44,.8,9),mat(0x2c3160));hat.position.y=1.85;g.add(hat);
-    const brim=new THREE.Mesh(new THREE.CylinderGeometry(.62,.62,.07,10),mat(0x2c3160));brim.position.y=1.5;g.add(brim);}
-  const staff=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,1.6,6),mat(0x6b4a2c));
-  staff.position.set(.5,.85,0);g.add(staff);
-  const orb=new THREE.Mesh(new THREE.SphereGeometry(.13,8,6),mat(0x9d8cff,0x9d8cff,1.6));
-  orb.position.set(.5,1.72,0);g.add(orb);
-  const og=makeGlow(0x9d8cff,1.7);og.position.set(.5,1.72,0);g.add(og);
+    const robe=new THREE.Mesh(new THREE.CylinderGeometry(.42,.62,1.15,8),mat(0x3a3f7a));robe.position.y=.58;body.add(robe);
+    const head=new THREE.Mesh(new THREE.SphereGeometry(.32,10,8),mat(0xe0c8a8));head.position.y=1.35;body.add(head);
+    const hat=new THREE.Mesh(new THREE.ConeGeometry(.44,.8,9),mat(0x2c3160));hat.position.y=1.85;body.add(hat);
+    const brim=new THREE.Mesh(new THREE.CylinderGeometry(.62,.62,.07,10),mat(0x2c3160));brim.position.y=1.5;body.add(brim);}
+  const heldGroup=new THREE.Group();heldGroup.position.set(.45,.9,0);body.add(heldGroup);
+  player.heldGroup=heldGroup;refreshHeldVis();
   player.mesh=g;scene.add(g);
   const arr=new THREE.Mesh(new THREE.BoxGeometry(1.1,.06,.16),mat(0xc9a45c,0xc9a45c,.9));
   arr.position.y=.15;player.arrow=arr;scene.add(arr);
+}
+function firstElemOf(data){
+  for(const L of data.layers)for(const s of L.shapes)if(s.element)return s.element;
+  return null;}
+function buildSwordVis(id){
+  const tier=id.split('_')[1];
+  const cfg={wood:{len:1.0,col:0x8a6a3c,em:0,ei:0},stone:{len:1.1,col:0x9aa0a8,em:0,ei:0},
+    shard:{len:1.2,col:0x7fd8e8,em:0x7fd8e8,ei:.4},mythic:{len:1.3,col:0xb06ae0,em:0xb06ae0,ei:.5}}[tier]
+    ||{len:1.0,col:0x8a6a3c,em:0,ei:0};
+  const grp=new THREE.Group();
+  const blade=new THREE.Mesh(new THREE.BoxGeometry(.09,cfg.len,.22),mat(cfg.col,cfg.em,cfg.ei));
+  blade.position.y=cfg.len/2+.14;grp.add(blade);
+  const guard=new THREE.Mesh(new THREE.BoxGeometry(.32,.06,.09),mat(0x4a3a28));
+  guard.position.y=.14;grp.add(guard);
+  const grip=new THREE.Mesh(new THREE.CylinderGeometry(.045,.045,.28,6),mat(0x3a2a1c));
+  grp.add(grip);
+  return grp;}
+function buildWandVis(id){
+  const tier=id.split('_')[1];
+  const cfg={wood:{col:0x8a6a3c,orb:0x9d8cff},shard:{col:0x7fd8e8,orb:0x7fd8e8},
+    mythic:{col:0xb06ae0,orb:0xb06ae0}}[tier]||{col:0x8a6a3c,orb:0x9d8cff};
+  const grp=new THREE.Group();
+  const stick=new THREE.Mesh(new THREE.CylinderGeometry(.035,.045,.9,6),mat(cfg.col));
+  stick.position.y=.45;grp.add(stick);
+  const orb=new THREE.Mesh(new THREE.SphereGeometry(.09,8,6),mat(cfg.orb,cfg.orb,1.4));
+  orb.position.y=.92;grp.add(orb);
+  const gl=makeGlow(cfg.orb,.9);gl.position.y=.92;grp.add(gl);
+  grp.userData.orb=orb;
+  return grp;}
+function buildStaffVis(data){
+  const el=firstElemOf(data),col=el?ECOL[el]:0x9d8cff;
+  const grp=new THREE.Group();
+  const stick=new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,1.0,6),mat(0x6b4a2c));
+  stick.position.y=.5;grp.add(stick);
+  const orb=new THREE.Mesh(new THREE.SphereGeometry(.12,8,6),mat(col,col,1.6));
+  orb.position.y=1.05;grp.add(orb);
+  const gl=makeGlow(col,1.6);gl.position.y=1.05;grp.add(gl);
+  grp.userData.orb=orb;
+  return grp;}
+function refreshHeldVis(){
+  const it=heldItem();
+  const def=it&&ITEMS[it.id];
+  const key=it?it.id+(def&&def.kind==='inscribed'?('|'+(it.data?firstElemOf(it.data):'')):''):'';
+  if(key===player.heldVisKey)return;
+  player.heldVisKey=key;
+  for(const c of [...player.heldGroup.children]){player.heldGroup.remove(c);disposeFloorObj(c);}
+  player.heldOrb=null;player.heldRestRot.set(0,0,0);
+  if(!it||!def)return;
+  if(def.kind==='sword'){player.heldGroup.add(buildSwordVis(it.id));player.heldRestRot.set(-Math.PI/6,0,0);}
+  else if(def.kind==='wand'){const vg=buildWandVis(it.id);player.heldGroup.add(vg);player.heldOrb=vg.userData.orb;}
+  else if(def.kind==='inscribed'&&it.data){const vg=buildStaffVis(it.data);player.heldGroup.add(vg);player.heldOrb=vg.userData.orb;}
 }
 
 /* ---------- floor gen ---------- */
@@ -659,7 +710,7 @@ function disposeFloorObj(root){root.traverse(o=>{
     o.material.dispose();}});}
 function clearFloor(){
   if(floorGroup){scene.remove(floorGroup);disposeFloorObj(floorGroup);}
-  enemies=[];projs=[];eProjs=[];chests=[];particles=[];orbs=[];shrines=[];
+  enemies=[];projs=[];eProjs=[];chests=[];particles=[];orbs=[];shrines=[];dying=[];
   nodes=[];structures=[];portal=null;bossRef=null;bossBarrier=null;barrierFlash=0;
   fogCtx=null;fogTex=null;fogMesh=null;
   $('bossBar').style.display='none';
@@ -848,40 +899,47 @@ const EDEF={
   brute:{hp:95,spd:2.8,dmg:16,r:1.15,xp:20,c:0x8a5aa0,agro:20},
   boss:{hp:560,spd:3.4,dmg:20,r:1.9,xp:110,c:0xb06ae0,agro:999}};
 function makeEnemyMesh(t,def,theme){
-  const g=new THREE.Group();const c=t==='boss'?theme.ec:def.c;
+  const g=new THREE.Group();const body=new THREE.Group();g.add(body);const c=t==='boss'?theme.ec:def.c;
   if(t==='rusher'){
     const mdl=faceFix(spawnModel('enemy-rusher',{h:1.5,lerp:[new THREE.Color(def.c),0.55]}));
-    if(mdl)g.add(mdl);
-    else{const b=new THREE.Mesh(new THREE.BoxGeometry(.9,.9,.9),mat(c));b.position.y=.6;b.rotation.y=.7;g.add(b);
-      const h=new THREE.Mesh(new THREE.ConeGeometry(.35,.6,4),mat(c,c,.3));h.position.y=1.35;g.add(h);}}
+    if(mdl)body.add(mdl);
+    else{const b=new THREE.Mesh(new THREE.BoxGeometry(.9,.9,.9),mat(c));b.position.y=.6;b.rotation.y=.7;body.add(b);
+      const h=new THREE.Mesh(new THREE.ConeGeometry(.35,.6,4),mat(c,c,.3));h.position.y=1.35;body.add(h);}}
   else if(t==='swarmer'){
     const mdl=faceFix(spawnModel('enemy-swarmer',{h:.95,lerp:[new THREE.Color(def.c),0.55]}));
-    if(mdl)g.add(mdl);
-    else{const b=new THREE.Mesh(new THREE.ConeGeometry(.42,.9,3),mat(c,c,.25));b.position.y=.5;g.add(b);}}
+    if(mdl)body.add(mdl);
+    else{const b=new THREE.Mesh(new THREE.ConeGeometry(.42,.9,3),mat(c,c,.25));b.position.y=.5;body.add(b);}}
   else if(t==='caster'){
     const mdl=faceFix(spawnModel('enemy-caster',{h:1.7,lerp:[new THREE.Color(def.c),0.55]}));
-    if(mdl)g.add(mdl);
-    else{const b=new THREE.Mesh(new THREE.CylinderGeometry(.3,.55,1.3,6),mat(c));b.position.y=.65;g.add(b);
-      const o=new THREE.Mesh(new THREE.SphereGeometry(.24,8,6),mat(c,c,1.2));o.position.y=1.6;g.add(o);}}
+    if(mdl)body.add(mdl);
+    else{const b=new THREE.Mesh(new THREE.CylinderGeometry(.3,.55,1.3,6),mat(c));b.position.y=.65;body.add(b);
+      const o=new THREE.Mesh(new THREE.SphereGeometry(.24,8,6),mat(c,c,1.2));o.position.y=1.6;body.add(o);}}
   else if(t==='brute'){
     const mdl=faceFix(spawnModel('enemy-brute',{h:2.4,lerp:[new THREE.Color(def.c),0.55]}));
-    if(mdl)g.add(mdl);
-    else{const b=new THREE.Mesh(new THREE.BoxGeometry(1.8,1.7,1.4),mat(c));b.position.y=.9;g.add(b);
-      const h=new THREE.Mesh(new THREE.BoxGeometry(.9,.6,.9),mat(c,0x000000,0));h.position.y=2.0;g.add(h);}}
+    if(mdl)body.add(mdl);
+    else{const b=new THREE.Mesh(new THREE.BoxGeometry(1.8,1.7,1.4),mat(c));b.position.y=.9;body.add(b);
+      const h=new THREE.Mesh(new THREE.BoxGeometry(.9,.6,.9),mat(c,0x000000,0));h.position.y=2.0;body.add(h);}}
   else{ // boss — enemy-boss.glb reuses the brute's blocky pirate-family body (curator's allowance);
         // crown + eye glow stay on top always, scaled to whichever body (model or fallback) is present
     const mdl=faceFix(spawnModel('enemy-boss',{h:3.6,emissive:theme.ec,ei:.25}));
     let bh=2.6;
     if(mdl){ // widen the slender pirate body so its bulk matches the boss's r=1.9 hitbox
       mdl.children[0].scale.x*=1.35;mdl.children[0].scale.z*=1.35;
-      g.add(mdl);bh=3.6;}
-    else{const b=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.7,2.6,7),mat(c,c,.25));b.position.y=1.3;g.add(b);}
+      body.add(mdl);bh=3.6;}
+    else{const b=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.7,2.6,7),mat(c,c,.25));b.position.y=1.3;body.add(b);}
     const crR=mdl?0.7:1.1;
     const cr=new THREE.Mesh(new THREE.TorusGeometry(crR,crR*.13,6,18),mat(0xc9a45c,0xc9a45c,.7));
-    cr.rotation.x=Math.PI/2;cr.position.y=bh+.3;g.add(cr);
+    cr.rotation.x=Math.PI/2;cr.position.y=bh+.3;body.add(cr);
     const eye=new THREE.Mesh(new THREE.SphereGeometry(.3,8,6),mat(0xffffff,c,2));
-    eye.position.set(0,bh*.73,mdl?.75:1.1);g.add(eye);}
+    eye.position.set(0,bh*.73,mdl?.75:1.1);body.add(eye);}
   return g;}
+function collectEnemyMats(mesh){
+  const list=[];
+  mesh.traverse(o=>{if(o.material&&o.material.emissive)
+    list.push({m:o.material,be:o.material.emissive.clone(),bei:o.material.emissiveIntensity});});
+  return list;}
+function flashMats(e){for(const r of e.mats)r.m.emissive.setHex(0xffffff);}
+function restoreMats(e){for(const r of e.mats){r.m.emissive.copy(r.be);r.m.emissiveIntensity=r.bei;}}
 function spawnEnemy(t,x,z,fl){
   const def=EDEF[t];const sc=1+0.4*(fl-1);const dsc=1+0.15*(fl-1);
   const e={type:t,x,z,r:def.r,hp:def.hp*sc,maxhp:def.hp*sc,spd:def.spd,dmg:def.dmg*dsc,
@@ -899,6 +957,8 @@ function spawnEnemy(t,x,z,fl){
     gl.position.y=1;e.mesh.add(gl);}
   e.mesh.scale.setScalar(e.baseScale);
   e.mesh.position.set(x,0,z);floorGroup.add(e.mesh);
+  e.body=e.mesh.children[0];e.mats=collectEnemyMats(e.mesh);
+  e.hurtT=0;e.spawnT=0;e.fireT=0;e.walkT=0;e.hopT=rand(0,TAU);
   if(e.boss){bossRef=e;$('bossBar').style.display='block';
     $('bossName').textContent='WARDEN OF '+G.theme.name.toUpperCase();}
   enemies.push(e);return e;}
@@ -1189,7 +1249,7 @@ function castHeld(){
   const sc=it.data;
   const plan=buildPlan(true,sc.layers);
   player.st-=8;
-  if(plan.fallback){fireFallback();sfx('cast');player.castCd=0.4;return;}
+  if(plan.fallback){fireFallback();sfx('cast');player.castCd=0.4;player.anim.castT=.25;return;}
   if(!plan.affordable){toast('Not enough mana for tier '+plan.tier+' tax');return;}
   for(const el of ELEMS)player.mana[el]-=plan.finalCost[el];
   player.castCd=plan.cd;
@@ -1208,7 +1268,7 @@ function castHeld(){
       fireOne(player.x,player.z,player.aim+avgRuneAngle(c)+spread(),
         plan.basePower,plan.baseDmg,c.r,perPay,plan.stack,plan.spdMod);}}
   else fireOne(player.x,player.z,player.aim+spread(),plan.basePower,plan.baseDmg,30,payload,plan.stack,plan.spdMod);
-  sfx('cast');
+  sfx('cast');player.anim.castT=.25;
   if(plan.ti>=3)addShake(.12+plan.ti*.07);
   updateSpellChip();}
 let meleeCd=0,punchCd=0;
@@ -1234,13 +1294,13 @@ function doSwingHit(dmg,range,arc,elems){
 function meleeSwing(it,def){
   if(meleeCd>0)return;
   if(player.st<6){toast('Too winded to swing');return;}
-  meleeCd=0.45;player.st-=6;
+  meleeCd=0.45;player.st-=6;player.anim.swingT=.22;
   const bonus=enchantBonus(it);
   doSwingHit(def.dmg*bonus.dmg,2.3,Math.PI*100/180,bonus.elems);
   sfx('hit');}
 function punch(){
   if(punchCd>0)return;
-  punchCd=0.4;
+  punchCd=0.4;player.anim.swingT=.22;
   doSwingHit(3,1.8,Math.PI*100/180,[]);
   sfx('hit');}
 function useConsumable(it){
@@ -1336,15 +1396,14 @@ function applyElems(e,elems,power,ang){
       spawnBurst(e.x,0.2,e.z,ECOL.earth,10,3);}}}
 function damageEnemy(e,dmg,ang,kb,power){
   if(e.boss)dmg=Math.min(dmg,e.maxhp*0.07); // wardens cannot be burst down
-  e.hp-=dmg;e.hitT=.09;sfx('hit');
+  e.hp-=dmg;e.hurtT=.12;if(e.mats)flashMats(e);sfx('hit');
   dmgNum(e.x,e.z,Math.round(dmg),dmg>=60?'#ffd97a':'#e8ddc8',dmg>=60);
   const k=kb*(1+power/300)*(e.boss?0.15:1);
   e.kx+=Math.cos(ang)*k;e.kz+=Math.sin(ang)*k;
-  e.mesh.traverse(o=>{if(o.material&&o.material.emissive)o.material.emissiveIntensity=(o.material.emissiveIntensity||0)+0;});
   if(e.hp<=0)killEnemy(e);}
 function killEnemy(e){
   const i=enemies.indexOf(e);if(i<0)return;
-  enemies.splice(i,1);floorGroup.remove(e.mesh);disposeFloorObj(e.mesh);
+  enemies.splice(i,1);dying.push({mesh:e.mesh,body:e.body,t:e.boss?0.9:0.35,total:e.boss?0.9:0.35});
   spawnBurst(e.x,.8,e.z,e.boss?0xc9a45c:0xffffff,e.boss?26:10,e.boss?7:4);
   sfx('kill');combo++;comboT=4;
   G.slowT=Math.max(G.slowT,e.boss?0.3:0.05);
@@ -1384,7 +1443,7 @@ function damagePlayer(d){
   if(player.iframe>0||G.over)return;
   const armor=eqMod('armor');
   d=d*100/(100+armor);
-  player.hp-=d;player.iframe=0.45;addShake(.45);sfx('hurt');
+  player.hp-=d;player.iframe=0.45;player.anim.hurtT=.15;addShake(.45);sfx('hurt');
   dmgNum(player.x,player.z,'-'+Math.round(d),'#e05555',true);
   spawnBurst(player.x,1,player.z,0xe05555,7,3);
   if(player.hp<=0){player.hp=0;die();}}
@@ -2114,14 +2173,15 @@ function updatePlayer(dt){
   else{mx=(keys.KeyD?1:0)-(keys.KeyA?1:0);mz=(keys.KeyS?1:0)-(keys.KeyW?1:0);
     sprint=!!(keys.ShiftLeft||keys.ShiftRight);}
   const m=Math.hypot(mx,mz);
+  let animSpd=0;
   if(player.dashT>0){player.dashT-=dt;
     player.x+=Math.cos(player.dashAng)*38*dt;
     player.z+=Math.sin(player.dashAng)*38*dt;
-    spawnBurst(player.x,0.5,player.z,0x9d8cff,2,1.5);}
+    spawnBurst(player.x,0.5,player.z,0x9d8cff,2,1.5);animSpd=38;}
   else if(m>0.01){mx/=Math.max(1,m);mz/=Math.max(1,m);
     let spd=stat_spd();
     if(sprint&&player.st>1){spd*=1.6;player.st-=20*dt;}
-    player.x+=mx*spd*dt;player.z+=mz*spd*dt;}
+    player.x+=mx*spd*dt;player.z+=mz*spd*dt;animSpd=spd;}
   /* spell knockback on the caster: rocket-jumps, boulder rides */
   player.x+=player.kx*dt;player.z+=player.kz*dt;
   const pdk=Math.exp(-3.2*dt);player.kx*=pdk;player.kz*=pdk;
@@ -2149,7 +2209,32 @@ function updatePlayer(dt){
   player.arrow.position.set(player.x+Math.cos(player.aim)*1.7,0.15,player.z+Math.sin(player.aim)*1.7);
   player.arrow.rotation.y=-player.aim;
   pLight.position.set(player.x,4,player.z);
-  player.mesh.visible=!(player.iframe>0&&Math.floor(G.time*18)%2===0);}
+  player.mesh.visible=!(player.iframe>0&&Math.floor(G.time*18)%2===0);
+  refreshHeldVis();
+  const an=player.anim;
+  an.swingT=Math.max(0,an.swingT-dt);an.castT=Math.max(0,an.castT-dt);an.hurtT=Math.max(0,an.hurtT-dt);
+  if(player.dashT>0||m>0.01)an.walkT+=dt*animSpd;
+  let bY=0,bRX=0,bRY=0,bRZ=0;
+  if(player.dashT>0){bY=Math.abs(Math.sin(an.walkT*7))*0.06;bRX=0.35;}
+  else if(m>0.01){bY=Math.abs(Math.sin(an.walkT*7))*0.06;bRZ=Math.sin(an.walkT*7)*0.05;bRX=0.12;}
+  else bY=Math.sin(G.time*2)*0.015;
+  let hRY=0,hPZ=0,hSc=1;
+  if(an.swingT>0){const p=1-an.swingT/0.22,AMP=1.13,W=0.3;let arcP;
+    if(p<0.3)arcP=-W*(p/0.3);
+    else{const q=(p-0.3)/0.7;
+      arcP=q<0.5?lerp(-W,AMP,Math.sin(q/0.5*Math.PI/2)):lerp(AMP,0,Math.sin((q-0.5)/0.5*Math.PI/2));}
+    hRY=arcP;bRY+=arcP*0.15;}
+  if(an.castT>0){const p=1-an.castT/0.25;
+    hPZ=Math.sin(p*Math.PI)*0.25;hSc=lerp(1.6,1,p);bRX-=Math.sin(p*Math.PI)*0.06;}
+  let sx=1,sy=1,sz=1;
+  if(an.hurtT>0){const p=an.hurtT/0.15;sy=lerp(1,0.85,p);sx=lerp(1,1.06,p);sz=lerp(1,1.06,p);}
+  player.body.position.set(0,bY,0);
+  player.body.rotation.set(bRX,bRY,bRZ);
+  player.body.scale.set(sx,sy,sz);
+  player.heldGroup.position.set(.45,.9,hPZ);
+  player.heldGroup.rotation.set(player.heldRestRot.x,player.heldRestRot.y+hRY,player.heldRestRot.z);
+  if(player.heldOrb)player.heldOrb.scale.setScalar(hSc);
+}
 function updateEnemies(dt){
   for(const e of [...enemies]){
     const slow=e.slow&&e.slow.t>0?e.slow.pct:0;
@@ -2172,7 +2257,7 @@ function updateEnemies(dt){
       else if(dP<9){vx=-Math.cos(aP)*spd;vz=-Math.sin(aP)*spd;}
       else{vx=Math.cos(aP+Math.PI/2)*spd*.5;vz=Math.sin(aP+Math.PI/2)*spd*.5;}
       e.shotCd-=dt;
-      if(e.shotCd<=0&&dP<e.agro){e.shotCd=2.2;fireEnemyBolt(e.x,e.z,aP,12,e.dmg);}}
+      if(e.shotCd<=0&&dP<e.agro){e.shotCd=2.2;fireEnemyBolt(e.x,e.z,aP,12,e.dmg);e.fireT=.3;}}
     else{e.wob+=dt*(e.type==='swarmer'?7:0);
       const a=aP+(e.type==='swarmer'?Math.sin(e.wob)*.6:0);
       vx=Math.cos(a)*spd;vz=Math.sin(a)*spd;}
@@ -2191,14 +2276,57 @@ function updateEnemies(dt){
         e.x=s.x+Math.cos(a)*min;e.z=s.z+Math.sin(a)*min;}}
     e.atkCd-=dt;
     if(e.type!=='caster'&&dP<e.r+0.95&&e.atkCd<=0){e.atkCd=0.9;damagePlayer(e.dmg);}
-    if(e.hitT>0)e.hitT-=dt;
-    e.mesh.scale.setScalar((e.baseScale||1)*(e.hitT>0?1.16:1));
     e.mesh.position.set(e.x,0,e.z);
     e.mesh.rotation.y=-aP+Math.PI/2;
+    animEnemyBody(e,dt,vx,vz);
     // hp tint
     e.mesh.traverse(o=>{if(o.material&&o.material.color&&!o.userData.keep)
       o.material.opacity=1;});
     if(e.boss)$('bossF').style.width=(100*e.hp/e.maxhp)+'%';}}
+const WHITE=new THREE.Color(0xffffff);
+function animEnemyBody(e,dt,vx,vz){
+  const b=e.body;if(!b)return;
+  if(e.spawnT<1)e.spawnT=Math.min(1,e.spawnT+dt/0.25);
+  const pop=e.spawnT<1?lerp(0.05,1,e.spawnT):1;
+  if(e.hurtT>0){e.hurtT-=dt;
+    const f=Math.max(0,e.hurtT)/0.12;
+    for(const r of e.mats){r.m.emissive.copy(r.be).lerp(WHITE,f);r.m.emissiveIntensity=r.bei+f*1.5;}
+    if(e.hurtT<=0)restoreMats(e);}
+  const hf=e.hurtT>0?e.hurtT/0.12:0;
+  let sx=1,sy=1,sz=1,by=0,bx=0,brz=0,bry=0;
+  const moving=Math.hypot(vx,vz)>0.15;
+  if(e.type==='rusher'){
+    if(moving){e.walkT+=dt;by=Math.abs(Math.sin(e.walkT*9))*0.05;bx=0.3;}
+  }else if(e.type==='swarmer'){
+    if(moving)e.hopT+=dt*2.2;
+    const p=e.hopT%1;by=moving?0.32*4*p*(1-p):0;
+    bry=Math.sin(e.hopT*TAU)*0.15;
+  }else if(e.type==='caster'){
+    by=0.15+Math.sin(G.time*1.8)*0.08;
+    if(e.fireT>0){e.fireT-=dt;bx=-0.25*(e.fireT/0.3);}
+  }else if(e.type==='brute'){
+    if(moving)e.walkT+=dt;
+    brz=moving?Math.sin(e.walkT*3.2)*0.09:0;
+    const ext=Math.pow(Math.abs(Math.sin(e.walkT*3.2)),8);
+    sy-=ext*0.05;sx+=ext*0.025;sz+=ext*0.025;
+  }else if(e.boss){
+    const breathe=1+Math.sin(G.time*2.2)*0.02;
+    sx=sy=sz=breathe;
+    if(e.state==='tele'){
+      const tot=e.next==='slam'?0.9:0.6,p=1-clamp(e.stateT/tot,0,1);
+      const ts=p<0.5?lerp(1,0.05,p/0.5):lerp(0.05,1,(p-0.5)/0.5);
+      sx=sy=sz=ts;
+      if(e.next==='charge'){bx=0.4;by=-0.1;}
+    }else if(e.state==='slam'){
+      const p=1-clamp(e.stateT/0.15,0,1);
+      if(p<0.7){by=lerp(0,0.4,p/0.7);}
+      else{const q=(p-0.7)/0.3;by=lerp(0.4,0,q);sy=breathe*lerp(1,0.7,q);sx=sz=breathe*lerp(1,1.15,q);}
+    }else if(e.state==='charge'){bx=0.4;by=-0.1;}
+    else if(e.state==='barrage'){bx=-0.15;brz=(Math.random()-0.5)*0.05;bry=(Math.random()-0.5)*0.05;}
+  }
+  sy*=lerp(1,0.85,hf);sx*=lerp(1,1.06,hf);sz*=lerp(1,1.06,hf);
+  sx*=pop;sy*=pop;sz*=pop;
+  b.position.set(0,by,0);b.rotation.set(bx,bry,brz);b.scale.set(sx,sy,sz);}
 function updateBoss(e,dt,dP,aP,spd){
   // phase summons at 66% / 33%, enrage below 30%
   const ratio=e.hp/e.maxhp;
@@ -2325,6 +2453,12 @@ function updateParticles(dt){
     if(!p.glow)p.vy-=14*dt;
     p.mesh.position.x+=p.vx*dt;p.mesh.position.y=Math.max(.05,p.mesh.position.y+p.vy*dt);
     p.mesh.position.z+=p.vz*dt;p.mesh.material.opacity=Math.min(1,p.life*2.5);}}
+function updateDying(dt){
+  for(let i=dying.length-1;i>=0;i--){const d=dying[i];
+    d.t-=dt;const p=1-clamp(d.t/d.total,0,1);
+    if(d.body){d.body.rotation.x=-Math.PI/2*p;d.body.scale.setScalar(lerp(1,0.6,p));}
+    d.mesh.position.y=-p*0.3;
+    if(d.t<=0){floorGroup.remove(d.mesh);disposeFloorObj(d.mesh);dying.splice(i,1);}}}
 function updateHUD(){
   $('hpF').style.width=(100*player.hp/stat_maxHp())+'%';
   $('hpT').textContent=Math.ceil(player.hp)+' / '+stat_maxHp();
@@ -2364,7 +2498,7 @@ function animate(now){
     if(bossBarrier)bossBarrier.material.opacity=0.04+barrierFlash*0.5;}
   if(!G.paused&&!G.over){
     G.time+=dt;
-    updatePlayer(dt);updateEnemies(dt);updateProjs(dt);updateParticles(dt);updateOrbs(dt);updateWave(dt);
+    updatePlayer(dt);updateEnemies(dt);updateDying(dt);updateProjs(dt);updateParticles(dt);updateOrbs(dt);updateWave(dt);
     if(portal){portal.ring.rotation.z+=dt*(portal.active?2:0.3);
       if(portal.active){portal.beam.material.opacity=0.25+Math.sin(G.time*3)*0.12;
         portal.glow.material.opacity=0.45+Math.sin(G.time*2.4)*0.22;}}
@@ -2404,6 +2538,7 @@ if(location.hash.includes('debug')||localStorage.getItem('msandbox:debug'))
   window.MS={buildFloor,G,player,MODELS,scene,renderer,ITEMS,RECIPES,RANKS,RANK_LIMITS,PARCH_USES,TIER_IDX,
     invAdd,invCount,invConsume,craftMatch,craftOnce,heldItem,selectHot,primaryAction,castHeld,buildPlan,
     embedSpell,resetDraft,syncUI,updateWave,aliveNonBossCount,
+    getEnemies:()=>enemies,getDying:()=>dying,meleeSwing,punch,damageEnemy,killEnemy,spawnEnemy,refreshHeldVis,
     getDraft:()=>draft,setDraft:v=>{draft=v;},getForgeIn:()=>forgeIn,setForgeIn:v=>{forgeIn=v;}};
 </script>
 </body>
