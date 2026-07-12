@@ -86,8 +86,7 @@ canvas#gl{display:block;position:fixed;inset:0}
 #tInt{right:230px;bottom:110px;width:52px;height:52px;display:none}
 #tDash{right:236px;bottom:186px;width:56px;height:56px}
 #tPack{right:290px;bottom:110px;width:52px;height:52px;display:none}
-#tCraft{right:14px;top:52px;width:54px;height:54px;border-radius:10px}
-#tInv{right:14px;top:114px;width:54px;height:54px;border-radius:10px}
+#tInv{right:14px;top:52px;width:54px;height:54px;border-radius:10px}
 
 /* ---------- overlays ---------- */
 .ovl{position:fixed;inset:0;z-index:20;background:#080d14e6;display:none;flex-direction:column}
@@ -124,16 +123,37 @@ input[type=range]{width:100%;accent-color:var(--brass)}
 #forgeMsg{font-size:11px;color:var(--danger);min-height:14px}
 
 /* ---------- Inventory ---------- */
-#invBody{flex:1;overflow-y:auto;padding:14px 16px;font-size:13px}
+#invBody,#tableCraftTab{flex:1;overflow-y:auto;padding:14px 16px;font-size:13px}
 .invSec{margin-bottom:16px}
 .invSec h3{font-size:11px;letter-spacing:.2em;color:var(--dim);font-weight:normal;
   border-bottom:1px solid #ffffff14;padding-bottom:4px;margin-bottom:8px}
-.slotLine,.itemLine{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:5px}
-.itemLine:nth-child(odd){background:#ffffff08}
-.iname{flex:1}
-.rar0{color:var(--parch)}.rar1{color:#8fd3a0}.rar2{color:#7fb8ff}.rar3{color:#d59cff}
 .mods{font-size:11px;color:var(--dim)}
-#matLine{font-family:ui-monospace,monospace}
+.btn.on{border-color:var(--lilac);color:var(--lilac);background:#9d8cff1a}
+
+/* ---------- slot-based inventory UI ---------- */
+.slotGrid{display:grid;gap:4px}
+.slotGrid.g9{grid-template-columns:repeat(9,40px)}
+.slotGrid.g3{grid-template-columns:repeat(3,40px)}
+.slotGrid.g2{grid-template-columns:repeat(2,40px)}
+.slotGrid.hotRow{margin-top:6px;padding-top:6px;border-top:1px solid #ffffff1a}
+.slot{width:40px;height:40px;background:#0006;border:1px solid #ffffff26;border-radius:5px;
+  position:relative;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer}
+.slot.outSlot{border-color:var(--brass)}
+.sIcon{pointer-events:none}
+.sN{position:absolute;bottom:1px;right:3px;font-size:10px;color:var(--brass);
+  font-family:ui-monospace,monospace;pointer-events:none;text-shadow:0 1px 1px #000}
+.craftRow{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.craftArrow{color:var(--dim);font-size:16px}
+.eqRow{display:flex;gap:16px}
+.eqSlotWrap{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:var(--dim)}
+#cursorStack{position:fixed;z-index:30;pointer-events:none;display:none;width:40px;height:40px;
+  align-items:center;justify-content:center;font-size:18px;transform:translate(-50%,-50%)}
+#slotTooltip{position:fixed;z-index:31;pointer-events:none;display:none;background:#000d;
+  border:1px solid var(--brass);border-radius:5px;padding:5px 8px;font-size:11px;max-width:200px;line-height:1.5}
+.hslot.sel{border-color:var(--brass);box-shadow:0 0 0 1px var(--brass)}
+#forgeCanvasWrap.dim{opacity:.3}
+#forgeHint{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+  font-size:13px;color:var(--dim);text-align:center;pointer-events:none}
 
 /* ---------- level up / death ---------- */
 .card{margin:auto;background:var(--panel);border:1px solid var(--brass);border-radius:10px;
@@ -178,62 +198,71 @@ input[type=range]{width:100%;accent-color:var(--brass)}
   <div id="lvLine"><span>Lv <b id="lvN">1</b></span><span id="ptsN"></span></div>
 </div>
 
-<div id="floorBadge">FLOOR <b id="floorN">1</b> · <span id="themeN">Verdant</span> · <span id="runT" class="mono">0:00</span></div>
+<div id="floorBadge">FLOOR <b id="floorN">1</b> · <span id="themeN">Verdant</span> · <span id="runT" class="mono">0:00</span> · <span id="waveN" class="mono"></span></div>
 <div id="bossBar"><div id="bossName">WARDEN</div><div class="bar"><i id="bossF"></i></div></div>
 <div id="spellChip"><div>SPELL <span class="tier" id="chipTier">E</span></div>
-  <div class="mono" id="chipInfo">base bolt</div><div class="mono" id="chipCd"></div></div>
+  <div class="mono" id="chipInfo">empty hand</div><div class="mono" id="chipCd"></div></div>
 <div id="hint"></div>
 <div id="toasts"></div>
-<div id="help">WASD move · mouse aim · Click/Space cast · F/RClick trigger next layer<br>
-Q dash · 1/2/3 spell slots · 4-0 hotbar · E interact/gather · G pack up structure · M forge · I bag</div>
+<div id="help">1-9 hotbar &middot; wheel select &middot; Click/Space use held item &middot; F trigger layers<br>
+E interact/gather &middot; G pack up &middot; I bag &middot; Q dash</div>
 <div id="combo">×<b id="comboN">2</b> combo</div>
 <div id="hotbar"></div>
+<div id="cursorStack"></div>
+<div id="slotTooltip"></div>
 
 <div id="touchUI">
   <div class="stick" id="joyL"><div class="nub" id="nubL"></div></div>
   <div class="stick" id="joyR"><div class="nub" id="nubR"></div></div>
-  <button class="tbtn" id="tCast">CAST</button>
+  <button class="tbtn" id="tCast">ATK</button>
   <button class="tbtn" id="tTrig">TRIG</button>
   <button class="tbtn" id="tDash">DASH</button>
   <button class="tbtn" id="tInt">USE</button>
   <button class="tbtn" id="tPack">PACK</button>
-  <button class="tbtn" id="tCraft">FORGE</button>
   <button class="tbtn" id="tInv">BAG</button>
-</div>
-
-<!-- Spellforge -->
-<div class="ovl" id="forgeOvl">
-  <div class="ovlHead"><h2>SPELLFORGE</h2>
-    <div style="display:flex;gap:8px">
-      <button class="btn ghost" id="fClear">Clear layer</button>
-      <button class="btn" id="fDone">Done</button>
-    </div></div>
-  <div id="forgeBody">
-    <div id="forgeCanvasWrap"><canvas id="forgeCanvas"></canvas></div>
-    <div id="forgePanel">
-      <div class="fSec"><h3>SPELL SLOT</h3><div class="layerRow" id="slotTabs"></div></div>
-      <div class="fSec"><h3>TOOL</h3><div class="toolRow">
-        <button class="tool on" data-t="weave">Weave</button>
-        <button class="tool" data-t="seal">Seal</button>
-        <button class="tool" data-t="rune">Rune</button>
-        <button class="tool" data-t="erase">Erase</button>
-        <button class="tool" data-t="pan">Pan</button>
-        <button class="tool" id="gridBtn">Grid</button></div>
-        <div class="mods" style="margin-top:5px">wheel / pinch = zoom &middot; double-tap = reset view</div></div>
-      <div class="fSec"><h3>WEAVES (layers)</h3><div class="layerRow" id="layerTabs"></div></div>
-      <div class="fSec"><h3>POTENCY <span class="mono" id="potN">1</span></h3>
-        <input type="range" id="potSlider" min="1" max="10" step="1" value="1"></div>
-      <div class="fSec"><h3>PARCHMENT</h3><div class="toolRow" id="parchRow"></div>
-        <div class="mods" id="scribeInfo" style="margin-top:5px"></div></div>
-      <div class="fSec"><h3>DIVINATION</h3><div id="readout"></div><div id="forgeMsg"></div></div>
-    </div>
-  </div>
 </div>
 
 <!-- Inventory -->
 <div class="ovl" id="invOvl">
   <div class="ovlHead"><h2>SATCHEL</h2><button class="btn" id="invDone">Done</button></div>
   <div id="invBody"></div>
+</div>
+
+<!-- Crafting Table (Craft + Spell Forge tabs) -->
+<div class="ovl" id="tableOvl">
+  <div class="ovlHead"><h2>WORKBENCH</h2>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost on" id="tabCraftBtn">Craft</button>
+      <button class="btn ghost" id="tabForgeBtn">Spell Forge</button>
+      <button class="btn" id="tableDone">Done</button>
+    </div></div>
+  <div id="tableBody" style="flex:1;display:flex;min-height:0">
+    <div id="tableCraftTab"></div>
+    <div id="tableForgeTab" style="flex:1;display:none;min-height:0">
+      <div id="forgeBody">
+        <div id="forgeCanvasWrap"><canvas id="forgeCanvas"></canvas><div id="forgeHint">Place a blank parchment</div></div>
+        <div id="forgePanel">
+          <div class="fSec"><h3>PARCHMENT</h3><div id="forgeInWrap"></div></div>
+          <div class="fSec"><h3>TOOL</h3><div class="toolRow">
+            <button class="tool on" data-t="weave">Weave</button>
+            <button class="tool" data-t="seal">Seal</button>
+            <button class="tool" data-t="rune">Rune</button>
+            <button class="tool" data-t="erase">Erase</button>
+            <button class="tool" data-t="pan">Pan</button>
+            <button class="tool" id="gridBtn">Grid</button></div>
+            <div class="mods" style="margin-top:5px">wheel / pinch = zoom &middot; double-tap = reset view</div></div>
+          <div class="fSec"><h3>WEAVES (layers)</h3><div class="layerRow" id="layerTabs"></div></div>
+          <div class="fSec"><h3>POTENCY <span class="mono" id="potN">1</span></h3>
+            <input type="range" id="potSlider" min="1" max="10" step="1" value="1"></div>
+          <div class="fSec"><h3>DIVINATION</h3><div id="readout"></div><div id="forgeMsg"></div></div>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn ghost" id="fClear">Clear layer</button>
+            <button class="btn" id="fEmbed">Embed</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Level up -->
@@ -324,6 +353,110 @@ const TIER_IDX={E:0,D:1,C:2,B:3,A:4,S:5,SS:6,SSS:7};
 const RANKS=['E','D','C','B','A','S','SS','SSS'];
 const PARCH_USES={E:1,D:2,C:4,B:6,A:10,S:20,SS:50,SSS:9999};
 const OVERWHELM=250;
+/* rank gates on the spell forge: how much a given parchment can hold */
+const RANK_LIMITS={E:{layers:1,circ:1,pot:3},D:{layers:1,circ:2,pot:4},C:{layers:2,circ:3,pot:6},
+  B:{layers:2,circ:4,pot:8},A:{layers:3,circ:6,pot:10},S:{layers:4,circ:8,pot:10},
+  SS:{layers:5,circ:10,pot:10},SSS:{layers:5,circ:12,pot:10}};
+
+/* ---------- unified Minecraft-style item registry ---------- */
+const ITEMS={
+  wood:{name:'Wood',icon:'🪵',stack:64,kind:'material'},
+  stone:{name:'Stone',icon:'🪨',stack:64,kind:'material'},
+  herb:{name:'Herb',icon:'🌿',stack:64,kind:'material'},
+  shard:{name:'Shard',icon:'💎',stack:64,kind:'material'},
+  essence:{name:'Essence',icon:'✨',stack:64,kind:'material'},
+  potion:{name:'Potion',icon:'🧪',stack:16,kind:'consumable'},
+  crystal:{name:'Mana Crystal',icon:'💠',stack:16,kind:'consumable'},
+  inscribed:{name:'Inscribed Parchment',icon:'📜',stack:1,kind:'inscribed'},
+  sword_wood:{name:'Wood Sword',icon:'🗡️',stack:1,kind:'sword',dmg:8},
+  sword_stone:{name:'Stone Sword',icon:'🗡️',stack:1,kind:'sword',dmg:14},
+  sword_shard:{name:'Shard Sword',icon:'🗡️',stack:1,kind:'sword',dmg:22},
+  sword_mythic:{name:'Mythic Sword',icon:'⚔️',stack:1,kind:'sword',dmg:34},
+  wand_wood:{name:'Wood Wand',icon:'🪄',stack:1,kind:'wand',save:.25},
+  wand_shard:{name:'Shard Wand',icon:'🪄',stack:1,kind:'wand',save:.45},
+  wand_mythic:{name:'Mythic Wand',icon:'🪄',stack:1,kind:'wand',save:.65},
+  s_table:{name:'Crafting Table',icon:'🛠️',stack:8,kind:'struct',structKind:'table'},
+  s_tent:{name:'Tent',icon:'⛺',stack:8,kind:'struct',structKind:'tent'},
+  s_wall:{name:'Wall',icon:'🧱',stack:8,kind:'struct',structKind:'wall'},
+  s_anvil:{name:'Anvil',icon:'⚒️',stack:8,kind:'struct',structKind:'anvil'},
+  s_map:{name:'Cartograph',icon:'🗺️',stack:8,kind:'struct',structKind:'map'},
+  gear:{name:'Gear',icon:'💍',stack:1,kind:'gear'}
+};
+RANKS.forEach(r=>{ITEMS['parch_'+r]={name:'Parchment ('+r+')',icon:'📜',stack:16,kind:'parchment',rank:r};});
+/* ---------- Minecraft-style shaped/shapeless grid recipes ---------- */
+const RECIPE_KEY={W:'wood',S:'stone',H:'herb',D:'shard',E:'essence',P:'potion'};
+const RECIPES=[
+  {pat:['WW','WW'],id:'s_table',n:1},
+  {pat:['SSS'],id:'s_wall',n:2},
+  {pat:['HH','WW'],id:'s_tent',n:1},
+  {pat:['SSS','_D_','_D_'],id:'s_anvil',n:1},
+  {shapeless:true,need:['E','E','H'],id:'s_map',n:1},
+  {shapeless:true,need:['H','H','E'],id:'potion',n:1},
+  {shapeless:true,need:['E','E','D'],id:'crystal',n:1},
+  {pat:['W','W'],id:'sword_wood',n:1},
+  {pat:['S','S','W'],id:'sword_stone',n:1},
+  {pat:['D','D','W'],id:'sword_shard',n:1},
+  {pat:['EDE','_D_','_W_'],id:'sword_mythic',n:1},
+  {shapeless:true,need:['W','W','D'],id:'wand_wood',n:1},
+  {shapeless:true,need:['wand_wood','D','D','D','E'],id:'wand_shard',n:1},
+  {shapeless:true,need:['wand_shard','D','D','D','E','E','E'],id:'wand_mythic',n:1},
+  {shapeless:true,need:['W','W','H'],id:'parch_E',n:1},
+  {shapeless:true,need:['parch_E','E','E'],id:'parch_D',n:1},
+  {shapeless:true,need:['parch_D','E','E','E','D'],id:'parch_C',n:1},
+  {shapeless:true,need:['parch_C','E','E','E','E','D','D'],id:'parch_B',n:1},
+  {shapeless:true,need:['parch_B','E','E','E','E','E','E','D','D','D'],id:'parch_A',n:1},
+  {shapeless:true,need:['parch_A','E','E','E','E','E','E','E','E','D','D','D','D','P'],id:'parch_S',n:1},
+  {shapeless:true,need:['parch_S','E','E','E','E','E','E','E','E','E','E','D','D','D','D','D','D','P'],id:'parch_SS',n:1},
+  {shapeless:true,need:['parch_SS','E','E','E','E','E','E','E','E','E','E','E','E','D','D','D','D','D','D','D','D','P','P'],id:'parch_SSS',n:1},
+  {pat:['DD','DD','EE'],special:'armor',n:1},
+  {shapeless:true,need:['D','D','D','E','E'],special:'accessory',n:1}
+];
+function trimmedPatSize(pat){return{h:pat.length,w:Math.max(...pat.map(r=>r.length))};}
+function shapedFits(grid,gw,gh,pat,offR,offC){
+  for(let r=0;r<gh;r++)for(let c=0;c<gw;c++){
+    const idx=r*gw+c,it=grid[idx];
+    const pr=r-offR,pc=c-offC;
+    let letter=null;
+    if(pr>=0&&pr<pat.length&&pc>=0&&pc<pat[pr].length)letter=pat[pr][pc];
+    if(!letter||letter==='_'){if(it)return false;}
+    else{const id=RECIPE_KEY[letter];if(!it||it.id!==id)return false;}
+  }
+  return true;}
+function craftMatch(grid){
+  const gw=grid.length===4?2:3,gh=grid.length/gw;
+  for(const rec of RECIPES){
+    if(rec.shapeless){
+      const need={};for(const tok of rec.need){const id=RECIPE_KEY[tok]||tok;need[id]=(need[id]||0)+1;}
+      const have={};for(const it of grid)if(it)have[it.id]=(have[it.id]||0)+it.n;
+      let ok=true;
+      for(const id in need)if(have[id]!==need[id]){ok=false;break;}
+      if(ok)for(const id in have)if(!(id in need)){ok=false;break;}
+      if(ok)return{rec,need,shapeless:true};
+    }else{
+      const sz=trimmedPatSize(rec.pat);
+      if(sz.h>gh||sz.w>gw)continue;
+      for(let offR=0;offR<=gh-sz.h;offR++)for(let offC=0;offC<=gw-sz.w;offC++){
+        if(shapedFits(grid,gw,gh,rec.pat,offR,offC))
+          return{rec,offR,offC,pw:sz.w,ph:sz.h,shapeless:false};}
+    }
+  }
+  return null;}
+/* consumes the matched grid, returns the crafted stack (mutates grid in place) */
+function craftOnce(grid){
+  const m=craftMatch(grid);if(!m)return null;
+  const gw=grid.length===4?2:3;
+  if(m.shapeless){
+    for(const id in m.need){let need=m.need[id];
+      for(let i=0;i<grid.length&&need>0;i++){const it=grid[i];
+        if(it&&it.id===id){const take=Math.min(it.n,need);it.n-=take;need-=take;if(it.n<=0)grid[i]=null;}}}
+  }else{
+    for(let r=0;r<m.ph;r++)for(let c=0;c<m.pw;c++){
+      const letter=m.rec.pat[r][c];
+      if(letter&&letter!=='_'){const idx=(m.offR+r)*gw+(m.offC+c),it=grid[idx];
+        if(it){it.n--;if(it.n<=0)grid[idx]=null;}}}
+  }
+  if(m.rec.special)return{id:'gear',n:1,data:makeEquipment(G.floor,m.rec.special)};
+  return{id:m.rec.id,n:m.rec.n||1};}
 
 /* ---------- three setup ---------- */
 const renderer=new THREE.WebGLRenderer({canvas:$('gl'),antialias:true});
@@ -422,7 +555,7 @@ const THEMES=[
 
 /* ---------- game state ---------- */
 const G={floor:1,theme:THEMES[0],half:30,paused:false,over:false,time:0,runTime:0,
-  buffs:{dmg:0,spd:0,regen:0},slowT:0};
+  buffs:{dmg:0,spd:0,regen:0},slowT:0,mobCap:10,waveT:90};
 let floorGroup=null, enemies=[], projs=[], eProjs=[], chests=[], particles=[];
 let portal=null, bossRef=null, bossBarrier=null, barrierFlash=0;
 let orbs=[], shrines=[], nodes=[], structures=[];
@@ -440,22 +573,56 @@ const player={
   level:1,xp:0,pts:0,
   alloc:{hp:0,st:0,mana_fire:0,mana_water:0,mana_earth:0,mana_air:0,spd:0},
   hp:100,st:100,kx:0,kz:0,
-  mana:{fire:100,water:100,earth:100,air:100},
-  inv:[],mats:{essence:2,shard:0,wood:2,stone:0,herb:1},potions:1,crystals:0,
-  parchments:{E:3,D:1,C:0,B:0,A:0,S:0,SS:0,SSS:0},
-  structs:{tent:1,wall:2,anvil:1,table:1,map:1},
-  eq:{focus:null,armor:null,accessory:null},
+  mana:{fire:60,water:60,earth:60,air:60},
+  slots:new Array(36).fill(null),hot:0,
+  eq:{armor:null,accessory:null},
   iframe:0,castCd:0,dashCd:0,dashT:0,dashAng:0,mesh:null,arrow:null,
   lastPlan:null
 };
 function stat_maxHp(){return 100+player.alloc.hp*20+eqMod('hp');}
 function stat_maxSt(){return 100+player.alloc.st*15+eqMod('st');}
-function stat_maxManaEl(el){return 100+player.alloc['mana_'+el]*25+eqMod('mana');}
+function stat_maxManaEl(el){return 60+player.alloc['mana_'+el]*20+eqMod('mana');}
 function stat_spd(){return (8+player.alloc.spd*0.4+eqMod('spd'))*(1+G.buffs.spd);}
 function eqMod(k){let v=0;for(const s in player.eq){const it=player.eq[s];if(it&&it.mods[k])v+=it.mods[k];}return v;}
 function eqElemBias(el){let v=0;for(const s in player.eq){const it=player.eq[s];if(it&&it.mods.bias&&it.mods.bias[0]===el)v+=it.mods.bias[1];}return v;}
 function dmgMult(){return (1+eqMod('dmg')/100)*(1+G.buffs.dmg);}
 function costRed(){return clamp(eqMod('cost')/100,0,0.6);}
+
+/* ---------- unified item/inventory helpers ---------- */
+function slotMax(id){const d=ITEMS[id];return d?d.stack:1;}
+function invAdd(id,n,data){
+  n=n===undefined?1:n;
+  const def=ITEMS[id];if(!def)return false;
+  if(data){
+    const i=player.slots.findIndex(s=>!s);
+    if(i<0){toast('Inventory full');return false;}
+    player.slots[i]={id,n:1,data};
+    toast('+1 '+def.icon+' '+(data.name||def.name));
+    syncUI();return true;}
+  let remaining=n;
+  if(def.stack>1){
+    for(let i=0;i<player.slots.length&&remaining>0;i++){
+      const s=player.slots[i];
+      if(s&&s.id===id&&!s.data&&s.n<def.stack){
+        const add=Math.min(def.stack-s.n,remaining);s.n+=add;remaining-=add;}}}
+  while(remaining>0){
+    const i=player.slots.findIndex(s=>!s);
+    if(i<0){toast('Inventory full');break;}
+    const take=Math.min(def.stack,remaining);
+    player.slots[i]={id,n:take};remaining-=take;}
+  const placed=n-remaining;
+  if(placed>0)toast('+'+placed+' '+def.icon+' '+def.name);
+  syncUI();
+  return remaining===0;}
+function invCount(id){let c=0;for(const s of player.slots)if(s&&s.id===id)c+=s.n;return c;}
+function invConsume(id,n){
+  let need=n;
+  for(let i=0;i<player.slots.length&&need>0;i++){
+    const s=player.slots[i];
+    if(s&&s.id===id){const take=Math.min(s.n,need);s.n-=take;need-=take;if(s.n<=0)player.slots[i]=null;}}
+  syncUI();
+  return need<=0;}
+function heldItem(){return player.slots[player.hot];}
 
 /* ---------- player mesh ---------- */
 function buildPlayer(){
@@ -636,16 +803,14 @@ function buildFloor(n){
     const{mesh:g,ob,glow:gl}=buildShrineMesh();
     g.rotation.y=rand(0,TAU);g.position.set(sx,0,sz);floorGroup.add(g);
     shrines.push({x:sx,z:sz,used:false,mesh:g,glow:gl,ob});}
-  // enemies
-  let budget=8+n*2.6;
-  const costs={rusher:2,swarmer:1,caster:3,brute:4};
-  let guard=0;
-  while(budget>0&&guard++<200){
+  // enemies — a mob cap + respawn wave keep the floor from ever running dry (see updateWave)
+  G.mobCap=Math.min(22,5+n*2);G.waveT=90;
+  const initialCount=Math.min(G.mobCap,6+Math.floor(n*1.4));
+  for(let i=0;i<initialCount;i++){
     const t=pick(['rusher','rusher','swarmer','swarmer','swarmer','caster','brute']);
-    if(costs[t]>budget&&budget<1)break;
     let ex,ez,tries=0;
     do{ex=rand(-H+4,H-4);ez=rand(-H+4,H-4);tries++;}while(dist(ex,ez,0,H-6)<14&&tries<20);
-    spawnEnemy(t,ex,ez,n);budget-=costs[t];}
+    spawnEnemy(t,ex,ez,n);}
   spawnEnemy('boss',0,-H+14,n);
   const bossRing=new THREE.Mesh(new THREE.RingGeometry(BOSS_LEASH-0.3,BOSS_LEASH,72),
     new THREE.MeshBasicMaterial({color:T.ec,transparent:true,opacity:.3,side:THREE.DoubleSide}));
@@ -656,8 +821,8 @@ function buildFloor(n){
     new THREE.MeshBasicMaterial({color:T.ec,transparent:true,opacity:0.04,
       side:THREE.DoubleSide,depthWrite:false}));
   bossBarrier.position.set(0,2.25,-H+14);floorGroup.add(bossBarrier);
-  // gatherable resource nodes
-  const nNodes=10+Math.floor(n*1.5);
+  // gatherable resource nodes — generous on floor 1 so an empty-handed player can bootstrap
+  const nNodes=Math.max(14,10+Math.floor(n*1.5));
   for(let i=0;i<nNodes;i++){
     const nx=rand(-H+4,H-4),nz=rand(-H+4,H-4);
     if(dist(nx,nz,0,H-6)<7||dist(nx,nz,0,-H+14)<BOSS_LEASH+2)continue;
@@ -737,34 +902,41 @@ function spawnEnemy(t,x,z,fl){
   if(e.boss){bossRef=e;$('bossBar').style.display='block';
     $('bossName').textContent='WARDEN OF '+G.theme.name.toUpperCase();}
   enemies.push(e);return e;}
+/* ---------- renewable mob-cap waves: a floor can never run dry ---------- */
+function aliveNonBossCount(){return enemies.filter(e=>!e.boss).length;}
+function updateWave(dt){
+  G.waveT-=dt;
+  if(G.waveT>0)return;
+  G.waveT=90;
+  const need=G.mobCap-aliveNonBossCount();
+  if(need<=0)return;
+  const H=G.half;
+  for(let i=0;i<need;i++){
+    let ex,ez,tries=0;
+    do{ex=rand(-H+4,H-4);ez=rand(-H+4,H-4);tries++;}
+    while(tries<30&&(dist(ex,ez,player.x,player.z)<15||
+      (bossRef&&dist(ex,ez,bossRef.home.x,bossRef.home.z)<BOSS_LEASH+2)));
+    spawnEnemy(pick(['rusher','rusher','swarmer','swarmer','swarmer','caster','brute']),ex,ez,G.floor);}
+  toast('⚠ Reinforcements');}
 
 /* ---------- input ---------- */
 const keys={};let mouseNdc={x:0,y:0};
 addEventListener('keydown',e=>{if(e.repeat)return;keys[e.code]=true;
-  if(e.code==='KeyM')toggleForge();
-  if(e.code==='KeyI')toggleInv();
+  if(e.code==='KeyI'||e.code==='Tab'){e.preventDefault();toggleInv();}
   if(e.code==='KeyE')doInteract();
   if(e.code==='KeyF')triggerPayloads();
-  if(e.code==='Space'){e.preventDefault();tryCast();}
+  if(e.code==='Space'){e.preventDefault();primaryAction();}
   if(e.code==='KeyQ')tryDash();
   if(e.code==='KeyG')gatherStruct();
-  if(e.code==='Digit1')switchSpell(0);
-  if(e.code==='Digit2')switchSpell(1);
-  if(e.code==='Digit3')switchSpell(2);
-  if(!G.paused){
-    if(e.code==='Digit4')useHot('potion');
-    if(e.code==='Digit5')useHot('crystal');
-    if(e.code==='Digit6')useHot('tent');
-    if(e.code==='Digit7')useHot('wall');
-    if(e.code==='Digit8')useHot('anvil');
-    if(e.code==='Digit9')useHot('table');
-    if(e.code==='Digit0')useHot('map');}
+  for(let d=1;d<=9;d++)if(e.code==='Digit'+d)selectHot(d-1);
   if(e.code==='KeyL'&&player.pts>0)openAlloc();});
 addEventListener('keyup',e=>keys[e.code]=false);
 $('gl').addEventListener('mousemove',e=>{mouseNdc.x=(e.clientX/innerWidth)*2-1;mouseNdc.y=-(e.clientY/innerHeight)*2+1;});
 $('gl').addEventListener('mousedown',e=>{if(G.paused)return;
-  if(e.button===0)tryCast();else if(e.button===2)triggerPayloads();});
+  if(e.button===0)primaryAction();else if(e.button===2)triggerPayloads();});
 addEventListener('contextmenu',e=>e.preventDefault());
+addEventListener('wheel',e=>{if(G.paused||Math.abs(e.deltaY)<1)return;
+  selectHot((player.hot+(e.deltaY>0?1:-1)+9)%9);},{passive:true});
 const ray=new THREE.Raycaster();
 function mouseAim(){
   ray.setFromCamera(mouseNdc,camera);
@@ -799,12 +971,11 @@ function bindStick(el,nub,key){
 if(IS_TOUCH){
   $('touchUI').style.display='block';$('help').style.display='none';
   bindStick($('joyL'),$('nubL'),'L');bindStick($('joyR'),$('nubR'),'R');
-  $('tCast').addEventListener('pointerdown',e=>{e.preventDefault();tryCast();});
+  $('tCast').addEventListener('pointerdown',e=>{e.preventDefault();primaryAction();});
   $('tTrig').addEventListener('pointerdown',e=>{e.preventDefault();triggerPayloads();});
   $('tDash').addEventListener('pointerdown',e=>{e.preventDefault();tryDash();});
   $('tInt').addEventListener('pointerdown',e=>{e.preventDefault();doInteract();});
   $('tPack').addEventListener('pointerdown',e=>{e.preventDefault();gatherStruct();});
-  $('tCraft').addEventListener('pointerdown',e=>{e.preventDefault();toggleForge();});
   $('tInv').addEventListener('pointerdown',e=>{e.preventDefault();toggleInv();});
   const tryLock=async()=>{try{
     if(!document.fullscreenElement&&document.documentElement.requestFullscreen)
@@ -816,43 +987,30 @@ if(IS_TOUCH){
   addEventListener('pointerdown',function once(){tryLock();
     removeEventListener('pointerdown',once);},{once:true});}
 addEventListener('orientationchange',()=>setTimeout(()=>{
-  resize();if(forge.open){sizeForge();drawForge();}},280));
+  resize();if($('tableOvl').classList.contains('open')&&tableTab==='forge'){sizeForge();drawForge();}},280));
 
 /* ---------- SPELL MODEL ---------- */
 const FORGE_BASE_R=160;
 const nodeScale=p=>lerp(0.5,1.45,(p-1)/9);
 function newLayer(){return{potency:1,shapes:[],circles:[]};}
-/* three saved spell slots; two starters so casting is fun from the first floor */
-function starterBolt(){const L=newLayer();
-  L.shapes.push({points:[0,4,8],element:'air'},{points:[2,6,10],element:'air'});
-  L.circles.push({x:0,y:0,r:40,runes:[-Math.PI/2]});
-  return{layers:[L],active:0};}
-function starterSpread(){const L=newLayer();
-  L.shapes.push({points:[0,3,6,9],element:'fire'});
-  [-0.45,0,0.45].forEach(off=>L.circles.push(
-    {x:off*200,y:0,r:28,runes:[-Math.PI/2+off]}));
-  return{layers:[L],active:0};}
-const spellbook=[starterBolt(),starterSpread(),{layers:[newLayer()],active:0}];
-spellbook.forEach(s=>s.scribed=null);
-let spellSlot=0;
-let spell=spellbook[0];
-function switchSpell(i){
-  if(i===spellSlot||G.over)return;
-  spellSlot=i;spell=spellbook[i];sfx('swap');toast('Spell slot '+(i+1));
-  if(forge.open){renderSlotTabs();renderLayerTabs();renderParchRow();
-    $('potSlider').value=spell.layers[spell.active].potency;
-    $('potN').textContent=spell.layers[spell.active].potency;
-    drawForge();updateReadout();}
-  else flashChipSlot();}
-/* the chip shows what will actually cast: the scribed spell, or base bolt */
-function flashChipSlot(){
-  const sc=spellbook[spellSlot].scribed;
-  if(sc){$('chipTier').textContent=sc.tier;
+/* the forge no longer holds saved spell slots — it edits a single "draft" bound to
+   whichever blank parchment sits in the forge's input slot; Embed snapshots it into
+   an inscribed-parchment item and clears the draft */
+let draft={layers:[newLayer()],active:0};
+function resetDraft(){draft={layers:[newLayer()],active:0};}
+/* the chip shows what the held item will do: a scribed parchment, a sword, or nothing */
+function updateSpellChip(){
+  const it=heldItem();
+  if(it&&it.id==='inscribed'&&it.data){const sc=it.data;
+    $('chipTier').textContent=sc.tier;
     $('chipTier').style.color=TIER_IDX[sc.tier]>=5?'#ffd97a':TIER_IDX[sc.tier]>=3?'#c9a45c':'#8fa0ab';
     $('chipInfo').textContent=sc.spectrum+' ×'+sc.nCirc+' · '+sc.rank+'-paper '+
       (sc.uses>9000?'∞':sc.uses);}
+  else if(it&&ITEMS[it.id]&&ITEMS[it.id].kind==='sword'){
+    $('chipTier').textContent='⚔';$('chipTier').style.color='#c9a45c';
+    $('chipInfo').textContent=ITEMS[it.id].name+' · dmg '+ITEMS[it.id].dmg;}
   else{$('chipTier').textContent='—';$('chipTier').style.color='#8fa0ab';
-    $('chipInfo').textContent='unscribed — base bolt';}}
+    $('chipInfo').textContent=it?ITEMS[it.id].name:'empty hand';}}
 function nodePos(i,layer){const R=FORGE_BASE_R*nodeScale(layer.potency);
   const a=-Math.PI/2+i*(TAU/12);return{x:Math.cos(a)*R,y:Math.sin(a)*R};}
 /* rune angles are stored in canvas space (0 = screen-right, +PI/2 = screen-down).
@@ -862,7 +1020,7 @@ function avgRuneAngle(c){if(!c.runes.length)return 0;
   let sx=0,sy=0;for(const a of c.runes){sx+=Math.cos(a);sy+=Math.sin(a);}
   return Math.atan2(sy,sx)+Math.PI/2;}
 function computeStability(Ls){
-  Ls=Ls||spell.layers;
+  Ls=Ls||draft.layers;
   const feats=[];
   for(const L of Ls){
     for(const s of L.shapes)for(const i of s.points){const p=nodePos(i,L);feats.push({t:'p',x:p.x,y:p.y});}
@@ -879,7 +1037,7 @@ function computeStability(Ls){
 
 /* ---------- cast plan (ported formulas) ---------- */
 function buildPlan(commit,layers){
-  const Ls=layers||spell.layers,P0=Ls[0].potency;
+  const Ls=layers||draft.layers,P0=Ls[0].potency;
   const shapeCost=Math.ceil(BASE_MANA_COST*(1+(P0-1)*0.2));
   const spent={fire:0,water:0,earth:0,air:0};
   let stack=[];
@@ -908,7 +1066,7 @@ function buildPlan(commit,layers){
   const score=basePower*sp.ceil*(1+0.2*Math.max(0,uniq-1))
     *(1+0.5*payloadLayers.length)*(1+0.35*Math.max(0,nCirc-1))*(0.5+0.5*stability);
   const tier=tierOf(score),ti=TIER_IDX[tier];
-  const manaMult=Math.pow(1.4,ti),cd=0.5+0.6*ti;
+  const manaMult=Math.pow(1.55,ti),cd=0.5+0.6*ti;
   const finalCost={};let affordable=true;
   for(const el of ELEMS){finalCost[el]=Math.ceil(spent[el]*manaMult*(1-costRed()));
     if(player.mana[el]<finalCost[el])affordable=false;}
@@ -945,7 +1103,7 @@ function discover(spectrum,elems){
   if(discovered.has(key))return;
   discovered.add(key);
   try{localStorage.setItem('msandbox:types',JSON.stringify([...discovered]));}catch(e){}
-  player.mats.essence+=2;sfx('level');
+  invAdd('essence',2);sfx('level');
   toast('✦ New type discovered: '+key+' ('+discovered.size+'/40, +2 essence)');}
 function fireOne(x,z,ang,power,dmgShare,circleR,payload,elems,spdMod,opts){
   opts=opts||{};
@@ -1007,18 +1165,28 @@ function endProj(p){
   if(p.kind==='explode')explode(p,0.9,1.0,0.35);
   else if(p.kind==='repulse')explode(p,0.15,2.6,0.05);}
 
-function useParch(slot){
-  const sc=slot.scribed;if(!sc)return;
-  if(sc.uses<9000){sc.uses--;
-    if(sc.uses<=0){slot.scribed=null;
-      toast('The parchment crumbles to ash — scribe a new one');sfx('fizzle');}}}
-function tryCast(){
-  if(G.paused||G.over)return;
-  if(player.castCd>0){return;}
+/* ---------- held-item primary action (Minecraft-style hotbar) ---------- */
+function bestWandSave(){
+  let best=0;
+  for(let i=0;i<9;i++){const s=player.slots[i];
+    if(s&&ITEMS[s.id]&&ITEMS[s.id].kind==='wand')best=Math.max(best,ITEMS[s.id].save);}
+  return best;}
+function consumeParchUse(it,sc){
+  if(sc.uses>=9000)return;
+  const save=bestWandSave();
+  if(save>0&&Math.random()<save){if(Math.random()<0.3)toast('🪄 preserved');return;}
+  sc.uses--;
+  if(sc.uses<=0){
+    const idx=player.slots.indexOf(it);
+    if(idx>=0)player.slots[idx]=null;
+    toast('📜 The parchment crumbles');sfx('fizzle');}
+  syncUI();}
+function castHeld(){
+  if(player.castCd>0)return;
   if(player.st<8){toast('Too winded to cast');return;}
-  const slot=spellbook[spellSlot],sc=slot.scribed;
-  if(!sc){player.st-=8;fireFallback();sfx('cast');player.castCd=0.4;
-    flashChipSlot();return;}
+  const it=heldItem();
+  if(!it||it.id!=='inscribed'||!it.data)return;
+  const sc=it.data;
   const plan=buildPlan(true,sc.layers);
   player.st-=8;
   if(plan.fallback){fireFallback();sfx('cast');player.castCd=0.4;return;}
@@ -1027,11 +1195,11 @@ function tryCast(){
   player.castCd=plan.cd;
   /* parchment strain: casting above the paper's rank risks a fizzle */
   const gap=plan.ti-TIER_IDX[sc.rank];
-  useParch(slot);
+  consumeParchUse(it,sc);
   if(gap>0&&Math.random()<Math.min(0.9,gap*0.22)){
     spawnBurst(player.x,1.2,player.z,0x8fa0ab,12,3);
     toast('The '+sc.rank+'-rank paper falters — tier '+plan.tier+' fizzles');
-    sfx('fizzle');flashChipSlot();return;}
+    sfx('fizzle');updateSpellChip();return;}
   const payload=buildPayload(plan.payloadLayers,plan.baseDmg,plan.basePower);
   const spread=()=> (Math.random()-0.5)*2*plan.inst*(Math.PI/6);
   if(plan.container){
@@ -1042,7 +1210,68 @@ function tryCast(){
   else fireOne(player.x,player.z,player.aim+spread(),plan.basePower,plan.baseDmg,30,payload,plan.stack,plan.spdMod);
   sfx('cast');
   if(plan.ti>=3)addShake(.12+plan.ti*.07);
-  flashChipSlot();}
+  updateSpellChip();}
+let meleeCd=0,punchCd=0;
+function enchantBonus(item){
+  /* enchant scaffold: aggregates future Magic Sword enchant effects. empty for now. */
+  const ench=(item.data&&item.data.enchants)||[];
+  let dmg=1;const elems=[];
+  for(const en of ench){if(en&&en.dmgMult)dmg*=en.dmgMult;if(en&&en.elem)elems.push(en.elem);}
+  return{dmg,elems};}
+function doSwingHit(dmg,range,arc,elems){
+  const ang=player.aim;let hitAny=false;
+  spawnBurst(player.x+Math.cos(ang)*1.2,1,player.z+Math.sin(ang)*1.2,0xe8ddc8,10,4);
+  for(const e of [...enemies]){
+    const d=dist(player.x,player.z,e.x,e.z);
+    if(d>range+e.r)continue;
+    const a=Math.atan2(e.z-player.z,e.x-player.x);
+    const diff=Math.atan2(Math.sin(a-ang),Math.cos(a-ang));
+    if(Math.abs(diff)>arc/2)continue;
+    hitAny=true;
+    if(elems.length)applyElems(e,elems,80,a);
+    if(enemies.includes(e))damageEnemy(e,dmg*dmgMult(),a,6,80);}
+  if(hitAny)addShake(.15);}
+function meleeSwing(it,def){
+  if(meleeCd>0)return;
+  if(player.st<6){toast('Too winded to swing');return;}
+  meleeCd=0.45;player.st-=6;
+  const bonus=enchantBonus(it);
+  doSwingHit(def.dmg*bonus.dmg,2.3,Math.PI*100/180,bonus.elems);
+  sfx('hit');}
+function punch(){
+  if(punchCd>0)return;
+  punchCd=0.4;
+  doSwingHit(3,1.8,Math.PI*100/180,[]);
+  sfx('hit');}
+function useConsumable(it){
+  if(it.id==='potion'){invConsume('potion',1);player.hp=Math.min(stat_maxHp(),player.hp+50);
+    toast('+50 HP');sfx('orb');}
+  else if(it.id==='crystal'){invConsume('crystal',1);
+    for(const e of ELEMS){const cap=stat_maxManaEl(e);player.mana[e]=Math.min(cap,player.mana[e]+60);}
+    toast('+60 all mana');sfx('orb');}}
+function placeHeldStruct(it,def){
+  const kind=def.structKind;
+  const H=G.half-2;
+  const px=clamp(player.x+Math.cos(player.aim)*2.4,-H,H);
+  const pz=clamp(player.z+Math.sin(player.aim)*2.4,-H,H);
+  for(const s of structures)if(dist(px,pz,s.x,s.z)<2.2){toast('Too close to another structure');return;}
+  invConsume(it.id,1);
+  const mesh=buildStructMesh(kind);
+  mesh.position.set(px,0,pz);mesh.rotation.y=-player.aim+Math.PI/2;
+  floorGroup.add(mesh);
+  structures.push({kind,x:px,z:pz,mesh,itemId:it.id});
+  spawnBurst(px,.8,pz,0xc9a45c,8,3);sfx('place');
+  toast(STRUCT_DEF[kind].name+' placed — G to pack it up');}
+function primaryAction(){
+  if(G.paused||G.over)return;
+  const it=heldItem();
+  if(!it){punch();return;}
+  const def=ITEMS[it.id];
+  if(def.kind==='inscribed')castHeld();
+  else if(def.kind==='sword')meleeSwing(it,def);
+  else if(def.kind==='consumable')useConsumable(it);
+  else if(def.kind==='struct')placeHeldStruct(it,def);
+  else punch();}
 function triggerPayloads(){
   if(G.paused||G.over)return;
   let any=false;
@@ -1126,27 +1355,31 @@ function killEnemy(e){
   const nOrb=e.boss?10:randi(1,2);
   for(let k=0;k<nOrb;k++)spawnOrb(e.x,e.z,pick(['hp','xp',pick(ELEMS),pick(ELEMS)]));
   gainXp(Math.round(e.xp*(1+Math.min(combo,20)*0.05)));
-  const r=Math.random();
-  if(e.boss){player.mats.shard+=2;addItem(makeEquipment(G.floor));
+  if(e.boss){
+    invAdd('shard',2);invAdd('gear',1,makeEquipment(G.floor));
     dropParch(Math.min(7,2+Math.floor(G.floor/2)));
     if(bossBarrier){floorGroup.remove(bossBarrier);disposeFloorObj(bossBarrier);bossBarrier=null;}
     toast('The Warden falls — the way opens');addShake(1);
     if(portal){portal.active=true;portal.beam.material.opacity=.35;
       portal.ring.material.color.setHex(G.theme.ec);
       portal.ring.material.emissive.setHex(G.theme.ec);portal.ring.material.emissiveIntensity=.9;}
-    $('bossBar').style.display='none';bossRef=null;}
-  else if(r<0.4){player.mats.essence++;toast('+1 essence');}
-  else if(r<0.6){player.mats.shard++;toast('+1 shard');}
-  else if(r<0.68){player.crystals++;toast('+1 mana crystal');}
-  else if(r<0.73){player.potions++;toast('+1 potion');}
-  else if(r<0.81)dropParch();}
+    $('bossBar').style.display='none';bossRef=null;return;}
+  /* renewable world materials — mobs restock what nodes provide, weighted by type */
+  const r=Math.random();
+  const bias=e.type==='brute'?'stone':e.type==='swarmer'?'herb':e.type==='rusher'?'wood':null;
+  if(r<0.18)invAdd(bias||pick(['wood','stone','herb']),randi(1,2));
+  else if(r<0.36)invAdd(pick(['wood','stone','herb']),1);
+  else if(r<0.5)invAdd('essence',1);
+  else if(r<0.68)invAdd('shard',1);
+  else if(r<0.76)invAdd('crystal',1);
+  else if(r<0.83)invAdd('potion',1);
+  else if(r<0.9)dropParch();}
 function dropParch(minIdx){
   let idx=Math.floor(rand(0,1.6)+G.floor*0.18);
   if(minIdx!==undefined)idx=Math.max(idx,minIdx);
   idx=clamp(idx,0,7);
   const rank=RANKS[idx];
-  player.parchments[rank]++;
-  toast('+1 '+rank+'-rank parchment');}
+  invAdd('parch_'+rank,1);}
 function damagePlayer(d){
   if(player.iframe>0||G.over)return;
   const armor=eqMod('armor');
@@ -1176,11 +1409,11 @@ function spawnBurst(x,y,z,col,n,spd){
 
 /* ---------- items ---------- */
 const RARN=['Worn','Tempered','Runed','Mythic'];
-function makeEquipment(fl){
-  const slot=pick(['focus','armor','accessory']);
+function makeEquipment(fl,slotConstraint){
+  const slot=slotConstraint||pick(['armor','accessory']);
   const rar=Math.min(3,Math.floor(rand(0,1.4)+fl*0.12));
   const mods={};const nMods=1+rar;
-  const pool=slot==='focus'?['dmg','cost','bias','mana']:slot==='armor'?['hp','armor','st']:['spd','mana','st','cost','dmg'];
+  const pool=slot==='armor'?['hp','armor','st']:['spd','mana','st','cost','dmg'];
   for(let i=0;i<nMods;i++){
     const k=pick(pool);const s=1+fl*0.15;
     if(k==='dmg')mods.dmg=(mods.dmg||0)+randi(5,12)*s|0;
@@ -1193,9 +1426,8 @@ function makeEquipment(fl){
     else if(k==='spd')mods.spd=(mods.spd||0)+rand(.3,.9);}
   mods.cost=Math.min(mods.cost||0,40)||undefined;
   if(mods.cost===undefined)delete mods.cost;
-  const names={focus:['Wand','Focus','Rod','Prism'],armor:['Mantle','Robe','Aegis','Weave'],accessory:['Ring','Charm','Sigil','Band']};
+  const names={armor:['Mantle','Robe','Aegis','Weave'],accessory:['Ring','Charm','Sigil','Band']};
   return{slot,rar,name:RARN[rar]+' '+pick(names[slot]),mods};}
-function addItem(it){player.inv.push(it);toast('Found: '+it.name);}
 function modStr(m){const out=[];
   for(const k in m){if(k==='bias')out.push('+'+m.bias[1]+'% '+m.bias[0]+' dmg');
     else if(k==='cost')out.push('-'+m[k]+'% mana cost');
@@ -1237,29 +1469,14 @@ function buildStructMesh(kind){
         new THREE.MeshStandardMaterial({color:0xe8ddc8,emissive:0xc9a45c,emissiveIntensity:.15,side:THREE.DoubleSide}));
       pl.position.y=1.2;g.add(pl);}}
   return g;}
-function placeStruct(kind){
-  if(G.paused||G.over)return;
-  if((player.structs[kind]|0)<1){toast('No '+STRUCT_DEF[kind].name+' — craft one at a table');return;}
-  const H=G.half-2;
-  const px=clamp(player.x+Math.cos(player.aim)*2.4,-H,H);
-  const pz=clamp(player.z+Math.sin(player.aim)*2.4,-H,H);
-  for(const s of structures)if(dist(px,pz,s.x,s.z)<2.2){toast('Too close to another structure');return;}
-  player.structs[kind]--;
-  const mesh=buildStructMesh(kind);
-  mesh.position.set(px,0,pz);mesh.rotation.y=-player.aim+Math.PI/2;
-  floorGroup.add(mesh);
-  structures.push({kind,x:px,z:pz,mesh});
-  spawnBurst(px,.8,pz,0xc9a45c,8,3);sfx('place');
-  toast(STRUCT_DEF[kind].name+' placed — G to pack it up');}
 function gatherStruct(){
   if(G.paused||G.over)return;
   for(let i=structures.length-1;i>=0;i--){const s=structures[i];
     if(dist(player.x,player.z,s.x,s.z)<2.6){
       structures.splice(i,1);floorGroup.remove(s.mesh);disposeFloorObj(s.mesh);
-      player.structs[s.kind]++;sfx('gather');
+      invAdd(s.itemId||('s_'+s.kind),1);sfx('gather');
       toast(STRUCT_DEF[s.kind].name+' packed up');return;}}
   toast('Nothing to pack up here');}
-function nearTable(){return structures.some(s=>s.kind==='table'&&dist(player.x,player.z,s.x,s.z)<4);}
 
 /* ---------- gatherable resource nodes ---------- */
 const NODE_DEF={
@@ -1295,9 +1512,9 @@ function buildNodeMesh(kind,T){
 function gatherNode(n){
   const def=NODE_DEF[n.kind];
   const q=n.kind==='vein'?1:randi(1,2);
-  player.mats[def.mat]=(player.mats[def.mat]||0)+q;
-  if(n.kind==='vein'&&Math.random()<0.4){player.mats.essence++;toast('+1 essence');}
-  toast('+'+q+' '+def.mat);sfx('gather');
+  invAdd(def.mat,q);
+  if(n.kind==='vein'&&Math.random()<0.4)invAdd('essence',1);
+  sfx('gather');
   spawnBurst(n.x,.8,n.z,0xc9a45c,6,2.5);
   n.left--;n.mesh.scale.multiplyScalar(0.78);
   if(n.left<=0){floorGroup.remove(n.mesh);disposeFloorObj(n.mesh);nodes.splice(nodes.indexOf(n),1);}}
@@ -1327,110 +1544,104 @@ function revealAllFog(){
   if(!fogCtx)return;
   fogCtx.clearRect(0,0,256,256);fogTex.needsUpdate=true;}
 
-/* ---------- hotbar ---------- */
-const HOT=[
-  {key:'4',kind:'potion',icon:'🧪'},{key:'5',kind:'crystal',icon:'💠'},
-  {key:'6',kind:'tent',icon:'⛺'},{key:'7',kind:'wall',icon:'🧱'},
-  {key:'8',kind:'anvil',icon:'⚒️'},{key:'9',kind:'table',icon:'🛠️'},
-  {key:'0',kind:'map',icon:'🗺️'}];
-function hotCount(kind){
-  return kind==='potion'?player.potions:kind==='crystal'?player.crystals:(player.structs[kind]|0);}
-function useHot(kind){
-  if(G.paused||G.over)return;
-  if(kind==='potion')window.usePotion();
-  else if(kind==='crystal')window.useCrystal();
-  else placeStruct(kind);}
+/* ---------- hotbar (mirrors player.slots[0..8]) ---------- */
+function selectHot(i){player.hot=clamp(i,0,8);buildHotbar();updateSpellChip();}
 function buildHotbar(){
   const bar=$('hotbar');bar.innerHTML='';
-  HOT.forEach(h=>{
-    const b=document.createElement('button');b.className='hslot';
-    b.setAttribute('aria-label',h.kind+' (key '+h.key+')');
-    b.innerHTML='<span class="hk">'+h.key+'</span>'+h.icon+'<span class="hn"></span>';
-    b.onclick=()=>useHot(h.kind);
+  for(let i=0;i<9;i++){
+    const it=player.slots[i];const def=it&&ITEMS[it.id];
+    const b=document.createElement('button');
+    b.className='hslot'+(!it?' empty':'')+(i===player.hot?' sel':'');
+    b.setAttribute('aria-label','hotbar slot '+(i+1));
+    b.innerHTML='<span class="hk">'+(i+1)+'</span>'+(def?def.icon:'')+
+      (it&&it.n>1?'<span class="hn">'+it.n+'</span>':'');
+    b.onclick=()=>selectHot(i);
     b.addEventListener('pointerdown',e=>e.stopPropagation());
-    h.el=b;h.nEl=b.querySelector('.hn');bar.appendChild(b);});}
-function updateHotbar(){
-  HOT.forEach(h=>{const n=hotCount(h.kind);
-    if(h.n!==n){h.n=n;h.nEl.textContent=n;h.el.classList.toggle('empty',n<1);}});}
+    bar.appendChild(b);}}
 
-/* ---------- FORGE EDITOR ---------- */
+/* ---------- FORGE EDITOR (now hosted in the crafting table's Spell Forge tab) ---------- */
 const fc=$('forgeCanvas'),fg=fc.getContext('2d');
-const forge={open:false,tool:'weave',path:null,seal:null,scale:1,cx:0,cy:0,vx:0,vy:0,zoom:1,grid:false,gStep:40};
-function toggleForge(){forge.open?closeForge():openForge();}
-function openForge(){if(G.over)return;forge.open=true;G.paused=true;
-  $('forgeOvl').classList.add('open');sizeForge();renderSlotTabs();renderLayerTabs();renderParchRow();
-  $('potSlider').value=spell.layers[spell.active].potency;
-  $('potN').textContent=spell.layers[spell.active].potency;
-  drawForge();updateReadout();}
-function renderSlotTabs(){
-  const box=$('slotTabs');box.innerHTML='';
-  for(let i=0;i<3;i++){const b=document.createElement('button');
-    b.className='ltab'+(i===spellSlot?' on':'');b.textContent='S'+(i+1);
-    b.onclick=()=>switchSpell(i);box.appendChild(b);}}
-function scribe(rank){
-  if((player.parchments[rank]|0)<1)return;
-  const p=buildPlan(false);
+const forge={tool:'weave',path:null,seal:null,scale:1,cx:0,cy:0,vx:0,vy:0,zoom:1,grid:false,gStep:40};
+function forgeInClick(){
+  if(!cursor){
+    if(forgeIn){cursor=forgeIn;forgeIn=null;resetDraft();}
+  }else{
+    const def=ITEMS[cursor.id];
+    if(!def||def.kind!=='parchment'){toast('Only blank parchment can go here');return;}
+    if(!forgeIn){forgeIn={id:cursor.id,n:1};cursor.n--;if(cursor.n<=0)cursor=null;resetDraft();}
+    else if(forgeIn.id!==cursor.id){
+      const old=forgeIn;forgeIn={id:cursor.id,n:1};cursor.n--;if(cursor.n<=0)cursor=null;
+      if(cursor)invAdd(old.id,old.n,old.data);else cursor=old;
+      resetDraft();}
+  }}
+function renderForgeIn(){
+  const wrap=$('forgeInWrap');if(!wrap)return;
+  wrap.innerHTML='';wrap.appendChild(buildSlotDiv({kind:'forgeIn'}));
+  const rankInfo=forgeIn&&ITEMS[forgeIn.id];
+  const canvasWrap=$('forgeCanvasWrap');
+  if(rankInfo&&rankInfo.kind==='parchment'){
+    canvasWrap.classList.remove('dim');$('forgeHint').style.display='none';
+    const lim=RANK_LIMITS[rankInfo.rank];
+    $('potSlider').max=lim.pot;
+    if(+$('potSlider').value>lim.pot||draft.layers[draft.active].potency>lim.pot){
+      const v=Math.min(+$('potSlider').value,lim.pot);
+      $('potSlider').value=v;draft.layers[draft.active].potency=v;}
+  }else{canvasWrap.classList.add('dim');$('forgeHint').style.display='flex';}
+  renderLayerTabs();drawForge();updateReadout();}
+function embedSpell(){
+  if(!forgeIn||!ITEMS[forgeIn.id]||ITEMS[forgeIn.id].kind!=='parchment')return;
+  const rank=ITEMS[forgeIn.id].rank;
+  const p=buildPlan(false,draft.layers);
   if(p.fallback){toast('Weave something first — an empty page is wasted');return;}
-  player.parchments[rank]--;
-  spellbook[spellSlot].scribed={
-    layers:JSON.parse(JSON.stringify(spell.layers)),
-    rank,uses:PARCH_USES[rank],
-    tier:p.tier,spectrum:p.spectrum,nCirc:p.nCirc,
-    kind:projKind(p.stack)};
-  sfx('shrine');toast('Scribed onto '+rank+'-rank parchment — its nature is revealed');
-  renderParchRow();updateReadout();flashChipSlot();}
-function renderParchRow(){
-  const box=$('parchRow');box.innerHTML='';
-  let anyOwned=false;
-  RANKS.forEach(r=>{
-    const n=player.parchments[r]|0;if(n<1)return;
-    anyOwned=true;
-    const b=document.createElement('button');b.className='tool';
-    b.textContent=r+' ×'+n;b.onclick=()=>scribe(r);box.appendChild(b);});
-  if(!anyOwned)box.innerHTML='<span class="mods">No parchment — enemies and chests drop it, or craft at a table.</span>';
-  const sc=spellbook[spellSlot].scribed;
-  $('scribeInfo').innerHTML=sc
-    ?('Scribed: <span style="color:var(--brass)">'+sc.tier+' '+sc.spectrum+' ×'+sc.nCirc+
-      '</span> · '+sc.rank+'-paper · '+(sc.uses>9000?'∞':sc.uses)+' uses left'+
-      (sc.kind!=='plain'?' · '+sc.kind:''))
-    :'Unscribed — casts only the base bolt. Pick a parchment above to scribe this design.';}
-function closeForge(){forge.open=false;G.paused=$('invOvl').classList.contains('open')||$('lvOvl').classList.contains('open');
-  $('forgeOvl').classList.remove('open');}
-$('fDone').onclick=closeForge;
-$('fClear').onclick=()=>{const L=spell.layers[spell.active];L.shapes=[];L.circles=[];drawForge();updateReadout();};
+  if(TIER_IDX[p.tier]>TIER_IDX[rank]){toast('Needs ≥ '+p.tier+' parchment for this design');return;}
+  forgeIn=null;
+  const data={layers:JSON.parse(JSON.stringify(draft.layers)),rank,
+    uses:PARCH_USES[rank],maxUses:PARCH_USES[rank],
+    tier:p.tier,spectrum:p.spectrum,nCirc:p.nCirc,kind:projKind(p.stack),
+    name:p.tier+' '+p.spectrum};
+  invAdd('inscribed',1,data);
+  sfx('shrine');toast('Embedded '+p.tier+' '+p.spectrum+' onto the parchment');
+  resetDraft();renderForgeIn();}
+$('fEmbed').onclick=embedSpell;
+$('fClear').onclick=()=>{const L=draft.layers[draft.active];L.shapes=[];L.circles=[];drawForge();updateReadout();};
 document.querySelectorAll('.tool[data-t]').forEach(b=>b.onclick=()=>{
   forge.tool=b.dataset.t;
   document.querySelectorAll('.tool[data-t]').forEach(x=>x.classList.toggle('on',x===b));});
 $('gridBtn').onclick=()=>{forge.grid=!forge.grid;
   $('gridBtn').classList.toggle('on',forge.grid);drawForge();updateReadout();};
 $('potSlider').oninput=e=>{
-  spell.layers[spell.active].potency=+e.target.value;
-  $('potN').textContent=e.target.value;drawForge();updateReadout();};
+  if(!forgeIn){e.target.value=draft.layers[draft.active].potency;return;}
+  let v=+e.target.value;
+  const lim=RANK_LIMITS[ITEMS[forgeIn.id].rank];if(lim)v=Math.min(v,lim.pot);
+  draft.layers[draft.active].potency=v;e.target.value=v;
+  $('potN').textContent=v;drawForge();updateReadout();};
 function renderLayerTabs(){
   const box=$('layerTabs');box.innerHTML='';
-  spell.layers.forEach((L,i)=>{
-    const b=document.createElement('button');b.className='ltab'+(i===spell.active?' on':'');
-    b.textContent=i+1;b.onclick=()=>{spell.active=i;
+  draft.layers.forEach((L,i)=>{
+    const b=document.createElement('button');b.className='ltab'+(i===draft.active?' on':'');
+    b.textContent=i+1;b.onclick=()=>{draft.active=i;
       $('potSlider').value=L.potency;$('potN').textContent=L.potency;
       renderLayerTabs();drawForge();updateReadout();};box.appendChild(b);});
   const add=document.createElement('button');add.className='ltab';add.textContent='+';
-  add.onclick=()=>{if(spell.layers.length>=5)return;
-    spell.layers.push(newLayer());spell.active=spell.layers.length-1;
+  add.onclick=()=>{
+    const lim=forgeIn&&ITEMS[forgeIn.id]?RANK_LIMITS[ITEMS[forgeIn.id].rank]:null;
+    if(!lim||draft.layers.length>=lim.layers){toast('This parchment rank cannot hold more weaves');return;}
+    draft.layers.push(newLayer());draft.active=draft.layers.length-1;
     $('potSlider').value=1;$('potN').textContent=1;renderLayerTabs();drawForge();updateReadout();};
   box.appendChild(add);
-  if(spell.layers.length>1){
+  if(draft.layers.length>1){
     const del=document.createElement('button');del.className='ltab';del.textContent='−';
-    del.onclick=()=>{spell.layers.splice(spell.active,1);
-      spell.active=Math.max(0,spell.active-1);
-      $('potSlider').value=spell.layers[spell.active].potency;
-      $('potN').textContent=spell.layers[spell.active].potency;
+    del.onclick=()=>{draft.layers.splice(draft.active,1);
+      draft.active=Math.max(0,draft.active-1);
+      $('potSlider').value=draft.layers[draft.active].potency;
+      $('potN').textContent=draft.layers[draft.active].potency;
       renderLayerTabs();drawForge();updateReadout();};box.appendChild(del);}}
 function sizeForge(){
   const w=fc.parentElement.clientWidth,h=fc.parentElement.clientHeight;
   fc.width=w*devicePixelRatio;fc.height=h*devicePixelRatio;
   forge.cx=w/2;forge.cy=h/2;
   forge.scale=Math.min(w,h)/(2*FORGE_BASE_R*1.45+70);}
-addEventListener('resize',()=>{if(forge.open){sizeForge();drawForge();}});
+addEventListener('resize',()=>{if($('tableOvl').classList.contains('open')&&tableTab==='forge'){sizeForge();drawForge();}});
 function toDesign(e){const r=fc.getBoundingClientRect();
   const zs=forge.scale*forge.zoom;
   return{x:(e.clientX-r.left-forge.cx-forge.vx)/zs,
@@ -1453,8 +1664,8 @@ function drawForge(){
       fg.beginPath();fg.moveTo(-ext,gy);fg.lineTo(ext,gy);fg.stroke();}}
   fg.strokeStyle='#ffffff20';fg.lineWidth=1.5/zs;
   fg.beginPath();fg.moveTo(-ext,0);fg.lineTo(ext,0);fg.moveTo(0,-ext);fg.lineTo(0,ext);fg.stroke();
-  spell.layers.forEach((L,li)=>{
-    const act=li===spell.active,al=act?1:0.32;
+  draft.layers.forEach((L,li)=>{
+    const act=li===draft.active,al=act?1:0.32;
     const R=FORGE_BASE_R*nodeScale(L.potency);
     fg.globalAlpha=al;
     // ring guide
@@ -1485,7 +1696,7 @@ function drawForge(){
   });
   fg.globalAlpha=1;
   // live previews
-  const L=spell.layers[spell.active];
+  const L=draft.layers[draft.active];
   if(forge.path){fg.strokeStyle='#e8ddc8';fg.lineWidth=2;fg.setLineDash([6,5]);
     fg.beginPath();forge.path.forEach((pi,k)=>{const p=nodePos(pi,L);
       k?fg.lineTo(p.x,p.y):fg.moveTo(p.x,p.y);});
@@ -1514,6 +1725,7 @@ fc.addEventListener('wheel',e=>{e.preventDefault();
   drawForge();},{passive:false});
 fc.addEventListener('dblclick',()=>{forge.vx=forge.vy=0;forge.zoom=1;drawForge();});
 fc.addEventListener('pointerdown',e=>{
+  if(!forgeIn)return; // canvas is disabled until a blank parchment is placed
   fc.setPointerCapture(e.pointerId);
   fPts.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(fPts.size===2){
@@ -1523,7 +1735,7 @@ fc.addEventListener('pointerdown',e=>{
     drawForge();return;}
   fPid=e.pointerId;
   const p=toDesign(e);forge.cur=p;forge.panLast={x:e.clientX,y:e.clientY};
-  const L=spell.layers[spell.active];
+  const L=draft.layers[draft.active];
   if(forge.tool==='weave'){const n=nearestNode(p,L);if(n>=0)forge.path=[n];}
   else if(forge.tool==='seal'){const sp=snapPt(p);forge.seal={x:sp.x,y:sp.y};}
   drawForge();});
@@ -1540,7 +1752,7 @@ fc.addEventListener('pointermove',e=>{
     forge.vx+=e.clientX-forge.panLast.x;forge.vy+=e.clientY-forge.panLast.y;
     forge.panLast={x:e.clientX,y:e.clientY};drawForge();return;}
   const p=toDesign(e);forge.cur=p;
-  const L=spell.layers[spell.active];
+  const L=draft.layers[draft.active];
   if(forge.path){const n=nearestNode(p,L);
     if(n>=0&&n!==forge.path[forge.path.length-1]){
       if(n===forge.path[0]&&forge.path.length>=3){
@@ -1553,11 +1765,14 @@ function fUp(e){
   if(pinch){if(fPts.size<2)pinch=null;return;}
   if(e.pointerId!==fPid)return;fPid=null;forge.panLast=null;
   if(forge.tool==='pan'){forge.path=null;forge.seal=null;drawForge();return;}
-  const p=toDesign(e);const L=spell.layers[spell.active];
+  const p=toDesign(e);const L=draft.layers[draft.active];
   if(forge.seal){
     let r=Math.hypot(p.x-forge.seal.x,p.y-forge.seal.y);
     if(forge.grid){const hs=(forge.gStep||40)/2;r=Math.max(hs,Math.round(r/hs)*hs);}
-    if(r>=18)L.circles.push({x:forge.seal.x,y:forge.seal.y,r,runes:[]});
+    const lim=forgeIn&&ITEMS[forgeIn.id]?RANK_LIMITS[ITEMS[forgeIn.id].rank]:null;
+    if(r>=18){
+      if(lim&&L.circles.length>=lim.circ)toast('This parchment rank cannot hold more seals');
+      else L.circles.push({x:forge.seal.x,y:forge.seal.y,r,runes:[]});}
     forge.seal=null;updateReadout();}
   else if(forge.tool==='rune'){
     for(const c of L.circles){
@@ -1585,12 +1800,8 @@ function fUp(e){
 fc.addEventListener('pointerup',fUp);
 fc.addEventListener('pointercancel',fUp);
 function updateReadout(){
-  const p=buildPlan(false);
+  const p=buildPlan(false,draft.layers);
   const st=Math.round((p.stability??1)*100);
-  /* divination only reveals a spell's true nature once it is scribed:
-     an unscribed draft shows mana cost & stability, nothing more */
-  const sc=spellbook[spellSlot].scribed;
-  const revealed=sc&&JSON.stringify(spell.layers)===JSON.stringify(sc.layers);
   let html='<span class="k">stability</span> '+st+'%<br>';
   html+='<span class="k">stack</span> ';
   html+=p.stack.length?p.stack.map(e=>'<span class="chip" style="background:'+ECSS[e]+'"></span>').join(''):'—';
@@ -1599,113 +1810,235 @@ function updateReadout(){
   const cparts=ELEMS.filter(e=>costs[e]>0).map(e=>'<span style="color:'+ECSS[e]+'">'+costs[e]+'</span>');
   html+=cparts.length?cparts.join(' / '):'free';
   if(p.fallback){html+='<br><span class="k">result</span> base bolt';}
-  else if(!revealed){
-    html+='<br><span class="k">form</span> ? · <span class="k">power</span> ? · <span class="k">dmg</span> ?';
-    html+='<br><span class="k">tier</span> <span id="tierBig">?</span> <span class="k">scribe to divine its nature</span>';}
   else{html+='<br><span class="k">form</span> '+p.spectrum+' ×'+p.nCirc;
     if(p.payloadLayers.length)html+=' <span class="k">+'+p.payloadLayers.length+' payload</span>';
     html+='<br><span class="k">power</span> '+Math.round(p.basePower)+' · <span class="k">dmg</span> '+Math.round(p.baseDmg);
     html+='<br><span class="k">range</span> ~'+Math.round(p.sp.rng*(0.9+p.basePower/600))+'m · <span class="k">kind</span> '+projKind(p.stack);
     html+='<br><span class="k">tier</span> <span id="tierBig">'+p.tier+'</span> <span class="k">cd '+p.cd.toFixed(1)+'s</span>';}
   $('readout').innerHTML=html;
-  $('forgeMsg').textContent=(!p.fallback&&!p.affordable)?'Not enough mana for the tier tax.':'';
-  renderParchRow();player.lastPlan=p;}
+  const rankInfo=forgeIn&&ITEMS[forgeIn.id];
+  let msg='',embedOk=false;
+  if(!rankInfo||rankInfo.kind!=='parchment')msg='Place a blank parchment to embed.';
+  else if(p.fallback)msg='Weave something first.';
+  else if(TIER_IDX[p.tier]>TIER_IDX[rankInfo.rank])msg='Needs ≥ '+p.tier+' parchment (this is '+rankInfo.rank+').';
+  else embedOk=true;
+  $('forgeMsg').textContent=msg;
+  if($('fEmbed'))$('fEmbed').disabled=!embedOk;
+  player.lastPlan=p;}
 
-/* ---------- inventory UI ---------- */
-function toggleInv(){const o=$('invOvl');
-  if(o.classList.contains('open')){o.classList.remove('open');G.paused=forge.open;}
-  else{if(G.over)return;renderInv();o.classList.add('open');G.paused=true;}}
-$('invDone').onclick=toggleInv;
+/* ---------- Minecraft-style slot UI: cursor-stack inventory + crafting ---------- */
+let craft2=[null,null,null,null],craft3=new Array(9).fill(null),forgeIn=null,cursor=null,tableTab='craft';
+function gridArrFor(g){return g==='craft2'?craft2:craft3;}
+function outputPreview(g){
+  const m=craftMatch(gridArrFor(g));if(!m)return null;
+  if(m.rec.special)return{id:'gear',n:m.rec.n||1,special:m.rec.special};
+  return{id:m.rec.id,n:m.rec.n||1};}
+function getSlotItem(desc){
+  if(desc.kind==='inv')return player.slots[desc.idx];
+  if(desc.kind==='craft2')return craft2[desc.idx];
+  if(desc.kind==='craft3')return craft3[desc.idx];
+  if(desc.kind==='eq')return player.eq[desc.eqSlot]?{id:'gear',n:1,data:player.eq[desc.eqSlot]}:null;
+  if(desc.kind==='forgeIn')return forgeIn;
+  if(desc.kind==='output')return outputPreview(desc.grid);
+  return null;}
+function quickMove(idx){
+  const it=player.slots[idx];if(!it)return;
+  const isHot=idx<9;const rs=isHot?9:0,re=isHot?36:9;
+  const def=ITEMS[it.id];let remaining=it.n;
+  if(!it.data&&def.stack>1){
+    for(let i=rs;i<re&&remaining>0;i++){const s=player.slots[i];
+      if(s&&s.id===it.id&&!s.data&&s.n<def.stack){const add=Math.min(def.stack-s.n,remaining);s.n+=add;remaining-=add;}}}
+  while(remaining>0){
+    let i=-1;for(let k=rs;k<re;k++)if(!player.slots[k]){i=k;break;}
+    if(i<0)break;
+    const take=it.data?remaining:Math.min(def.stack,remaining);
+    player.slots[i]={id:it.id,n:take,data:it.data};remaining-=take;
+    if(it.data)break;}
+  if(remaining<=0)player.slots[idx]=null;else it.n=remaining;}
+function eqSlotClick(desc){
+  const cur=player.eq[desc.eqSlot];
+  if(!cursor){
+    if(cur){cursor={id:'gear',n:1,data:cur};player.eq[desc.eqSlot]=null;player.hp=Math.min(player.hp,stat_maxHp());}
+  }else if(cursor.id==='gear'&&cursor.data&&cursor.data.slot===desc.eqSlot){
+    player.eq[desc.eqSlot]=cursor.data;
+    cursor=cur?{id:'gear',n:1,data:cur}:null;
+  }else toast('Doesn\'t fit that slot');}
+function craftOutputClick(desc,shift){
+  const grid=gridArrFor(desc.grid);
+  if(shift){
+    let count=0;
+    while(count<64){
+      const prev=outputPreview(desc.grid);if(!prev)break;
+      const res=craftOnce(grid);if(!res)break;
+      if(!invAdd(res.id,res.n,res.data))break;
+      count++;}
+    if(count)sfx('place');
+  }else{
+    const prev=outputPreview(desc.grid);if(!prev)return;
+    if(cursor&&!(cursor.id===prev.id&&!cursor.data&&!prev.special&&cursor.n+prev.n<=slotMax(prev.id))){
+      toast('Cursor full');return;}
+    const res=craftOnce(grid);if(!res)return;
+    if(cursor)cursor.n+=res.n;else cursor={id:res.id,n:res.n,data:res.data};
+    sfx('place');}}
+function onSlotClick(desc,opt){
+  if(desc.kind==='output'){craftOutputClick(desc,opt.shiftKey);syncUI();return;}
+  if(desc.kind==='eq'){eqSlotClick(desc);syncUI();return;}
+  if(desc.kind==='forgeIn'){forgeInClick();syncUI();return;}
+  const arr=desc.kind==='inv'?player.slots:desc.kind==='craft2'?craft2:craft3;
+  const idx=desc.idx,cur=arr[idx];
+  if(opt.shiftKey&&desc.kind==='inv'){quickMove(idx);syncUI();return;}
+  if(opt.button===2){
+    if(!cursor){
+      if(cur){const half=Math.ceil(cur.n/2);cursor={id:cur.id,n:half,data:cur.data};cur.n-=half;if(cur.n<=0)arr[idx]=null;}
+    }else{
+      if(!cur){arr[idx]={id:cursor.id,n:1,data:cursor.data};cursor.n--;}
+      else if(cur.id===cursor.id&&!cur.data&&cur.n<slotMax(cur.id)){cur.n++;cursor.n--;}
+      if(cursor&&cursor.n<=0)cursor=null;}
+  }else{
+    if(!cursor){
+      if(cur){cursor=cur;arr[idx]=null;}
+    }else{
+      if(!cur){arr[idx]=cursor;cursor=null;}
+      else if(cur.id===cursor.id&&!cur.data&&!cursor.data){
+        const room=slotMax(cur.id)-cur.n,move=Math.min(room,cursor.n);
+        cur.n+=move;cursor.n-=move;if(cursor.n<=0)cursor=null;
+      }else{arr[idx]=cursor;cursor=cur;}}}
+  syncUI();}
+function buildSlotDiv(desc){
+  const el=document.createElement('div');el.className='slot'+(desc.kind==='output'?' outSlot':'');
+  const it=getSlotItem(desc);
+  if(it){const def=ITEMS[it.id]||{icon:'?'};
+    el.innerHTML='<span class="sIcon">'+def.icon+'</span>'+(it.n>1?'<span class="sN">'+it.n+'</span>':'');}
+  if(desc.kind==='inv'&&desc.idx===player.hot&&desc.idx<9)el.classList.add('sel');
+  el.addEventListener('click',e=>onSlotClick(desc,{button:0,shiftKey:e.shiftKey}));
+  el.addEventListener('contextmenu',e=>{e.preventDefault();onSlotClick(desc,{button:2,shiftKey:e.shiftKey});});
+  el.addEventListener('mouseenter',()=>showTooltip(desc,el));
+  el.addEventListener('mousemove',()=>showTooltip(desc,el));
+  el.addEventListener('mouseleave',hideTooltip);
+  return el;}
+function labeledSlot(label,slotEl){
+  const wrap=document.createElement('div');wrap.className='eqSlotWrap';
+  const l=document.createElement('div');l.textContent=label;wrap.appendChild(l);wrap.appendChild(slotEl);return wrap;}
+function renderMainGrid(container){
+  container.innerHTML='';
+  const grid=document.createElement('div');grid.className='slotGrid g9';
+  for(let i=9;i<36;i++)grid.appendChild(buildSlotDiv({kind:'inv',idx:i}));
+  container.appendChild(grid);
+  const hot=document.createElement('div');hot.className='slotGrid g9 hotRow';
+  for(let i=0;i<9;i++)hot.appendChild(buildSlotDiv({kind:'inv',idx:i}));
+  container.appendChild(hot);}
 function renderInv(){
-  let h='<div class="invSec"><h3>EQUIPPED</h3>';
-  for(const s of ['focus','armor','accessory']){
-    const it=player.eq[s];
-    h+='<div class="slotLine"><span class="k" style="width:84px;color:var(--dim)">'+s+'</span>';
-    h+=it?('<span class="iname rar'+it.rar+'">'+it.name+'</span><span class="mods">'+modStr(it.mods)+'</span>'+
-      '<button class="btn small" onclick="unequip(\''+s+'\')">Remove</button>'):'<span class="mods">empty</span>';
-    h+='</div>';}
-  h+='</div><div class="invSec"><h3>PACK</h3>';
-  if(!player.inv.length)h+='<div class="mods">Nothing yet. Chests and Wardens carry gear.</div>';
-  player.inv.forEach((it,i)=>{
-    h+='<div class="itemLine"><span class="iname rar'+it.rar+'">'+it.name+'</span>'+
-      '<span class="mods">'+modStr(it.mods)+'</span>'+
-      '<button class="btn small" onclick="equipItem('+i+')">Equip</button></div>';});
-  h+='</div><div class="invSec"><h3>SUPPLIES</h3><div id="matLine">essence ×'+player.mats.essence+
-    ' · shard ×'+player.mats.shard+' · wood ×'+(player.mats.wood|0)+
-    ' · stone ×'+(player.mats.stone|0)+' · herb ×'+(player.mats.herb|0)+
-    '<br>potion ×'+player.potions+' · crystal ×'+player.crystals+'</div>'+
-    '<div class="mods" style="margin-top:4px">parchment: '+
-    RANKS.map(r=>(player.parchments[r]|0)>0?r+'×'+player.parchments[r]:null)
-      .filter(Boolean).join(' · ')+
-    (RANKS.some(r=>player.parchments[r]>0)?'':'none — drops from enemies & chests')+'</div>'+
-    '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">'+
-    '<button class="btn small" onclick="usePotion()">Drink potion (+50 HP)</button>'+
-    '<button class="btn small" onclick="useCrystal()">Crack crystal (+60 all mana)</button></div></div>';
-  h+='<div class="invSec"><h3>STRUCTURES (hotbar 6–0)</h3>';
-  for(const k in STRUCT_DEF){const d=STRUCT_DEF[k];
-    h+='<div class="itemLine"><span class="iname">'+d.icon+' '+d.name+
-      ' <span class="mods">×'+(player.structs[k]|0)+'</span></span>'+
-      '<span class="mods">'+d.desc+'</span></div>';}
-  h+='</div>';
-  const atTable=nearTable();
-  h+='<div class="invSec"><h3>CRAFT'+(atTable?' · AT TABLE':'')+'</h3>'+
-    '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
-    '<button class="btn small" onclick="craftPotion()">3 essence → potion</button>'+
-    '<button class="btn small" onclick="craftGear()">5 shard + 2 essence → gear</button>'+
-    '<button class="btn small" onclick="craftStruct(\'table\')">4 wood → crafting table</button>';
-  if(atTable){
-    h+='<button class="btn small" onclick="craftParch()">2 essence + 2 wood → parchment</button>';
-    for(const k in STRUCT_DEF){if(k==='table')continue;const d=STRUCT_DEF[k];
-      h+='<button class="btn small" onclick="craftStruct(\''+k+'\')">'+
-        Object.entries(d.cost).map(([m,q])=>q+' '+m).join(' + ')+' → '+d.name.toLowerCase()+'</button>';}}
-  else h+='<div class="mods" style="width:100%">Stand near a crafting table for parchment & structure recipes.</div>';
-  h+='</div></div>';
-  h+='<div class="invSec"><h3>GRIMOIRE — SPELL TYPES ('+discovered.size+'/40)</h3>';
-  h+=discovered.size?('<div class="mods">'+
-      [...discovered].sort().map(escHtml).join(' · ')+'</div>')
-    :'<div class="mods">Cast spells to discover their types. Each new type grants essence.</div>';
-  h+='</div>';
-  $('invBody').innerHTML=h;}
+  const root=$('invBody');root.innerHTML='';
+  const eqSec=document.createElement('div');eqSec.className='invSec';eqSec.innerHTML='<h3>EQUIPPED</h3>';
+  const eqRow=document.createElement('div');eqRow.className='eqRow';
+  eqRow.appendChild(labeledSlot('Armor',buildSlotDiv({kind:'eq',eqSlot:'armor'})));
+  eqRow.appendChild(labeledSlot('Accessory',buildSlotDiv({kind:'eq',eqSlot:'accessory'})));
+  eqSec.appendChild(eqRow);root.appendChild(eqSec);
+  const cSec=document.createElement('div');cSec.className='invSec';cSec.innerHTML='<h3>CRAFT</h3>';
+  const cRow=document.createElement('div');cRow.className='craftRow';
+  const grid2=document.createElement('div');grid2.className='slotGrid g2';
+  for(let i=0;i<4;i++)grid2.appendChild(buildSlotDiv({kind:'craft2',idx:i}));
+  cRow.appendChild(grid2);
+  const arrow=document.createElement('div');arrow.className='craftArrow';arrow.textContent='→';cRow.appendChild(arrow);
+  cRow.appendChild(buildSlotDiv({kind:'output',grid:'craft2'}));
+  cSec.appendChild(cRow);root.appendChild(cSec);
+  const mSec=document.createElement('div');mSec.className='invSec';mSec.innerHTML='<h3>PACK</h3>';
+  const mBody=document.createElement('div');mSec.appendChild(mBody);renderMainGrid(mBody);
+  root.appendChild(mSec);
+  const gSec=document.createElement('div');gSec.className='invSec';
+  gSec.innerHTML='<h3>GRIMOIRE — SPELL TYPES ('+discovered.size+'/40)</h3>'+
+    (discovered.size?('<div class="mods">'+[...discovered].sort().map(escHtml).join(' · ')+'</div>')
+     :'<div class="mods">Cast spells to discover their types. Each new type grants essence.</div>');
+  root.appendChild(gSec);
+  renderCursor();}
+function renderTableCraft(){
+  const root=$('tableCraftTab');root.innerHTML='';
+  const cSec=document.createElement('div');cSec.className='invSec';cSec.innerHTML='<h3>CRAFT</h3>';
+  const cRow=document.createElement('div');cRow.className='craftRow';
+  const grid3=document.createElement('div');grid3.className='slotGrid g3';
+  for(let i=0;i<9;i++)grid3.appendChild(buildSlotDiv({kind:'craft3',idx:i}));
+  cRow.appendChild(grid3);
+  const arrow=document.createElement('div');arrow.className='craftArrow';arrow.textContent='→';cRow.appendChild(arrow);
+  cRow.appendChild(buildSlotDiv({kind:'output',grid:'craft3'}));
+  cSec.appendChild(cRow);root.appendChild(cSec);
+  const mSec=document.createElement('div');mSec.className='invSec';mSec.innerHTML='<h3>PACK</h3>';
+  const mBody=document.createElement('div');mSec.appendChild(mBody);renderMainGrid(mBody);
+  root.appendChild(mSec);
+  renderCursor();}
 function escHtml(s){return String(s).replace(/[&<>"']/g,
   c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-window.craftParch=()=>{
-  if(!nearTable())return toast('Need a crafting table nearby');
-  if(player.mats.essence<2||player.mats.wood<2)return toast('Need 2 essence + 2 wood');
-  player.mats.essence-=2;player.mats.wood-=2;
-  dropParch();renderInv();sfx('place');};
-window.craftStruct=k=>{
-  const d=STRUCT_DEF[k];
-  if(k!=='table'&&!nearTable())return toast('Need a crafting table nearby');
-  for(const m in d.cost)if((player.mats[m]|0)<d.cost[m])
-    return toast('Need '+Object.entries(d.cost).map(([mm,q])=>q+' '+mm).join(' + '));
-  for(const m in d.cost)player.mats[m]-=d.cost[m];
-  player.structs[k]++;renderInv();sfx('place');toast(d.name+' crafted');};
-window.equipItem=i=>{const it=player.inv.splice(i,1)[0];
-  if(player.eq[it.slot])player.inv.push(player.eq[it.slot]);
-  player.eq[it.slot]=it;
-  player.hp=Math.min(player.hp,stat_maxHp());renderInv();};
-window.unequip=s=>{if(player.eq[s]){player.inv.push(player.eq[s]);player.eq[s]=null;renderInv();}};
-window.usePotion=()=>{if(player.potions<1)return toast('No potions');
-  player.potions--;player.hp=Math.min(stat_maxHp(),player.hp+50);renderInv();toast('+50 HP');};
-window.useCrystal=()=>{if(player.crystals<1)return toast('No crystals');
-  player.crystals--;
-  for(const e of ELEMS){const cap=stat_maxManaEl(e);player.mana[e]=Math.min(cap,player.mana[e]+60);}
-  renderInv();toast('+60 all mana');};
-window.craftPotion=()=>{if(player.mats.essence<3)return toast('Need 3 essence');
-  player.mats.essence-=3;player.potions++;renderInv();toast('Brewed a potion');};
-window.craftGear=()=>{if(player.mats.shard<5||player.mats.essence<2)return toast('Need 5 shard + 2 essence');
-  player.mats.shard-=5;player.mats.essence-=2;addItem(makeEquipment(G.floor));renderInv();};
+function showTooltip(desc,el){
+  const it=getSlotItem(desc);const tt=$('slotTooltip');
+  if(!it){tt.style.display='none';return;}
+  const def=ITEMS[it.id]||{};
+  const name=it.data&&it.data.name?it.data.name:def.name;
+  const lines=[name];
+  if(def.kind==='sword')lines.push('DMG '+def.dmg+' · '+((it.data&&it.data.enchants&&it.data.enchants.length)?it.data.enchants.join(', '):'Enchantable'));
+  else if(def.kind==='wand')lines.push('Cast-save '+Math.round(def.save*100)+'%');
+  else if(it.id==='inscribed'&&it.data){
+    lines.push(it.data.tier+' '+it.data.spectrum+' · '+it.data.rank+'-paper');
+    lines.push((it.data.uses>9000?'∞':it.data.uses)+'/'+(it.data.maxUses>9000?'∞':it.data.maxUses)+' uses');}
+  else if(it.id==='gear'&&it.data)lines.push(modStr(it.data.mods));
+  tt.innerHTML=lines.map(escHtml).join('<br>');tt.style.display='block';
+  const r=el.getBoundingClientRect();
+  tt.style.left=Math.min(innerWidth-200,r.right+6)+'px';tt.style.top=r.top+'px';}
+function hideTooltip(){$('slotTooltip').style.display='none';}
+function renderCursor(){
+  const cs=$('cursorStack');
+  if(!cursor){cs.style.display='none';return;}
+  const def=ITEMS[cursor.id];cs.style.display='flex';
+  cs.innerHTML='<span class="sIcon">'+def.icon+'</span>'+(cursor.n>1?'<span class="sN">'+cursor.n+'</span>':'');}
+addEventListener('mousemove',e=>{
+  if(cursor&&($('invOvl').classList.contains('open')||$('tableOvl').classList.contains('open'))){
+    const cs=$('cursorStack');cs.style.left=e.clientX+'px';cs.style.top=e.clientY+'px';}});
+function syncUI(){
+  buildHotbar();
+  if($('invOvl').classList.contains('open'))renderInv();
+  if($('tableOvl').classList.contains('open')){
+    if(tableTab==='craft')renderTableCraft();else renderForgeIn();}
+  renderCursor();updateSpellChip();}
+function closeInv(){
+  for(let i=0;i<4;i++)if(craft2[i]){invAdd(craft2[i].id,craft2[i].n,craft2[i].data);craft2[i]=null;}
+  if(cursor){invAdd(cursor.id,cursor.n,cursor.data);cursor=null;}
+  $('invOvl').classList.remove('open');
+  G.paused=$('tableOvl').classList.contains('open')||$('lvOvl').classList.contains('open');}
+function toggleInv(){
+  const o=$('invOvl');
+  if(o.classList.contains('open'))closeInv();
+  else{if(G.over||$('tableOvl').classList.contains('open'))return;renderInv();o.classList.add('open');G.paused=true;}}
+$('invDone').onclick=toggleInv;
+/* ---------- crafting table overlay (Craft + Spell Forge tabs) ---------- */
+function switchTableTab(tab){
+  tableTab=tab;
+  $('tableCraftTab').style.display=tab==='craft'?'block':'none';
+  $('tableForgeTab').style.display=tab==='forge'?'flex':'none';
+  $('tabCraftBtn').classList.toggle('on',tab==='craft');
+  $('tabForgeBtn').classList.toggle('on',tab==='forge');
+  if(tab==='craft')renderTableCraft();else{sizeForge();renderForgeIn();}}
+function openTable(){
+  if(G.over||$('invOvl').classList.contains('open'))return;
+  $('tableOvl').classList.add('open');G.paused=true;switchTableTab('craft');}
+function closeTable(){
+  for(let i=0;i<9;i++)if(craft3[i]){invAdd(craft3[i].id,craft3[i].n,craft3[i].data);craft3[i]=null;}
+  if(forgeIn){invAdd(forgeIn.id,forgeIn.n,forgeIn.data);forgeIn=null;}
+  if(cursor){invAdd(cursor.id,cursor.n,cursor.data);cursor=null;}
+  $('tableOvl').classList.remove('open');
+  G.paused=$('invOvl').classList.contains('open')||$('lvOvl').classList.contains('open');}
+$('tabCraftBtn').onclick=()=>switchTableTab('craft');
+$('tabForgeBtn').onclick=()=>switchTableTab('forge');
+$('tableDone').onclick=closeTable;
 
 /* ---------- alloc UI ---------- */
 function openAlloc(){G.paused=true;renderAlloc();$('lvOvl').classList.add('open');}
-$('lvDone').onclick=()=>{$('lvOvl').classList.remove('open');G.paused=forge.open||$('invOvl').classList.contains('open');};
+$('lvDone').onclick=()=>{$('lvOvl').classList.remove('open');
+  G.paused=$('invOvl').classList.contains('open')||$('tableOvl').classList.contains('open');};
 function renderAlloc(){
   $('allocPts').textContent=player.pts;
   const rows=[['hp','Max HP (+20)'],['st','Max Stamina (+15)'],
-    ['mana_fire','<span class="chip" style="background:'+ECSS.fire+'"></span>Fire Mana Cap (+25)'],
-    ['mana_water','<span class="chip" style="background:'+ECSS.water+'"></span>Water Mana Cap (+25)'],
-    ['mana_earth','<span class="chip" style="background:'+ECSS.earth+'"></span>Earth Mana Cap (+25)'],
-    ['mana_air','<span class="chip" style="background:'+ECSS.air+'"></span>Air Mana Cap (+25)'],
+    ['mana_fire','<span class="chip" style="background:'+ECSS.fire+'"></span>Fire Mana Cap (+20)'],
+    ['mana_water','<span class="chip" style="background:'+ECSS.water+'"></span>Water Mana Cap (+20)'],
+    ['mana_earth','<span class="chip" style="background:'+ECSS.earth+'"></span>Earth Mana Cap (+20)'],
+    ['mana_air','<span class="chip" style="background:'+ECSS.air+'"></span>Air Mana Cap (+20)'],
     ['spd','Move Speed (+0.4)']];
   $('allocRows').innerHTML=rows.map(([k,l])=>
     '<div class="allocRow"><span>'+l+'</span><span><b>'+player.alloc[k]+'</b> '+
@@ -1736,12 +2069,12 @@ function doInteract(){
         o.userData.sharedMat=false;}});} // dimmed clone is per-chest now — let clearFloor free it
     spawnBurst(n.c.x,1,n.c.z,0xc9a45c,10,3);
     const r=Math.random();
-    if(r<0.3)addItem(makeEquipment(G.floor));
-    else if(r<0.5){const q=randi(2,4);player.mats.essence+=q;toast('+'+q+' essence');}
-    else if(r<0.64){const q=randi(1,3);player.mats.shard+=q;toast('+'+q+' shard');}
+    if(r<0.3)invAdd('gear',1,makeEquipment(G.floor));
+    else if(r<0.5){const q=randi(2,4);invAdd('essence',q);}
+    else if(r<0.64){const q=randi(1,3);invAdd('shard',q);}
     else if(r<0.82)dropParch();
-    else if(r<0.92){player.crystals++;toast('+1 mana crystal');}
-    else{player.potions++;toast('+1 potion');}}
+    else if(r<0.92)invAdd('crystal',1);
+    else invAdd('potion',1);}
   else if(n.t==='shrine'){
     n.s.used=true;n.s.glow.material.opacity=.04;
     n.s.ob.material.emissiveIntensity=.1;sfx('shrine');
@@ -1755,13 +2088,13 @@ function doInteract(){
   else if(n.t==='struct'){
     const s=n.s;
     if(s.kind==='anvil'){
-      const slot=spellbook[spellSlot],sc=slot.scribed;
-      if(!sc)toast('Nothing scribed in this slot to repair');
-      else if(sc.uses>9000)toast('This parchment never wears out');
-      else if(player.mats.shard<1)toast('Need 1 shard to repair');
-      else{player.mats.shard--;sc.uses=Math.min(PARCH_USES[sc.rank]*2,sc.uses+3);
-        sfx('place');toast('Parchment reinforced: '+sc.uses+' uses');flashChipSlot();}}
-    else if(s.kind==='table')toggleInv();
+      const it=heldItem();
+      if(!it||it.id!=='inscribed')toast('Hold an inscribed parchment to repair it');
+      else if(it.data.uses>9000)toast('This parchment never wears out');
+      else if(invCount('shard')<1)toast('Need 1 shard to repair');
+      else{invConsume('shard',1);it.data.uses=Math.min(it.data.maxUses*2,it.data.uses+3);
+        sfx('place');toast('Parchment reinforced: '+it.data.uses+' uses');syncUI();}}
+    else if(s.kind==='table')openTable();
     else{revealAllFog();sfx('shrine');toast('The cartograph unveils the floor');}}
   else if(n.t==='portal'){
     if(structures.length)toast(structures.length+' structure(s) left behind — pack them with G');
@@ -1798,7 +2131,7 @@ function updatePlayer(dt){
   player.hp=Math.min(stat_maxHp(),player.hp+hpRegen*dt);
   player.st=Math.min(stat_maxSt(),player.st+stRegen*dt);
   for(const e of ELEMS){const cap=stat_maxManaEl(e);
-    player.mana[e]=Math.min(cap,player.mana[e]+8*(1+G.buffs.regen)*dt);}
+    player.mana[e]=Math.min(cap,player.mana[e]+6*(1+G.buffs.regen)*dt);}
   const H=G.half-1;player.x=clamp(player.x,-H,H);player.z=clamp(player.z,-H,H);
   fogAccum+=dt;
   if(fogAccum>0.12){fogAccum=0;revealFog(player.x,player.z,11);}
@@ -1807,7 +2140,10 @@ function updatePlayer(dt){
   else if(!IS_TOUCH)player.aim=mouseAim();
   player.iframe=Math.max(0,player.iframe-dt);
   player.castCd=Math.max(0,player.castCd-dt);
-  $('chipCd').textContent=player.castCd>0?('cd '+player.castCd.toFixed(1)+'s'):'ready';
+  meleeCd=Math.max(0,meleeCd-dt);punchCd=Math.max(0,punchCd-dt);
+  {const it=heldItem();
+    const cdShow=it&&ITEMS[it.id].kind==='inscribed'?player.castCd:it&&ITEMS[it.id].kind==='sword'?meleeCd:punchCd;
+    $('chipCd').textContent=cdShow>0?('cd '+cdShow.toFixed(1)+'s'):'ready';}
   player.mesh.position.set(player.x,0,player.z);
   player.mesh.rotation.y=-player.aim+Math.PI/2;
   player.arrow.position.set(player.x+Math.cos(player.aim)*1.7,0.15,player.z+Math.sin(player.aim)*1.7);
@@ -2003,9 +2339,9 @@ function updateHUD(){
   $('ptsN').textContent=player.pts>0?('+'+player.pts+' pts (L)'):'';
   if(comboT>0&&combo>1){$('combo').style.display='block';$('comboN').textContent=combo;}
   else $('combo').style.display='none';
-  updateHotbar();
   const rt=Math.floor(G.runTime);
   $('runT').textContent=Math.floor(rt/60)+':'+String(rt%60).padStart(2,'0');
+  $('waveN').textContent='⚠'+Math.max(0,Math.ceil(G.waveT))+'s';
   const n=nearestInteract();
   $('hint').style.display=n?'block':'none';
   if(IS_TOUCH){$('tInt').style.display=n?'block':'none';
@@ -2028,7 +2364,7 @@ function animate(now){
     if(bossBarrier)bossBarrier.material.opacity=0.04+barrierFlash*0.5;}
   if(!G.paused&&!G.over){
     G.time+=dt;
-    updatePlayer(dt);updateEnemies(dt);updateProjs(dt);updateParticles(dt);updateOrbs(dt);
+    updatePlayer(dt);updateEnemies(dt);updateProjs(dt);updateParticles(dt);updateOrbs(dt);updateWave(dt);
     if(portal){portal.ring.rotation.z+=dt*(portal.active?2:0.3);
       if(portal.active){portal.beam.material.opacity=0.25+Math.sin(G.time*3)*0.12;
         portal.glow.material.opacity=0.45+Math.sin(G.time*2.4)*0.22;}}
@@ -2041,40 +2377,34 @@ function animate(now){
 $('restartBtn').onclick=()=>{
   $('deathOvl').classList.remove('open');G.over=false;
   Object.assign(player,{level:1,xp:0,pts:0,hp:100,st:100,iframe:1,castCd:0,
-    dashCd:0,dashT:0,kx:0,kz:0,
-    alloc:{hp:0,st:0,mana_fire:0,mana_water:0,mana_earth:0,mana_air:0,spd:0},inv:[],potions:1,crystals:0,
-    mats:{essence:2,shard:0,wood:2,stone:0,herb:1},eq:{focus:null,armor:null,accessory:null},
-    parchments:{E:3,D:1,C:0,B:0,A:0,S:0,SS:0,SSS:0},
-    structs:{tent:1,wall:2,anvil:1,table:1,map:1},
-    mana:{fire:100,water:100,earth:100,air:100}});
+    dashCd:0,dashT:0,kx:0,kz:0,hot:0,
+    alloc:{hp:0,st:0,mana_fire:0,mana_water:0,mana_earth:0,mana_air:0,spd:0},
+    eq:{armor:null,accessory:null},
+    mana:{fire:60,water:60,earth:60,air:60}});
+  player.slots=new Array(36).fill(null);
+  craft2=[null,null,null,null];craft3=new Array(9).fill(null);forgeIn=null;cursor=null;
+  resetDraft();
   combo=0;comboT=0;G.slowT=0;G.runTime=0;
-  preScribeStarters();
-  buildFloor(1);flashChipSlot();};
+  buildFloor(1);buildHotbar();updateSpellChip();};
 
 /* ---------- boot ---------- */
-/* starters arrive already scribed on generous C-rank paper */
-function preScribeStarters(){
-  for(const i of [0,1]){
-    const s=spellbook[i];
-    if(s.scribed)continue;
-    const p=buildPlan(false,s.layers);
-    s.scribed={layers:JSON.parse(JSON.stringify(s.layers)),rank:'C',uses:8,
-      tier:p.tier,spectrum:p.spectrum,nCirc:p.nCirc,kind:projKind(p.stack)};}}
 const loadBar=$('loadBar');
 await preloadAssets(p=>{if(loadBar)loadBar.style.width=(p*100)+'%';});
 const loadOvl=$('loadOvl');if(loadOvl)loadOvl.remove();
-preScribeStarters();
 buildHotbar();
 buildPlayer();
 buildFloor(1);
-toast('Aim, weave, ascend. Open the Spellforge ('+(IS_TOUCH?'FORGE':'M')+') to craft magic.');
-toast('Two starter spells are scribed in — '+(IS_TOUCH?'swap slots in the forge (S1-S3)':'swap with keys 1 · 2 · 3'));
-flashChipSlot();
+toast('E to gather wood, stone & herb — a bare hand still works to fight, too.');
+toast('1-9 hotbar · wheel select · Click/Space use held item · F trigger layers · E interact/gather · G pack up · I bag · Q dash');
+updateSpellChip();
 requestAnimationFrame(animate);
 /* debug handle for external verification/automation */
 /* debug/test handle — opt in via #debug or localStorage so it isn't exposed by default */
 if(location.hash.includes('debug')||localStorage.getItem('msandbox:debug'))
-  window.MS={buildFloor,G,player,MODELS,scene,renderer};
+  window.MS={buildFloor,G,player,MODELS,scene,renderer,ITEMS,RECIPES,RANKS,RANK_LIMITS,PARCH_USES,TIER_IDX,
+    invAdd,invCount,invConsume,craftMatch,craftOnce,heldItem,selectHot,primaryAction,castHeld,buildPlan,
+    embedSpell,resetDraft,syncUI,updateWave,aliveNonBossCount,
+    getDraft:()=>draft,setDraft:v=>{draft=v;},getForgeIn:()=>forgeIn,setForgeIn:v=>{forgeIn=v;}};
 </script>
 </body>
 </html>
