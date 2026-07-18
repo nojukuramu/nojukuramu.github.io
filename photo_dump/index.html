@@ -863,6 +863,9 @@ player.pause=function(){player.playing=false;$('playBtn').textContent='▶';sync
 function seek(t){
   player.t=clamp(t,0,timelineD+(cfg.holdLast?cfg.holdMs:0));
   player.dirty=true;syncMusic();
+  /* Paint immediately instead of waiting for the next rAF tick, so
+     scrubbing/seeking never leaves a stale frame on screen for a beat. */
+  renderFrame(player.t,false);
 }
 function syncTransport(){
   const end=timelineD+(cfg.holdLast?cfg.holdMs:0)||1;
@@ -890,8 +893,7 @@ addEventListener('keydown',e=>{
    players (phone galleries, Facebook, Instagram) read the length as Infinity
    and truncate the clip to a stray 1–3s. This injects the real Duration so
    the file reports its true length everywhere. Adds ~11 bytes, keeps it
-   fully playable. Only WebM needs this — MP4 from MediaRecorder carries a
-   correct duration already. */
+   fully playable. */
 function fixWebmDuration(buf,durationMs){
   if(!(buf[0]===0x1a&&buf[1]===0x45&&buf[2]===0xdf&&buf[3]===0xa3))return buf;
   const len=buf.length;
@@ -924,6 +926,141 @@ function fixWebmDuration(buf,durationMs){
   parts.push(durElem);
   parts.push(buf.slice(info.dataEnd));
   return concat(parts);
+}
+/* Chromium's MediaRecorder produces fragmented MP4 (moov + a run of moof
+   fragments, no single mdat) with broken duration metadata: mvhd duration
+   is 0, tkhd duration is only whatever the first fragment covered (~1-3s),
+   mdhd duration is likewise stale, and mvex has no mehd (movie-extends
+   fragment_duration) at all. Metadata-trusting parsers — phone galleries,
+   Facebook, Instagram — read mvhd=0, fall back to the bogus tkhd value,
+   and truncate the clip even though every frame is present in the moof
+   fragments. This patches mvhd/tkhd/mdhd in place and inserts a mehd box
+   carrying the real fragment_duration so the file reports its true length
+   everywhere. */
+function fixMp4Duration(buf,durationMs){
+  try{
+    const len=buf.length;
+    if(len<8)return buf;
+    const dv=new DataView(buf.buffer,buf.byteOffset,buf.byteLength);
+    const typeAt=p=>String.fromCharCode(buf[p+4],buf[p+5],buf[p+6],buf[p+7]);
+    /* Reads one box header at p (bounded by end). Returns null on a
+       malformed/short box, {bail:true} on a 64-bit largesize box (never
+       emitted by MediaRecorder for these boxes — safest to give up), or
+       {p,type,size,rawSize,dataStart,dataEnd}. */
+    const readBox=(p,end)=>{
+      if(p+8>end)return null;
+      const rawSize=dv.getUint32(p,false);
+      const type=typeAt(p);
+      if(rawSize===1)return{bail:true};
+      let size=rawSize;
+      if(rawSize===0)size=end-p;
+      if(size<8||p+size>end)return null;
+      return{p,type,size,rawSize,dataStart:p+8,dataEnd:p+size};
+    };
+    const findChild=(start,end,want)=>{
+      let p=start;
+      while(p+8<=end){
+        const b=readBox(p,end);
+        if(!b)return null;
+        if(b.bail)return b;
+        if(b.type===want)return b;
+        p+=b.size;
+      }
+      return null;
+    };
+    const findAllChildren=(start,end,want)=>{
+      const list=[];
+      let p=start;
+      while(p+8<=end){
+        const b=readBox(p,end);
+        if(!b)return null; // malformed or largesize -> caller bails
+        if(b.type===want)list.push(b);
+        p+=b.size;
+      }
+      return list;
+    };
+
+    /* Task requirement: verify this looks like MP4 via a top-level walk
+       that finds moov; otherwise leave the buffer untouched. */
+    const moov=findChild(0,len,'moov');
+    if(!moov||moov.bail)return buf;
+    const mvhd=findChild(moov.dataStart,moov.dataEnd,'mvhd');
+    if(!mvhd||mvhd.bail)return buf;
+    const traks=findAllChildren(moov.dataStart,moov.dataEnd,'trak');
+    if(!traks||!traks.length)return buf;
+
+    /* mvhd/tkhd/mdhd patches only rewrite existing fields, so work on a
+       plain copy for those — no length change yet. */
+    const out=buf.slice();
+    const odv=new DataView(out.buffer,out.byteOffset,out.byteLength);
+
+    const mvhdVer=out[mvhd.p+8];
+    if(mvhdVer!==0&&mvhdVer!==1)return buf;
+    const timescale=mvhdVer===1?odv.getUint32(mvhd.p+28,false):odv.getUint32(mvhd.p+20,false);
+    if(!timescale)return buf;
+    const mvhdDuration=Math.max(0,Math.round(durationMs/1000*timescale));
+    if(mvhdVer===1)odv.setBigUint64(mvhd.p+32,BigInt(mvhdDuration),false);
+    else odv.setUint32(mvhd.p+24,mvhdDuration>>>0,false);
+
+    for(const trak of traks){
+      const tkhd=findChild(trak.dataStart,trak.dataEnd,'tkhd');
+      if(!tkhd||tkhd.bail)return buf;
+      const tkhdVer=out[tkhd.p+8];
+      if(tkhdVer!==0&&tkhdVer!==1)return buf;
+      if(tkhdVer===1)odv.setBigUint64(tkhd.p+36,BigInt(mvhdDuration),false);
+      else odv.setUint32(tkhd.p+28,mvhdDuration>>>0,false);
+
+      const mdia=findChild(trak.dataStart,trak.dataEnd,'mdia');
+      if(!mdia||mdia.bail)return buf;
+      const mdhd=findChild(mdia.dataStart,mdia.dataEnd,'mdhd');
+      if(!mdhd||mdhd.bail)return buf;
+      const mdhdVer=out[mdhd.p+8];
+      if(mdhdVer!==0&&mdhdVer!==1)return buf;
+      const mediaTs=mdhdVer===1?odv.getUint32(mdhd.p+28,false):odv.getUint32(mdhd.p+20,false);
+      if(!mediaTs)return buf;
+      const mdhdDuration=Math.max(0,Math.round(durationMs/1000*mediaTs));
+      if(mdhdVer===1)odv.setBigUint64(mdhd.p+32,BigInt(mdhdDuration),false);
+      else odv.setUint32(mdhd.p+24,mdhdDuration>>>0,false);
+    }
+
+    /* mvex>mehd is what fragmented-file parsers use for overall duration.
+       No mvex at all means this isn't fragmented — the patches above are
+       the whole fix. */
+    const mvex=findChild(moov.dataStart,moov.dataEnd,'mvex');
+    if(!mvex)return out;
+    if(mvex.bail)return buf;
+    const mehd=findChild(mvex.dataStart,mvex.dataEnd,'mehd');
+    if(mehd&&mehd.bail)return buf;
+    if(mehd){
+      const mehdVer=out[mehd.p+8];
+      if(mehdVer!==0&&mehdVer!==1)return buf;
+      if(mehdVer===1)odv.setBigUint64(mehd.p+12,BigInt(mvhdDuration),false);
+      else odv.setUint32(mehd.p+12,mvhdDuration>>>0,false);
+      return out;
+    }
+
+    /* No mehd (the real-world Chromium case): insert a 16-byte v0 mehd box
+       as the first child of mvex, then grow mvex's and moov's own sizes by
+       16 and splice the new bytes in. */
+    const mehdBox=new Uint8Array(16);
+    const mdv=new DataView(mehdBox.buffer);
+    mdv.setUint32(0,16,false);
+    mehdBox.set([0x6d,0x65,0x68,0x64],4); // 'mehd'
+    mdv.setUint32(8,0,false); // version(0) + flags(0)
+    mdv.setUint32(12,mvhdDuration>>>0,false);
+
+    if(mvex.rawSize!==0)odv.setUint32(mvex.p,mvex.size+16,false); // rawSize 0 == "to EOF", stays correct as-is
+    if(moov.rawSize!==0)odv.setUint32(moov.p,moov.size+16,false);
+
+    const insertAt=mvex.dataStart;
+    const rebuilt=new Uint8Array(out.length+16);
+    rebuilt.set(out.subarray(0,insertAt),0);
+    rebuilt.set(mehdBox,insertAt);
+    rebuilt.set(out.subarray(insertAt),insertAt+16);
+    return rebuilt;
+  }catch(e){
+    return buf;
+  }
 }
 function pickMime(){
   const list=[
@@ -960,15 +1097,22 @@ function startExport(){
   recChunks=[];
   rec.ondataavailable=e=>{if(e.data.size)recChunks.push(e.data);};
   rec.onstop=async()=>{
+    if(!recChunks.length){$('exportStat').innerHTML='<span class="err">Recording produced no data — try again.</span>';return;}
     const ext=mime.includes('mp4')?'mp4':'webm';
     const type=mime.split(';')[0];
     let blob=new Blob(recChunks,{type});
-    /* WebM from MediaRecorder ships with no duration → fix it so galleries/FB/IG
-       read the real length instead of a truncated 1–3s. */
+    /* WebM ships with no duration at all, and Chromium's fragmented MP4
+       ships with a broken one (mvhd=0, tkhd≈first fragment, no mehd) — both
+       read as truncated 1–3s clips in galleries/FB/IG. Fix whichever we got. */
+    const dur=player.recWallMs||(timelineD+(cfg.holdLast?cfg.holdMs:0));
     if(ext==='webm'){
       try{
-        const dur=player.recWallMs||(timelineD+(cfg.holdLast?cfg.holdMs:0));
         const fixed=fixWebmDuration(new Uint8Array(await blob.arrayBuffer()),dur);
+        blob=new Blob([fixed],{type});
+      }catch(e){/* keep the original blob if the fixer ever chokes */}
+    }else if(ext==='mp4'){
+      try{
+        const fixed=fixMp4Duration(new Uint8Array(await blob.arrayBuffer()),dur);
         blob=new Blob([fixed],{type});
       }catch(e){/* keep the original blob if the fixer ever chokes */}
     }
@@ -981,9 +1125,14 @@ function startExport(){
   };
   player.rec=rec;
   player.exporting=true;player.loopWas=player.loop;player.loop=false;
+  player.recWallMs=0; // stale value from a previous export must never leak into this one's onstop
   $('exportBtn').disabled=true;$('recDot').style.display='flex';
   player.recStart=performance.now();
   seek(0);
+  /* Force a clean t=0 frame onto both canvases before the recorder starts,
+     so the first captured frame is the true start (background + first
+     event), never whatever was left on screen from scrubbing/preview. */
+  player.dirty=true;drawBg(accx);drawBg(ctx);renderFrame(0,false);
   rec.start(400);
   player.play();
   $('exportStat').textContent='Recording in real time — keep this tab focused, huwag mag-alt-tab.';
