@@ -886,6 +886,45 @@ addEventListener('keydown',e=>{
 });
 
 /* ---------- export ---------- */
+/* MediaRecorder streams WebM with no Segment>Info>Duration element, so
+   players (phone galleries, Facebook, Instagram) read the length as Infinity
+   and truncate the clip to a stray 1–3s. This injects the real Duration so
+   the file reports its true length everywhere. Adds ~11 bytes, keeps it
+   fully playable. Only WebM needs this — MP4 from MediaRecorder carries a
+   correct duration already. */
+function fixWebmDuration(buf,durationMs){
+  if(!(buf[0]===0x1a&&buf[1]===0x45&&buf[2]===0xdf&&buf[3]===0xa3))return buf;
+  const len=buf.length;
+  const vintLen=b0=>{let mask=0x80,l=1;while(l<=8){if(b0&mask)return l;mask>>=1;l++;}return 8;};
+  const readId=p=>{const l=vintLen(buf[p]);let id=0;for(let i=0;i<l;i++)id=id*256+buf[p+i];return{id,len:l};};
+  const readSize=p=>{const l=vintLen(buf[p]);const mask=0x80>>(l-1);let val=buf[p]&(mask-1);let unknown=(buf[p]&(mask-1))===(mask-1);for(let i=1;i<l;i++){val=val*256+buf[p+i];if(buf[p+i]!==0xff)unknown=false;}return{val,len:l,unknown};};
+  const findChild=(start,end,wantId)=>{let q=start;while(q+2<=end){const id=readId(q);const sz=readSize(q+id.len);const dataStart=q+id.len+sz.len;const dataEnd=sz.unknown?end:dataStart+sz.val;if(id.id===wantId)return{idStart:q,idLen:id.len,sizeStart:q+id.len,sizeLen:sz.len,dataStart,dataEnd,unknown:sz.unknown,sizeVal:sz.val};if(sz.unknown)return null;q=dataEnd;}return null;};
+  const encodeSize=value=>{let l=1;while(value>Math.pow(2,7*l)-2)l++;const b=new Uint8Array(l);let v=value;for(let i=l-1;i>=0;i--){b[i]=v&0xff;v=Math.floor(v/256);}b[0]|=(0x80>>(l-1));return b;};
+  const f64=value=>{const b=new Uint8Array(8);new DataView(b.buffer).setFloat64(0,value,false);return b;};
+  const concat=arrs=>{let n=0;for(const a of arrs)n+=a.length;const o=new Uint8Array(n);let k=0;for(const a of arrs){o.set(a,k);k+=a.length;}return o;};
+  const seg=findChild(0,len,0x18538067);if(!seg)return buf;
+  const info=findChild(seg.dataStart,seg.dataEnd,0x1549a966);if(!info)return buf;
+  let timecodeScale=1000000;
+  const ts=findChild(info.dataStart,info.dataEnd,0x2ad7b1);
+  if(ts){let v=0;for(let i=ts.dataStart;i<ts.dataEnd;i++)v=v*256+buf[i];if(v>0)timecodeScale=v;}
+  const durationValue=(durationMs*1e6)/timecodeScale;
+  const existing=findChild(info.dataStart,info.dataEnd,0x4489);
+  if(existing&&existing.dataEnd-existing.dataStart===8){const out=buf.slice();out.set(f64(durationValue),existing.dataStart);return out;}
+  const durElem=concat([new Uint8Array([0x44,0x89]),encodeSize(8),f64(durationValue)]);
+  const delta=durElem.length;
+  const newInfoDataLen=(info.dataEnd-info.dataStart)+delta;
+  const newInfoSize=encodeSize(newInfoDataLen);
+  const parts=[];
+  parts.push(buf.slice(0,seg.sizeStart));
+  if(seg.unknown)parts.push(buf.slice(seg.sizeStart,seg.dataStart));
+  else parts.push(encodeSize(seg.sizeVal+delta+(newInfoSize.length-info.sizeLen)));
+  parts.push(buf.slice(seg.dataStart,info.sizeStart));
+  parts.push(newInfoSize);
+  parts.push(buf.slice(info.dataStart,info.dataEnd));
+  parts.push(durElem);
+  parts.push(buf.slice(info.dataEnd));
+  return concat(parts);
+}
 function pickMime(){
   const list=[
     'video/mp4;codecs="avc1.640028,mp4a.40.2"',
@@ -901,7 +940,7 @@ function pickMime(){
 function refreshFmtLcd(){
   const m=pickMime();
   $('lcdF').textContent=m?(m.includes('mp4')?'MP4':'WEBM'):'N/A';
-  if(m&&!m.includes('mp4'))$('exportStat').innerHTML='Heads up: this browser records <b>WebM</b>, not MP4 (Chrome desktop does MP4 natively). WebM still uploads to IG fine after a quick convert.';
+  if(m&&!m.includes('mp4'))$('exportStat').innerHTML='Heads up: this browser records <b>WebM</b>, not MP4 (Chrome desktop does MP4 natively). Duration is baked in so galleries/FB/IG read the full length — convert to MP4 only if an app refuses WebM.';
 }
 $('exportBtn').onclick=startExport;
 let recChunks=[];
@@ -920,9 +959,19 @@ function startExport(){
   catch(err){$('exportStat').innerHTML='<span class="err">Recorder failed: '+err.message+'</span>';return;}
   recChunks=[];
   rec.ondataavailable=e=>{if(e.data.size)recChunks.push(e.data);};
-  rec.onstop=()=>{
+  rec.onstop=async()=>{
     const ext=mime.includes('mp4')?'mp4':'webm';
-    const blob=new Blob(recChunks,{type:mime.split(';')[0]});
+    const type=mime.split(';')[0];
+    let blob=new Blob(recChunks,{type});
+    /* WebM from MediaRecorder ships with no duration → fix it so galleries/FB/IG
+       read the real length instead of a truncated 1–3s. */
+    if(ext==='webm'){
+      try{
+        const dur=player.recWallMs||(timelineD+(cfg.holdLast?cfg.holdMs:0));
+        const fixed=fixWebmDuration(new Uint8Array(await blob.arrayBuffer()),dur);
+        blob=new Blob([fixed],{type});
+      }catch(e){/* keep the original blob if the fixer ever chokes */}
+    }
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
     a.href=url;a.download=`burstdump_${cv.width}x${cv.height}_${Math.round(timelineD/1000)}s.${ext}`;
@@ -943,6 +992,8 @@ function finishExport(){
   player.pause();
   player.exporting=false;player.loop=player.loopWas;
   $('recDot').style.display='none';$('exportBtn').disabled=false;
+  /* true captured length (real-time capture can drift from the target) */
+  player.recWallMs=performance.now()-player.recStart;
   try{player.rec.stop();}catch(e){}
   player.rec=null;
 }
