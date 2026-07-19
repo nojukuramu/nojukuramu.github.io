@@ -209,6 +209,7 @@ header{display:flex;align-items:center;gap:18px;padding:0 16px;border-bottom:1px
         <div class="row"><label>…or rate</label><input class="grow" type="number" id="pps" min="0.5" max="60" step="0.5" value="0"><span class="val">photos/s</span></div>
         <div class="row"><label>Rhythm</label><select class="grow" id="rhythm">
           <option value="accel" selected>accelerate · slow → machine gun</option>
+          <option value="decel">decelerate · machine gun → slow</option>
           <option value="uniform">uniform · steady</option>
           <option value="bursts">bursts · clusters + gaps</option>
           <option value="random">random · jittered</option>
@@ -229,9 +230,15 @@ header{display:flex;align-items:center;gap:18px;padding:0 16px;border-bottom:1px
           <button class="chip on" data-s="pop">center pop</button>
           <button class="chip on" data-s="grid">grid fill</button>
           <button class="chip" data-s="strip">strips</button>
+          <button class="chip" data-s="split">split panels</button>
+          <button class="chip" data-s="stack">deck stack</button>
+          <button class="chip" data-s="echo">echo zoom</button>
+          <button class="chip" data-s="slash">diagonal slash</button>
+          <button class="chip" data-s="bubble">sticker dots</button>
+          <button class="chip" data-s="mirror">mirror</button>
         </div>
         <div class="row" style="margin-top:11px"><label>Chaos</label><input class="grow" type="range" id="chaos" min="0" max="1" step="0.05" value="0.5"><span class="val" id="chaosVal">0.50</span></div>
-        <div class="row"><label>Pile borders</label><select class="grow" id="border"><option value="white">white print</option><option value="polaroid">polaroid</option><option value="none">none</option></select></div>
+        <div class="row"><label>Print borders</label><select class="grow" id="border"><option value="white">white print</option><option value="polaroid">polaroid</option><option value="none">none</option></select></div>
         <div class="row"><label>Micro drift</label><div class="tgl on" id="drift"></div><span class="hint" style="margin:0">slow push-in on longer holds</span></div>
         <div class="hint">Chaos = how often the style switches. Low = long same-style runs, high = frantic channel-surfing. Cuts stay hard — max “animation” is a ~90ms snap.</div>
       </div>
@@ -311,7 +318,7 @@ const cfg={
   aspect:'9:16', arw:9, arh:16, res:1080, bg:'#000000', fit:'cover',
   durS:30, pps:0, rhythm:'accel', accel:2.2, cluster:16, bpm:120,
   holdLast:true, holdMs:800,
-  styles:{slam:true,pile:true,pop:true,grid:true,strip:false},
+  styles:{slam:true,pile:true,pop:true,grid:true,strip:false,split:false,stack:false,echo:false,slash:false,bubble:false,mirror:false},
   chaos:0.5, border:'white', drift:true,
   flash:true, glitch:true, grain:0.10, vig:0.35, hud:true,
   sfx:false, sfxVol:0.5, musicVol:0.9, musicOff:0,
@@ -684,6 +691,23 @@ function makeGrid(rng){
   for(let i=cells.length-1;i>0;i--){const j=rng()*(i+1)|0;[cells[i],cells[j]]=[cells[j],cells[i]];}
   return{cols,rows,cells};
 }
+function makeSplit(rng){
+  let rects=[{x:0,y:0,w:1,h:1}];
+  const M=3+(rng()*3|0);
+  while(rects.length<M){
+    let bi=0,ba=-1;
+    for(let i=0;i<rects.length;i++){const a=rects[i].w*rects[i].h;if(a>ba){ba=a;bi=i;}}
+    const r=rects[bi];
+    const ratio=0.35+rng()*0.30;
+    const vertical=r.w*cv.width>r.h*cv.height;
+    let a,b;
+    if(vertical){a={x:r.x,y:r.y,w:r.w*ratio,h:r.h};b={x:r.x+r.w*ratio,y:r.y,w:r.w*(1-ratio),h:r.h};}
+    else{a={x:r.x,y:r.y,w:r.w,h:r.h*ratio};b={x:r.x,y:r.y+r.h*ratio,w:r.w,h:r.h*(1-ratio)};}
+    rects.splice(bi,1,a,b);
+  }
+  for(let i=rects.length-1;i>0;i--){const j=rng()*(i+1)|0;[rects[i],rects[j]]=[rects[j],rects[i]];}
+  return{rects};
+}
 function genTimeline(){
   const N=photos.length;
   events=[];evT=[];anchor=[];timelineD=0;
@@ -697,6 +721,7 @@ function genTimeline(){
   const rh=cfg.rhythm;
   if(rh==='uniform'){for(let i=0;i<N;i++)times.push(i*D/N);}
   else if(rh==='accel'){for(let i=0;i<N;i++)times.push(D*Math.pow(i/N,1/cfg.accel));}
+  else if(rh==='decel'){for(let i=0;i<N;i++)times.push(D*Math.pow(i/N,cfg.accel));}
   else if(rh==='random'){const g=D/N;for(let i=0;i<N;i++)times.push(clamp(i*g+(rng()*2-1)*g*0.45,0,D-1));times.sort((a,b)=>a-b);}
   else if(rh==='bursts'){
     const sizes=[];let left=N;
@@ -727,6 +752,7 @@ function genTimeline(){
   /* --- assign styles & params --- */
   const styles=enabledStyles();
   let run=0,st=null,grid=null,gPtr=0,pileCount=0,sinceCover=99;
+  let splitL=null,sPtr=0,stackCount=0,slashCount=0,bubCount=0;
   const runBase=()=>Math.round(lerp(18,4,cfg.chaos)+rng()*lerp(14,4,cfg.chaos));
   for(let k=0;k<N;k++){
     let runStart=false;
@@ -736,6 +762,10 @@ function genTimeline(){
       run=runBase();runStart=true;
       if(st==='grid'){grid=makeGrid(rng);gPtr=0;const cells=grid.cells.length;run=Math.max(cells,Math.ceil(run/cells)*cells);}
       if(st==='pile')pileCount=0;
+      if(st==='split'){splitL=makeSplit(rng);sPtr=0;const n=splitL.rects.length;run=Math.max(n,Math.ceil(run/n)*n);}
+      if(st==='stack')stackCount=0;
+      if(st==='slash')slashCount=0;
+      if(st==='bubble')bubCount=0;
     }
     const ev={t:times[k],i:k,st,clear:false,covers:false,flash:false,glitch:false,pop:0};
     const bmp=photos[k].bmp, ar=bmp.width/bmp.height;
@@ -770,6 +800,54 @@ function genTimeline(){
     else if(st==='strip'){
       ev.h=0.16+rng()*0.2;
       ev.y=rng()*(1-0.16);
+    }
+    else if(st==='split'){
+      if(sPtr===0){splitL=splitL||makeSplit(rng);ev.clear=true;}
+      ev.rect=splitL.rects[sPtr];
+      sPtr=(sPtr+1)%splitL.rects.length;
+      if(sPtr===0)splitL=makeSplit(rng);
+    }
+    else if(st==='stack'){
+      if(runStart&&(rng()<0.4||sinceCover>40))ev.clear=true;
+      if(stackCount>24){ev.clear=true;stackCount=0;}
+      stackCount++;
+      ev.pop=90;
+      ev.sc=0.78+rng()*0.14;
+      ev.x=0.5+(rng()-0.5)*0.10;
+      ev.y=0.5+(rng()-0.5)*0.10;
+      ev.rot=(rng()-0.5)*0.16;
+    }
+    else if(st==='echo'){
+      ev.covers=true;
+      ev.echoN=2+(rng()<0.35?1:0);
+      ev.esc=0.62+rng()*0.12;
+      ev.ex=0.5+(rng()-0.5)*0.16;
+      ev.ey=0.5+(rng()-0.5)*0.16;
+      ev.erot=(rng()-0.5)*0.10;
+    }
+    else if(st==='slash'){
+      if(runStart&&rng()<0.5)ev.clear=true;
+      if(slashCount>14){ev.clear=true;slashCount=0;}
+      slashCount++;
+      ev.ang=(rng()<0.5?-1:1)*(0.35+rng()*0.35);
+      ev.h=0.18+rng()*0.14;
+      ev.off=(rng()-0.5)*0.9;
+    }
+    else if(st==='bubble'){
+      if(runStart&&(rng()<0.5||sinceCover>40))ev.clear=true;
+      if(bubCount>20){ev.clear=true;bubCount=0;}
+      bubCount++;
+      ev.pop=90;
+      ev.r=0.16+rng()*0.18;
+      ev.x=0.5+(rng()-0.5)*0.8;
+      ev.y=0.5+(rng()-0.5)*0.8;
+      ev.ring=rng()<0.6;
+    }
+    else if(st==='mirror'){
+      ev.covers=true;
+      const m=rng();
+      ev.mdir=m<0.45?'v':(m<0.75?'h':'q');
+      ev.msh=(rng()-0.5)*0.3;
     }
     if(k===0)ev.clear=true;
     ev.flash=(runStart&&rng()<0.5)||rng()<0.03;
@@ -854,22 +932,99 @@ function drawEvent(c,ev,prog,tNow){
     c.drawImage(bmp,sx,sy,sw,sh,0,y,cv.width,h);
     return;
   }
-  /* pop & pile — placed prints */
+  if(ev.st==='split'){
+    const gap=Math.round(cv.width*0.008);
+    const x=ev.rect.x*cv.width+gap/2,y=ev.rect.y*cv.height+gap/2;
+    const w=ev.rect.w*cv.width-gap,h=ev.rect.h*cv.height-gap;
+    const[sx,sy,sw,sh]=coverSrc(bmp,w,h);
+    c.drawImage(bmp,sx,sy,sw,sh,x,y,w,h);
+    return;
+  }
+  if(ev.st==='echo'){
+    drawCoverFull(c,bmp);
+    const[sx,sy,sw,sh]=coverSrc(bmp,cv.width,cv.height);
+    for(let i=1;i<=ev.echoN;i++){
+      const s=Math.pow(ev.esc,i),w=cv.width*s,h=cv.height*s;
+      const cxp=cv.width*(0.5+(ev.ex-0.5)*i),cyp=cv.height*(0.5+(ev.ey-0.5)*i);
+      c.save();c.translate(cxp,cyp);c.rotate(ev.erot*i);
+      c.fillStyle='#0b0c0e';
+      c.fillRect(-w/2-cv.width*0.004,-h/2-cv.width*0.004,w+cv.width*0.008,h+cv.width*0.008);
+      c.drawImage(bmp,sx,sy,sw,sh,-w/2,-h/2,w,h);
+      c.restore();
+    }
+    return;
+  }
+  if(ev.st==='slash'){
+    const L=Math.hypot(cv.width,cv.height)*1.05;
+    const h=ev.h*cv.height,yo=ev.off*cv.height*0.5;
+    c.save();
+    c.translate(cv.width/2,cv.height/2);c.rotate(ev.ang);
+    const[sx,sy,sw,sh]=coverSrc(bmp,L,h);
+    c.fillStyle='#f5f2ea';
+    c.fillRect(-L/2,yo-h/2-cv.width*0.004,L,h+cv.width*0.008);
+    c.drawImage(bmp,sx,sy,sw,sh,-L/2,yo-h/2,L,h);
+    c.restore();
+    return;
+  }
+  if(ev.st==='bubble'){
+    const settle=prog>=1?1:easeOut(prog);
+    const r=ev.r*cv.width*(1.16-0.16*settle);
+    const cxp=ev.x*cv.width,cyp=ev.y*cv.height,d=r*2;
+    c.save();
+    if(ev.ring&&cfg.border!=='none'){
+      c.shadowColor='rgba(0,0,0,0.5)';c.shadowBlur=cv.width*0.015;
+      c.beginPath();c.arc(cxp,cyp,r*1.06,0,Math.PI*2);c.fillStyle='#f5f2ea';c.fill();
+      c.shadowColor='transparent';
+    }
+    c.beginPath();c.arc(cxp,cyp,r,0,Math.PI*2);c.clip();
+    const[sx,sy,sw,sh]=coverSrc(bmp,d,d);
+    c.drawImage(bmp,sx,sy,sw,sh,cxp-r,cyp-r,d,d);
+    c.restore();
+    return;
+  }
+  if(ev.st==='mirror'){
+    if(ev.mdir==='v'){
+      const[sx,sy,sw,sh]=coverSrc(bmp,cv.width/2,cv.height);
+      const shx=clamp(sx+ev.msh*bmp.width,0,Math.max(0,bmp.width-sw));
+      c.drawImage(bmp,shx,sy,sw,sh,0,0,cv.width/2,cv.height);
+      c.save();c.translate(cv.width,0);c.scale(-1,1);
+      c.drawImage(bmp,shx,sy,sw,sh,0,0,cv.width/2,cv.height);c.restore();
+    } else if(ev.mdir==='h'){
+      const[sx,sy,sw,sh]=coverSrc(bmp,cv.width,cv.height/2);
+      const shy=clamp(sy+ev.msh*bmp.height,0,Math.max(0,bmp.height-sh));
+      c.drawImage(bmp,sx,shy,sw,sh,0,0,cv.width,cv.height/2);
+      c.save();c.translate(0,cv.height);c.scale(1,-1);
+      c.drawImage(bmp,sx,shy,sw,sh,0,0,cv.width,cv.height/2);c.restore();
+    } else {
+      const[sx,sy,sw,sh]=coverSrc(bmp,cv.width/2,cv.height/2);
+      const shx=clamp(sx+ev.msh*bmp.width,0,Math.max(0,bmp.width-sw));
+      const shy=clamp(sy+ev.msh*bmp.height,0,Math.max(0,bmp.height-sh));
+      for(let qx=0;qx<2;qx++)for(let qy=0;qy<2;qy++){
+        c.save();
+        c.translate(qx?cv.width:0,qy?cv.height:0);
+        c.scale(qx?-1:1,qy?-1:1);
+        c.drawImage(bmp,shx,shy,sw,sh,0,0,cv.width/2,cv.height/2);
+        c.restore();
+      }
+    }
+    return;
+  }
+  /* pop, pile & stack — placed prints */
   const settle=prog>=1?1:easeOut(prog);
   const base=cv.width;
   let w=ev.sc*base;let h=w/ev.ar;
-  const maxH=cv.height*0.82;if(h>maxH){h=maxH;w=h*ev.ar;}
+  const maxH=cv.height*(ev.st==='stack'?0.92:0.82);if(h>maxH){h=maxH;w=h*ev.ar;}
   const scaleAnim=1.16-0.16*settle;
   const cx=ev.x*cv.width,cy=ev.y*cv.height;
   c.save();
   c.translate(cx,cy);c.rotate(ev.rot);c.scale(scaleAnim,scaleAnim);
-  if(ev.st==='pile'&&cfg.border!=='none'){
+  if((ev.st==='pile'||ev.st==='stack')&&cfg.border!=='none'){
     const pad=w*0.035,bot=cfg.border==='polaroid'?w*0.16:pad;
     c.shadowColor='rgba(0,0,0,0.55)';c.shadowBlur=cv.width*0.02;c.shadowOffsetY=cv.width*0.006;
     c.fillStyle='#f5f2ea';
     c.fillRect(-w/2-pad,-h/2-pad,w+pad*2,h+pad+bot);
     c.shadowColor='transparent';
-  } else if(ev.st==='pile'){
+  } else if(ev.st==='pile'||ev.st==='stack'){
     c.shadowColor='rgba(0,0,0,0.5)';c.shadowBlur=cv.width*0.018;
   }
   c.drawImage(bmp,-w/2,-h/2,w,h);
@@ -1363,7 +1518,7 @@ $('pps').addEventListener('change',()=>{
   if(p>0&&photos.length){cfg.durS=clamp(Math.round(photos.length/p),2,60);$('dur').value=cfg.durS;$('durVal').textContent=cfg.durS+'s';scheduleRegen();}
 });
 bindSel('rhythm','rhythm',()=>{
-  $('accelRow').style.display=cfg.rhythm==='accel'?'flex':'none';
+  $('accelRow').style.display=(cfg.rhythm==='accel'||cfg.rhythm==='decel')?'flex':'none';
   $('clusterRow').style.display=cfg.rhythm==='bursts'?'flex':'none';
   $('bpmRow').style.display=cfg.rhythm==='beat'?'flex':'none';
   scheduleRegen();
