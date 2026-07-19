@@ -134,7 +134,7 @@
     },
     {
       id: "photo-dump", name: "Burst//Dump", accent: "#ff3b30", icon: ICONS.camera,
-      href: "photo_dump/", badge: "video",
+      href: "burst_dump/", badge: "video",
       desc: "Drop a folder of photos and it cuts them into a fast, seeded photo-dump reel — rhythms, styles, FX, music — then records to MP4/WebM right in the browser.",
       tags: ["canvas", "MediaRecorder", "reels"]
     }
@@ -211,7 +211,7 @@
     { icon: "🗼", label: "Magic Sandbox", sub: "open app", run: function () { location.href = "magic_sandbox/"; } },
     { icon: "📝", label: "Task Notes", sub: "open app", run: function () { location.href = "task-notes/"; } },
     { icon: "👁", label: "Anti-AFK", sub: "open app", run: function () { location.href = "antiafk/"; } },
-    { icon: "📸", label: "Burst//Dump", sub: "open app", run: function () { location.href = "photo_dump/"; } },
+    { icon: "📸", label: "Burst//Dump", sub: "open app", run: function () { location.href = "burst_dump/"; } },
     { icon: "🎮", label: "Play Elemental Echo", sub: "minigame", run: function () { closePalette(); document.getElementById("play").scrollIntoView(); var s = document.getElementById("echo-start"); if (s) s.focus(); } },
     { icon: "🌗", label: "Toggle theme", sub: "light / dark", run: function () { Atelier.toggleTheme(); } },
     { icon: "💾", label: "Source on GitHub", sub: "repo", run: function () { window.open("https://github.com/nojukuramu/nojukuramu.github.io", "_blank"); } }
