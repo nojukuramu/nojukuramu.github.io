@@ -259,6 +259,8 @@ header{display:flex;align-items:center;gap:18px;padding:0 16px;border-bottom:1px
         <input type="file" id="musicInput" accept="audio/*" hidden>
         <div class="row" style="margin-top:10px"><label>Volume</label><input class="grow" type="range" id="musicVol" min="0" max="1" step="0.05" value="0.9"></div>
         <div class="row"><label>Song start at</label><input type="number" id="musicOff" min="0" step="0.1" value="0" style="width:70px"><span class="val">sec</span><button class="mini" id="musicClear" style="display:none">clear</button></div>
+        <div class="row" id="beatSyncRow" style="display:none"><label>Sync to beat</label><div class="tgl" id="beatSync"></div><button class="mini" id="reanalyzeBtn" title="re-run beat detection">re-detect</button></div>
+        <div class="hint" id="beatSyncHint" style="display:none">Cuts lock onto the track's own detected beats instead of a typed BPM — switches Timing → Rhythm to "beat grid" automatically.</div>
         <div class="stat" id="musicStat">No track. Export still works (video-only or SFX-only).</div>
       </div>
 
@@ -321,7 +323,7 @@ const cfg={
   styles:{slam:true,pile:true,pop:true,grid:true,strip:false,split:false,stack:false,echo:false,slash:false,bubble:false,mirror:false},
   chaos:0.5, border:'white', drift:true,
   flash:true, glitch:true, grain:0.10, vig:0.35, hud:true,
-  sfx:false, sfxVol:0.5, musicVol:0.9, musicOff:0,
+  sfx:false, sfxVol:0.5, musicVol:0.9, musicOff:0, beatSync:false,
   seed:1337, fps:60, bitrate:20
 };
 let allFiles=[];            // every image File found
@@ -739,13 +741,32 @@ function genTimeline(){
     if(sc<1)times=times.map(x=>x*sc);
   }
   else { /* beat */
-    const beat=60000/clamp(cfg.bpm,40,220);
+    const synced=cfg.beatSync&&trackBeats.length>=4;
+    const bpmUse=synced&&trackBpm?trackBpm:cfg.bpm;
+    const beats=synced?activeBeatTimes(D):[];
+    const beat=60000/clamp(bpmUse,40,220);
     const mults=[1,2,3,4,6,8,12,16];
     let best=1,bd=1e18;
     for(const m of mults){const d=N*beat/m;if(d<=62000&&Math.abs(d-D)<bd){bd=Math.abs(d-D);best=m;}}
     const iv=beat/best; D=N*iv;
-    for(let i=0;i<N;i++)times.push(i*iv);
-    $('beatInfo').textContent=best+'/beat';
+    /* Phase-lock the grid's origin to the first real beat inside the window
+       so cuts land on downbeats instead of an arbitrary t=0. */
+    const phase=beats.length?((beats[0]%iv)+iv)%iv:0;
+    for(let i=0;i<N;i++){
+      let t=i*iv+phase;
+      if(beats.length){
+        /* Pull each grid time onto the nearest actual onset (within ~35% of
+           an interval) — keeps arbitrary photo counts locked to the chosen
+           subdivision while riding the track's real, possibly-drifting
+           beats instead of a purely synthetic metronome. */
+        let nb=beats[0],nd=Infinity;
+        for(const b of beats){const d=Math.abs(b-t);if(d<nd){nd=d;nb=b;}}
+        if(nd<iv*0.35)t=nb;
+      }
+      times.push(clamp(t,0,D-1));
+    }
+    times.sort((a,b)=>a-b);
+    $('beatInfo').textContent=synced?`${best}/beat · synced ~${bpmUse}bpm`:(best+'/beat');
   }
   timelineD=D;
 
@@ -1108,7 +1129,106 @@ function renderFrame(t,forSfx){
 /* ---------- audio ---------- */
 let actx=null,exportDest=null,clickGain=null,musicGain=null,musicSrc=null,noiseBuf=null,lastClick=0;
 const audioEl=new Audio();audioEl.crossOrigin='anonymous';audioEl.preload='auto';
-let musicLoaded=false;
+let musicLoaded=false,musicFile=null;
+
+/* ---------- beat detection ---------- */
+let trackBeats=[];         // detected onset times, ms, relative to the track's own t=0
+let trackBpm=null;
+let analyzingBeats=false;
+let beatAnalysisGen=0;
+/* Maps detected onsets into the animation's own timeline (player.t space),
+   accounting for "song start at" offset, and keeps only the ones that fall
+   inside the current duration window. */
+function activeBeatTimes(D){
+  if(!trackBeats.length)return[];
+  const offMs=cfg.musicOff*1000, out=[];
+  for(const t of trackBeats){
+    const rel=t-offMs;
+    if(rel>=-50&&rel<=D+50)out.push(clamp(rel,0,D));
+  }
+  return out;
+}
+/* Energy-based onset detector: downmix to mono, isolate the low end (kick/
+   bass carries the beat in most music) with a one-pole low-pass, then flag
+   a beat wherever short-window energy spikes well above its trailing
+   ~1s local average — the classic "instant vs. local average energy"
+   approach. Runs entirely client-side, no external libs. */
+function detectBeats(audioBuf){
+  const sr=audioBuf.sampleRate;
+  const ch0=audioBuf.getChannelData(0);
+  const ch1=audioBuf.numberOfChannels>1?audioBuf.getChannelData(1):null;
+  const n=ch0.length;
+  const mono=new Float32Array(n);
+  for(let i=0;i<n;i++)mono[i]=ch1?(ch0[i]+ch1[i])*0.5:ch0[i];
+
+  const rc=1/(2*Math.PI*150), dt=1/sr, alpha=dt/(rc+dt);
+  let prev=0;
+  const lp=new Float32Array(n);
+  for(let i=0;i<n;i++){prev+=alpha*(mono[i]-prev);lp[i]=prev;}
+
+  const win=Math.max(1,Math.round(sr*0.02));   // ~20ms energy windows
+  const hist=Math.max(1,Math.round(sr/win));   // windows spanning ~1s of trailing history
+  const nWin=Math.ceil(n/win);
+  const energy=new Float32Array(nWin);
+  for(let w=0;w<nWin;w++){
+    let s=0;const start=w*win,end=Math.min(n,start+win);
+    for(let i=start;i<end;i++)s+=lp[i]*lp[i];
+    energy[w]=s/(end-start);
+  }
+
+  const minGapWin=Math.max(1,Math.round(0.25*sr/win)); // >=250ms between beats (<=240bpm)
+  const C=1.35; // instant energy must clear the local average by 35%
+  const times=[];
+  let lastBeatWin=-minGapWin;
+  for(let w=0;w<nWin;w++){
+    const lo=Math.max(0,w-hist),hi=Math.min(nWin,w+1);
+    let avg=0;for(let k=lo;k<hi;k++)avg+=energy[k];avg/=(hi-lo);
+    if(avg>1e-9&&energy[w]>avg*C&&w-lastBeatWin>=minGapWin){
+      times.push(w*win/sr*1000);
+      lastBeatWin=w;
+    }
+  }
+  if(times.length<4)return{times,bpm:null};
+  const intervals=[];
+  for(let i=1;i<times.length;i++)intervals.push(times[i]-times[i-1]);
+  intervals.sort((a,b)=>a-b);
+  const median=intervals[Math.floor(intervals.length/2)];
+  const bpm=clamp(Math.round(60000/median),40,220);
+  return{times,bpm};
+}
+async function analyzeTrackBeats(file){
+  const gen=++beatAnalysisGen;
+  analyzingBeats=true; trackBeats=[]; trackBpm=null;
+  $('beatSyncRow').style.display='none';$('beatSyncHint').style.display='none';
+  $('musicStat').innerHTML=`<b>${file.name}</b> loaded — plays in preview &amp; gets baked into the export. Analyzing beats…`;
+  /* Yield once so the "analyzing…" status actually paints before the
+     detector's synchronous number-crunching blocks the main thread. */
+  await new Promise(r=>setTimeout(r,0));
+  if(gen!==beatAnalysisGen)return;
+  try{
+    const buf=await file.arrayBuffer();
+    const Ctx=window.AudioContext||window.webkitAudioContext;
+    const tmp=actx||new Ctx();
+    let audioBuf;
+    try{audioBuf=await tmp.decodeAudioData(buf);}
+    finally{if(tmp!==actx){try{tmp.close();}catch(e){}}}
+    if(gen!==beatAnalysisGen)return;
+    const det=detectBeats(audioBuf);
+    if(gen!==beatAnalysisGen)return;
+    trackBeats=det.times;trackBpm=det.bpm;
+    if(trackBeats.length>=4){
+      $('beatSyncRow').style.display='flex';$('beatSyncHint').style.display='block';
+      $('musicStat').innerHTML=`<b>${file.name}</b> loaded — plays in preview &amp; gets baked into the export. <b>${trackBeats.length}</b> beats detected @ ~<b>${trackBpm}</b> BPM.`;
+    } else {
+      $('musicStat').innerHTML=`<b>${file.name}</b> loaded — plays in preview &amp; gets baked into the export. Couldn't lock a clear beat (quiet/ambient track?) — manual BPM/tap tempo still work.`;
+    }
+  }catch(e){
+    if(gen!==beatAnalysisGen)return;
+    $('musicStat').innerHTML=`<b>${file.name}</b> loaded — plays in preview &amp; gets baked into the export. Beat analysis failed — manual BPM/tap tempo still work.`;
+  }finally{
+    if(gen===beatAnalysisGen)analyzingBeats=false;
+  }
+}
 function ensureAudio(){
   if(actx)return;
   actx=new (window.AudioContext||window.webkitAudioContext)();
@@ -1146,18 +1266,23 @@ function syncMusic(){
 $('musicBtn').onclick=()=>$('musicInput').click();
 $('musicInput').onchange=e=>{
   const f=e.target.files[0];if(!f)return;
+  musicFile=f;
   audioEl.src=URL.createObjectURL(f);
   musicLoaded=true;hookMusic();
-  $('musicStat').innerHTML=`<b>${f.name}</b> loaded — plays in preview &amp; gets baked into the export.`;
   $('musicClear').style.display='inline-block';
   if(actx)hookMusic();
+  analyzeTrackBeats(f);
 };
 $('musicClear').onclick=()=>{
   audioEl.pause();audioEl.removeAttribute('src');audioEl.load();
-  musicLoaded=false;
+  musicLoaded=false;musicFile=null;
+  beatAnalysisGen++;trackBeats=[];trackBpm=null;analyzingBeats=false;
   $('musicStat').textContent='No track. Export still works (video-only or SFX-only).';
   $('musicClear').style.display='none';
+  $('beatSyncRow').style.display='none';$('beatSyncHint').style.display='none';
+  if(cfg.beatSync){cfg.beatSync=false;$('beatSync').classList.remove('on');scheduleRegen();}
 };
+$('reanalyzeBtn').onclick=()=>{if(musicFile&&!analyzingBeats)analyzeTrackBeats(musicFile);};
 let taps=[];
 $('tapBtn').onclick=()=>{
   const n=performance.now();
@@ -1166,7 +1291,9 @@ $('tapBtn').onclick=()=>{
   if(taps.length>=3){
     const iv=(taps[taps.length-1]-taps[0])/(taps.length-1);
     cfg.bpm=clamp(Math.round(60000/iv),40,220);
-    $('bpm').value=cfg.bpm;scheduleRegen();
+    $('bpm').value=cfg.bpm;
+    if(cfg.beatSync){cfg.beatSync=false;$('beatSync').classList.remove('on');} // manual tap overrides auto-sync
+    scheduleRegen();
   }
 };
 
@@ -1525,7 +1652,11 @@ bindSel('rhythm','rhythm',()=>{
 });
 bindNum('accel','accel',()=>{$('accelVal').textContent=cfg.accel.toFixed(1)+'×';},scheduleRegen);
 bindNum('cluster','cluster',()=>{$('clusterVal').textContent=cfg.cluster;},scheduleRegen);
-bindNum('bpm','bpm',null,scheduleRegen);
+$('bpm').addEventListener('input',()=>{
+  cfg.bpm=parseFloat($('bpm').value)||120;
+  if(cfg.beatSync){cfg.beatSync=false;$('beatSync').classList.remove('on');} // manual BPM overrides auto-sync
+  scheduleRegen();
+});
 bindTgl('holdLast','holdLast',syncTransport);
 bindNum('holdMs','holdMs',null,syncTransport);
 
@@ -1548,7 +1679,17 @@ bindTgl('hud','hud');
 bindTgl('sfx','sfx',()=>{if(cfg.sfx)ensureAudio();});
 bindNum('sfxVol','sfxVol',null,()=>{if(clickGain)clickGain.gain.value=cfg.sfxVol*0.5;});
 bindNum('musicVol','musicVol',null,()=>{if(musicGain)musicGain.gain.value=cfg.musicVol;});
-bindNum('musicOff','musicOff',null,syncMusic);
+bindNum('musicOff','musicOff',null,()=>{syncMusic();if(cfg.beatSync)scheduleRegen();});
+bindTgl('beatSync','beatSync',()=>{
+  if(cfg.beatSync){
+    if(trackBpm){cfg.bpm=trackBpm;$('bpm').value=trackBpm;}
+    if(cfg.rhythm!=='beat'){
+      cfg.rhythm='beat';$('rhythm').value='beat';
+      $('accelRow').style.display='none';$('clusterRow').style.display='none';$('bpmRow').style.display='flex';
+    }
+  }
+  scheduleRegen();
+});
 
 bindNum('seed','seed',null,scheduleRegen);
 $('reroll').onclick=()=>{cfg.seed=(Math.random()*1e9)|0;$('seed').value=cfg.seed;genTimeline();seek(0);if(!player.playing)player.play();};
