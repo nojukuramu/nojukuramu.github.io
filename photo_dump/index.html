@@ -292,7 +292,12 @@ function canvasSize(){
   let w,h;
   if(ratio>=1){h=short;w=Math.round(short*ratio);}else{w=short;h=Math.round(short/ratio);}
   w-=w%2; h-=h%2;
-  if(cv.width!==w||cv.height!==h){
+  /* Must also check acc/fx: cv's HTML attributes already match the default
+     aspect/res, so on first load this guard used to skip entirely and
+     leave acc/fx at their createElement default of 300x150 forever — every
+     frame's drawBg(accx)+drawImage(acc) reset then only touched a 300x150
+     corner, leaving stale content outside it as permanent ghosting. */
+  if(cv.width!==w||cv.height!==h||acc.width!==w||acc.height!==h){
     cv.width=w;cv.height=h;acc.width=w;acc.height=h;fx.width=w;fx.height=h;
     vigCv=null; player.dirty=true; drawBg(accx); player.accumAnchor=-2;
   }
