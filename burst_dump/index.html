@@ -299,6 +299,18 @@ header{display:flex;align-items:center;gap:18px;padding:0 16px;border-bottom:1px
       </div>
 
       <div class="sec">
+        <h2>Music feel</h2>
+        <div class="row"><label>React to feel</label><div class="tgl on" id="feelOn"></div></div>
+        <div class="row"><label>Amount</label><input class="grow" type="range" id="feelAmt" min="0" max="2" step="0.05" value="1"><span class="val" id="feelAmtVal">1.00</span></div>
+        <div class="row"><label>Pace</label><input class="grow" type="range" id="feelPace" min="0" max="2" step="0.05" value="1"><span class="val" id="feelPaceVal">1.00</span></div>
+        <div class="row"><label>FX hits</label><input class="grow" type="range" id="feelFx" min="0" max="2" step="0.05" value="1"><span class="val" id="feelFxVal">1.00</span></div>
+        <div class="row"><label>Style pick</label><input class="grow" type="range" id="feelStyle" min="0" max="2" step="0.05" value="1"><span class="val" id="feelStyleVal">1.00</span></div>
+        <div class="row"><label>Texture</label><input class="grow" type="range" id="feelTex" min="0" max="2" step="0.05" value="1"><span class="val" id="feelTexVal">1.00</span></div>
+        <div class="hint">Energy drives cut pace, punchiness drives flash/glitch odds, brightness steers style picks, noisiness breathes the grain. Baselines are your sliders above — this only bends them while a track's feel is known.</div>
+        <div class="stat" id="feelStat">Load a music track to analyze its feel.</div>
+      </div>
+
+      <div class="sec">
         <h2>Seed</h2>
         <div class="row"><label>Seed</label><input class="grow" type="number" id="seed" value="1337"><button class="mini" id="reroll">🎲 reroll</button></div>
         <div class="hint">Same seed + same settings = the exact same edit, every time. Reroll until it slaps.</div>
@@ -334,6 +346,7 @@ header{display:flex;align-items:center;gap:18px;padding:0 16px;border-bottom:1px
 </div>
 <div id="dropOverlay"><div>DROP IT.</div></div>
 
+<script src="audiofeel.js"></script>
 <script>
 /* =========================================================
    BURST//DUMP — single-file burst photo show generator
@@ -362,6 +375,7 @@ const cfg={
   border:'white', drift:true,
   flash:true, glitch:true, grain:0.10, vig:0.35, hud:true,
   sfx:false, sfxVol:0.5, musicVol:0.9, musicOff:0, beatSync:false,
+  feelOn:true, feelAmt:1, feelPace:1, feelFx:1, feelStyle:1, feelTex:1,
   seed:1337, fps:60, bitrate:20
 };
 let allFiles=[];            // every image File found
@@ -800,6 +814,8 @@ function hexToRgba(hex,a){const v=parseInt(hex.slice(1),16);return`rgba(${(v>>16
    branch) is a soft 75%-odds nudge the assign loop can ignore — see the
    `pool`/`runStyles` lines where they're consumed. */
 const SECTION_MOD_DEFAULT={runScale:1,flashRun:0.5,flashRand:0.03,glitchP:0.05,styleFilter:null,stylePref:null,sectionKey:null};
+const BRIGHT_STYLES=['xerox','strip','bars','mirror','echo','punch'];
+const DARK_STYLES=['pile','tape','stack','pop','grid'];
 /* Falls the Rhythm select back to 'accel' whenever it's currently 'dynamic'
    but there's no song structure left to follow (track cleared, re-analysis
    failed, or came back with no detected sections) — mirrors what picking a
@@ -828,7 +844,7 @@ function mapTrackSections(D){
   for(const s of trackSections){
     const t0=s.t0-off,t1=s.t1-off;
     if(t1<=0||t0>=D)continue;
-    secs.push({t0:clamp(t0,0,D),t1:clamp(t1,0,D),type:s.type,intensity:s.intensity});
+    secs.push({t0:clamp(t0,0,D),t1:clamp(t1,0,D),type:s.type,intensity:s.intensity,feel:s.feel});
   }
   const fills=[];
   for(const f of trackFills){
@@ -871,7 +887,8 @@ function renderSongMap(){
     const haveHtml=have.map(n=>`<b>${styleLabel(n)}</b>`).join(' · ');
     const missHtml=missing.map(n=>`<button class="smBtn" data-s="${n}">+${styleLabel(n)}</button>`).join(' ');
     const styleHtml=[haveHtml,missHtml].filter(Boolean).join(' · ')||'<span class="hint" style="margin:0">(no recommended styles enabled)</span>';
-    return`<div class="smRow"><span class="smSw" style="background:${SECTION_COLOR[s.type]}"></span><b>${s.type}</b> ${fmt(s.t0)}–${fmt(s.t1)}${hasFill?' · fill':''} — ${styleHtml}</div>`;
+    const feelWords=s.feel?feelWordsFromMeans(s.feel.energy,s.feel.brightness,s.feel.percussive,s.feel.noisiness).split(' · ').slice(0,2).join(' · '):'';
+    return`<div class="smRow"><span class="smSw" style="background:${SECTION_COLOR[s.type]}"></span><b>${s.type}</b> ${fmt(s.t0)}–${fmt(s.t1)}${hasFill?' · fill':''}${feelWords?` · ${feelWords}`:''} — ${styleHtml}</div>`;
   }).join('');
   wrap.querySelectorAll('.smBtn').forEach(btn=>{
     btn.addEventListener('click',()=>{
@@ -933,6 +950,35 @@ function sectionModFor(tMs){
   const pref=prefForType(sec.type);
   return{runScale:m.runScale,flashRun:m.flashRun,flashRand:m.flashRand,glitchP:m.glitchP,styleFilter:null,stylePref:pref.length?pref:null,sectionKey:sec.type+'@'+sec.t0};
 }
+/* Bends a section-mod object (from sectionModFor — SECTION_MOD_DEFAULT in
+   every rhythm mode besides 'dynamic') toward what the track's feel
+   implies at tMs: energy speeds/slows the run length, percussiveness (and,
+   for glitch, noisiness too) raises flash/glitch odds, brightness nudges
+   the style pool. This is what lets feel modulate flash/glitch/style in
+   *every* rhythm mode, not just 'dynamic'. Early-returns the untouched mod
+   (zero rng() draws, zero copies) whenever feel isn't active, so a
+   feel-less run reproduces the exact same timeline as before this feature
+   existed for the same seed. */
+function applyFeelMod(mod,tMs,rng){
+  if(!feelActive())return mod;
+  const f=feelAt(tMs);
+  if(!f)return mod;
+  const w=feelWeights();
+  const m=Object.assign({},mod);
+  m.runScale=lerp(m.runScale,lerp(1.7,0.35,f.energy),w.pace);
+  m.flashRun=lerp(m.flashRun,lerp(0.15,0.85,f.percussive),w.fx);
+  m.flashRand=lerp(m.flashRand,lerp(0.01,0.09,f.percussive),w.fx);
+  m.glitchP=lerp(m.glitchP,lerp(0.01,0.14,Math.max(f.percussive,f.noisiness*0.85)),w.fx);
+  if(!m.styleFilter){
+    const set=f.brightness>=0.65?BRIGHT_STYLES:f.brightness<=0.35?DARK_STYLES:null;
+    if(set){
+      const en=enabledStyles();
+      const cand=set.filter(s=>en.includes(s));
+      if(cand.length&&rng()<0.6*w.style)m.stylePref=cand;
+    }
+  }
+  return m;
+}
 /* Builds cut times for rhythm='dynamic': each mapped section gets a photo
    budget proportional to (rate-weight × its duration), then cuts are placed
    inside it — snapped to real beats where available, otherwise an
@@ -943,6 +989,7 @@ function dynamicTimes(N,D,rng,secs){
   if(!secs.length||N<=0)return null;
   const rateW=s=>{
     let w=s.type==='low'?0.45:s.type==='peak'?2.2:s.type==='build'?1.3:1.0;
+    if(feelActive()&&s.feel)w=lerp(w,lerp(0.45,2.2,s.feel.energy),feelWeights().pace);
     return w*lerp(0.85,1.15,s.intensity);
   };
   const durOf=s=>Math.max(0.01,(s.t1-s.t0)/1000);
@@ -1017,7 +1064,12 @@ function dynamicAutoTimes(N,Dmax,rng,secs,fills){
     else if(sec.type==='peak')iv=beatIv?0.5*beatIv:300;
     else if(sec.type==='build')iv=beatIv?lerp(beatIv,0.5*beatIv,tFrac):lerp(900,450,tFrac);
     else iv=beatIv||600;
-    return clamp(iv*lerp(1.15,0.85,sec.intensity),120,2500);
+    iv=clamp(iv*lerp(1.15,0.85,sec.intensity),120,2500);
+    if(feelActive()&&sec.feel){
+      const ivFeel=beatIv?lerp(2*beatIv,0.5*beatIv,sec.feel.energy):lerp(1400,300,sec.feel.energy);
+      iv=lerp(iv,ivFeel,feelWeights().pace);
+    }
+    return iv;
   };
   function walk(ivScale){
     const out=[];
@@ -1173,7 +1225,7 @@ function genTimeline(){
   let splitL=null,sPtr=0,stackCount=0,slashCount=0,bubCount=0,tapeCount=0;
   let runSectionKey=null;
   for(let k=0;k<times.length;k++){
-    const mod=sectionModFor(times[k]);
+    const mod=applyFeelMod(sectionModFor(times[k]),times[k],rng);
     /* A song-section boundary crossing mid-run should be felt right away —
        otherwise "follow the song" could keep playing out a low-energy run
        for several seconds after the track has already hit the drop. */
@@ -1561,6 +1613,7 @@ function renderFrame(t,forSfx){
   const N=events.length;
   if(!N){drawBg(ctx);return;}
   const tt=clamp(t,0,timelineD+(cfg.holdLast?cfg.holdMs:0));
+  const feelHere=feelActive()?feelAt(tt):null; // sampled once per frame, purely a function of tt — preview and export capture agree
   const et=Math.min(tt,timelineD-0.001);
   const idx=Math.max(0,idxFor(et));
   const anch=anchor[idx];
@@ -1603,16 +1656,18 @@ function renderFrame(t,forSfx){
       ctx.drawImage(fx,0,y,cv.width,h,off,y,cv.width,h);
     }
   }
-  /* grain */
-  if(cfg.grain>0){
+  /* grain — feel breathes it with noisiness (grittier passages grain up) */
+  const gAmt=feelHere?clamp(cfg.grain*(1+(feelHere.noisiness-0.5)*0.9*feelWeights().tex),0,0.5):cfg.grain;
+  if(gAmt>0){
     const tile=getGrain((et/50)|0);
-    ctx.save();ctx.globalAlpha=cfg.grain;
+    ctx.save();ctx.globalAlpha=gAmt;
     const ox=-(Math.random()*384|0),oy=-(Math.random()*384|0);
     for(let x=ox;x<cv.width;x+=384)for(let y=oy;y<cv.height;y+=384)ctx.drawImage(tile,x,y);
     ctx.restore();
   }
-  /* vignette */
-  if(cfg.vig>0){ctx.save();ctx.globalAlpha=cfg.vig;ctx.drawImage(getVig(),0,0);ctx.restore();}
+  /* vignette — feel eases it back on brighter passages */
+  const vAmt=feelHere?clamp(cfg.vig*(1-(feelHere.brightness-0.5)*0.5*feelWeights().tex),0,0.8):cfg.vig;
+  if(vAmt>0){ctx.save();ctx.globalAlpha=vAmt;ctx.drawImage(getVig(),0,0);ctx.restore();}
   /* HUD */
   if(cfg.hud){
     const fs=Math.round(cv.height*0.02);
@@ -1642,9 +1697,10 @@ let analyzingBeats=false;
 let beatAnalysisGen=0;
 let trackDurS=0;            // full track duration, seconds (for the trim scrubber)
 let trackWavePeaks=null;    // Float32Array, per-bucket max-abs amplitude, 0..1
-let trackSections=[];       // [{t0,t1,type,intensity}] ms, track-relative — song structure
+let trackSections=[];       // [{t0,t1,type,intensity,feel}] ms, track-relative — song structure
 let trackFills=[];          // [{t0,t1}] ms — dense-onset "roll" spans right before a peak
 let mappedSections=[], mappedFills=[]; // trackSections/trackFills shifted by -musicOff into timeline space, set each genTimeline()
+let trackFeel=null;         // {hopSec,n,energy,brightness,percussive,noisiness,bass} Float32Arrays, track-relative 0.25s bins — set by analyzeTrackBeats, null if no track/analysis failed
 /* Maps detected onsets into the animation's own timeline (player.t space),
    accounting for "song start at" offset, and keeps only the ones that fall
    inside the current duration window. */
@@ -1656,6 +1712,50 @@ function activeBeatTimes(D){
     if(rel>=-50&&rel<=D+50)out.push(clamp(rel,0,D));
   }
   return out;
+}
+/* Whether the "feel" overlay should influence anything right now — false
+   whenever there's no track, no successful analysis, the toggle is off, or
+   Amount is 0. Every feel hook checks this first and must draw zero extra
+   rng() calls when it's false, so a feel-less run reproduces byte-identical
+   output to before this feature existed for the same seed. */
+function feelActive(){return!!(trackFeel&&cfg.feelOn&&cfg.feelAmt>0);}
+/* Linear-interpolated sample of a track-relative feel curve at trackMs —
+   bin i represents time i*hopSec, same convention computeEnvelope/
+   segmentTrack use — index-clamped at both ends (holds first/last value). */
+function feelCurveAt(curve,trackMs){
+  const n=curve.length;
+  if(!n)return 0;
+  const bin=trackMs/1000/trackFeel.hopSec;
+  const i0=clamp(Math.floor(bin),0,n-1),i1=clamp(i0+1,0,n-1);
+  const f=clamp(bin-i0,0,1);
+  return lerp(curve[i0],curve[i1],f);
+}
+const _feelScratch={energy:0,brightness:0,percussive:0,noisiness:0,bass:0};
+/* Samples all five feel curves at timeline time tlMs (0..timelineD space),
+   converting to track-relative ms via the current "song start at" offset.
+   Returns a reused scratch object — read it immediately, never retain it
+   across calls. Returns null when feel isn't active. */
+function feelAt(tlMs){
+  if(!feelActive())return null;
+  const trackMs=tlMs+cfg.musicOff*1000;
+  _feelScratch.energy=feelCurveAt(trackFeel.energy,trackMs);
+  _feelScratch.brightness=feelCurveAt(trackFeel.brightness,trackMs);
+  _feelScratch.percussive=feelCurveAt(trackFeel.percussive,trackMs);
+  _feelScratch.noisiness=feelCurveAt(trackFeel.noisiness,trackMs);
+  _feelScratch.bass=feelCurveAt(trackFeel.bass,trackMs);
+  return _feelScratch;
+}
+/* Per-channel feel blend weights — how strongly feel bends pace/FX-odds/
+   style-picks/render texture, each Amount×per-channel-slider, clamped so
+   a channel can never fully override its baseline (tex allows up to 2x:
+   it's a render-time multiplier, not a blend factor). */
+function feelWeights(){
+  return{
+    pace:clamp(cfg.feelAmt*cfg.feelPace,0,1),
+    fx:clamp(cfg.feelAmt*cfg.feelFx,0,1),
+    style:clamp(cfg.feelAmt*cfg.feelStyle,0,1),
+    tex:clamp(cfg.feelAmt*cfg.feelTex,0,2)
+  };
 }
 function downmixMono(audioBuf){
   const ch0=audioBuf.getChannelData(0);
@@ -1802,7 +1902,7 @@ function computeEnvelope(mono,sr){
    even from a low level), and a loud-but-beatless pad/vocal wall used to
    read as 'peak' on level alone (now it needs either very high level on its
    own, or high level *and* drums, to qualify). */
-function segmentTrack(envObj,beats){
+function segmentTrack(envObj,beats,feel){
   const{env,slope,hopSec}=envObj;
   const n=env.length;
   if(!n)return[];
@@ -1817,11 +1917,29 @@ function segmentTrack(envObj,beats){
       dens[i]=clamp(cnt/12,0,1);
     }
   }
+  /* Brightness slope over the same ±2s window the envelope's own slope
+     uses — a rising-brightness riser should read as a 'build' even when
+     loudness alone stays flat. feel is optional/nullable: with no feel
+     data P and Sb are always 0 below, so labelOf reduces to exactly the
+     pre-feel-analysis rules. */
+  let brightSlope=null;
+  if(feel){
+    const bn=feel.brightness.length;
+    brightSlope=new Float32Array(bn);
+    const span=Math.max(1,Math.round(2/hopSec));
+    for(let h=0;h<bn;h++){
+      const lo=Math.max(0,h-span),hi=Math.min(bn-1,h+span);
+      brightSlope[h]=(feel.brightness[hi]-feel.brightness[lo])/Math.max(1e-6,(hi-lo)*hopSec);
+    }
+  }
   const labelOf=i=>{
     const L=env[i],S=slope[i],Dn=dens[i];
+    const fi=feel?Math.min(i,feel.n-1):0;
+    const P=feel?feel.percussive[fi]:0;
+    const Sb=brightSlope?brightSlope[Math.min(fi,brightSlope.length-1)]:0;
     if(L>0.78)return'peak';
-    if(L>0.62&&Dn>0.45)return'peak';
-    if(S>0.035&&L>0.15)return'build';
+    if(L>0.62&&(Dn>0.45||P>0.55))return'peak';
+    if((S>0.035||Sb>0.05)&&L>0.15)return'build';
     if(L<0.32)return'low';
     return'mid';
   };
@@ -1879,6 +1997,26 @@ function segmentTrack(envObj,beats){
   for(const s of merged){s.intensity=meanLevel(s);delete s.idx0;delete s.idx1;}
   return merged;
 }
+/* Attaches the mean of each feel curve over a section's own bins to
+   s.feel, so dynamicTimes/dynamicAutoTimes' pace weighting and
+   applyFeelMod's style nudging can read a per-section feel summary
+   without re-sampling the curves themselves. No-op when feel is null. */
+function attachSectionFeel(sections,feel){
+  if(!feel)return;
+  const hop=feel.hopSec;
+  const meanOf=(curve,i0,i1)=>{let s=0;for(let i=i0;i<=i1;i++)s+=curve[i];return s/Math.max(1,i1-i0+1);};
+  for(const sec of sections){
+    const i0=clamp(Math.round(sec.t0/1000/hop),0,feel.n-1);
+    const i1=clamp(Math.round(sec.t1/1000/hop),i0,feel.n-1);
+    sec.feel={
+      energy:meanOf(feel.energy,i0,i1),
+      brightness:meanOf(feel.brightness,i0,i1),
+      percussive:meanOf(feel.percussive,i0,i1),
+      noisiness:meanOf(feel.noisiness,i0,i1),
+      bass:meanOf(feel.bass,i0,i1)
+    };
+  }
+}
 /* Per-bucket max(|amplitude|) for the trim scrubber's waveform, normalized
    to its own peak. Cheap O(n) pass over the same mono buffer. */
 function computeWavePeaks(mono,buckets){
@@ -1893,9 +2031,25 @@ function computeWavePeaks(mono,buckets){
   for(let b=0;b<buckets;b++)out[b]/=mx;
   return out;
 }
+/* Track-wide feel summary words for status text, e.g. "energetic · bright ·
+   punchy" — thresholds are deliberately loose (most tracks should read as
+   'steady'/no bright-dark word/etc rather than everything getting labeled). */
+function feelWordsFromMeans(e,b,p,ns){
+  const words=[];
+  words.push(e>0.62?'energetic':e<0.35?'mellow':'steady');
+  if(b>0.60)words.push('bright');else if(b<0.40)words.push('dark');
+  if(p>0.55)words.push('punchy');else if(p<0.30)words.push('smooth');
+  if(ns>0.55)words.push('gritty');
+  return words.join(' · ');
+}
+function feelSummaryWords(feel){
+  if(!feel)return'';
+  const mean=arr=>{let s=0;for(let i=0;i<arr.length;i++)s+=arr[i];return s/Math.max(1,arr.length);};
+  return feelWordsFromMeans(mean(feel.energy),mean(feel.brightness),mean(feel.percussive),mean(feel.noisiness));
+}
 async function analyzeTrackBeats(file){
   const gen=++beatAnalysisGen;
-  analyzingBeats=true; trackBeats=[]; trackBpm=null; trackSections=[]; trackFills=[]; trackDurS=0; trackWavePeaks=null;
+  analyzingBeats=true; trackBeats=[]; trackBpm=null; trackSections=[]; trackFills=[]; trackDurS=0; trackWavePeaks=null; trackFeel=null;
   $('beatSyncRow').style.display='none';$('beatSyncHint').style.display='none';$('beatSyncPointer').style.display='none';
   $('trimWrap').style.display='none';$('songMap').innerHTML='';
   const dynOpt=$('rhythm').querySelector('option[value=dynamic]');if(dynOpt)dynOpt.disabled=true;
@@ -1931,10 +2085,34 @@ async function analyzeTrackBeats(file){
       await new Promise(r=>setTimeout(r,0));
       if(gen!==beatAnalysisGen)return;
       const env=computeEnvelope(mono,audioBuf.sampleRate);
-      trackSections=segmentTrack(env,trackBeats);
+      /* Spectral "feel" (brightness/percussiveness/noisiness/bass) is its
+         own best-effort pass on top of the loudness envelope, gated behind
+         a separate try/catch — audiofeel.js failing to load, or the FFT
+         pass throwing/being aborted, must still leave beat/structure
+         detection working exactly as it did before this feature existed. */
+      let feel=null;
+      if(typeof AudioFeel!=='undefined'){
+        try{
+          const raw=await AudioFeel.analyze(mono,audioBuf.sampleRate,{shouldAbort:()=>gen!==beatAnalysisGen});
+          if(gen!==beatAnalysisGen)return;
+          if(raw){
+            const len=Math.min(env.env.length,raw.brightness.length);
+            feel={hopSec:env.hopSec,n:len,
+              energy:env.env.slice(0,len),
+              brightness:raw.brightness.slice(0,len),
+              percussive:raw.percussive.slice(0,len),
+              noisiness:raw.noisiness.slice(0,len),
+              bass:raw.bass.slice(0,len)};
+          }
+        }catch(e){feel=null;}
+      }
+      trackFeel=feel;
+      trackSections=segmentTrack(env,trackBeats,trackFeel);
+      attachSectionFeel(trackSections,trackFeel);
       const dense=denseOnsets(det.energy,det.win,det.sr);
       trackFills=findFillSpans(dense,trackSections);
-    }catch(e){trackSections=[];trackFills=[];}
+    }catch(e){trackSections=[];trackFills=[];trackFeel=null;}
+    $('feelStat').textContent=trackFeel?`Feel: ${feelSummaryWords(trackFeel)||'steady'}.`:`Couldn't read this track's feel — sections/beats still work.`;
     $('trimWrap').style.display='block';drawTrimWave();updateTrimWin();
     if(trackSections.length>=1){
       if(dynOpt)dynOpt.disabled=false;
@@ -1948,10 +2126,11 @@ async function analyzeTrackBeats(file){
     } else {
       $('musicStat').innerHTML=`<b>${file.name}</b> loaded — plays in preview &amp; gets baked into the export. Couldn't lock a clear beat (quiet/ambient track?) — manual BPM/tap tempo still work.`;
     }
-    if(cfg.rhythm==='dynamic')scheduleRegen();
+    if(cfg.rhythm==='dynamic'||feelActive())scheduleRegen(); // feel-baked flash/glitch/style flags need a regen in every rhythm mode, not just 'dynamic'
   }catch(e){
     if(gen!==beatAnalysisGen)return;
     $('musicStat').innerHTML=`<b>${file.name}</b> loaded — plays in preview &amp; gets baked into the export. Beat analysis failed — manual BPM/tap tempo still work.`;
+    $('feelStat').textContent=`Couldn't read this track's feel — sections/beats still work.`;
     offDynamicRhythmIfNeeded(); // analysis failed outright — 'dynamic' has no structure to follow
     /* Still let the trim scrubber work off the element's own metadata even
        though we have no waveform/beats/structure to show. */
@@ -1992,6 +2171,18 @@ function drawTrimWave(){
     }
   } else {
     g.fillStyle='#565c64';g.fillRect(0,h/2-1,w,2);
+  }
+  /* Energy curve overlay — an at-a-glance feel map inside the scrubber
+     itself, on top of the section tint/waveform rather than a separate
+     widget. */
+  if(trackFeel&&trackFeel.n>1){
+    const n=trackFeel.n,env=trackFeel.energy;
+    g.save();g.globalAlpha=0.5;g.strokeStyle='#ffc24b';g.lineWidth=1;g.beginPath();
+    for(let i=0;i<n;i++){
+      const x=i/n*w,y=h-2-env[i]*(h-6);
+      if(i===0)g.moveTo(x,y);else g.lineTo(x,y);
+    }
+    g.stroke();g.restore();
   }
 }
 /* How far "song start at" can go before there's not enough track left. In
@@ -2085,8 +2276,9 @@ $('musicClear').onclick=()=>{
   audioEl.pause();audioEl.removeAttribute('src');audioEl.load();
   musicLoaded=false;musicFile=null;
   beatAnalysisGen++;trackBeats=[];trackBpm=null;analyzingBeats=false;
-  trackDurS=0;trackWavePeaks=null;trackSections=[];trackFills=[];
+  trackDurS=0;trackWavePeaks=null;trackSections=[];trackFills=[];trackFeel=null;
   $('musicStat').textContent='No track. Export still works (video-only or SFX-only).';
+  $('feelStat').textContent='Load a music track to analyze its feel.';
   $('musicClear').style.display='none';
   $('beatSyncRow').style.display='none';$('beatSyncHint').style.display='none';$('beatSyncPointer').style.display='none';
   $('trimWrap').style.display='none';
@@ -2526,6 +2718,13 @@ bindTgl('beatSync','beatSync',()=>{
   }
   scheduleRegen();
 });
+
+bindTgl('feelOn','feelOn',scheduleRegen);
+bindNum('feelAmt','feelAmt',()=>{$('feelAmtVal').textContent=cfg.feelAmt.toFixed(2);},scheduleRegen);
+bindNum('feelPace','feelPace',()=>{$('feelPaceVal').textContent=cfg.feelPace.toFixed(2);},scheduleRegen);
+bindNum('feelFx','feelFx',()=>{$('feelFxVal').textContent=cfg.feelFx.toFixed(2);},scheduleRegen);
+bindNum('feelStyle','feelStyle',()=>{$('feelStyleVal').textContent=cfg.feelStyle.toFixed(2);},scheduleRegen);
+bindNum('feelTex','feelTex',()=>{$('feelTexVal').textContent=cfg.feelTex.toFixed(2);}); // render-time only, no regen needed
 
 bindNum('seed','seed',null,scheduleRegen);
 $('reroll').onclick=()=>{cfg.seed=(Math.random()*1e9)|0;$('seed').value=cfg.seed;genTimeline();seek(0);if(!player.playing)player.play();};
