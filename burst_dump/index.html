@@ -63,6 +63,15 @@ header{display:flex;align-items:center;gap:18px;padding:0 16px;border-bottom:1px
 #trimCv{width:100%;height:44px;display:block;border:1px solid var(--line);border-radius:4px;background:var(--panel2)}
 #trimWin{position:absolute;top:0;bottom:0;left:0;width:0;border:1px solid var(--lcd);background:rgba(255,194,75,.16);border-radius:4px;pointer-events:none}
 
+/* ---- song map + per-style run list ---- */
+.smRow{font-size:11px;color:var(--dim);line-height:1.7}
+.smSw{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;flex:none}
+.smBtn{padding:2px 7px;border-radius:99px;border:1px dashed var(--line2);background:transparent;color:var(--faint);font-size:10px;cursor:pointer;margin:0 2px}
+.smBtn:hover{border-color:var(--dim);color:var(--dim)}
+#styleRunList{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.srItem{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);background:var(--panel2);border:1px solid var(--line2);border-radius:4px;padding:4px 8px}
+.srItem input{width:40px;padding:2px 4px}
+
 .bigbtn{width:100%;padding:11px;border-radius:6px;border:1px dashed var(--line2);background:transparent;color:var(--ink);font-size:13px;font-weight:600;letter-spacing:.02em;transition:border-color .12s,background .12s}
 .bigbtn:hover{border-color:var(--dim);background:var(--panel2)}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -222,14 +231,19 @@ header{display:flex;align-items:center;gap:18px;padding:0 16px;border-bottom:1px
           <option value="beat">beat grid · BPM locked</option>
           <option value="dynamic" disabled>follow the song · auto sections</option>
         </select></div>
+        <div class="row" id="lenModeRow" style="display:none"><label>Length</label><select class="grow" id="lenMode">
+          <option value="fixed" selected>fixed · duration slider</option>
+          <option value="song">let the song decide</option>
+        </select></div>
         <div class="row" id="accelRow"><label>Accel curve</label><input class="grow" type="range" id="accel" min="1.2" max="3.5" step="0.1" value="2.2"><span class="val" id="accelVal">2.2×</span></div>
         <div class="row" id="clusterRow" style="display:none"><label>Cluster size</label><input class="grow" type="range" id="cluster" min="6" max="40" step="1" value="16"><span class="val" id="clusterVal">16</span></div>
         <div class="row" id="beatSyncRow" style="display:none"><label>Sync to beat</label><div class="tgl" id="beatSync"></div><button class="mini" id="reanalyzeBtn" title="re-run beat detection">re-detect</button></div>
         <div class="hint" id="beatSyncHint" style="display:none">Cuts lock onto the loaded track's own detected beats instead of the typed BPM below. Turning this on switches Rhythm to "beat grid".</div>
+        <div class="hint" id="lenModeHint" style="display:none">"Let the song decide" ignores Duration entirely — the video runs from "Song start at" to the track's end (or stops early if there aren't enough photos to keep pace without stretching more than 2×), with cut speed following each section's energy.</div>
         <div class="row" id="bpmRow" style="display:none"><label>BPM</label><input type="number" id="bpm" min="40" max="220" value="120" style="width:70px"><button class="mini" id="tapBtn">tap tempo</button><span class="val" id="beatInfo"></span></div>
         <div class="row"><label>Hold last</label><div class="tgl on" id="holdLast"></div><input type="number" id="holdMs" min="0" max="3000" step="100" value="800" style="width:70px"><span class="val">ms</span></div>
         <div class="stat" id="timeStat"></div>
-        <div class="stat" id="sectionStat" style="margin-top:4px"></div>
+        <div class="stat" id="songMap" style="margin-top:4px"></div>
       </div>
 
       <div class="sec">
@@ -246,20 +260,21 @@ header{display:flex;align-items:center;gap:18px;padding:0 16px;border-bottom:1px
           <button class="chip" data-s="slash">diagonal slash</button>
           <button class="chip" data-s="bubble">sticker dots</button>
           <button class="chip" data-s="mirror">mirror</button>
+          <button class="chip" data-s="punch">punch zoom</button>
+          <button class="chip" data-s="quad">quad repeat</button>
+          <button class="chip" data-s="bars">bars</button>
+          <button class="chip" data-s="tape">taped snap</button>
+          <button class="chip" data-s="xerox">xerox blast</button>
         </div>
         <div class="row" style="margin-top:11px"><label>Chaos</label><input class="grow" type="range" id="chaos" min="0" max="1" step="0.05" value="0.5"><span class="val" id="chaosVal">0.50</span></div>
         <div class="row"><label>Run length</label><select class="grow" id="runMode">
           <option value="auto" selected>auto · chaos-driven</option>
-          <option value="weighted">weighted · pick bucket odds</option>
+          <option value="perStyle">per style · set photos/run</option>
         </select></div>
-        <div class="row" id="runWeightsRow" style="display:none"><label>Weights</label>
-          <span class="hint" style="margin:0">1×</span><input type="number" id="rw1" min="0" max="10" value="2" style="width:44px">
-          <span class="hint" style="margin:0">2-3×</span><input type="number" id="rw2" min="0" max="10" value="3" style="width:44px">
-          <span class="hint" style="margin:0">4+×</span><input type="number" id="rw3" min="0" max="10" value="1" style="width:44px">
-        </div>
+        <div id="styleRunList" style="display:none"></div>
         <div class="row"><label>Print borders</label><select class="grow" id="border"><option value="white">white print</option><option value="polaroid">polaroid</option><option value="none">none</option></select></div>
         <div class="row"><label>Micro drift</label><div class="tgl on" id="drift"></div><span class="hint" style="margin:0">slow push-in on longer holds</span></div>
-        <div class="hint">Chaos = how often the style switches (auto run-length mode) and how long 4+ runs stretch (weighted mode). Low = long same-style runs, high = frantic channel-surfing. Cuts stay hard — max “animation” is a ~90ms snap.</div>
+        <div class="hint" id="runModeHint">Chaos = how often the style switches (auto mode). Low = long same-style runs, high = frantic channel-surfing. Cuts stay hard — max “animation” is a ~90ms snap.</div>
       </div>
 
       <div class="sec">
@@ -337,10 +352,14 @@ const fmtMB=b=>(b/1048576).toFixed(0)+' MB';
 const cfg={
   cap:1000, sample:'even', order:'name', quality:'auto',
   aspect:'9:16', arw:9, arh:16, res:1080, bg:'#000000', fit:'cover',
-  durS:30, pps:0, rhythm:'accel', accel:2.2, cluster:16, bpm:120,
+  durS:30, pps:0, rhythm:'accel', accel:2.2, cluster:16, bpm:120, lenMode:'fixed',
   holdLast:true, holdMs:800,
-  styles:{slam:true,pile:true,pop:true,grid:true,strip:false,split:false,stack:false,echo:false,slash:false,bubble:false,mirror:false},
-  chaos:0.5, runMode:'auto', runW1:2, runW2:3, runW3:1, border:'white', drift:true,
+  styles:{slam:true,pile:true,pop:true,grid:true,strip:false,split:false,stack:false,echo:false,slash:false,bubble:false,mirror:false,
+          punch:false,quad:false,bars:false,tape:false,xerox:false},
+  chaos:0.5, runMode:'auto',
+  styleRun:{slam:4,pile:14,pop:6,grid:8,strip:8,split:6,stack:10,echo:3,slash:8,bubble:10,mirror:3,
+            punch:4,quad:3,bars:8,tape:10,xerox:3},
+  border:'white', drift:true,
   flash:true, glitch:true, grain:0.10, vig:0.35, hud:true,
   sfx:false, sfxVol:0.5, musicVol:0.9, musicOff:0, beatSync:false,
   seed:1337, fps:60, bitrate:20
@@ -348,6 +367,7 @@ const cfg={
 let allFiles=[];            // every image File found
 let photos=[];              // [{bmp,name}]
 let events=[], evT=[], anchor=[], timelineD=0;
+let songLenNote=''; // set by genTimeline's songLen branch: '' | 'surplus' | 'short' — read by updateStats()
 let decoding=false, decodeGen=0;
 
 /* ---------- canvas ---------- */
@@ -357,6 +377,14 @@ const fx=document.createElement('canvas'),  fxx=fx.getContext('2d');
 const blurSm=document.createElement('canvas'), blurSx=blurSm.getContext('2d');
 blurSm.width=36; blurSm.height=64;
 let vigCv=null, grainTiles=[];
+/* Canvas `filter` (used by the xerox style) isn't universal — older Safari
+   lacks it. Feature-detect once; drawEvent falls back to a plain cover-draw
+   when it's unsupported instead of silently rendering nothing. */
+/* Property-existence check, not assign-and-readback: an unsupported engine's
+   2D context is still a plain extensible object, so setting an unrecognized
+   `.filter` and reading it back would just echo whatever was assigned,
+   reporting "supported" even when it isn't. */
+const CAN_FILTER=(()=>{try{return 'filter' in document.createElement('canvas').getContext('2d');}catch(e){return false;}})();
 function canvasSize(){
   let a,b;
   if(cfg.aspect==='custom'){a=Math.max(1,cfg.arw);b=Math.max(1,cfg.arh);}
@@ -704,23 +732,25 @@ function renderPhotoMgmt(){
 
 /* ---------- timeline generation ---------- */
 function enabledStyles(){const s=Object.keys(cfg.styles).filter(k=>cfg.styles[k]);return s.length?s:['slam'];}
-/* How many photos the next style run should hold. `bias` (optional [w1,w2,w3]
-   from a song section, see sectionModFor) multiplies element-wise into the
-   bucket weights. With runMode='auto' and no bias, reproduces the original
-   chaos-only formula exactly, so existing seeds render identically. */
-function sampleRunLen(rng,bias){
-  if(cfg.runMode==='auto'&&!bias)
-    return Math.round(lerp(18,4,cfg.chaos)+rng()*lerp(14,4,cfg.chaos));
-  let w1,w2,w3;
-  if(cfg.runMode==='weighted'){w1=cfg.runW1;w2=cfg.runW2;w3=cfg.runW3;}
-  else{w1=lerp(0.5,3,cfg.chaos);w2=2;w3=lerp(3,0.5,cfg.chaos);}
-  if(bias){w1*=bias[0];w2*=bias[1];w3*=bias[2];}
-  const tot=w1+w2+w3;
-  if(tot<=0)return 1;
-  const r=rng()*tot;
-  if(r<w1)return 1;
-  if(r<w1+w2)return 2+(rng()<0.5?0:1);
-  return 4+Math.floor(rng()*lerp(10,2,cfg.chaos));
+/* Ceiling for any run length in either mode — the auto formula's own max
+   (chaos=0: 18+14=32), so "per style" mode's slider tops out at exactly
+   what "auto" could already produce at its most repetitive. */
+const MAX_RUN=32;
+/* How many photos the next style run (of style `st`) should hold. `scale`
+   (from sectionModFor's per-section runScale, dynamic mode only) multiplies
+   the result — e.g. 0.35 at a peak for frantic near-every-photo switching,
+   1.6 in a low/breakdown section for lingering runs. With runMode='auto' and
+   scale=1 this reproduces the original chaos-only formula exactly, so
+   existing seeds render identically. */
+function sampleRunLen(rng,st,scale){
+  let base;
+  if(cfg.runMode==='perStyle'){
+    base=cfg.styleRun[st]||6;
+    base*=1+(rng()-0.5)*0.5*cfg.chaos; // exact at chaos=0, up to ±25% wobble at chaos=1
+  } else {
+    base=lerp(18,4,cfg.chaos)+rng()*lerp(14,4,cfg.chaos);
+  }
+  return clamp(Math.round(base*(scale==null?1:scale)),1,MAX_RUN);
 }
 function makeGrid(rng){
   const port=cv.height>=cv.width;
@@ -749,16 +779,27 @@ function makeSplit(rng){
 }
 
 /* ---------- song-section-aware bursting ("follow the song") ---------- */
-/* Per-section-type burst behavior. runBias feeds sampleRunLen's [1x,2-3x,4+x]
-   bucket weights; stylePref (intersected with the user's enabled chips) biases
-   which animation styles get picked while that section plays. */
+/* Per-section-type burst behavior. runScale multiplies whatever run length
+   sampleRunLen would otherwise produce (auto or per-style) — e.g. 0.35 at a
+   peak makes runs ~3x shorter (near-every-photo switching), 1.6 in a low
+   section makes them ~60% longer (lingering). stylePref is a *soft* nudge
+   (see genTimeline's assign loop: picked with 75% odds, never a hard
+   filter) toward styles that read well for that section's energy, limited
+   to whichever of them the user has actually enabled. */
 const SECTION_MOD={
-  low:  {flashRun:0.15,flashRand:0.01,glitchP:0.01,runBias:[0.5,1.5,3],  stylePref:['pile','stack','grid','bubble','pop']},
-  mid:  {flashRun:0.5, flashRand:0.03,glitchP:0.05,runBias:[1,1,1],     stylePref:null},
-  build:{flashRun:0.6, flashRand:0.04,glitchP:0.06,runBias:[2,2,0.7],   stylePref:null},
-  peak: {flashRun:0.8, flashRand:0.08,glitchP:0.12,runBias:[3,1,0.3],   stylePref:['slam','echo','mirror','slash','strip']}
+  low:  {flashRun:0.15,flashRand:0.01,glitchP:0.01,runScale:1.6, stylePref:['pile','tape','stack','grid','bubble','pop']},
+  mid:  {flashRun:0.5, flashRand:0.03,glitchP:0.05,runScale:1.0, stylePref:['grid','split','bars','pop','stack','quad']},
+  build:{flashRun:0.6, flashRand:0.04,glitchP:0.06,runScale:0.6, stylePref:['strip','bars','split','echo','punch','pop']},
+  peak: {flashRun:0.8, flashRand:0.08,glitchP:0.12,runScale:0.35,stylePref:['slam','punch','xerox','echo','mirror','slash','quad','strip']}
 };
-const SECTION_MOD_DEFAULT={runBias:null,flashRun:0.5,flashRand:0.03,glitchP:0.05,styleFilter:null,sectionKey:null};
+const SECTION_COLOR={low:'#5b8cff',mid:'#8b9199',build:'#ffc24b',peak:'#ff5a4d'};
+function hexToRgba(hex,a){const v=parseInt(hex.slice(1),16);return`rgba(${(v>>16)&255},${(v>>8)&255},${v&255},${a})`;}
+/* styleFilter and stylePref are mutually exclusive on any single return
+   value from sectionModFor: styleFilter (only ever set by the fill-span
+   branch) is a hard lock, stylePref (only ever set by the section-lookup
+   branch) is a soft 75%-odds nudge the assign loop can ignore — see the
+   `pool`/`runStyles` lines where they're consumed. */
+const SECTION_MOD_DEFAULT={runScale:1,flashRun:0.5,flashRand:0.03,glitchP:0.05,styleFilter:null,stylePref:null,sectionKey:null};
 /* Falls the Rhythm select back to 'accel' whenever it's currently 'dynamic'
    but there's no song structure left to follow (track cleared, re-analysis
    failed, or came back with no detected sections) — mirrors what picking a
@@ -801,12 +842,81 @@ function mapTrackSections(D){
    in the *current* mapped timeline and returns the burst-behavior overrides
    for it. Returns the untouched-behavior default when rhythm isn't 'dynamic'
    or no structure was mapped, so every other rhythm mode is unaffected. */
+/* Intersection of a section type's recommended styles with the user's
+   currently-enabled chips. Shared by sectionModFor (behavior) and
+   renderSongMap (the "which styles are great for this part" display). */
+function prefForType(type){
+  const m=SECTION_MOD[type];
+  if(!m||!m.stylePref)return[];
+  const en=enabledStyles();
+  return m.stylePref.filter(s=>en.includes(s));
+}
+/* Reads a style's display name off its own chip button rather than keeping
+   a second copy of the label text somewhere else. */
+function styleLabel(s){const el=document.querySelector(`#styleChips [data-s="${s}"]`);return el?el.textContent:s;}
+/* "Which style (among selected) are great for this part" — one row per
+   detected section, in track order, with its recommended-and-enabled
+   styles listed and its recommended-but-disabled styles offered as
+   one-click enable buttons. Re-rendered whenever the track is (re)analyzed
+   or the enabled style set changes, since both change what's "enabled". */
+function renderSongMap(){
+  const wrap=$('songMap');
+  if(!trackSections.length){wrap.innerHTML='';return;}
+  const fmt=ms=>Math.round(ms/1000)+'s';
+  wrap.innerHTML=trackSections.map(s=>{
+    const full=(SECTION_MOD[s.type]&&SECTION_MOD[s.type].stylePref)||[];
+    const have=full.filter(n=>cfg.styles[n]);
+    const missing=full.filter(n=>!cfg.styles[n]);
+    const hasFill=trackFills.some(f=>f.t0<s.t1&&f.t1>s.t0);
+    const haveHtml=have.map(n=>`<b>${styleLabel(n)}</b>`).join(' · ');
+    const missHtml=missing.map(n=>`<button class="smBtn" data-s="${n}">+${styleLabel(n)}</button>`).join(' ');
+    const styleHtml=[haveHtml,missHtml].filter(Boolean).join(' · ')||'<span class="hint" style="margin:0">(no recommended styles enabled)</span>';
+    return`<div class="smRow"><span class="smSw" style="background:${SECTION_COLOR[s.type]}"></span><b>${s.type}</b> ${fmt(s.t0)}–${fmt(s.t1)}${hasFill?' · fill':''} — ${styleHtml}</div>`;
+  }).join('');
+  wrap.querySelectorAll('.smBtn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const s=btn.dataset.s;
+      cfg.styles[s]=true;
+      const chip=document.querySelector(`#styleChips [data-s="${s}"]`);
+      if(chip)chip.classList.add('on');
+      renderSongMap();renderStyleRunList();
+      scheduleRegen();
+    });
+  });
+}
+/* Per-style "photos per run" number inputs for runMode='perStyle' — one row
+   per currently-*enabled* style (disabled styles keep their stored value,
+   just no visible control, so re-enabling one restores whatever it was set
+   to). Re-rendered on runMode change and on any style-chip toggle. */
+function renderStyleRunList(){
+  const wrap=$('styleRunList');
+  if(cfg.runMode!=='perStyle'){wrap.style.display='none';return;}
+  wrap.style.display='flex';
+  /* enabledStyles() falls back to ['slam'] when every chip is off (the
+     renderer always needs *something* to draw) — but showing a "slam"
+     row here without any chip lit would look like a bug, not a fallback.
+     Say so instead of rendering a phantom control. */
+  if(!Object.values(cfg.styles).some(Boolean)){
+    wrap.innerHTML='<span class="hint" style="margin:0">No styles enabled — defaulting to full-frame slam.</span>';
+    return;
+  }
+  wrap.innerHTML=enabledStyles().map(s=>
+    `<span class="srItem"><b>${styleLabel(s)}</b><input type="number" min="1" max="${MAX_RUN}" value="${cfg.styleRun[s]}" data-s="${s}"></span>`
+  ).join('');
+  wrap.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('input',()=>{
+      cfg.styleRun[inp.dataset.s]=clamp(parseInt(inp.value)||1,1,MAX_RUN);
+      scheduleRegen();
+    });
+  });
+}
 function sectionModFor(tMs){
   if(cfg.rhythm!=='dynamic'||!mappedSections.length)return SECTION_MOD_DEFAULT;
   for(const f of mappedFills){
     if(tMs>=f.t0&&tMs<=f.t1){
-      const slamOk=enabledStyles().includes('slam');
-      return{runBias:[6,1,0.1],flashRun:1,flashRand:0.3,glitchP:0.15,styleFilter:slamOk?['slam']:null,sectionKey:'fill@'+f.t0};
+      const en=enabledStyles();
+      const pref=['slam','punch'].filter(s=>en.includes(s));
+      return{runScale:0.1,flashRun:1,flashRand:0.3,glitchP:0.15,styleFilter:pref.length?pref:null,stylePref:null,sectionKey:'fill@'+f.t0};
     }
   }
   /* Nearest section, not just the first — a `tMs` that falls in a gap (e.g.
@@ -820,8 +930,8 @@ function sectionModFor(tMs){
     if(d<bestD){bestD=d;sec=s;}
   }
   const m=SECTION_MOD[sec.type]||SECTION_MOD.mid;
-  const pref=m.stylePref?m.stylePref.filter(s=>enabledStyles().includes(s)):null;
-  return{runBias:m.runBias,flashRun:m.flashRun,flashRand:m.flashRand,glitchP:m.glitchP,styleFilter:pref&&pref.length?pref:null,sectionKey:sec.type+'@'+sec.t0};
+  const pref=prefForType(sec.type);
+  return{runScale:m.runScale,flashRun:m.flashRun,flashRand:m.flashRand,glitchP:m.glitchP,styleFilter:null,stylePref:pref.length?pref:null,sectionKey:sec.type+'@'+sec.t0};
 }
 /* Builds cut times for rhythm='dynamic': each mapped section gets a photo
    budget proportional to (rate-weight × its duration), then cuts are placed
@@ -886,18 +996,99 @@ function dynamicTimes(N,D,rng,secs){
   times.sort((a,b)=>a-b);
   return times.map(t=>clamp(t,0,D-1));
 }
+/* Cut times purely from the song's own structure (rhythm='dynamic' +
+   lenMode='song') — unlike dynamicTimes, D is a ceiling here, not a fixed
+   target: the video runs the pace the music implies and stops wherever that
+   pace lands (up to Dmax, the track's own remaining length), never forced
+   to fill an arbitrary duration. Always rides real beats when they exist —
+   there's no "Sync to beat" ambiguity here since the user has explicitly
+   handed timing over to the track. Returns {times, photoIdx, D} or null.
+   photoIdx is only non-identity (null otherwise) when there are more photos
+   than the music calls for — the surplus gets evenly subsampled rather than
+   arbitrarily truncated. */
+function dynamicAutoTimes(N,Dmax,rng,secs,fills){
+  if(!secs.length||N<=0)return null;
+  const beatIv=trackBpm?60000/trackBpm:null;
+  const beatsAll=trackBeats.length?activeBeatTimes(Dmax):[];
+  const isInFill=t=>fills.some(f=>t>=f.t0&&t<=f.t1);
+  const ivFor=(sec,tFrac)=>{
+    let iv;
+    if(sec.type==='low')iv=beatIv?2*beatIv:1200;
+    else if(sec.type==='peak')iv=beatIv?0.5*beatIv:300;
+    else if(sec.type==='build')iv=beatIv?lerp(beatIv,0.5*beatIv,tFrac):lerp(900,450,tFrac);
+    else iv=beatIv||600;
+    return clamp(iv*lerp(1.15,0.85,sec.intensity),120,2500);
+  };
+  function walk(ivScale){
+    const out=[];
+    for(const s of secs){
+      const secDur=s.t1-s.t0;
+      const secBeats=beatsAll.filter(t=>t>=s.t0&&t<=s.t1);
+      let t=s.t0;
+      while(t<s.t1){
+        if(isInFill(t)){out.push(t);t+=95*ivScale;continue;}
+        const tFrac=secDur>0?(t-s.t0)/secDur:0;
+        const iv=ivFor(s,tFrac)*ivScale;
+        out.push(clamp(secBeats.length?snapToNearestBeat(t,secBeats,iv,0.35):t,s.t0,s.t1));
+        t+=iv;
+      }
+    }
+    out.sort((a,b)=>a-b);
+    return out;
+  }
+  const ideal=walk(1);
+  const M=ideal.length;
+  if(!M)return null;
+  if(M<=N){
+    /* Surplus photos: use every musically-ideal cut as-is (D runs the full
+       track), spreading the N photos evenly across the M cuts rather than
+       just showing the first M and stranding the rest. */
+    const photoIdx=ideal.map((_,k)=>Math.min(N-1,Math.floor(k*N/M)));
+    return{times:ideal,photoIdx,D:Dmax};
+  }
+  if(N>=M/2){
+    /* Enough photos to cover the track at up to ~2x the ideal pace — still
+       every photo, still beat-snapped, just slower cuts than the song's
+       "ideal" density would want. */
+    let times=walk(M/N).slice(0,N);
+    while(times.length<N){
+      const last=times.length?times[times.length-1]:0;
+      const next=clamp(last+(beatIv||500),0,Dmax-1);
+      if(next<=last)break; // out of room at the track's end — stop instead of stacking duplicate/zero-duration cuts
+      times.push(next);
+    }
+    times.sort((a,b)=>a-b);
+    return{times,photoIdx:null,D:Dmax};
+  }
+  /* Too few photos even at 2x stretch: honor the music's pacing rather than
+     stretching further into "clearly wrong" territory, and let the video
+     end early instead of covering the whole track. */
+  const times=ideal.slice(0,N);
+  const lastIv=N>1?times[N-1]-times[N-2]:300;
+  let endT=times[N-1]+clamp(2*lastIv,600,2000);
+  if(beatsAll.length)endT=snapToNearestBeat(endT,beatsAll,lastIv,0.5);
+  return{times,photoIdx:null,D:clamp(endT,times[N-1]+1,Dmax)};
+}
 
 function genTimeline(){
   const N=photos.length;
-  events=[];evT=[];anchor=[];timelineD=0;
+  events=[];evT=[];anchor=[];timelineD=0;songLenNote='';
   updateStats();
   if(!N){syncTransport();if(trackDurS>0)updateTrimWin();return;}
   const rng=mulberry32(cfg.seed);
-  let D=clamp(cfg.durS,2,60)*1000;
+  const rh=cfg.rhythm;
+  /* "Let the song decide" — video length becomes an output, not a fixed
+     input: up to the full remaining track length, no 60s ceiling. Only
+     meaningful for 'dynamic' with a track whose structure is known. */
+  const songLen=rh==='dynamic'&&cfg.lenMode==='song'&&trackDurS>0&&trackSections.length>0;
+  /* No floor here beyond avoiding literal zero/negative — "max length of
+     the video is the max length of the audio file" means D must never
+     exceed what's actually left of the track, even for a very short one. */
+  let D=songLen?Math.max(1,trackDurS*1000-cfg.musicOff*1000):clamp(cfg.durS,2,60)*1000;
+  let photoIdx=null; // non-identity only when dynamicAutoTimes evenly subsamples surplus photos
 
   /* --- event times --- */
   let times=[];
-  const rh=cfg.rhythm;
   if(rh==='uniform'){for(let i=0;i<N;i++)times.push(i*D/N);}
   else if(rh==='accel'){for(let i=0;i<N;i++)times.push(D*Math.pow(i/N,1/cfg.accel));}
   else if(rh==='decel'){for(let i=0;i<N;i++)times.push(D*Math.pow(i/N,cfg.accel));}
@@ -919,14 +1110,35 @@ function genTimeline(){
   }
   else if(rh==='dynamic'){
     /* "follow the song" — cut budget & placement are driven per-section by
-       the track's own detected structure (see segmentTrack). Unlike 'beat'
-       this never rewrites D: sections are wall-clock-aligned to the music,
-       so the video plays the window the user actually chose. */
+       the track's own detected structure (see segmentTrack). */
     const{secs,fills}=mapTrackSections(D);
     mappedSections=secs;mappedFills=fills;
-    const dyn=secs.length?dynamicTimes(N,D,rng,secs):null;
-    if(dyn){times=dyn;}
-    else{for(let i=0;i<N;i++)times.push(D*Math.pow(i/N,1/cfg.accel));} // no structure yet — behave like accel
+    if(songLen){
+      /* Length is an output here, not a fixed input — dynamicAutoTimes may
+         return a shorter D than the track's remaining length if there
+         aren't enough photos to keep pace without stretching too much. */
+      const Dceil=D; // the track's remaining length — dynamicAutoTimes treats this as a ceiling, not a target
+      const dyn=secs.length?dynamicAutoTimes(N,Dceil,rng,secs,fills):null;
+      if(dyn){
+        times=dyn.times;photoIdx=dyn.photoIdx;D=dyn.D;
+        songLenNote=photoIdx?'surplus':(dyn.D<Dceil?'short':'');
+        /* Re-map against the *final* D, not the original ceiling: if D just
+           shrank, mapTrackSections would otherwise leave mappedSections
+           holding sections beyond the new end, and sectionModFor's
+           nearest-section fallback could bias the last few cuts' style/flash
+           toward a section that will never actually play. A no-op when D
+           didn't change (the common case). */
+        const remap=mapTrackSections(D);mappedSections=remap.secs;mappedFills=remap.fills;
+      } else {songLenNote='';for(let i=0;i<N;i++)times.push(D*Math.pow(i/N,1/cfg.accel));}
+    } else {
+      songLenNote='';
+      /* Fixed-duration dynamic mode never rewrites D: sections are
+         wall-clock-aligned to the music, so the video plays the window the
+         user actually chose. */
+      const dyn=secs.length?dynamicTimes(N,D,rng,secs):null;
+      if(dyn){times=dyn;}
+      else{for(let i=0;i<N;i++)times.push(D*Math.pow(i/N,1/cfg.accel));} // no structure yet — behave like accel
+    }
   }
   else { /* beat */
     mappedSections=[];mappedFills=[];
@@ -958,11 +1170,10 @@ function genTimeline(){
   /* --- assign styles & params --- */
   const styles=enabledStyles();
   let run=0,st=null,grid=null,gPtr=0,pileCount=0,sinceCover=99;
-  let splitL=null,sPtr=0,stackCount=0,slashCount=0,bubCount=0;
+  let splitL=null,sPtr=0,stackCount=0,slashCount=0,bubCount=0,tapeCount=0;
   let runSectionKey=null;
-  for(let k=0;k<N;k++){
+  for(let k=0;k<times.length;k++){
     const mod=sectionModFor(times[k]);
-    const runStyles=mod.styleFilter&&mod.styleFilter.length?mod.styleFilter:styles;
     /* A song-section boundary crossing mid-run should be felt right away —
        otherwise "follow the song" could keep playing out a low-energy run
        for several seconds after the track has already hit the drop. */
@@ -970,8 +1181,13 @@ function genTimeline(){
     let runStart=false;
     if(run<=0){
       const prev=st;
+      /* Fill spans hard-filter to punchy styles; a song section's stylePref
+         is only a soft nudge (75% odds) so the newly-populated mid/build
+         preferences don't over-constrain "anything goes" sections. */
+      const pool=(mod.stylePref&&mod.stylePref.length&&rng()<0.75)?mod.stylePref:styles;
+      const runStyles=(mod.styleFilter&&mod.styleFilter.length)?mod.styleFilter:pool;
       st=runStyles.length===1?runStyles[0]:(()=>{let p;do{p=runStyles[rng()*runStyles.length|0]}while(p===prev&&runStyles.length>1&&rng()<0.7);return p})();
-      run=sampleRunLen(rng,mod.runBias);runStart=true;
+      run=sampleRunLen(rng,st,mod.runScale);runStart=true;
       runSectionKey=mod.sectionKey;
       if(st==='grid'){grid=makeGrid(rng);gPtr=0;const cells=grid.cells.length;run=Math.max(cells,Math.ceil(run/cells)*cells);}
       if(st==='pile')pileCount=0;
@@ -979,9 +1195,11 @@ function genTimeline(){
       if(st==='stack')stackCount=0;
       if(st==='slash')slashCount=0;
       if(st==='bubble')bubCount=0;
+      if(st==='tape')tapeCount=0;
     }
-    const ev={t:times[k],i:k,st,clear:false,covers:false,flash:false,glitch:false,pop:0};
-    const bmp=photos[k].bmp, ar=bmp.width/bmp.height;
+    const pIdx=photoIdx?photoIdx[k]:k;
+    const ev={t:times[k],i:pIdx,st,clear:false,covers:false,flash:false,glitch:false,pop:0};
+    const bmp=photos[pIdx].bmp, ar=bmp.width/bmp.height;
 
     if(st==='slam'){
       ev.fit=cfg.fit==='mix'?(rng()<0.72?'cover':'contain'):cfg.fit;
@@ -1062,7 +1280,34 @@ function genTimeline(){
       ev.mdir=m<0.45?'v':(m<0.75?'h':'q');
       ev.msh=(rng()-0.5)*0.3;
     }
-    if(k===0)ev.clear=true;
+    else if(st==='punch'){
+      ev.covers=true;
+      ev.zs=1.8+rng()*0.8;
+      ev.zx=0.2+rng()*0.6;
+      ev.zy=0.2+rng()*0.6;
+    }
+    else if(st==='quad'){
+      ev.covers=true;
+      ev.qflip=[rng()<0.5,rng()<0.5,rng()<0.5,rng()<0.5];
+    }
+    else if(st==='bars'){
+      ev.w=0.14+rng()*0.12;
+      ev.x=rng()*(1-ev.w);
+    }
+    else if(st==='tape'){
+      if(runStart&&(rng()<0.5||sinceCover>40))ev.clear=true;
+      if(tapeCount>20){ev.clear=true;tapeCount=0;}
+      tapeCount++;
+      ev.pop=90;
+      ev.sc=0.42+rng()*0.30;
+      ev.x=0.5+(rng()-0.5)*0.5;
+      ev.y=0.5+(rng()-0.5)*0.5;
+      ev.rot=(rng()-0.5)*0.35;
+    }
+    else if(st==='xerox'){
+      ev.covers=true;
+    }
+    if(pIdx===0)ev.clear=true;
     ev.flash=(runStart&&rng()<mod.flashRun)||rng()<mod.flashRand;
     ev.glitch=rng()<mod.glitchP;
     sinceCover=(ev.clear||ev.covers)?0:sinceCover+1;
@@ -1071,8 +1316,8 @@ function genTimeline(){
     events.push(ev);run--;
   }
   /* holds + anchors */
-  for(let k=0;k<N;k++){
-    events[k].hold=(k<N-1?events[k+1].t:timelineD)-events[k].t;
+  for(let k=0;k<events.length;k++){
+    events[k].hold=(k<events.length-1?events[k+1].t:timelineD)-events[k].t;
     evT.push(events[k].t);
     anchor.push((events[k].clear||events[k].covers)?k:(k?anchor[k-1]:0));
   }
@@ -1088,8 +1333,26 @@ function updateStats(){
   const N=photos.length;
   if(!N){$('timeStat').textContent='';$('lcdD').textContent='--.-s';$('lcdR').textContent='--.-/s';return;}
   const D=timelineD||cfg.durS*1000;
-  const rate=N/(D/1000);
-  $('timeStat').innerHTML=`<b>${N}</b> photos over <b>${(D/1000).toFixed(1)}s</b> → avg <b>${Math.round(D/N)}ms</b>/photo (<b>${rate.toFixed(1)}</b>/s)`;
+  const M=events.length||N; // actual cut count once the timeline exists; falls back to photo count before it does
+  const rate=M/(D/1000);
+  const songLenActive=cfg.rhythm==='dynamic'&&cfg.lenMode==='song'&&trackDurS>0&&trackSections.length>0;
+  if(songLenActive&&events.length){
+    const note=songLenNote==='surplus'?` — more photos than the song's pace needs, showing an even sample across the full track`
+      :songLenNote==='short'?` from <b>${N}</b> photos (ended early — not enough photos to keep pace)`:'';
+    $('timeStat').innerHTML=`song decides — <b>${(D/1000).toFixed(1)}s</b> · <b>${M}</b> cuts${note}`;
+    /* Never stomp the "recording in progress" notice mid-export — a style
+       chip or other live-editable control can still fire a regen while
+       player.exporting is true. */
+    if(!player.exporting){
+      $('exportStat').innerHTML=D>90000
+        ? `Capture happens in real time — keep this tab focused while it records. <span class="warn">Song-length video is ${(D/1000).toFixed(0)}s — export will take that long.</span>`
+        : 'Capture happens in real time — keep this tab focused while it records.';
+    }
+  } else if(events.length&&M!==N){
+    $('timeStat').innerHTML=`<b>${M}</b> cuts from <b>${N}</b> photos over <b>${(D/1000).toFixed(1)}s</b> → avg <b>${Math.round(D/M)}ms</b>/cut (<b>${rate.toFixed(1)}</b>/s)`;
+  } else {
+    $('timeStat').innerHTML=`<b>${N}</b> photos over <b>${(D/1000).toFixed(1)}s</b> → avg <b>${Math.round(D/N)}ms</b>/photo (<b>${rate.toFixed(1)}</b>/s)`;
+  }
   $('lcdD').textContent=(D/1000).toFixed(1)+'s';
   $('lcdR').textContent=rate.toFixed(1)+'/s';
   $('pps').value=rate.toFixed(1);
@@ -1131,12 +1394,49 @@ function drawEvent(c,ev,prog,tNow){
     } else drawCoverFull(c,bmp,dz);
     return;
   }
+  if(ev.st==='punch'){
+    const[sx,sy,sw,sh]=coverSrc(bmp,cv.width,cv.height);
+    const cw=sw/ev.zs,ch=sh/ev.zs;
+    const cx=clamp(sx+ev.zx*sw-cw/2,sx,sx+sw-cw);
+    const cy=clamp(sy+ev.zy*sh-ch/2,sy,sy+sh-ch);
+    c.drawImage(bmp,cx,cy,cw,ch,0,0,cv.width,cv.height);
+    return;
+  }
+  if(ev.st==='quad'){
+    const gap=Math.round(cv.width*0.006);
+    const cw=cv.width/2,ch=cv.height/2;
+    const[sx,sy,sw,sh]=coverSrc(bmp,cw,ch);
+    let idx=0;
+    for(let qy=0;qy<2;qy++)for(let qx=0;qx<2;qx++){
+      const x=qx*cw+gap/2,y=qy*ch+gap/2,w=cw-gap,h=ch-gap;
+      c.save();
+      if(ev.qflip[idx]){c.translate(x+w,y);c.scale(-1,1);c.drawImage(bmp,sx,sy,sw,sh,0,0,w,h);}
+      else c.drawImage(bmp,sx,sy,sw,sh,x,y,w,h);
+      c.restore();
+      idx++;
+    }
+    return;
+  }
+  if(ev.st==='xerox'){
+    if(CAN_FILTER){
+      c.save();c.filter='grayscale(1) contrast(2.2) brightness(1.05)';
+      drawCoverFull(c,bmp);
+      c.restore();
+    } else drawCoverFull(c,bmp); // older Safari etc. without canvas filter support
+    return;
+  }
   if(ev.st==='grid'){
     const gap=Math.round(cv.width*0.006);
     const cw=cv.width/ev.cols,ch=cv.height/ev.rows;
     const x=ev.cell.c*cw+gap/2,y=ev.cell.r*ch+gap/2,w=cw-gap,h=ch-gap;
     const[sx,sy,sw,sh]=coverSrc(bmp,w,h);
     c.drawImage(bmp,sx,sy,sw,sh,x,y,w,h);
+    return;
+  }
+  if(ev.st==='bars'){
+    const w=Math.round(cv.width*ev.w),x=Math.round(cv.width*ev.x);
+    const[sx,sy,sw,sh]=coverSrc(bmp,w,cv.height);
+    c.drawImage(bmp,sx,sy,sw,sh,x,0,w,cv.height);
     return;
   }
   if(ev.st==='strip'){
@@ -1222,7 +1522,7 @@ function drawEvent(c,ev,prog,tNow){
     }
     return;
   }
-  /* pop, pile & stack — placed prints */
+  /* pop, pile, stack & tape — placed prints */
   const settle=prog>=1?1:easeOut(prog);
   const base=cv.width;
   let w=ev.sc*base;let h=w/ev.ar;
@@ -1231,16 +1531,28 @@ function drawEvent(c,ev,prog,tNow){
   const cx=ev.x*cv.width,cy=ev.y*cv.height;
   c.save();
   c.translate(cx,cy);c.rotate(ev.rot);c.scale(scaleAnim,scaleAnim);
-  if((ev.st==='pile'||ev.st==='stack')&&cfg.border!=='none'){
+  const accumulator=ev.st==='pile'||ev.st==='stack'||ev.st==='tape';
+  if(accumulator&&cfg.border!=='none'){
     const pad=w*0.035,bot=cfg.border==='polaroid'?w*0.16:pad;
     c.shadowColor='rgba(0,0,0,0.55)';c.shadowBlur=cv.width*0.02;c.shadowOffsetY=cv.width*0.006;
     c.fillStyle='#f5f2ea';
     c.fillRect(-w/2-pad,-h/2-pad,w+pad*2,h+pad+bot);
     c.shadowColor='transparent';
-  } else if(ev.st==='pile'||ev.st==='stack'){
+  } else if(accumulator){
     c.shadowColor='rgba(0,0,0,0.5)';c.shadowBlur=cv.width*0.018;
   }
   c.drawImage(bmp,-w/2,-h/2,w,h);
+  if(ev.st==='tape'){
+    const tw=w*0.32,th=w*0.09;
+    c.save();c.translate(-w*0.32,-h*0.42);c.rotate(-0.5);
+    c.fillStyle='rgba(255,255,255,0.28)';c.fillRect(-tw/2,-th/2,tw,th);
+    c.fillStyle='rgba(255,255,255,0.5)';c.fillRect(-tw/2,-th/2,tw,th*0.18);
+    c.restore();
+    c.save();c.translate(w*0.30,h*0.40);c.rotate(0.45);
+    c.fillStyle='rgba(255,255,255,0.28)';c.fillRect(-tw/2,-th/2,tw,th);
+    c.fillStyle='rgba(255,255,255,0.5)';c.fillRect(-tw/2,-th/2,tw,th*0.18);
+    c.restore();
+  }
   c.restore();
 }
 
@@ -1479,21 +1791,38 @@ function computeEnvelope(mono,sr){
   }
   return{env,slope,hopSec};
 }
-/* Labels each envelope hop low/build/peak/mid from its level + slope,
-   median-filters to kill flicker, merges into sections, absorbs anything
-   shorter than ~4s into its closer neighbor, then snaps every boundary onto
-   the nearest real beat within ±1s so cuts land on musically sensible
-   edges. Amplitude-only heuristics can't tell verse from chorus at equal
-   loudness, but they're enough for "is this part loud/rising/quiet". */
+/* Labels each envelope hop low/build/peak/mid from its level + slope + a
+   local beat-density feature, median-filters to kill flicker, merges into
+   sections, absorbs anything shorter than ~4s into its closer neighbor,
+   then snaps every boundary onto the nearest real beat within ±1s so cuts
+   land on musically sensible edges. Amplitude-only heuristics can't tell
+   verse from chorus at equal loudness, but adding density fixes two real
+   misclassifications the level+slope-only version had: a riser that starts
+   quiet used to read as 'low' the whole way up (now a rising slope wins
+   even from a low level), and a loud-but-beatless pad/vocal wall used to
+   read as 'peak' on level alone (now it needs either very high level on its
+   own, or high level *and* drums, to qualify). */
 function segmentTrack(envObj,beats){
   const{env,slope,hopSec}=envObj;
   const n=env.length;
   if(!n)return[];
+  /* beats-per-second within a ±2s window around each hop, normalized so
+     ~3 beats/s (a busy drum pattern) maps to 1.0 */
+  const dens=new Float32Array(n);
+  if(beats.length){
+    for(let i=0;i<n;i++){
+      const tc=(i+0.5)*hopSec*1000;
+      let cnt=0;
+      for(const b of beats){if(Math.abs(b-tc)<=2000)cnt++;}
+      dens[i]=clamp(cnt/12,0,1);
+    }
+  }
   const labelOf=i=>{
-    const L=env[i],S=slope[i];
-    if(L>0.70)return'peak';
-    if(L<0.35)return'low';
-    if(S>0.04)return'build';
+    const L=env[i],S=slope[i],Dn=dens[i];
+    if(L>0.78)return'peak';
+    if(L>0.62&&Dn>0.45)return'peak';
+    if(S>0.035&&L>0.15)return'build';
+    if(L<0.32)return'low';
     return'mid';
   };
   const raw=new Array(n);for(let i=0;i<n;i++)raw[i]=labelOf(i);
@@ -1568,7 +1897,7 @@ async function analyzeTrackBeats(file){
   const gen=++beatAnalysisGen;
   analyzingBeats=true; trackBeats=[]; trackBpm=null; trackSections=[]; trackFills=[]; trackDurS=0; trackWavePeaks=null;
   $('beatSyncRow').style.display='none';$('beatSyncHint').style.display='none';$('beatSyncPointer').style.display='none';
-  $('trimWrap').style.display='none';$('sectionStat').textContent='';
+  $('trimWrap').style.display='none';$('songMap').innerHTML='';
   const dynOpt=$('rhythm').querySelector('option[value=dynamic]');if(dynOpt)dynOpt.disabled=true;
   $('musicStat').innerHTML=`<b>${file.name}</b> loaded — plays in preview &amp; gets baked into the export. Analyzing beats…`;
   /* Yield once so the "analyzing…" status actually paints before the
@@ -1609,7 +1938,7 @@ async function analyzeTrackBeats(file){
     $('trimWrap').style.display='block';drawTrimWave();updateTrimWin();
     if(trackSections.length>=1){
       if(dynOpt)dynOpt.disabled=false;
-      $('sectionStat').innerHTML='Song map: '+trackSections.map(s=>`<b>${s.type}</b> ${(s.t0/1000).toFixed(0)}–${(s.t1/1000).toFixed(0)}s`).join(' · ');
+      renderSongMap();
     } else {
       offDynamicRhythmIfNeeded(); // structure came back empty — 'dynamic' has nothing to follow
     }
@@ -1634,7 +1963,9 @@ async function analyzeTrackBeats(file){
 }
 
 /* ---------- audio trim scrubber (IG/FB-Stories-style song-start slider) ---------- */
-const SECTION_TINT={low:null,mid:null,build:'rgba(255,194,75,.09)',peak:'rgba(255,59,48,.13)'};
+/* Same SECTION_COLOR the song map uses, at low alpha, so the trim widget and
+   the song map read as one system rather than two color languages. */
+const SECTION_TINT_ALPHA={low:0.07,mid:0.045,build:0.09,peak:0.13};
 function drawTrimWave(){
   const wrap=$('trimWrap'),cvv=$('trimCv');
   const w=Math.max(1,wrap.clientWidth||300),h=44;
@@ -1646,9 +1977,9 @@ function drawTrimWave(){
   g.clearRect(0,0,w,h);
   if(trackDurS>0&&trackSections.length){
     for(const s of trackSections){
-      const tint=SECTION_TINT[s.type];if(!tint)continue;
       const x0=s.t0/1000/trackDurS*w,x1=s.t1/1000/trackDurS*w;
-      g.fillStyle=tint;g.fillRect(x0,0,Math.max(1,x1-x0),h);
+      g.fillStyle=hexToRgba(SECTION_COLOR[s.type],SECTION_TINT_ALPHA[s.type]);
+      g.fillRect(x0,0,Math.max(1,x1-x0),h);
     }
   }
   if(trackWavePeaks&&trackWavePeaks.length){
@@ -1663,6 +1994,17 @@ function drawTrimWave(){
     g.fillStyle='#565c64';g.fillRect(0,h/2-1,w,2);
   }
 }
+/* How far "song start at" can go before there's not enough track left. In
+   'dynamic'+'song' length mode, the video's own length is *derived from*
+   musicOff (it runs to the track's end), so the usual "trackDurS - usedS"
+   calc collapses toward the current offset and the scrubber can't move
+   right at all — special-case it to just keep a minimum tail of track. */
+function maxMusicOffS(){
+  if(!(trackDurS>0))return 0;
+  if(cfg.rhythm==='dynamic'&&cfg.lenMode==='song')return Math.max(0,trackDurS-5);
+  const usedMs=Math.min((timelineD||0)+(cfg.holdLast?cfg.holdMs:0),trackDurS*1000);
+  return Math.max(0,trackDurS-usedMs/1000);
+}
 function updateTrimWin(){
   if(!(trackDurS>0))return;
   const usedMs=Math.min((timelineD||0)+(cfg.holdLast?cfg.holdMs:0),trackDurS*1000);
@@ -1674,11 +2016,8 @@ function updateTrimWin(){
 function setMusicOffFromPointer(clientX){
   const wrap=$('trimWrap');
   const r=wrap.getBoundingClientRect();
-  const usedMs=Math.min((timelineD||0)+(cfg.holdLast?cfg.holdMs:0),trackDurS*1000)||1;
-  const usedS=usedMs/1000;
-  const maxStart=Math.max(0,trackDurS-usedS);
   const frac=clamp((clientX-r.left)/Math.max(1,r.width),0,1);
-  cfg.musicOff=clamp(frac*trackDurS,0,maxStart);
+  cfg.musicOff=clamp(frac*trackDurS,0,maxMusicOffS());
   $('musicOff').value=cfg.musicOff.toFixed(1);
   updateTrimWin();syncMusic();
   if(cfg.beatSync||cfg.rhythm==='dynamic')scheduleRegen();
@@ -1751,7 +2090,7 @@ $('musicClear').onclick=()=>{
   $('musicClear').style.display='none';
   $('beatSyncRow').style.display='none';$('beatSyncHint').style.display='none';$('beatSyncPointer').style.display='none';
   $('trimWrap').style.display='none';
-  $('sectionStat').textContent='';
+  $('songMap').innerHTML='';
   const dynOpt=$('rhythm').querySelector('option[value=dynamic]');if(dynOpt)dynOpt.disabled=true;
   if(cfg.beatSync){cfg.beatSync=false;$('beatSync').classList.remove('on');$('bpm').disabled=false;scheduleRegen();}
   offDynamicRhythmIfNeeded();
@@ -2122,6 +2461,19 @@ bindSel('rhythm','rhythm',()=>{
   $('accelRow').style.display=(cfg.rhythm==='accel'||cfg.rhythm==='decel')?'flex':'none';
   $('clusterRow').style.display=cfg.rhythm==='bursts'?'flex':'none';
   $('bpmRow').style.display=cfg.rhythm==='beat'?'flex':'none';
+  $('lenModeRow').style.display=cfg.rhythm==='dynamic'?'flex':'none';
+  $('lenModeHint').style.display=(cfg.rhythm==='dynamic'&&cfg.lenMode==='song')?'block':'none';
+  if(cfg.rhythm!=='dynamic'&&cfg.lenMode==='song'){
+    cfg.lenMode='fixed';$('lenMode').value='fixed';$('dur').disabled=false;$('pps').disabled=false;
+    $('durVal').textContent=cfg.durS+'s';
+  }
+  scheduleRegen();
+});
+bindSel('lenMode','lenMode',()=>{
+  const song=cfg.lenMode==='song';
+  $('dur').disabled=song;$('pps').disabled=song;
+  $('lenModeHint').style.display=song?'block':'none';
+  $('durVal').textContent=song?'auto':cfg.durS+'s'; // the slider's own value is stale/irrelevant once the song decides
   scheduleRegen();
 });
 bindNum('accel','accel',()=>{$('accelVal').textContent=cfg.accel.toFixed(1)+'×';},scheduleRegen);
@@ -2138,14 +2490,12 @@ document.querySelectorAll('#styleChips .chip').forEach(ch=>{
   ch.addEventListener('click',()=>{
     const s=ch.dataset.s;cfg.styles[s]=!cfg.styles[s];
     ch.classList.toggle('on',cfg.styles[s]);
+    renderSongMap();renderStyleRunList();
     scheduleRegen();
   });
 });
 bindNum('chaos','chaos',()=>{$('chaosVal').textContent=cfg.chaos.toFixed(2);},scheduleRegen);
-bindSel('runMode','runMode',()=>{$('runWeightsRow').style.display=cfg.runMode==='weighted'?'flex':'none';scheduleRegen();});
-bindNum('rw1','runW1',null,scheduleRegen);
-bindNum('rw2','runW2',null,scheduleRegen);
-bindNum('rw3','runW3',null,scheduleRegen);
+bindSel('runMode','runMode',()=>{renderStyleRunList();scheduleRegen();});
 bindSel('border','border',()=>{player.dirty=true;});
 bindTgl('drift','drift',()=>{player.dirty=true;});
 
@@ -2159,8 +2509,7 @@ bindNum('sfxVol','sfxVol',null,()=>{if(clickGain)clickGain.gain.value=cfg.sfxVol
 bindNum('musicVol','musicVol',null,()=>{if(musicGain)musicGain.gain.value=cfg.musicVol;});
 bindNum('musicOff','musicOff',null,()=>{
   if(trackDurS>0){
-    const usedMs=Math.min((timelineD||0)+(cfg.holdLast?cfg.holdMs:0),trackDurS*1000);
-    cfg.musicOff=clamp(cfg.musicOff,0,Math.max(0,trackDurS-usedMs/1000));
+    cfg.musicOff=clamp(cfg.musicOff,0,maxMusicOffS());
     $('musicOff').value=cfg.musicOff.toFixed(1);
   }
   updateTrimWin();syncMusic();
