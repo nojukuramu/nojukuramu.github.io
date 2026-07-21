@@ -65,7 +65,7 @@
       this._resample(renderSegs);
 
       var tex = Procgen.groundTexture(256);
-      tex.repeat.set(this.size / 14, this.size / 14);
+      tex.repeat.set(this.size / 22, this.size / 22);
       var mat = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true });
       this.mesh = new THREE.Mesh(geo, mat);
       this.mesh.receiveShadow = true;
@@ -135,7 +135,7 @@
           var wz = (iy / renderSegs) * this.size - half;
           var h = this.heightAt(wx, wz);
           pos.setY(idx, h);
-          this._biomeColor(h, this.slopeAt(wx, wz), tmpColor);
+          this._biomeColor(wx, wz, h, this.slopeAt(wx, wz), tmpColor);
           col.setXYZ(idx, tmpColor.r, tmpColor.g, tmpColor.b);
         }
       }
@@ -144,20 +144,56 @@
       this.geometry.computeVertexNormals();
     },
 
-    _biomeColor: function (h, slope, out) {
-      var sand = new THREE.Color(0xd9c98a);
-      var grass = new THREE.Color(0xffffff); // multiply w/ texture so keep near-white
-      var rock = new THREE.Color(0x8a8578);
-      var snow = new THREE.Color(0xf2f4f7);
+    // Biome tint v2. The ground texture carries the grass color; vertex
+    // colors act as a tint/AO mask layered on top: wet dark sand at the
+    // waterline fading through dry sand, moisture-darkened lowland grass,
+    // sun-bleached dry grass on high ground, two-tone strata rock on slopes,
+    // snow dusting the peaks — plus a concavity term that shades hollows
+    // like cheap baked ambient occlusion.
+    _biomeColors: {
+      wetSand: new THREE.Color(0x8a7350).convertSRGBToLinear(),
+      sand: new THREE.Color(0xd9c184).convertSRGBToLinear(),
+      grass: new THREE.Color(0xffffff),
+      lush: new THREE.Color(0xb8d6a0).convertSRGBToLinear(),
+      dry: new THREE.Color(0xd8cf9a).convertSRGBToLinear(),
+      rockLow: new THREE.Color(0x8d8578).convertSRGBToLinear(),
+      rockHigh: new THREE.Color(0xa39d92).convertSRGBToLinear(),
+      snow: new THREE.Color(0xeef2f7).convertSRGBToLinear()
+    },
+    _biomeColor: function (x, z, h, slope, out) {
+      var c = this._biomeColors;
       var wl = this.waterLevel;
-      if (h < wl + 1.4) {
-        out.copy(sand).lerp(grass, util.smoothstep(wl - 0.4, wl + 1.4, h));
-      } else if (h > CFG.MAX_HEIGHT * 0.72) {
-        out.copy(grass).lerp(snow, util.smoothstep(CFG.MAX_HEIGHT * 0.72, CFG.MAX_HEIGHT * 0.95, h));
+      // continuous cheap noise for patchy grass hue drift
+      var n = Math.sin(x * 0.11 + Math.sin(z * 0.07) * 2.1) * Math.sin(z * 0.13 + Math.sin(x * 0.05) * 1.7);
+
+      if (h < wl + 1.6) {
+        out.copy(c.wetSand).lerp(c.sand, util.smoothstep(wl - 0.6, wl + 0.7, h));
+        out.lerp(c.grass, util.smoothstep(wl + 0.8, wl + 1.6, h));
       } else {
-        out.copy(grass);
+        out.copy(c.grass);
+        // moisture gradient: lush near the waterline, dry/bleached uphill
+        out.lerp(c.lush, util.smoothstep(wl + 3.5, wl + 1.6, h) * 0.5);
+        out.lerp(c.dry, util.smoothstep(10, 26, h) * 0.55);
+        // patchiness
+        out.lerp(c.lush, Math.max(0, n) * 0.22);
+        out.lerp(c.dry, Math.max(0, -n) * 0.18);
       }
-      if (slope > 0.55) out.lerp(rock, util.smoothstep(0.55, 1.4, slope));
+      // rock strata on slopes: band the tone by height for a layered read
+      if (slope > 0.45) {
+        var strata = (Math.sin(h * 1.7) * 0.5 + 0.5);
+        var rock = this._tmpRock || (this._tmpRock = new THREE.Color());
+        rock.copy(c.rockLow).lerp(c.rockHigh, strata);
+        out.lerp(rock, util.smoothstep(0.45, 1.3, slope));
+      }
+      // snow dusting on high, gentle ground
+      if (h > CFG.MAX_HEIGHT * 0.66) {
+        out.lerp(c.snow, util.smoothstep(CFG.MAX_HEIGHT * 0.66, CFG.MAX_HEIGHT * 0.92, h) * (1 - util.smoothstep(0.5, 1.0, slope)));
+      }
+      // baked AO: darken hollows (center below neighborhood average)
+      var e = 3.5;
+      var avg = (this.heightAt(x - e, z) + this.heightAt(x + e, z) + this.heightAt(x, z - e) + this.heightAt(x, z + e)) * 0.25;
+      var occ = util.clamp((avg - h) / e * 0.9, 0, 0.45);
+      out.multiplyScalar(1 - occ);
     },
 
     applyLoadedHeights: function (heights) {
@@ -207,7 +243,11 @@
           changed = true;
         }
       }
-      if (changed) this._updatePatch(minX, minZ, maxX, maxZ);
+      if (changed) {
+        this._updatePatch(minX, minZ, maxX, maxZ);
+        if (Game.Water) Game.Water.markHeightsDirty();
+        if (Game.Trees) Game.Trees.refreshArea(x, z, radius);
+      }
       return changed;
     },
 
@@ -231,7 +271,7 @@
           var wz = (iy / rs) * this.size - half;
           var h = this.heightAt(wx, wz);
           pos.setY(idx, h);
-          this._biomeColor(h, this.slopeAt(wx, wz), tmpColor);
+          this._biomeColor(wx, wz, h, this.slopeAt(wx, wz), tmpColor);
           col.setXYZ(idx, tmpColor.r, tmpColor.g, tmpColor.b);
         }
       }

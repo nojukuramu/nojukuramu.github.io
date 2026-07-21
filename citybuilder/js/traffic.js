@@ -4,14 +4,18 @@
  * slow near multi-way intersection hubs, and each vehicle does a simple
  * "is anything close ahead of me" check against the small active-vehicle
  * list (counts are capped low enough by qualityManager that this stays
- * O(n^2)-cheap on mobile). Headlights/taillights are billboard glow
- * sprites that fade in with `Lighting.nightFactor`, batched in one pool
- * instead of real point lights per car.
+ * O(n^2)-cheap on mobile).
+ *
+ * Visuals: each color bucket is one InstancedMesh of a MERGED body+cabin
+ * geometry (vertex colors darken the cabin glass; material color supplies
+ * the paint), and ALL head/taillights across every vehicle live in two
+ * Points clouds — two draw calls for the whole fleet's lights instead of
+ * two sprites per car.
  */
 (function (global) {
   "use strict";
   var util = Game.util;
-  var COLORS = [0xd94f4f, 0x333844, 0xe8e8ea, 0x3a6fd9, 0xe0b23a, 0x2f2f2f];
+  var COLORS = [0xc94840, 0x2f3542, 0xdfe3e8, 0x2f5e9e, 0xd7a63f, 0x4a4f57];
 
   var Traffic = {
     buckets: [],
@@ -28,18 +32,27 @@
       return this;
     },
 
+    _carGeometry: function () {
+      // body keeps vertex color white (material color = paint); cabin verts
+      // darken toward glass; tiny bumper strip anchors the silhouette
+      return Procgen.mergeGeoms([
+        { geo: new THREE.BoxGeometry(1.7, 0.62, 3.4), color: "#ffffff", matrix: new THREE.Matrix4().makeTranslation(0, 0.48, 0) },
+        { geo: new THREE.BoxGeometry(1.5, 0.5, 1.8), color: "#20242c", matrix: new THREE.Matrix4().makeTranslation(0, 1.02, -0.25) },
+        { geo: new THREE.BoxGeometry(1.72, 0.16, 3.44), color: "#22252a", matrix: new THREE.Matrix4().makeTranslation(0, 0.16, 0) }
+      ]);
+    },
+
     _build: function (count) {
       this.group.clear();
       this.buckets = [];
       var per = Math.max(1, Math.ceil(count / COLORS.length));
-      var bodyGeo = new THREE.BoxGeometry(1.7, 0.8, 3.4);
-      bodyGeo.translate(0, 0.55, 0);
+      var carGeo = this._carGeometry();
       var self = this;
-      this.lightPool = [];
       COLORS.forEach(function (color) {
-        var mat = new THREE.MeshLambertMaterial({ color: color });
-        var mesh = new THREE.InstancedMesh(bodyGeo, mat, per);
+        var mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(color).convertSRGBToLinear(), vertexColors: true });
+        var mesh = new THREE.InstancedMesh(carGeo, mat, per);
         mesh.count = per;
+        mesh.castShadow = true;
         mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         for (var i = 0; i < per; i++) mesh.setMatrixAt(i, new THREE.Matrix4().makeScale(0.0001, 0.0001, 0.0001));
         mesh.instanceMatrix.needsUpdate = true;
@@ -47,19 +60,35 @@
         self.buckets.push(mesh);
       });
 
-      var headTex = Procgen.glowSprite("rgba(255,250,220,1)", 48);
-      var tailTex = Procgen.glowSprite("rgba(255,60,60,1)", 48);
-      this.agents = [];
       var total = per * COLORS.length;
+
+      // batched vehicle lights: one Points cloud for headlights, one for tails
+      this._lightSlots = total;
+      function mkLights(colorCss, size) {
+        var geo = new THREE.BufferGeometry();
+        var positions = new Float32Array(total * 3);
+        for (var i = 0; i < total; i++) positions[i * 3 + 1] = -999; // parked offscreen
+        geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        var mat = new THREE.PointsMaterial({
+          map: Procgen.glowSprite(colorCss, 48), size: size, transparent: true, opacity: 0,
+          depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true
+        });
+        var pts = new THREE.Points(geo, mat);
+        pts.frustumCulled = false;
+        return pts;
+      }
+      this.headLights = mkLights("rgba(255,250,220,1)", 2.6);
+      this.tailLights = mkLights("rgba(255,60,60,1)", 2.0);
+      this.group.add(this.headLights);
+      this.group.add(this.tailLights);
+
+      this.agents = [];
       for (var b = 0; b < COLORS.length; b++) {
         for (var i2 = 0; i2 < per; i2++) {
-          var head = new THREE.Sprite(new THREE.SpriteMaterial({ map: headTex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
-          var tail = new THREE.Sprite(new THREE.SpriteMaterial({ map: tailTex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
-          head.scale.set(1.1, 1.1, 1); tail.scale.set(0.9, 0.9, 1);
-          this.group.add(head); this.group.add(tail);
+          var slot = b * per + i2;
           this.agents.push({
-            state: "unspawned", bucket: b, idx: i2, path: null, segLens: null, totalLen: 0, traveled: 0,
-            speed: 5 + Math.random() * 3, baseSpeed: 5 + Math.random() * 3, head: head, tail: tail, pos: new THREE.Vector3(), heading: 0
+            state: "unspawned", bucket: b, idx: i2, slot: slot, path: null, segLens: null, totalLen: 0, traveled: 0,
+            speed: 5 + Math.random() * 3, baseSpeed: 5 + Math.random() * 3, pos: new THREE.Vector3(), heading: 0
           });
         }
       }
@@ -88,7 +117,6 @@
     },
 
     update: function (dt) {
-      var dayFactor = 1 - Game.Lighting.nightFactor;
       var trafficDensity = util.smoothstep(6, 10, Game.Lighting.hours) * (1 - util.smoothstep(21, 24, Game.Lighting.hours)) * 0.7 + 0.15;
       this.spawnAccumulator += dt * Game.timeScale;
       var doSpawn = this.spawnAccumulator > 0.35;
@@ -101,6 +129,8 @@
       }
 
       var lightOpacity = util.smoothstep(0.3, 0.6, Game.Lighting.nightFactor);
+      this.headLights.material.opacity = lightOpacity * 0.95;
+      this.tailLights.material.opacity = lightOpacity * 0.85;
 
       for (i = 0; i < this.agents.length; i++) {
         var agent = this.agents[i];
@@ -127,17 +157,20 @@
           this._hide(agent);
           continue;
         }
-        this._placeOnPath(agent, lightOpacity);
+        this._placeOnPath(agent);
       }
+      this.headLights.geometry.attributes.position.needsUpdate = true;
+      this.tailLights.geometry.attributes.position.needsUpdate = true;
     },
 
     _hide: function (agent) {
       this.buckets[agent.bucket].setMatrixAt(agent.idx, new THREE.Matrix4().makeScale(0.0001, 0.0001, 0.0001));
       this.buckets[agent.bucket].instanceMatrix.needsUpdate = true;
-      agent.head.material.opacity = 0; agent.tail.material.opacity = 0;
+      this.headLights.geometry.attributes.position.array[agent.slot * 3 + 1] = -999;
+      this.tailLights.geometry.attributes.position.array[agent.slot * 3 + 1] = -999;
     },
 
-    _placeOnPath: function (agent, lightOpacity) {
+    _placeOnPath: function (agent) {
       var lens = agent.segLens, path = agent.path;
       var t = agent.traveled;
       var segIdx = 0;
@@ -159,10 +192,10 @@
       this.buckets[agent.bucket].instanceMatrix.needsUpdate = true;
 
       var fx = Math.sin(heading), fz = Math.cos(heading);
-      agent.head.position.set(x + fx * 1.75, y + 0.65, z + fz * 1.75);
-      agent.tail.position.set(x - fx * 1.75, y + 0.65, z - fz * 1.75);
-      agent.head.material.opacity = lightOpacity * 0.95;
-      agent.tail.material.opacity = lightOpacity * 0.85;
+      var hp = this.headLights.geometry.attributes.position.array;
+      var tp = this.tailLights.geometry.attributes.position.array;
+      hp[agent.slot * 3] = x + fx * 1.75; hp[agent.slot * 3 + 1] = y + 0.55; hp[agent.slot * 3 + 2] = z + fz * 1.75;
+      tp[agent.slot * 3] = x - fx * 1.75; tp[agent.slot * 3 + 1] = y + 0.55; tp[agent.slot * 3 + 2] = z - fz * 1.75;
     }
   };
 

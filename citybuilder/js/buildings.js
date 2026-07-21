@@ -114,7 +114,12 @@
       var palette = ZONE_PALETTES[type];
       var wallColor = palette[variant % palette.length];
       var rows = level === "high" ? 16 : level === "mid" ? 10 : 6;
-      var tex = Procgen.buildingTexture({ wallColor: wallColor, cols: 5, rows: rows, light: level === "high" ? 22 : 30, litChance: 0.28 + variant * 0.08 });
+      var tex = Procgen.buildingTexture({
+        wallColor: wallColor, cols: 5, rows: rows,
+        light: level === "high" ? 22 : 30, litChance: 0.28 + variant * 0.08,
+        // commercial ground floors get storefront glazing + entrance door
+        storefront: type === "commercial" || (type === "residential" && level !== "low")
+      });
       var mat = new THREE.MeshLambertMaterial({
         map: tex.map, emissive: 0xfff2c0, emissiveMap: tex.emissiveMap, emissiveIntensity: 0
       });
@@ -141,6 +146,12 @@
         var m = new THREE.Matrix4();
         oldMesh.getMatrixAt(i, m);
         newMesh.setMatrixAt(i, m);
+      }
+      if (oldMesh.instanceColor) {
+        // carry the per-instance tints across (allocates via setColorAt once)
+        newMesh.setColorAt(0, new THREE.Color(1, 1, 1));
+        newMesh.instanceColor.array.set(oldMesh.instanceColor.array.subarray(0, oldMesh.count * 3));
+        newMesh.instanceColor.needsUpdate = true;
       }
       this.group.remove(oldMesh);
       this.group.add(newMesh);
@@ -217,6 +228,13 @@
       m.compose(new THREE.Vector3(center.x, groundY, center.z), q, new THREE.Vector3(foot, height, foot));
       bucket.mesh.setMatrixAt(idx, m);
       bucket.mesh.instanceMatrix.needsUpdate = true;
+      // per-instance brightness tint breaks the "same texture" uniformity
+      // within a bucket (setColorAt multiplies the material's diffuse)
+      var tint = 0.88 + Math.random() * 0.22;
+      bucket.mesh.setColorAt(idx, new THREE.Color(tint, tint, tint));
+      if (bucket.mesh.instanceColor) bucket.mesh.instanceColor.needsUpdate = true;
+
+      if (Game.Trees) Game.Trees.clearNear(center.x, center.z, foot * 0.9 + 2);
 
       var ck = Game.Zoning.key(cell.gx, cell.gz);
       this.cellBuildings.set(ck, {
@@ -247,6 +265,15 @@
         var m = new THREE.Matrix4();
         mesh.getMatrixAt(last, m);
         mesh.setMatrixAt(b.idx, m);
+        // swap-pop the per-instance tint too (raw array copy — getColorAt
+        // doesn't exist in r128)
+        if (mesh.instanceColor) {
+          var ca = mesh.instanceColor.array;
+          ca[b.idx * 3] = ca[last * 3];
+          ca[b.idx * 3 + 1] = ca[last * 3 + 1];
+          ca[b.idx * 3 + 2] = ca[last * 3 + 2];
+          mesh.instanceColor.needsUpdate = true;
+        }
         // find the record pointing at `last` and repoint it to b.idx
         this.cellBuildings.forEach(function (other) {
           if (other.bucketKey === b.bucketKey && other.idx === last) other.idx = b.idx;
@@ -288,7 +315,7 @@
         var bucket = Game.Buildings.buckets[key];
         var thresh = bucket.mesh.userData.duskThreshold;
         var t = util.smoothstep(thresh, thresh + 0.22, nightFactor);
-        bucket.mesh.material.emissiveIntensity = t * 1.6;
+        bucket.mesh.material.emissiveIntensity = t * 2.1; // tuned for the ACES curve
       });
     },
 
@@ -319,6 +346,7 @@
       this.serviceGroup.add(mesh);
       var rec = { id: this._nextServiceId++, type: type, x: x, z: z, rot: rot || 0, footprint: def.footprint, mesh: mesh };
       this.services.push(rec);
+      if (Game.Trees) Game.Trees.clearNear(x, z, def.footprint);
       return rec;
     },
 

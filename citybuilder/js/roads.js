@@ -41,7 +41,9 @@
       this.previewMat = new THREE.MeshBasicMaterial({ color: 0x00d9c0, transparent: true, opacity: 0.55, depthTest: false });
       this.previewMesh = null;
 
-      this.hubMat = new THREE.MeshLambertMaterial({ color: 0x2b2f36 });
+      var hubTex = Procgen.asphaltTexture();
+      hubTex.repeat.set(3, 3);
+      this.hubMat = new THREE.MeshLambertMaterial({ map: hubTex });
       this.roadTextures = {
         street: Procgen.roadTexture("street"),
         avenue: Procgen.roadTexture("avenue"),
@@ -55,11 +57,33 @@
         avenue: new THREE.MeshLambertMaterial({ map: this.roadTextures.avenue }),
         highway: new THREE.MeshLambertMaterial({ map: this.roadTextures.highway })
       };
-      this.streetLightGeo = new THREE.CylinderGeometry(0.12, 0.15, 4.2, 5);
-      this.streetLightMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
-      this.streetLampGlow = Procgen.glowSprite("rgba(255,224,150,1)", 64);
-      this.streetLightsGroup = new THREE.Group();
-      this.group.add(this.streetLightsGroup);
+
+      // Street lights are fully batched: ALL poles live in one InstancedMesh
+      // (merged pole+arm+head geometry) and all lamp glows in one Points
+      // cloud — two draw calls total regardless of how many lights the city
+      // has, instead of a Mesh + Sprite pair per pole.
+      this.LIGHT_CAP = 640;
+      var poleGeo = Procgen.mergeGeoms([
+        { geo: new THREE.CylinderGeometry(0.09, 0.13, 4.4, 5), color: "#2c2e31", matrix: new THREE.Matrix4().makeTranslation(0, 2.2, 0) },
+        { geo: new THREE.CylinderGeometry(0.06, 0.06, 1.3, 4), color: "#2c2e31", matrix: new THREE.Matrix4().makeRotationZ(Math.PI / 2).setPosition(0.62, 4.35, 0) },
+        { geo: new THREE.BoxGeometry(0.55, 0.14, 0.22), color: "#3a3c40", matrix: new THREE.Matrix4().makeTranslation(1.15, 4.32, 0) }
+      ]);
+      this.lightPoles = new THREE.InstancedMesh(poleGeo, new THREE.MeshLambertMaterial({ vertexColors: true }), this.LIGHT_CAP);
+      this.lightPoles.count = 0;
+      this.lightPoles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.group.add(this.lightPoles);
+
+      var glowGeo = new THREE.BufferGeometry();
+      this._glowPositions = new Float32Array(this.LIGHT_CAP * 3);
+      glowGeo.setAttribute("position", new THREE.BufferAttribute(this._glowPositions, 3));
+      glowGeo.setDrawRange(0, 0);
+      this.lampGlowMat = new THREE.PointsMaterial({
+        map: Procgen.glowSprite("rgba(255,224,150,1)", 64), size: 3.6, transparent: true,
+        opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true
+      });
+      this.lampGlows = new THREE.Points(glowGeo, this.lampGlowMat);
+      this.lampGlows.frustumCulled = false;
+      this.group.add(this.lampGlows);
 
       if (saved) this._loadFromSave(saved);
       return this;
@@ -395,6 +419,12 @@
       this._adjacency = null;
       if (Game.Zoning) Game.Zoning.onRoadsChanged();
       if (Game.Economy) Game.Economy.spend(totalCost, "Road construction");
+      if (Game.Trees) {
+        var clearR = TYPES[this.curType].width * 0.9 + 2;
+        createdEdges.forEach(function (e) {
+          e.pts.forEach(function (p) { Game.Trees.clearNear(p.x, p.z, clearR); });
+        });
+      }
       return createdEdges[0];
     },
 
@@ -583,36 +613,45 @@
 
     _rebuildStreetLights: function () {
       var settings = QualityManager.settings;
-      this.streetLightsGroup.clear();
       var every = settings.streetLightEvery;
       var self = this;
+      var m4 = new THREE.Matrix4();
+      var quat = new THREE.Quaternion();
+      var up = new THREE.Vector3(0, 1, 0);
+      var count = 0;
+
       this.edges.forEach(function (edge) {
         var step = Math.max(2, Math.floor(6 * every));
         for (var i = 2; i < edge.pts.length - 1; i += step) {
+          if (count >= self.LIGHT_CAP) return;
           var p = edge.pts[i], next = edge.pts[Math.min(edge.pts.length - 1, i + 1)];
           var tx = next.x - p.x, tz = next.z - p.z, tl = Math.hypot(tx, tz) || 1;
           var nx = -tz / tl, nz = tx / tl;
           var side = (i % (step * 2) === 0) ? 1 : -1;
           var off = TYPES[edge.type].width / 2 + 0.8;
-          var pole = new THREE.Mesh(self.streetLightGeo, self.streetLightMat);
           var y = edge.elev[i];
-          pole.position.set(p.x + nx * off * side, y + 2.1, p.z + nz * off * side);
-          pole.castShadow = false;
-          self.streetLightsGroup.add(pole);
-          var glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: self.streetLampGlow, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
-          glow.scale.set(3.2, 3.2, 1);
-          glow.position.set(pole.position.x, y + 4.1, pole.position.z);
-          glow.userData.isLampGlow = true;
-          self.streetLightsGroup.add(glow);
+          var px = p.x + nx * off * side, pz = p.z + nz * off * side;
+          // rotate the arm to reach over the asphalt
+          var heading = Math.atan2(-nx * side, -nz * side) + Math.PI / 2;
+          quat.setFromAxisAngle(up, heading);
+          m4.compose(new THREE.Vector3(px, y, pz), quat, new THREE.Vector3(1, 1, 1));
+          self.lightPoles.setMatrixAt(count, m4);
+          // glow point hangs at the lamp head, slightly toward the road
+          var hx = px - nx * side * 1.15, hz = pz - nz * side * 1.15;
+          self._glowPositions[count * 3] = hx;
+          self._glowPositions[count * 3 + 1] = y + 4.35;
+          self._glowPositions[count * 3 + 2] = hz;
+          count++;
         }
       });
+      this.lightPoles.count = count;
+      this.lightPoles.instanceMatrix.needsUpdate = true;
+      this.lampGlows.geometry.setDrawRange(0, count);
+      this.lampGlows.geometry.attributes.position.needsUpdate = true;
     },
 
     updateNightLights: function (nightFactor) {
-      var opacity = util.smoothstep(0.35, 0.65, nightFactor);
-      this.streetLightsGroup.children.forEach(function (c) {
-        if (c.userData.isLampGlow) c.material.opacity = opacity * 0.95;
-      });
+      this.lampGlowMat.opacity = util.smoothstep(0.5, 0.75, nightFactor) * 0.85;
     },
 
     // ---------------- preview ----------------

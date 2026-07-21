@@ -24,7 +24,13 @@
     Game.renderer.setSize(window.innerWidth, window.innerHeight);
     Game.renderer.shadowMap.enabled = settings.shadows;
     Game.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    if (Game.renderer.outputColorSpace !== undefined) Game.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // Filmic color pipeline: ACES tonemapping + sRGB output. Every color
+    // texture is tagged sRGB in procgen.js, sky/water shaders opt in via
+    // <tonemapping_fragment>/<encodings_fragment> includes, and the light
+    // rig in lighting.js is tuned against this curve — change one, retune all.
+    Game.renderer.outputEncoding = THREE.sRGBEncoding;
+    Game.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    Game.renderer.toneMappingExposure = 1.12;
     Game.clock = new THREE.Clock();
     Game.raycaster = new THREE.Raycaster();
 
@@ -38,6 +44,9 @@
 
     Game.UI.setBootProgress(42, "filling the lake…");
     Game.scene.add(Game.Water.init());
+
+    Game.UI.setBootProgress(48, "planting forests…");
+    Game.Trees.init(Game.scene);
 
     Game.UI.setBootProgress(52, "raising the sun…");
     Game.Lighting.init(Game.scene);
@@ -94,6 +103,7 @@
     Game.Citizens.onQualityChange(settings);
     Game.Traffic.onQualityChange(settings);
     Game.Weather.onQualityChange();
+    Game.Trees.onQualityChange(settings);
     Game.UI.toast("Graphics: " + settings.name);
   }
 
@@ -141,6 +151,10 @@
     Game.Lighting.loadSaveState(data.lighting);
     Game.Weather.loadSaveState(data.weather);
     Game.Terrain.loadCameraSaveState(data.camera);
+    // trees are decorative + deterministic (fixed seed), so they aren't
+    // serialized — re-scatter and re-carve clearings around the loaded city
+    Game.Trees.rescatter();
+    Game.Trees.reapplyClearances();
   };
 
   Game.captureThumbnail = function () {
