@@ -60,13 +60,16 @@
 
     _buildClouds: function () {
       this.cloudGroup = new THREE.Group();
-      var tex = Procgen.glowSprite("rgba(220,225,235,1)", 128);
+      var tex = Procgen.cloudTexture();
       for (var i = 0; i < 14; i++) {
         var spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false }));
-        var a = Math.random() * Math.PI * 2, r = 60 + Math.random() * 140;
-        spr.position.set(Math.cos(a) * r, 55 + Math.random() * 20, Math.sin(a) * r);
-        spr.scale.set(60 + Math.random() * 40, 30 + Math.random() * 20, 1);
+        var a = Math.random() * Math.PI * 2, r = 60 + Math.random() * 160;
+        spr.position.set(Math.cos(a) * r, 58 + Math.random() * 26, Math.sin(a) * r);
+        var w = 55 + Math.random() * 50;
+        spr.scale.set(w, w * 0.45, 1);
         spr.userData.speed = 1.2 + Math.random();
+        // a few "ambient" clouds stay faintly visible even in clear weather
+        spr.userData.ambient = i < 6;
         this.cloudGroup.add(spr);
       }
       this.group.add(this.cloudGroup);
@@ -112,9 +115,12 @@
         this.rain.instanceMatrix.needsUpdate = true;
       }
 
+      var dayGlow = 1 - Game.Lighting.nightFactor * 0.75; // clouds fade at night
       this.cloudGroup.children.forEach(function (c) {
-        c.material.opacity = Weather.cloudFactor * 0.5;
+        var base = c.userData.ambient ? 0.16 : 0;
+        c.material.opacity = (base + Weather.cloudFactor * 0.5) * dayGlow;
         c.position.x += c.userData.speed * dt * Game.timeScale;
+        if (c.position.x > 260) c.position.x = -260;
       });
 
       if (Game.Roads) Game.Roads._wetness = this.rainIntensity;

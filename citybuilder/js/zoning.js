@@ -36,7 +36,11 @@
     worldToCell: function (x, z) { return { gx: Math.floor(x / this.cellSize), gz: Math.floor(z / this.cellSize) }; },
 
     isZonable: function (x, z) {
-      if (Game.Roads.distanceToNearestRoad(x, z) > 14) return false;
+      // FIX 4: reject cells inside/hugging the asphalt (d <= 1.0) as well as
+      // cells too far from any road (d > 14) — distanceToNearestRoad already
+      // subtracts the road half-width, so d <= 0 means literally on the road.
+      var d = Game.Roads.distanceToNearestRoad(x, z);
+      if (!(d > 1.0 && d <= 14)) return false;
       var h = Game.Terrain.heightAt(x, z);
       if (h < Game.Terrain.waterLevel + 0.6) return false;
       if (Game.Terrain.slopeAt(x, z) > 0.5) return false;

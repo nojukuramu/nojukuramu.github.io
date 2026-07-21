@@ -23,6 +23,11 @@ html,body{
   touch-action:none;overscroll-behavior:none;user-select:none;
 }
 #game-canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;}
+/* subtle cinematic vignette over the 3D view — pure CSS, zero GPU cost */
+#vignette{
+  position:fixed;inset:0;pointer-events:none;z-index:4;
+  background:radial-gradient(ellipse 120% 105% at 50% 42%, transparent 62%, rgba(4,8,16,.28) 100%);
+}
 
 /* ---------------- overlays / modals ---------------- */
 .overlay{
