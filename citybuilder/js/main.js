@@ -64,9 +64,13 @@
     Game.Citizens.init(Game.scene);
     Game.Traffic.init(Game.scene);
 
-    Game.UI.setBootProgress(90, "loading the forecast…");
+    Game.UI.setBootProgress(88, "loading the forecast…");
     Game.Weather.init(Game.scene);
     Game.Economy.init();
+
+    Game.UI.setBootProgress(92, "releasing the birds…");
+    Game.Ambient.init(Game.scene);
+    Game.Audio.init();
 
     Game.UI.setBootProgress(95, "wiring the controls…");
     Game.Input.init(canvas);
@@ -185,10 +189,13 @@
       Game.Roads.update();
       Game.Roads.updateNightLights(Game.Lighting.nightFactor);
       Game.Buildings.update(dt);
+      Game.Buildings.updateAnimations(dt);
       Game.Buildings.updateNightLights(Game.Lighting.nightFactor);
       Game.Citizens.update(dt);
       Game.Traffic.update(dt);
       Game.Economy.update(dt);
+      Game.Ambient.update(dt);
+      Game.Audio.update(dt);
     } else if (Game.running) {
       // even paused, keep water/sky gently subtle-static (no update) but lights stay put
     }

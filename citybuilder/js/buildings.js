@@ -208,7 +208,7 @@
       return hasPower && hasWater;
     },
 
-    _spawnBuilding: function (cell, level) {
+    _spawnBuilding: function (cell, level, instant) {
       var type = cell.type;
       var variant = Math.floor(Math.random() * VARIANTS_PER_BUCKET);
       var key = this._bucketKey(type, level, variant);
@@ -225,7 +225,12 @@
 
       var m = new THREE.Matrix4();
       var q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot);
-      m.compose(new THREE.Vector3(center.x, groundY, center.z), q, new THREE.Vector3(foot, height, foot));
+      if (instant) {
+        m.compose(new THREE.Vector3(center.x, groundY, center.z), q, new THREE.Vector3(foot, height, foot));
+      } else {
+        // start collapsed; updateAnimations eases it up to full height
+        m.compose(new THREE.Vector3(center.x, groundY, center.z), q, new THREE.Vector3(foot * 0.3, height * 0.03, foot * 0.3));
+      }
       bucket.mesh.setMatrixAt(idx, m);
       bucket.mesh.instanceMatrix.needsUpdate = true;
       // per-instance brightness tint breaks the "same texture" uniformity
@@ -237,13 +242,48 @@
       if (Game.Trees) Game.Trees.clearNear(center.x, center.z, foot * 0.9 + 2);
 
       var ck = Game.Zoning.key(cell.gx, cell.gz);
-      this.cellBuildings.set(ck, {
+      var rec = {
         type: type, level: level, variant: variant, bucketKey: key, idx: idx,
         gx: cell.gx, gz: cell.gz, x: center.x, z: center.z, height: height, foot: foot,
         bornAt: performance.now() // FIX 6: gates when this building is eligible to level up
-      });
+      };
+      this.cellBuildings.set(ck, rec);
+      if (!instant) {
+        this._animations.push({ rec: rec, ck: ck, t: 0, dur: 1.1, pos: new THREE.Vector3(center.x, groundY, center.z), quat: q.clone() });
+        if (Game.Ambient) Game.Ambient.puffAt(center.x, center.z);
+      }
       Game.Zoning.markBuilt(cell.gx, cell.gz, true);
       if (Game.Economy) Game.Economy.onBuildingGrown(type, level);
+    },
+
+    // Grow-in animation: recently spawned lots rise out of the ground with a
+    // slight overshoot. Records self-invalidate if the building was removed
+    // or its instance was swap-popped to a new index mid-animation (we
+    // re-read rec.idx every frame, and drop the record if the cell no longer
+    // maps to the same object).
+    _animations: [],
+    _animM4: new THREE.Matrix4(),
+    updateAnimations: function (dt) {
+      if (!this._animations.length) return;
+      var alive = [];
+      for (var i = 0; i < this._animations.length; i++) {
+        var a = this._animations[i];
+        if (this.cellBuildings.get(a.ck) !== a.rec) continue; // building gone
+        a.t += dt;
+        var t = Math.min(1, a.t / a.dur);
+        // easeOutBack-ish vertical pop, footprint settles faster
+        var easeY = 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2) * t * 3;
+        easeY = t < 1 ? (1 - Math.pow(1 - t, 3)) * (1 + 0.08 * Math.sin(t * Math.PI)) : 1;
+        var easeXZ = Math.min(1, 0.3 + t * 1.6);
+        var bucket = this.buckets[a.rec.bucketKey];
+        this._animM4.compose(a.pos, a.quat, new THREE.Vector3(
+          a.rec.foot * easeXZ, Math.max(0.03, a.rec.height * easeY), a.rec.foot * easeXZ
+        ));
+        bucket.mesh.setMatrixAt(a.rec.idx, this._animM4);
+        bucket.mesh.instanceMatrix.needsUpdate = true;
+        if (t < 1) alive.push(a);
+      }
+      this._animations = alive;
     },
 
     _levelUp: function (ck, b) {
@@ -438,6 +478,7 @@
       this.services.forEach(function (s) { self.serviceGroup.remove(s.mesh); });
       this.services = [];
       this.cellBuildings.clear();
+      this._animations = [];
       Object.keys(this.buckets).forEach(function (key) {
         var bucket = self.buckets[key];
         self.group.remove(bucket.mesh);
@@ -469,7 +510,7 @@
       });
       (data.cells || []).forEach(function (c) {
         Game.Zoning.cells.set(Game.Zoning.key(c.gx, c.gz), { type: c.type, gx: c.gx, gz: c.gz, hasBuilding: false, level: 0 });
-        self._spawnBuilding({ type: c.type, gx: c.gx, gz: c.gz }, c.level);
+        self._spawnBuilding({ type: c.type, gx: c.gx, gz: c.gz }, c.level, true); // instant on load — no pop-in wave
       });
     }
   };

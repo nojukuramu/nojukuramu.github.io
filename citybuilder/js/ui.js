@@ -82,6 +82,8 @@
       this.els.settingsModeHint.textContent = Game.mode === "creative" ? "Creative — unlimited resources" : "Normal — full simulation";
       this.els.qualitySelect.value = QualityManager.userOverride || "auto";
       this.els.weatherToggle.checked = Game.Weather.enabled;
+      var soundToggle = document.getElementById("sound-toggle");
+      if (soundToggle) soundToggle.checked = Game.Audio.enabled;
       this.els.daylengthRange.value = Game.Lighting.dayLengthMinutes;
     },
 
@@ -259,6 +261,10 @@
       this.els.cancelSwitch.addEventListener("click", function () { self.els.modeSwitchWarning.classList.add("hidden"); });
       this.els.qualitySelect.addEventListener("change", function () { QualityManager.setOverride(self.els.qualitySelect.value); });
       this.els.weatherToggle.addEventListener("change", function () { Game.Weather.setEnabled(self.els.weatherToggle.checked); });
+      var soundToggle = document.getElementById("sound-toggle");
+      if (soundToggle) {
+        soundToggle.addEventListener("change", function () { Game.Audio.setEnabled(soundToggle.checked); });
+      }
       this.els.daylengthRange.addEventListener("input", function () { Game.Lighting.setDayLength(parseFloat(self.els.daylengthRange.value)); });
       this.els.settingsClose.addEventListener("click", function () { self.els.settingsPanel.classList.add("hidden"); });
     },
