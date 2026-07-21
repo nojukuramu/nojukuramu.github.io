@@ -99,7 +99,8 @@
     tiles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="8" y="13" width="8" height="8" rx="2"/><path d="M6.2 8V6.4a1 1 0 0 1 1.6-.8"/><path d="M16 9V5l2 4V5"/><path d="M11 18.5h2"/></svg>',
     eye:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg>',
     tower: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 3-3 3-3-3z"/><path d="M7 8h10l1 5H6z"/><path d="M6 13h12l1.5 8h-15z"/><path d="M10 21v-4M14 21v-4"/></svg>',
-    camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l1.5-2h9L18 8h3v11H3z"/><circle cx="12" cy="13" r="3.4"/><path d="M17.5 8.5h.01"/></svg>'
+    camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l1.5-2h9L18 8h3v11H3z"/><circle cx="12" cy="13" r="3.4"/><path d="M17.5 8.5h.01"/></svg>',
+    city:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V9l4-3v15"/><path d="M13 21V5l4-2v18"/><path d="M9 12h.01M9 15h.01M9 18h.01M17 9h.01M17 12h.01M17 15h.01M17 18h.01"/></svg>'
   };
   var APPS = [
     {
@@ -137,6 +138,12 @@
       href: "burst_dump/", badge: "video",
       desc: "Drop a folder of photos and it cuts them into a fast, seeded photo-dump reel — rhythms, styles, FX, music — then records to MP4/WebM right in the browser.",
       tags: ["canvas", "MediaRecorder", "reels"]
+    },
+    {
+      id: "citybuilder", name: "SkyLine", accent: "#00d9c0", icon: ICONS.city,
+      href: "citybuilder/", badge: "3D city builder",
+      desc: "A pocket Cities: Skylines — terraform, lay roads, zone a skyline that grows itself, and watch day turn to night and rain roll in. Fully procedural, mobile-first, saves locally.",
+      tags: ["Three.js", "procedural", "IndexedDB"]
     }
   ];
 
@@ -212,6 +219,7 @@
     { icon: "📝", label: "Task Notes", sub: "open app", run: function () { location.href = "task-notes/"; } },
     { icon: "👁", label: "Anti-AFK", sub: "open app", run: function () { location.href = "antiafk/"; } },
     { icon: "📸", label: "Burst//Dump", sub: "open app", run: function () { location.href = "burst_dump/"; } },
+    { icon: "🏙️", label: "SkyLine", sub: "open app", run: function () { location.href = "citybuilder/"; } },
     { icon: "🎮", label: "Play Elemental Echo", sub: "minigame", run: function () { closePalette(); document.getElementById("play").scrollIntoView(); var s = document.getElementById("echo-start"); if (s) s.focus(); } },
     { icon: "🌗", label: "Toggle theme", sub: "light / dark", run: function () { Atelier.toggleTheme(); } },
     { icon: "💾", label: "Source on GitHub", sub: "repo", run: function () { window.open("https://github.com/nojukuramu/nojukuramu.github.io", "_blank"); } }

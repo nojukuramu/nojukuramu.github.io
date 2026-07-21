@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>SkyLine · Mobile City Builder</title>
+<meta name="description" content="A procedurally-generated, mobile-friendly 3D city builder in the browser. Terraform, build roads, zone your city, and watch it grow — day and night, rain or shine." />
+<meta name="theme-color" content="#0a0f1a" />
+<meta name="color-scheme" content="dark" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='16' width='6' height='12' fill='%2300d9c0'/%3E%3Crect x='12' y='10' width='6' height='18' fill='%2300b3a4'/%3E%3Crect x='20' y='4' width='6' height='24' fill='%23ffb020'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<canvas id="game-canvas"></canvas>
+
+<!-- ============ BOOT / LOADING ============ -->
+<div id="boot-screen" class="overlay">
+  <div class="boot-inner">
+    <div class="boot-logo">
+      <span class="boot-bar b1"></span><span class="boot-bar b2"></span><span class="boot-bar b3"></span>
+    </div>
+    <h1>SkyLine</h1>
+    <p class="boot-sub">a pocket city builder</p>
+    <div class="boot-progress"><div id="boot-progress-fill" class="boot-progress-fill"></div></div>
+    <p id="boot-status" class="boot-status">warming up the engine…</p>
+  </div>
+</div>
+
+<!-- ============ MODE SELECT ============ -->
+<div id="mode-select" class="overlay hidden">
+  <div class="modal mode-modal">
+    <h2>Start Building</h2>
+    <p class="modal-sub">Choose how you want to play. You can switch later from the pause menu.</p>
+    <div class="mode-cards">
+      <button class="mode-card" data-mode="normal">
+        <div class="mode-icon">🏙️</div>
+        <h3>Normal</h3>
+        <p>Budget, taxes, RCI demand and services gate your growth. The full simulation.</p>
+      </button>
+      <button class="mode-card" data-mode="creative">
+        <div class="mode-icon">✨</div>
+        <h3>Creative</h3>
+        <p>Unlimited budget, everything unlocked. Just build, freely.</p>
+      </button>
+    </div>
+    <div id="continue-row" class="continue-row hidden">
+      <div class="divider"><span>or</span></div>
+      <button id="continue-btn" class="btn btn-secondary btn-wide">Continue last city</button>
+    </div>
+    <button id="load-from-menu-btn" class="btn btn-ghost btn-wide">Load a save…</button>
+  </div>
+</div>
+
+<!-- ============ TOP HUD ============ -->
+<div id="hud-top" class="hud-top hidden">
+  <div class="hud-pill" id="hud-budget"><span class="hud-icon">💰</span><span id="hud-budget-val">—</span></div>
+  <div class="hud-pill" id="hud-pop"><span class="hud-icon">🧑‍🤝‍🧑</span><span id="hud-pop-val">0</span></div>
+  <div class="hud-pill" id="hud-happy"><span class="hud-icon">🙂</span><span id="hud-happy-val">—</span></div>
+  <div class="hud-pill hud-time" id="hud-time">
+    <span class="hud-icon" id="hud-time-icon">☀️</span>
+    <span id="hud-time-val">06:00</span>
+  </div>
+  <button id="hud-pause-btn" class="hud-pill hud-btn" aria-label="Pause / speed">⏸</button>
+  <button id="hud-menu-btn" class="hud-pill hud-btn" aria-label="Menu">☰</button>
+</div>
+
+<!-- Demand meter (RCI) -->
+<div id="demand-meter" class="demand-meter hidden">
+  <div class="demand-row"><span class="demand-dot res"></span><div class="demand-track"><div id="demand-res" class="demand-fill res"></div></div></div>
+  <div class="demand-row"><span class="demand-dot com"></span><div class="demand-track"><div id="demand-com" class="demand-fill com"></div></div></div>
+  <div class="demand-row"><span class="demand-dot ind"></span><div class="demand-track"><div id="demand-ind" class="demand-fill ind"></div></div></div>
+</div>
+
+<!-- ============ TOOL OPTIONS (context) ============ -->
+<div id="tool-options" class="tool-options hidden"></div>
+
+<!-- ============ BUILDING DRAWER ============ -->
+<div id="building-drawer" class="building-drawer hidden">
+  <div class="drawer-handle"></div>
+  <div id="building-drawer-grid" class="drawer-grid"></div>
+</div>
+
+<!-- ============ BOTTOM TOOLBAR ============ -->
+<div id="toolbar" class="toolbar hidden">
+  <button class="tool-btn" data-tool="terrain"><span class="tool-ico">⛰️</span><span>Terrain</span></button>
+  <button class="tool-btn" data-tool="roads"><span class="tool-ico">🛣️</span><span>Roads</span></button>
+  <button class="tool-btn" data-tool="zone"><span class="tool-ico">🏘️</span><span>Zones</span></button>
+  <button class="tool-btn" data-tool="build"><span class="tool-ico">🏛️</span><span>Build</span></button>
+  <button class="tool-btn" data-tool="bulldoze"><span class="tool-ico">🚧</span><span>Clear</span></button>
+  <button class="tool-btn tool-btn-select" data-tool="select"><span class="tool-ico">👆</span><span>Select</span></button>
+</div>
+
+<!-- ============ PAUSE / MENU ============ -->
+<div id="pause-menu" class="overlay hidden">
+  <div class="modal">
+    <h2>Menu</h2>
+    <div class="menu-list">
+      <button id="resume-btn" class="btn btn-primary btn-wide">Resume</button>
+      <button id="save-btn" class="btn btn-secondary btn-wide">Save City</button>
+      <button id="load-btn" class="btn btn-secondary btn-wide">Load City</button>
+      <button id="settings-btn" class="btn btn-secondary btn-wide">Settings</button>
+      <button id="newgame-btn" class="btn btn-ghost btn-wide">New City</button>
+    </div>
+  </div>
+</div>
+
+<div id="settings-panel" class="overlay hidden">
+  <div class="modal">
+    <h2>Settings</h2>
+    <div class="settings-list">
+      <div class="settings-row">
+        <div><strong>Game Mode</strong><div class="settings-hint" id="settings-mode-hint">Normal</div></div>
+        <button id="switch-mode-btn" class="btn btn-ghost">Switch</button>
+      </div>
+      <div class="settings-row">
+        <div><strong>Graphics Quality</strong><div class="settings-hint">Auto-detected, adjustable</div></div>
+        <select id="quality-select" class="select">
+          <option value="auto">Auto</option>
+          <option value="low">Low</option>
+          <option value="mid">Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <div><strong>Weather</strong><div class="settings-hint">Rain cycle on/off</div></div>
+        <label class="switch"><input type="checkbox" id="weather-toggle" checked /><span class="slider"></span></label>
+      </div>
+      <div class="settings-row">
+        <div><strong>Day Length</strong><div class="settings-hint">Minutes per in-game day</div></div>
+        <input type="range" id="daylength-range" min="2" max="20" step="1" value="8" class="range" />
+      </div>
+    </div>
+    <button id="settings-close-btn" class="btn btn-primary btn-wide">Done</button>
+  </div>
+</div>
+
+<div id="save-panel" class="overlay hidden">
+  <div class="modal save-modal">
+    <h2 id="save-panel-title">Save City</h2>
+    <div id="save-slots" class="save-slots"></div>
+    <div class="save-actions">
+      <button id="export-save-btn" class="btn btn-ghost">Export .json</button>
+      <label class="btn btn-ghost file-btn">Import .json<input type="file" id="import-save-input" accept="application/json" hidden /></label>
+    </div>
+    <button id="save-panel-close-btn" class="btn btn-primary btn-wide">Close</button>
+  </div>
+</div>
+
+<div id="mode-switch-warning" class="overlay hidden">
+  <div class="modal">
+    <h2>⚠️ Switch to Normal Mode?</h2>
+    <p class="modal-sub">Your city's economy will initialize from its current state. A large Creative-mode city may start unbalanced — budget and tax income begin fresh from here.</p>
+    <div class="menu-list">
+      <button id="confirm-switch-btn" class="btn btn-primary btn-wide">Switch to Normal</button>
+      <button id="cancel-switch-btn" class="btn btn-ghost btn-wide">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+<div id="fps-counter" class="fps-counter">60 fps</div>
+
+<a id="back-home" href="../index.html" class="back-home" aria-label="Back to home">← nojukuramu.io</a>
+
+<!-- Vendored Three.js r128 — no external CDN dependency -->
+<script src="vendor/three.min.js"></script>
+
+<script src="js/core.js"></script>
+<script src="js/qualityManager.js"></script>
+<script src="js/procgen.js"></script>
+<script src="js/terrain.js"></script>
+<script src="js/water.js"></script>
+<script src="js/lighting.js"></script>
+<script src="js/roads.js"></script>
+<script src="js/zoning.js"></script>
+<script src="js/buildings.js"></script>
+<script src="js/citizens.js"></script>
+<script src="js/traffic.js"></script>
+<script src="js/weather.js"></script>
+<script src="js/economy.js"></script>
+<script src="js/save.js"></script>
+<script src="js/input.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
