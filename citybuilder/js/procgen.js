@@ -14,6 +14,47 @@
     return c;
   }
 
+  // FIX 7b: fraction of the facade texture height reserved as a flat roof
+  // band (must match buildings.js ROOF_BAND, which remaps the box UVs to match).
+  var ROOF_BAND_RATIO = 0.12;
+
+  // Darken/lighten a "#rrggbb" hex color by a signed fractional amount
+  // (negative darkens toward black, positive lightens toward white).
+  function shadeHex(hex, amt) {
+    var c = hex.replace("#", "");
+    if (c.length === 3) c = c.split("").map(function (ch) { return ch + ch; }).join("");
+    var r = parseInt(c.substring(0, 2), 16), g = parseInt(c.substring(2, 4), 16), b = parseInt(c.substring(4, 6), 16);
+    function adj(v) { return Math.max(0, Math.min(255, Math.round(amt < 0 ? v * (1 + amt) : v + (255 - v) * amt))); }
+    return "rgb(" + adj(r) + "," + adj(g) + "," + adj(b) + ")";
+  }
+
+  // FIX 8: resolve a building's wall/glass/roof colors. Accepts an explicit
+  // `opts.wallColor` (hex string like "#b8a992", or {h,s,l}); falls back to
+  // the original hue-only behavior when only opts.hue/opts.light are given.
+  function resolveWallColors(opts) {
+    var roof = "hsl(220, 6%, 19%)"; // flat dark neutral gray, same for every palette
+    if (opts.wallColor) {
+      if (typeof opts.wallColor === "string") {
+        return { fill: opts.wallColor, glassA: shadeHex(opts.wallColor, -0.38), glassB: shadeHex(opts.wallColor, -0.5), roof: roof };
+      }
+      var wc = opts.wallColor;
+      return {
+        fill: "hsl(" + wc.h + ", " + wc.s + "%, " + wc.l + "%)",
+        glassA: "hsl(" + wc.h + ", " + Math.max(6, wc.s - 6) + "%, " + Math.max(6, wc.l - 18) + "%)",
+        glassB: "hsl(" + wc.h + ", " + Math.max(6, wc.s - 6) + "%, " + Math.max(6, wc.l - 24) + "%)",
+        roof: roof
+      };
+    }
+    var baseHue = opts.hue != null ? opts.hue : 210;
+    var light = opts.light != null ? opts.light : 30;
+    return {
+      fill: "hsl(" + baseHue + ", 18%, " + light + "%)",
+      glassA: "hsl(" + (baseHue + 8) + ", 26%, " + Math.max(6, light - 14) + "%)",
+      glassB: "hsl(" + (baseHue + 8) + ", 26%, " + Math.max(6, light - 20) + "%)",
+      roof: roof
+    };
+  }
+
   // cheap value-noise for terrain-ish speckle
   function valueNoise(w, h, scale, seed) {
     seed = seed || 1;
@@ -108,32 +149,47 @@
     },
 
     // Building facade: window grid, emissive-ready (alpha channel doubles as emissive mask).
+    // FIX 7a: the day map always gets dark glass windows (with a subtle two-tone
+    // checker for variety) — the lit-window pattern is painted ONLY into the
+    // emissive mask, so night lighting comes purely from emissiveMap * emissiveIntensity.
+    // FIX 7b: the top ROOF_BAND_RATIO slice of the canvas is reserved as a flat,
+    // windowless roof color (buildings.js remaps the box UVs so only the top/
+    // bottom faces sample this band and only the side faces sample the rest).
     buildingTexture: function (opts) {
       opts = opts || {};
       var cols = opts.cols || 6, rows = opts.rows || 10;
       var w = cols * 24, h = rows * 24;
       var c = mkCanvas(w, h);
       var ctx = c.getContext("2d");
-      var baseHue = opts.hue != null ? opts.hue : 210;
-      ctx.fillStyle = "hsl(" + baseHue + ", 18%, " + (opts.light || 30) + "%)";
+      var wall = resolveWallColors(opts);
+
+      ctx.fillStyle = wall.fill;
       ctx.fillRect(0, 0, w, h);
 
       var litMask = mkCanvas(w, h);
       var lctx = litMask.getContext("2d");
       lctx.fillStyle = "#000"; lctx.fillRect(0, 0, w, h);
 
+      var roofPx = Math.round(h * ROOF_BAND_RATIO);
+
       for (var r = 0; r < rows; r++) {
         for (var cix = 0; cix < cols; cix++) {
           var px = cix * 24 + 4, py = r * 24 + 4;
-          var lit = Math.random() < (opts.litChance != null ? opts.litChance : 0.0);
-          ctx.fillStyle = lit ? "hsl(46, 90%, 78%)" : "hsl(" + (baseHue + 8) + ", 30%, " + ((opts.light || 30) - 10) + "%)";
+          if (py < roofPx) continue; // this row falls inside the roof band — no windows
+          ctx.fillStyle = (cix + r) % 2 === 0 ? wall.glassA : wall.glassB;
           ctx.fillRect(px, py, 16, 14);
+          var lit = Math.random() < (opts.litChance != null ? opts.litChance : 0.0);
           if (lit) {
             lctx.fillStyle = "#fff";
             lctx.fillRect(px, py, 16, 14);
           }
         }
       }
+
+      // flat roof band, painted last so it stays clean of any window fragments
+      ctx.fillStyle = wall.roof;
+      ctx.fillRect(0, 0, w, roofPx);
+
       var tex = new THREE.CanvasTexture(c);
       var emTex = new THREE.CanvasTexture(litMask);
       tex.anisotropy = 4;

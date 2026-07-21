@@ -47,6 +47,14 @@
         avenue: Procgen.roadTexture("avenue"),
         highway: Procgen.roadTexture("highway")
       };
+      // One shared material per road type (FIX 11) — every edge mesh of a
+      // given type reuses the same material instance instead of allocating
+      // its own, so wet-road tinting is 3 color updates instead of N.
+      this.roadMats = {
+        street: new THREE.MeshLambertMaterial({ map: this.roadTextures.street }),
+        avenue: new THREE.MeshLambertMaterial({ map: this.roadTextures.avenue }),
+        highway: new THREE.MeshLambertMaterial({ map: this.roadTextures.highway })
+      };
       this.streetLightGeo = new THREE.CylinderGeometry(0.12, 0.15, 4.2, 5);
       this.streetLightMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
       this.streetLampGlow = Procgen.glowSprite("rgba(255,224,150,1)", 64);
@@ -74,6 +82,10 @@
     snapPoint: function (x, z, fromPoint) {
       var node = this._findNearestNode(x, z, 9);
       if (node) return { x: node.x, z: node.z, node: node };
+      // FIX 1: snap onto the nearest point of an existing edge's polyline
+      // (not just its endpoints) so a new road can T-branch mid-edge.
+      var onEdge = this._findNearestEdgePoint(x, z, 9);
+      if (onEdge) return { x: onEdge.point.x, z: onEdge.point.z, node: null, onEdge: onEdge };
       var gx = Math.round(x / 4) * 4, gz = Math.round(z / 4) * 4;
       if (fromPoint && !this.curveMode) {
         var dx = x - fromPoint.x, dz = z - fromPoint.z;
@@ -86,6 +98,33 @@
         }
       }
       return { x: gx, z: gz, node: null };
+    },
+
+    // Closest point on segment a->b to (x,z), with its parametric t in [0,1].
+    _closestPointOnSeg: function (x, z, a, b) {
+      var dx = b.x - a.x, dz = b.z - a.z;
+      var len2 = dx * dx + dz * dz || 1;
+      var t = util.clamp(((x - a.x) * dx + (z - a.z) * dz) / len2, 0, 1);
+      return { x: a.x + dx * t, z: a.z + dz * t, t: t };
+    },
+
+    // Nearest point on ANY existing edge's polyline to (x,z), within maxDist.
+    // Returns {edge, segIndex, point:{x,z}, t} or null.
+    _findNearestEdgePoint: function (x, z, maxDist) {
+      var best = null, bestD = maxDist;
+      for (var i = 0; i < this.edges.length; i++) {
+        var e = this.edges[i];
+        for (var j = 0; j < e.pts.length - 1; j++) {
+          var cp = this._closestPointOnSeg(x, z, e.pts[j], e.pts[j + 1]);
+          var d = Math.hypot(x - cp.x, z - cp.z);
+          if (d < bestD) { bestD = d; best = { edge: e, segIndex: j, point: { x: cp.x, z: cp.z }, t: cp.t }; }
+        }
+      }
+      return best;
+    },
+
+    _nodeById: function (id) {
+      return this.nodes.find(function (n) { return n.id === id; }) || null;
     },
 
     // ---------------- interaction ----------------
@@ -141,8 +180,17 @@
     cancelDrag: function () { this.dragging = false; this.dragStartSnap = null; this._clearPreview(); },
 
     // ---------------- geometry / commit ----------------
+    // `steps` is an optional override (previews pass a fixed coarse value);
+    // when omitted, steps scale with path length (~1 sample per 4 units,
+    // clamped to [8,48]) so long roads stay finer than the terrain grid
+    // (~4.2 units/cell) instead of skipping over undulations between samples.
     _sampleCurve: function (a, b, handle, steps) {
-      steps = steps || 14;
+      if (!steps) {
+        var approxLen = handle
+          ? Math.hypot(handle.x - a.x, handle.z - a.z) + Math.hypot(b.x - handle.x, b.z - handle.z)
+          : Math.hypot(b.x - a.x, b.z - a.z);
+        steps = util.clamp(Math.round(approxLen / 4), 8, 48);
+      }
       var pts = [];
       for (var i = 0; i <= steps; i++) {
         var t = i / steps;
@@ -161,6 +209,8 @@
 
     _getOrCreateNode: function (p) {
       if (p.node) return p.node;
+      // FIX 1: point snapped mid-edge -> split that edge into two, return the new node.
+      if (p.onEdge) return this._splitEdgeAt(p.onEdge);
       var existing = this._findNearestNode(p.x, p.z, 0.5);
       if (existing) return existing;
       var n = { id: this._nextId++, x: p.x, z: p.z };
@@ -168,52 +218,244 @@
       return n;
     },
 
+    // Split `onEdge.edge` at `onEdge.point` (which lies on segment onEdge.segIndex),
+    // replacing it with two edges that partition the original pts/elev arrays.
+    // Used both for mid-edge endpoint snapping (FIX 1) and crossing detection (FIX 2).
+    _splitEdgeAt: function (onEdge) {
+      var terrain = Game.Terrain, wl = terrain.waterLevel;
+      var edge = onEdge.edge, point = onEdge.point, segIndex = onEdge.segIndex;
+      var idx = this.edges.indexOf(edge);
+      if (idx < 0) {
+        // The referenced edge was already replaced by an earlier split in this
+        // same commit (e.g. two crossings landing on the same original edge).
+        // Relocate the split point onto whichever surviving edge now carries it.
+        var relocated = this._findNearestEdgePoint(point.x, point.z, 1.5);
+        if (!relocated) {
+          var coincident0 = this._findNearestNode(point.x, point.z, 0.5);
+          if (coincident0) return coincident0;
+          var n0 = { id: this._nextId++, x: point.x, z: point.z };
+          this.nodes.push(n0);
+          return n0;
+        }
+        edge = relocated.edge; point = relocated.point; segIndex = relocated.segIndex;
+        idx = this.edges.indexOf(edge);
+      }
+
+      // If a node already sits (essentially) at this point, just reuse it.
+      var coincident = this._findNearestNode(point.x, point.z, 0.5);
+      if (coincident) return coincident;
+
+      var pts = edge.pts, elev = edge.elev;
+      var newNode = { id: this._nextId++, x: point.x, z: point.z };
+      this.nodes.push(newNode);
+
+      var segLen = Math.hypot(pts[segIndex + 1].x - pts[segIndex].x, pts[segIndex + 1].z - pts[segIndex].z);
+      var t = segLen > 1e-6 ? Math.hypot(point.x - pts[segIndex].x, point.z - pts[segIndex].z) / segLen : 0;
+      var splitElev = util.lerp(elev[segIndex], elev[segIndex + 1], t);
+      // never let the interpolated split point sink below ground or water clearance
+      var groundAtSplit = terrain.heightAt(point.x, point.z);
+      var minAllowed = groundAtSplit + 0.1;
+      if (groundAtSplit < wl) minAllowed = Math.max(minAllowed, wl + 2.0);
+      if (splitElev < minAllowed) splitElev = minAllowed;
+
+      var splitPt = { x: point.x, z: point.z };
+      var ptsA = pts.slice(0, segIndex + 1).concat([splitPt]);
+      var ptsB = [splitPt].concat(pts.slice(segIndex + 1));
+      var elevA = elev.slice(0, segIndex + 1).concat([splitElev]);
+      var elevB = [splitElev].concat(elev.slice(segIndex + 1));
+
+      var edgeA = { id: this._nextId++, a: edge.a, b: newNode.id, type: edge.type, pts: ptsA, elev: elevA, bridge: edge.bridge };
+      var edgeB = { id: this._nextId++, a: newNode.id, b: edge.b, type: edge.type, pts: ptsB, elev: elevB, bridge: edge.bridge };
+
+      if (edge.mesh) { this.group.remove(edge.mesh); edge.mesh.geometry.dispose(); }
+      (edge.pylons || []).forEach(function (p) { this.group.remove(p); }, this);
+      this.edges.splice(idx, 1);
+      this.edges.push(edgeA, edgeB);
+      this._rebuildEdgeMesh(edgeA);
+      this._rebuildEdgeMesh(edgeB);
+      this._adjacency = null;
+      return newNode;
+    },
+
+    // 2D segment-segment intersection (x,z plane). Returns {x,z,t,u} (t,u in [0,1]) or null.
+    _segIntersect: function (p1, p2, p3, p4) {
+      var x1 = p1.x, y1 = p1.z, x2 = p2.x, y2 = p2.z, x3 = p3.x, y3 = p3.z, x4 = p4.x, y4 = p4.z;
+      var d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+      if (Math.abs(d) < 1e-9) return null;
+      var t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / d;
+      var u = ((x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2)) / d;
+      if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+      return { x: x1 + t * (x2 - x1), z: y1 + t * (y2 - y1), t: t, u: u };
+    },
+
+    // FIX 2: find every crossing between the new road's polyline `pts` and every
+    // existing edge, skipping crossings within ~3 units of either road's endpoints
+    // (those are already handled by node/edge snapping). Sorted by arc-length
+    // along `pts` so multiple crossings on one placement come out in order.
+    _findCrossings: function (pts, nodeA, nodeB) {
+      var arcLens = [0];
+      for (var i = 1; i < pts.length; i++) arcLens.push(arcLens[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z));
+
+      var crossings = [];
+      for (i = 0; i < pts.length - 1; i++) {
+        var p1 = pts[i], p2 = pts[i + 1];
+        for (var e = 0; e < this.edges.length; e++) {
+          var edge = this.edges[e];
+          var nA = this._nodeById(edge.a), nB = this._nodeById(edge.b);
+          for (var j = 0; j < edge.pts.length - 1; j++) {
+            var hit = this._segIntersect(p1, p2, edge.pts[j], edge.pts[j + 1]);
+            if (!hit) continue;
+            var pt = { x: hit.x, z: hit.z };
+            if (Math.hypot(pt.x - nodeA.x, pt.z - nodeA.z) < 3) continue;
+            if (Math.hypot(pt.x - nodeB.x, pt.z - nodeB.z) < 3) continue;
+            if (nA && Math.hypot(pt.x - nA.x, pt.z - nA.z) < 3) continue;
+            if (nB && Math.hypot(pt.x - nB.x, pt.z - nB.z) < 3) continue;
+            var arcLen = arcLens[i] + hit.t * (arcLens[i + 1] - arcLens[i]);
+            crossings.push({ arcLen: arcLen, newSegIndex: i, point: pt, edge: edge, segIndex: j });
+          }
+        }
+      }
+      crossings.sort(function (a, b) { return a.arcLen - b.arcLen; });
+      // dedupe near-duplicate hits (e.g. a shared vertex touched from both sides)
+      var deduped = [];
+      crossings.forEach(function (c) {
+        var dup = deduped.some(function (d) { return Math.hypot(d.point.x - c.point.x, d.point.z - c.point.z) < 0.5; });
+        if (!dup) deduped.push(c);
+      });
+      return deduped;
+    },
+
+    // Cuts the new road's `pts` into a chain of segments at every crossing,
+    // splitting the crossed existing edges along the way. Returns an array of
+    // {pts, startNode, endNode} to be committed as individual edges.
+    _splitAtCrossings: function (pts, nodeA, nodeB) {
+      var crossings = this._findCrossings(pts, nodeA, nodeB);
+      if (!crossings.length) return [{ pts: pts, startNode: nodeA, endNode: nodeB }];
+
+      var chain = [];
+      var curPts = [pts[0]];
+      var curStartNode = nodeA;
+      var ci = 0;
+      for (var i = 0; i < pts.length - 1; i++) {
+        while (ci < crossings.length && crossings[ci].newSegIndex === i) {
+          var c = crossings[ci];
+          var crossNode = this._splitEdgeAt(c);
+          var crossPt = { x: crossNode.x, z: crossNode.z };
+          curPts.push(crossPt);
+          chain.push({ pts: curPts, startNode: curStartNode, endNode: crossNode });
+          curPts = [crossPt];
+          curStartNode = crossNode;
+          ci++;
+        }
+        curPts.push(pts[i + 1]);
+      }
+      chain.push({ pts: curPts, startNode: curStartNode, endNode: nodeB });
+      return chain;
+    },
+
     _commitEdge: function (aPt, bPt, handle) {
       var nodeA = this._getOrCreateNode(aPt);
       var nodeB = this._getOrCreateNode(bPt);
       if (nodeA === nodeB) return;
       var pts = this._sampleCurve(nodeA, nodeB, handle);
-      var edge = { id: this._nextId++, a: nodeA.id, b: nodeB.id, type: this.curType, pts: pts, bridge: false };
-      this._gradeAndElevate(edge);
-      this.edges.push(edge);
-      this._rebuildEdgeMesh(edge);
+      // pin the sampled endpoints exactly to the (possibly just-split) node coords
+      pts[0] = { x: nodeA.x, z: nodeA.z };
+      pts[pts.length - 1] = { x: nodeB.x, z: nodeB.z };
+
+      var chain = this._splitAtCrossings(pts, nodeA, nodeB);
+      var createdEdges = [], totalCost = 0;
+      for (var s = 0; s < chain.length; s++) {
+        var seg = chain[s];
+        var edge = { id: this._nextId++, a: seg.startNode.id, b: seg.endNode.id, type: this.curType, pts: seg.pts, bridge: false };
+        this._gradeAndElevate(edge);
+        this.edges.push(edge);
+        this._rebuildEdgeMesh(edge);
+        createdEdges.push(edge);
+        totalCost += TYPES[edge.type].cost * (seg.pts.length - 1) / 6;
+      }
+
+      // FIX 10 robustness: grading the new road's bed (pass 1 above) can nudge
+      // terrain right under a NEIGHBORING already-placed road (e.g. a T-branch
+      // grading near the road it snapped onto). Re-clamp every edge's deck
+      // against current ground so nothing ends up buried or submerged as a
+      // side effect of a later placement.
+      this._reclampAllEdges();
+
       this._rebuildHubs();
       this._rebuildStreetLights();
       this._adjacency = null;
       if (Game.Zoning) Game.Zoning.onRoadsChanged();
-      if (Game.Economy) Game.Economy.spend(TYPES[edge.type].cost * (pts.length - 1) / 6, "Road construction");
-      return edge;
+      if (Game.Economy) Game.Economy.spend(totalCost, "Road construction");
+      return createdEdges[0];
+    },
+
+    // Re-clamp every edge's elev array against the current terrain so a deck
+    // point can never end up buried (or submerged over water) as a side
+    // effect of grading done while placing a different road.
+    _reclampAllEdges: function () {
+      var terrain = Game.Terrain, wl = terrain.waterLevel;
+      var self = this;
+      this.edges.forEach(function (edge) {
+        var changed = false;
+        for (var i = 0; i < edge.pts.length; i++) {
+          var groundH = terrain.heightAt(edge.pts[i].x, edge.pts[i].z);
+          var minAllowed = groundH + 0.1;
+          if (groundH < wl) minAllowed = Math.max(minAllowed, wl + 2.0);
+          if (edge.elev[i] < minAllowed) { edge.elev[i] = minAllowed; changed = true; }
+        }
+        if (changed) self._rebuildEdgeMesh(edge);
+      });
     },
 
     // Auto-grade terrain under the road path; auto-bridge water crossings.
+    // FIX 10: elevation is derived per-point from the (graded) ground height
+    // rather than a single lerp between endpoints, so it can never bury or
+    // submerge a deck segment on uneven terrain — followed by a few smoothing
+    // passes (endpoints pinned) with a hard floor clamp after each pass.
     _gradeAndElevate: function (edge) {
       var terrain = Game.Terrain;
       var wl = terrain.waterLevel;
-      var startH = terrain.heightAt(edge.pts[0].x, edge.pts[0].z);
-      var endH = terrain.heightAt(edge.pts[edge.pts.length - 1].x, edge.pts[edge.pts.length - 1].z);
-      var crossesWater = false;
+      var pts = edge.pts;
+      var startH = terrain.heightAt(pts[0].x, pts[0].z);
+      var endH = terrain.heightAt(pts[pts.length - 1].x, pts[pts.length - 1].z);
+      var i, t, p, target, groundH;
+
+      // Pass 1: grade a smooth bed toward the endpoint-interpolated line,
+      // skipping points that are underwater (nothing to grade there).
+      for (i = 0; i < pts.length; i++) {
+        p = pts[i];
+        t = pts.length > 1 ? i / (pts.length - 1) : 0;
+        target = util.lerp(startH, endH, t);
+        groundH = terrain.heightAt(p.x, p.z);
+        if (groundH >= wl + 0.4) terrain.applyBrush(p.x, p.z, "flatten", TYPES[edge.type].width * 0.9, 0.9, target);
+      }
+
+      // Pass 2: per-point deck height from the (now graded) ground.
+      edge.bridge = false;
       edge.elev = [];
-      for (var i = 0; i < edge.pts.length; i++) {
-        var p = edge.pts[i];
-        var t = i / (edge.pts.length - 1);
-        var target = util.lerp(startH, endH, t);
-        var groundH = terrain.heightAt(p.x, p.z);
-        if (groundH < wl + 0.4) crossesWater = true;
-        else if (Game.mode !== "creative" || true) {
-          // grade a small radius flat toward the target height for a smooth road bed
-          terrain.applyBrush(p.x, p.z, "flatten", TYPES[edge.type].width * 0.9, 0.9, target);
+      for (i = 0; i < pts.length; i++) {
+        groundH = terrain.heightAt(pts[i].x, pts[i].z);
+        if (groundH < wl + 0.4) {
+          edge.bridge = true;
+          edge.elev.push(wl + 2.2);
+        } else {
+          edge.elev.push(groundH + 0.12);
         }
       }
-      if (crossesWater) {
-        edge.bridge = true;
-        for (i = 0; i < edge.pts.length; i++) {
-          t = i / (edge.pts.length - 1);
-          edge.elev.push(Math.max(util.lerp(startH, endH, t), wl + 2.2));
+
+      // Pass 3: 3 smoothing passes, endpoints pinned, clamped to never dip
+      // below ground (or below water clearance over water) after each pass.
+      for (var pass = 0; pass < 3; pass++) {
+        var next = edge.elev.slice();
+        for (i = 1; i < edge.elev.length - 1; i++) {
+          next[i] = (edge.elev[i - 1] + edge.elev[i] + edge.elev[i + 1]) / 3;
         }
-      } else {
-        for (i = 0; i < edge.pts.length; i++) {
-          t = i / (edge.pts.length - 1);
-          edge.elev.push(util.lerp(startH, endH, t) + 0.12);
+        edge.elev = next;
+        for (i = 0; i < edge.elev.length; i++) {
+          groundH = terrain.heightAt(pts[i].x, pts[i].z);
+          var minAllowed = groundH + 0.1;
+          if (groundH < wl) minAllowed = Math.max(minAllowed, wl + 2.0);
+          if (edge.elev[i] < minAllowed) edge.elev[i] = minAllowed;
         }
       }
     },
@@ -250,7 +492,7 @@
       geo.setIndex(indices);
       geo.computeVertexNormals();
 
-      var mat = new THREE.MeshLambertMaterial({ map: this.roadTextures[edge.type] });
+      var mat = this.roadMats[edge.type]; // FIX 11: shared per-type material, not one per edge
       var mesh = new THREE.Mesh(geo, mat);
       mesh.receiveShadow = true;
       mesh.castShadow = edge.bridge;
@@ -263,6 +505,7 @@
       if (edge.bridge) {
         for (i = 2; i < pts.length - 1; i += 3) {
           var h = elev[i] - Game.Terrain.heightAt(pts[i].x, pts[i].z);
+          if (h <= 1.5) continue; // FIX 10: pylons only where the deck actually clears the ground
           var geoP = new THREE.CylinderGeometry(0.6, 0.6, Math.max(0.5, h), 6);
           var pylon = new THREE.Mesh(geoP, this.hubMat);
           pylon.position.set(pts[i].x, elev[i] - h / 2, pts[i].z);
@@ -277,11 +520,15 @@
       this.hubGroup = new THREE.Group();
       var deg = {};
       this.edges.forEach(function (e) {
-        deg[e.a] = deg[e.a] || { count: 0, maxW: 0 };
-        deg[e.b] = deg[e.b] || { count: 0, maxW: 0 };
+        deg[e.a] = deg[e.a] || { count: 0, maxW: 0, maxElev: -Infinity };
+        deg[e.b] = deg[e.b] || { count: 0, maxW: 0, maxElev: -Infinity };
         deg[e.a].count++; deg[e.b].count++;
         deg[e.a].maxW = Math.max(deg[e.a].maxW, TYPES[e.type].width);
         deg[e.b].maxW = Math.max(deg[e.b].maxW, TYPES[e.type].width);
+        // FIX 3: hub sits at deck height, not terrain height — take the max
+        // of the connecting edges' elevation at their endpoint on this node.
+        deg[e.a].maxElev = Math.max(deg[e.a].maxElev, e.elev[0]);
+        deg[e.b].maxElev = Math.max(deg[e.b].maxElev, e.elev[e.elev.length - 1]);
       });
       var self = this;
       Object.keys(deg).forEach(function (id) {
@@ -290,7 +537,7 @@
         var node = self.nodes.find(function (n) { return n.id == id; });
         if (!node) return;
         var r = info.maxW / 2 + (info.count > 2 ? 1.2 : 0.2);
-        var h = Game.Terrain.heightAt(node.x, node.z) + 0.13;
+        var h = info.maxElev + 0.02;
         var geo = new THREE.CircleGeometry(r, 16);
         geo.rotateX(-Math.PI / 2);
         var mesh = new THREE.Mesh(geo, self.hubMat);
@@ -541,10 +788,9 @@
     update: function () {
       var w = this._wetness || 0;
       var c = this._dryColor.clone().lerp(this._wetColor, w * 0.7);
-      for (var i = 0; i < this.edges.length; i++) {
-        var mesh = this.edges[i].mesh;
-        if (mesh) mesh.material.color.copy(c);
-      }
+      // FIX 11: tint the 3 shared materials directly instead of looping every edge mesh.
+      var self = this;
+      Object.keys(this.roadMats).forEach(function (t) { self.roadMats[t].color.copy(c); });
     }
   };
 

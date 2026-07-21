@@ -17,19 +17,25 @@
   "use strict";
   var CFG = Game.CONFIG;
 
+  // FIX 9: the old normal came from a per-vertex wave sampled on a 64x64 plane,
+  // which produced a blotchy/faceted look once interpolated across triangles,
+  // plus a sparkle term built from two axis-aligned sin() waves that lined up
+  // into a visible repeating dot grid. Both are replaced below: the normal is
+  // now computed per-pixel in the fragment shader from a continuous sum of
+  // sine waves at incommensurate frequencies/directions (an analytic height
+  // field, so its gradient — and therefore the normal — is exact, no dFdx
+  // needed, and never faceted by the underlying mesh resolution). A small
+  // vertex displacement is kept purely for silhouette/edge movement.
   var vertexShader = [
     "uniform float uTime;",
     "varying vec2 vUv;",
-    "varying float vWave;",
     "varying vec3 vWorldPos;",
     "void main(){",
     "  vUv = uv;",
     "  vec3 pos = position;",
-    "  float w1 = sin(pos.x * 0.18 + uTime * 1.1) * 0.16;",
-    "  float w2 = cos(pos.z * 0.22 - uTime * 0.9) * 0.12;",
-    "  float w = w1 + w2;",
-    "  pos.y += w;",
-    "  vWave = w;",
+    "  float w1 = sin(pos.x * 0.18 + uTime * 1.1) * 0.09;",
+    "  float w2 = cos(pos.z * 0.22 - uTime * 0.9) * 0.07;",
+    "  pos.y += w1 + w2;",
     "  vec4 world = modelMatrix * vec4(pos, 1.0);",
     "  vWorldPos = world.xyz;",
     "  gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);",
@@ -46,18 +52,31 @@
     "uniform float uOpacity;",
     "uniform vec3 uCamPos;",
     "varying vec2 vUv;",
-    "varying float vWave;",
     "varying vec3 vWorldPos;",
+    // Analytic gradient of a sum of 4 sine wave trains at incommensurate
+    // frequencies/directions/speeds — smooth, non-repeating, no dot pattern.
+    "vec2 waveGradient(vec2 p, float t) {",
+    "  vec2 g = vec2(0.0);",
+    "  vec2 k1 = vec2(0.045, 0.091); g += k1 * 0.30 * cos(dot(p, k1) + t * 0.35);",
+    "  vec2 k2 = vec2(-0.071, 0.033); g += k2 * 0.22 * cos(dot(p, k2) - t * 0.27);",
+    "  vec2 k3 = vec2(0.113, -0.052); g += k3 * 0.14 * cos(dot(p, k3) + t * 0.51);",
+    "  vec2 k4 = vec2(0.021, -0.064); g += k4 * 0.09 * cos(dot(p, k4) - t * 0.16);",
+    "  return g;",
+    "}",
     "void main(){",
     "  vec3 viewDir = normalize(uCamPos - vWorldPos);",
-    "  vec3 normal = normalize(vec3(-vWave*1.4, 1.0, -vWave*1.1));",
+    "  vec2 grad = waveGradient(vWorldPos.xz, uTime);",
+    "  vec3 normal = normalize(vec3(-grad.x, 1.0, -grad.y));",
     "  float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 3.0);",
     "  vec3 reflection = mix(uSkyHorizon, uSkyTop, fresnel);",
     "  vec3 base = mix(uDeep, reflection, clamp(fresnel + 0.15, 0.0, 1.0));",
-    "  float spec = pow(max(dot(reflect(-uSunDir, normal), viewDir), 0.0), 60.0);",
+    "  vec3 reflected = reflect(-uSunDir, normal);",
+    "  float spec = pow(max(dot(reflected, viewDir), 0.0), 60.0);",
     "  base += uSunColor * spec * 0.9;",
-    "  float sparkle = sin(vWorldPos.x*2.2 + uTime*3.0) * sin(vWorldPos.z*2.4 - uTime*2.6);",
-    "  base += vec3(0.05) * smoothstep(0.85, 1.0, sparkle) * (0.4+fresnel);",
+    // Sparkle now rides the same irregular analytic normal (tight glint
+    // lobe) instead of an independent sin*sin dot grid.
+    "  float glint = pow(max(dot(reflected, viewDir), 0.0), 240.0);",
+    "  base += vec3(1.0) * glint * 1.1 * (0.35 + fresnel);",
     "  gl_FragColor = vec4(base, uOpacity);",
     "}"
   ].join("\n");

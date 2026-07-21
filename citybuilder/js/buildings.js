@@ -18,15 +18,28 @@
   "use strict";
   var util = Game.util, CFG = Game.CONFIG;
 
-  var ZONE_HUE = { residential: 130, commercial: 205, industrial: 42 };
+  // FIX 8: desaturated, realistic per-zone wall palettes, replacing the old
+  // green/blue/orange ZONE_HUE approach. Each variant in a bucket picks its
+  // palette entry deterministically (by variant index) so buckets stay
+  // visually distinct from one another within the same zone.
+  var ZONE_PALETTES = {
+    residential: ["#b8a992", "#9c8f80", "#8f6f5f", "#a9a29a"],
+    commercial:  ["#7f8fa0", "#6d7d90", "#8a97a5", "#5e6b7a"],
+    industrial:  ["#8d8a82", "#97907f", "#7d7568", "#6e6a61"]
+  };
   var LEVELS = ["low", "mid", "high"];
+  // FIX 5: footprints capped so buildings never exceed their 8-unit parcel;
+  // density differences now come from height (hMin/hMax unchanged).
   var LEVEL_RANGES = {
-    low:  { footMin: 5, footMax: 7,  hMin: 4,  hMax: 8,  cap: 6  },
-    mid:  { footMin: 6, footMax: 9,  hMin: 9,  hMax: 18, cap: 16 },
-    high: { footMin: 8, footMax: 13, hMin: 20, hMax: 42, cap: 40 }
+    low:  { footMin: 4.5, footMax: 6,   hMin: 4,  hMax: 8,  cap: 6  },
+    mid:  { footMin: 5,   footMax: 6.5, hMin: 9,  hMax: 18, cap: 16 },
+    high: { footMin: 5.5, footMax: 7,   hMin: 20, hMax: 42, cap: 40 }
   };
   var VARIANTS_PER_BUCKET = 4;
   var BUCKET_CAPACITY = 48;
+  // FIX 7b: reserve the top slice of the shared facade texture as a flat
+  // roof band (see procgen.js buildingTexture) — must match ROOF_BAND there.
+  var ROOF_BAND = 0.12;
 
   var SERVICE_DEFS = {
     power_plant: { name: "Power Plant", cost: 4200, footprint: 14, coverage: 90, ico: "⚡" },
@@ -57,6 +70,7 @@
 
       this.boxGeo = new THREE.BoxGeometry(1, 1, 1);
       this.boxGeo.translate(0, 0.5, 0);
+      this._remapBoxUVsForRoof(this.boxGeo, ROOF_BAND);
 
       this._buildBuckets();
       if (saved) this._loadFromSave(saved);
@@ -64,6 +78,24 @@
     },
 
     _bucketKey: function (type, level, variant) { return type + "_" + level + "_" + variant; },
+
+    // FIX 7b: r128 BoxGeometry lays its 24 UVs out face-by-face in the fixed
+    // order +x, -x, +y(top), -y(bottom), +z, -z, each face's 4 verts using
+    // v in {0,1}. The facade texture reserves its top ROOF_BAND slice as a
+    // flat roof color (see procgen.js buildingTexture) which sits at v close
+    // to 1 (canvas texture v=1 -> top row of the canvas). So: side faces get
+    // their v range squeezed into [0, 1-ROOF_BAND] (the window region), and
+    // the top/bottom faces get their v range squeezed into [1-ROOF_BAND, 1]
+    // (the roof band) so they only ever sample the flat roof color.
+    _remapBoxUVsForRoof: function (geo, roofBand) {
+      var uv = geo.attributes.uv;
+      var arr = uv.array;
+      var sideVerts = [0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23]; // +x,-x,+z,-z
+      var roofVerts = [8, 9, 10, 11, 12, 13, 14, 15]; // +y (top), -y (bottom)
+      sideVerts.forEach(function (i) { arr[i * 2 + 1] = arr[i * 2 + 1] * (1 - roofBand); });
+      roofVerts.forEach(function (i) { arr[i * 2 + 1] = (1 - roofBand) + arr[i * 2 + 1] * roofBand; });
+      uv.needsUpdate = true;
+    },
 
     _buildBuckets: function () {
       var self = this;
@@ -77,9 +109,12 @@
     },
 
     _makeBucket: function (type, level, variant) {
-      var hue = ZONE_HUE[type] + (variant - VARIANTS_PER_BUCKET / 2) * 6;
+      // FIX 8: each variant deterministically picks a palette entry (by
+      // variant index) so buckets stay visually distinct within a zone.
+      var palette = ZONE_PALETTES[type];
+      var wallColor = palette[variant % palette.length];
       var rows = level === "high" ? 16 : level === "mid" ? 10 : 6;
-      var tex = Procgen.buildingTexture({ hue: hue, cols: 5, rows: rows, light: level === "high" ? 22 : 30, litChance: 0.28 + variant * 0.08 });
+      var tex = Procgen.buildingTexture({ wallColor: wallColor, cols: 5, rows: rows, light: level === "high" ? 22 : 30, litChance: 0.28 + variant * 0.08 });
       var mat = new THREE.MeshLambertMaterial({
         map: tex.map, emissive: 0xfff2c0, emissiveMap: tex.emissiveMap, emissiveIntensity: 0
       });
@@ -141,10 +176,13 @@
       // level-ups
       this.cellBuildings.forEach(function (b, key) {
         if (b.level === "high") return;
+        // FIX 6: a building must exist for 20s before it's eligible to level up,
+        // so low/mid-rise variety stays visible instead of everything rushing to "high".
+        if (performance.now() - (b.bornAt || 0) < 20000) return;
         var d = demand[b.type] / 100;
         var covered = creative || self._hasServiceCoverage(b.x, b.z);
         if (!covered && !creative) return;
-        var chance = creative ? 0.35 : util.clamp(d * 0.12, 0, 0.18);
+        var chance = creative ? 0.08 : util.clamp(d * 0.12, 0, 0.18);
         if (Math.random() < chance) self._levelUp(key, b);
       });
     },
@@ -183,7 +221,8 @@
       var ck = Game.Zoning.key(cell.gx, cell.gz);
       this.cellBuildings.set(ck, {
         type: type, level: level, variant: variant, bucketKey: key, idx: idx,
-        gx: cell.gx, gz: cell.gz, x: center.x, z: center.z, height: height, foot: foot
+        gx: cell.gx, gz: cell.gz, x: center.x, z: center.z, height: height, foot: foot,
+        bornAt: performance.now() // FIX 6: gates when this building is eligible to level up
       });
       Game.Zoning.markBuilt(cell.gx, cell.gz, true);
       if (Game.Economy) Game.Economy.onBuildingGrown(type, level);
