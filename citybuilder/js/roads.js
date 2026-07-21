@@ -252,10 +252,19 @@
       var segLen = Math.hypot(pts[segIndex + 1].x - pts[segIndex].x, pts[segIndex + 1].z - pts[segIndex].z);
       var t = segLen > 1e-6 ? Math.hypot(point.x - pts[segIndex].x, point.z - pts[segIndex].z) / segLen : 0;
       var splitElev = util.lerp(elev[segIndex], elev[segIndex + 1], t);
-      // never let the interpolated split point sink below ground or water clearance
-      var groundAtSplit = terrain.heightAt(point.x, point.z);
-      var minAllowed = groundAtSplit + 0.1;
-      if (groundAtSplit < wl) minAllowed = Math.max(minAllowed, wl + 2.0);
+      // never let the interpolated split point sink below ground (sampled across
+      // the strip's width, not just the centerline) or below water clearance
+      var splitWidth = TYPES[edge.type].width;
+      var nxTx = pts[segIndex + 1].x - pts[segIndex].x, nxTz = pts[segIndex + 1].z - pts[segIndex].z;
+      var nxTl = Math.hypot(nxTx, nxTz) || 1;
+      var nnx = -nxTz / nxTl, nnz = nxTx / nxTl, nHalf = splitWidth / 2 + 0.5;
+      var maxGroundAtSplit = Math.max(
+        terrain.heightAt(point.x, point.z),
+        terrain.heightAt(point.x + nnx * nHalf, point.z + nnz * nHalf),
+        terrain.heightAt(point.x - nnx * nHalf, point.z - nnz * nHalf)
+      );
+      var minAllowed = maxGroundAtSplit + 0.18;
+      if (maxGroundAtSplit < wl) minAllowed = Math.max(minAllowed, wl + 2.0);
       if (splitElev < minAllowed) splitElev = minAllowed;
 
       var splitPt = { x: point.x, z: point.z };
@@ -389,6 +398,25 @@
       return createdEdges[0];
     },
 
+    // The road strip is `width` wide, not a zero-width line — on a cross-slope
+    // the uphill shoulder can poke through a deck graded only to the centerline
+    // height. Sample ground at the centerline AND both strip edges (offset by
+    // width/2 + 0.5 along the perpendicular derived from neighboring pts, same
+    // way _rebuildEdgeMesh derives its strip normal) and take the max.
+    _groundMaxAt: function (pts, i, width) {
+      var terrain = Game.Terrain;
+      var prev = pts[Math.max(0, i - 1)], next = pts[Math.min(pts.length - 1, i + 1)];
+      var tx = next.x - prev.x, tz = next.z - prev.z;
+      var tl = Math.hypot(tx, tz) || 1;
+      var nx = -tz / tl, nz = tx / tl;
+      var half = width / 2 + 0.5;
+      var p = pts[i];
+      var gC = terrain.heightAt(p.x, p.z);
+      var gL = terrain.heightAt(p.x + nx * half, p.z + nz * half);
+      var gR = terrain.heightAt(p.x - nx * half, p.z - nz * half);
+      return Math.max(gC, gL, gR);
+    },
+
     // Re-clamp every edge's elev array against the current terrain so a deck
     // point can never end up buried (or submerged over water) as a side
     // effect of grading done while placing a different road.
@@ -396,11 +424,12 @@
       var terrain = Game.Terrain, wl = terrain.waterLevel;
       var self = this;
       this.edges.forEach(function (edge) {
+        var width = TYPES[edge.type].width;
         var changed = false;
         for (var i = 0; i < edge.pts.length; i++) {
-          var groundH = terrain.heightAt(edge.pts[i].x, edge.pts[i].z);
-          var minAllowed = groundH + 0.1;
-          if (groundH < wl) minAllowed = Math.max(minAllowed, wl + 2.0);
+          var maxGround = self._groundMaxAt(edge.pts, i, width);
+          var minAllowed = maxGround + 0.18;
+          if (maxGround < wl) minAllowed = Math.max(minAllowed, wl + 2.0);
           if (edge.elev[i] < minAllowed) { edge.elev[i] = minAllowed; changed = true; }
         }
         if (changed) self._rebuildEdgeMesh(edge);
@@ -412,39 +441,43 @@
     // rather than a single lerp between endpoints, so it can never bury or
     // submerge a deck segment on uneven terrain — followed by a few smoothing
     // passes (endpoints pinned) with a hard floor clamp after each pass.
+    // Ground height uses _groundMaxAt (centerline + both strip edges) so a
+    // cross-slope's uphill shoulder can't poke through the deck between
+    // samples, and the grading brush is widened to cut the shoulders too.
     _gradeAndElevate: function (edge) {
       var terrain = Game.Terrain;
       var wl = terrain.waterLevel;
       var pts = edge.pts;
+      var width = TYPES[edge.type].width;
       var startH = terrain.heightAt(pts[0].x, pts[0].z);
       var endH = terrain.heightAt(pts[pts.length - 1].x, pts[pts.length - 1].z);
-      var i, t, p, target, groundH;
+      var i, t, p, target, maxGround;
 
-      // Pass 1: grade a smooth bed toward the endpoint-interpolated line,
-      // skipping points that are underwater (nothing to grade there).
+      // Pass 1: grade a smooth bed (and shoulders) toward the endpoint-
+      // interpolated line, skipping points that are underwater.
       for (i = 0; i < pts.length; i++) {
         p = pts[i];
         t = pts.length > 1 ? i / (pts.length - 1) : 0;
         target = util.lerp(startH, endH, t);
-        groundH = terrain.heightAt(p.x, p.z);
-        if (groundH >= wl + 0.4) terrain.applyBrush(p.x, p.z, "flatten", TYPES[edge.type].width * 0.9, 0.9, target);
+        if (terrain.heightAt(p.x, p.z) >= wl + 0.4) terrain.applyBrush(p.x, p.z, "flatten", width * 1.3, 0.9, target);
       }
 
-      // Pass 2: per-point deck height from the (now graded) ground.
+      // Pass 2: per-point deck height from the max of centerline + both strip edges.
       edge.bridge = false;
       edge.elev = [];
       for (i = 0; i < pts.length; i++) {
-        groundH = terrain.heightAt(pts[i].x, pts[i].z);
-        if (groundH < wl + 0.4) {
+        maxGround = this._groundMaxAt(pts, i, width);
+        if (maxGround < wl + 0.4) {
           edge.bridge = true;
           edge.elev.push(wl + 2.2);
         } else {
-          edge.elev.push(groundH + 0.12);
+          edge.elev.push(maxGround + 0.22);
         }
       }
 
-      // Pass 3: 3 smoothing passes, endpoints pinned, clamped to never dip
-      // below ground (or below water clearance over water) after each pass.
+      // Pass 3: 3 smoothing passes, endpoints pinned, clamped after each pass
+      // to the same 3-sample max-ground floor (never dip below ground, or
+      // below water clearance over water).
       for (var pass = 0; pass < 3; pass++) {
         var next = edge.elev.slice();
         for (i = 1; i < edge.elev.length - 1; i++) {
@@ -452,9 +485,9 @@
         }
         edge.elev = next;
         for (i = 0; i < edge.elev.length; i++) {
-          groundH = terrain.heightAt(pts[i].x, pts[i].z);
-          var minAllowed = groundH + 0.1;
-          if (groundH < wl) minAllowed = Math.max(minAllowed, wl + 2.0);
+          maxGround = this._groundMaxAt(pts, i, width);
+          var minAllowed = maxGround + 0.18;
+          if (maxGround < wl) minAllowed = Math.max(minAllowed, wl + 2.0);
           if (edge.elev[i] < minAllowed) edge.elev[i] = minAllowed;
         }
       }
