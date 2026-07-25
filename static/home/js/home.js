@@ -100,7 +100,8 @@
     eye:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg>',
     tower: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 3-3 3-3-3z"/><path d="M7 8h10l1 5H6z"/><path d="M6 13h12l1.5 8h-15z"/><path d="M10 21v-4M14 21v-4"/></svg>',
     camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l1.5-2h9L18 8h3v11H3z"/><circle cx="12" cy="13" r="3.4"/><path d="M17.5 8.5h.01"/></svg>',
-    city:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V9l4-3v15"/><path d="M13 21V5l4-2v18"/><path d="M9 12h.01M9 15h.01M9 18h.01M17 9h.01M17 12h.01M17 15h.01M17 18h.01"/></svg>'
+    city:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V9l4-3v15"/><path d="M13 21V5l4-2v18"/><path d="M9 12h.01M9 15h.01M9 18h.01M17 9h.01M17 12h.01M17 15h.01M17 18h.01"/></svg>',
+    spore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10c0-3.6 3.8-6 8.5-6s8.5 2.4 8.5 6z"/><path d="M10 10v7a2 2 0 0 0 4 0v-7"/><path d="M2 21h20"/></svg>'
   };
   var APPS = [
     {
@@ -144,6 +145,12 @@
       href: "citybuilder/", badge: "3D city builder",
       desc: "A pocket Cities: Skylines — terraform, lay roads, zone a skyline that grows itself, and watch day turn to night and rain roll in. Fully procedural, mobile-first, saves locally.",
       tags: ["Three.js", "procedural", "IndexedDB"]
+    },
+    {
+      id: "3dtd", name: "VELL", accent: "#7cffd8", icon: ICONS.spore,
+      href: "3dtd/", badge: "3D tower defense",
+      desc: "A drowned moor, procedurally grown. Root the Bloom around a Heartspore, shape the route with towers, walls and walkable traps, and hold the line against the Rust — with endless promotions and a day/night cycle.",
+      tags: ["Three.js", "procedural", "mobile"]
     }
   ];
 
@@ -220,6 +227,7 @@
     { icon: "👁", label: "Anti-AFK", sub: "open app", run: function () { location.href = "antiafk/"; } },
     { icon: "📸", label: "Burst//Dump", sub: "open app", run: function () { location.href = "burst_dump/"; } },
     { icon: "🏙️", label: "SkyLine", sub: "open app", run: function () { location.href = "citybuilder/"; } },
+    { icon: "🍄", label: "VELL", sub: "open app", run: function () { location.href = "3dtd/"; } },
     { icon: "🎮", label: "Play Elemental Echo", sub: "minigame", run: function () { closePalette(); document.getElementById("play").scrollIntoView(); var s = document.getElementById("echo-start"); if (s) s.focus(); } },
     { icon: "🌗", label: "Toggle theme", sub: "light / dark", run: function () { Atelier.toggleTheme(); } },
     { icon: "💾", label: "Source on GitHub", sub: "repo", run: function () { window.open("https://github.com/nojukuramu/nojukuramu.github.io", "_blank"); } }

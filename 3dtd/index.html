@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>VELL · 3D Tower Defense</title>
+<meta name="description" content="VELL — a procedurally generated 3D tower defense on a drowned moor. Grow the Bloom, shape the route, and hold the Heartspore against the Rust. Free camera, mobile-friendly, day and night." />
+<meta name="theme-color" content="#07110f" />
+<meta name="color-scheme" content="dark" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 5c6 0 10 4 10 8H6c0-4 4-8 10-8z' fill='%237cffd8'/%3E%3Crect x='14' y='13' width='4' height='13' rx='2' fill='%23b0906a'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<canvas id="game-canvas"></canvas>
+<div id="vignette" aria-hidden="true"></div>
+
+<!-- ============ BOOT ============ -->
+<div id="boot-screen" class="overlay boot">
+  <div class="boot-inner">
+    <div class="spore-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+    <h1 class="title">VELL</h1>
+    <p class="subtitle">the shallows remember</p>
+    <div class="boot-progress"><div id="boot-fill" class="boot-fill"></div></div>
+    <p id="boot-status" class="boot-status">waking the colony…</p>
+  </div>
+</div>
+
+<!-- ============ INTRO ============ -->
+<div id="intro" class="overlay hidden">
+  <div class="modal wide">
+    <h2 class="title small">VELL</h2>
+    <p class="subtitle">a tower defense of the drowned moor</p>
+    <div id="intro-body" class="story"></div>
+    <button id="intro-start" class="btn btn-primary btn-wide">Take root</button>
+    <p class="fineprint">Drag to pan · two fingers to orbit &amp; zoom · WASD / Q / E on a keyboard</p>
+  </div>
+</div>
+
+<!-- ============ TOP HUD ============ -->
+<div id="hud-top" class="hud-top hidden">
+  <div class="hud-left">
+    <div class="pill sap"><span class="pill-ico">🜄</span><span id="hud-sap">0</span><span class="pill-unit">sap</span></div>
+    <div class="pill"><span class="pill-ico">↯</span>wave <span id="hud-wave">0</span></div>
+    <div class="pill clock"><span id="hud-clock">☀</span><span id="hud-phase" class="pill-unit">day</span></div>
+  </div>
+  <div class="hud-center">
+    <div class="hp-wrap">
+      <div class="hp-label">Heartspore</div>
+      <div class="hp-bar"><div id="hud-hp-fill" class="hp-fill"></div></div>
+      <div id="hud-hp-text" class="hp-text">—</div>
+    </div>
+  </div>
+  <div class="hud-right">
+    <button id="speed-1" class="chip active">1×</button>
+    <button id="speed-2" class="chip">2×</button>
+    <button id="speed-3" class="chip">3×</button>
+    <button id="pause-btn" class="chip">❚❚</button>
+    <button id="codex-btn" class="chip wide">📖</button>
+    <button id="menu-btn" class="chip">☰</button>
+  </div>
+</div>
+
+<!-- ============ WAVE DOCK ============ -->
+<div id="wave-dock" class="wave-dock hidden">
+  <button id="wave-btn" class="btn btn-wave">Call wave 1 ↯</button>
+  <div id="wave-status" class="wave-status">—</div>
+</div>
+
+<!-- ============ BUILD BAR ============ -->
+<div id="build-bar" class="build-bar hidden"></div>
+
+<div id="confirm-chip" class="confirm-chip hidden">
+  <button id="confirm-build" class="btn btn-primary">Grow here</button>
+  <button id="confirm-cancel" class="btn btn-ghost">Cancel</button>
+</div>
+
+<p id="hint" class="hint hidden"></p>
+
+<!-- ============ SELECTION PANEL ============ -->
+<div id="panel" class="panel hidden">
+  <button id="panel-close" class="panel-close" aria-label="Close">×</button>
+  <h3 id="panel-name">—</h3>
+  <div id="panel-level" class="panel-level">—</div>
+  <p id="panel-desc" class="panel-desc"></p>
+  <div id="panel-stats" class="panel-stats"></div>
+  <div class="panel-actions">
+    <button id="panel-upgrade" class="btn btn-primary btn-wide">Upgrade</button>
+    <button id="panel-sell" class="btn btn-ghost btn-wide">Reclaim</button>
+  </div>
+</div>
+
+<!-- ============ PROMOTION ============ -->
+<div id="promote" class="overlay hidden">
+  <div class="modal wide">
+    <h2 id="promote-title">Promotion</h2>
+    <p class="modal-sub">Every tenth level, what you have grown becomes something else. Choose carefully — this branch is permanent.</p>
+    <div id="promote-options" class="promo-grid"></div>
+    <button id="promote-cancel" class="btn btn-ghost btn-wide">Not yet</button>
+  </div>
+</div>
+
+<!-- ============ CODEX ============ -->
+<div id="codex" class="overlay hidden">
+  <div class="modal wide scroll">
+    <h2>Codex of the Shallows</h2>
+    <p class="modal-sub">Tap relics out in the moor to read them. They are not hints. They are what happened.</p>
+    <div id="codex-list" class="codex-list"></div>
+    <button id="codex-close" class="btn btn-ghost btn-wide">Close</button>
+  </div>
+</div>
+
+<!-- ============ MENU ============ -->
+<div id="menu" class="overlay hidden">
+  <div class="modal">
+    <h2>Paused</h2>
+    <button id="menu-close" class="btn btn-primary btn-wide">Resume</button>
+    <button id="sound-toggle" class="btn btn-ghost btn-wide">🔊 Sound on</button>
+    <button id="menu-help" class="btn btn-ghost btn-wide">How to play</button>
+    <button id="menu-restart" class="btn btn-ghost btn-wide">New moor</button>
+    <a class="btn btn-ghost btn-wide" href="../index.html">← nojukuramu.io</a>
+  </div>
+</div>
+
+<!-- ============ HELP ============ -->
+<div id="help" class="overlay hidden">
+  <div class="modal wide scroll">
+    <h2>How to hold the moor</h2>
+    <div class="story">
+      <h4>Camera</h4>
+      <p>One finger drags the view. Two fingers pinch to zoom, twist to orbit, and slide up/down to tilt. On a keyboard: <b>WASD</b> pans, <b>Q/E</b> orbits, <b>R/F</b> tilts, wheel zooms, right-drag orbits.</p>
+      <h4>Building</h4>
+      <p>Pick <b>Tower</b>, <b>Wall</b> or <b>Trap</b>, then tap a cell — once to aim, again to confirm. Towers and walls are solid; traps lie flat in the path and are walked over.</p>
+      <p>You may never fully seal the route. If a placement would trap the Rust with no way to the Heartspore, the Bloom refuses it.</p>
+      <h4>Ground</h4>
+      <p>Firm ground takes towers, walls and traps. <b>Shallow water</b> is walkable — for them and for your traps — but nothing solid will root in it. Deep water, cliffs, groves, boulders and old relics are impassable to everyone.</p>
+      <h4>Growth</h4>
+      <p>Every structure upgrades forever. Each <b>10th level</b> promotes it into a new form, and you choose the branch. Once the branches run out it <b>ascends</b> instead, multiplying everything, without limit.</p>
+      <h4>Sap</h4>
+      <p>The Heartspore trickles sap, the Rust drops it when broken, and calling a wave early pays a bonus. Reclaiming a structure returns 55%.</p>
+      <h4>Night</h4>
+      <p>The moor runs a full day/night cycle. Nothing changes mechanically after dark — but the Bloom is easier to love at night.</p>
+    </div>
+    <button id="help-close" class="btn btn-primary btn-wide">Understood</button>
+  </div>
+</div>
+
+<!-- ============ GAME OVER ============ -->
+<div id="gameover" class="overlay hidden">
+  <div class="modal">
+    <h2>The Heartspore is broken</h2>
+    <p class="modal-sub">The shallows go quiet. Somewhere under the peat, a spore that was not on the map begins to swell.</p>
+    <div id="go-stats" class="go-stats"></div>
+    <button id="go-restart" class="btn btn-primary btn-wide">Root again, elsewhere</button>
+    <a class="btn btn-ghost btn-wide" href="../index.html">← nojukuramu.io</a>
+  </div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+<div id="fps" class="fps">60 fps</div>
+<a id="back-home" href="../index.html" class="back-home" aria-label="Back to home">← nojukuramu.io</a>
+
+<!-- Vendored Three.js r128 — no external CDN dependency -->
+<script src="vendor/three.min.js"></script>
+
+<script src="js/core.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/terrain.js"></script>
+<script src="js/path.js"></script>
+<script src="js/water.js"></script>
+<script src="js/props.js"></script>
+<script src="js/sky.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/defs.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/build.js"></script>
+<script src="js/enemies.js"></script>
+<script src="js/input.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
