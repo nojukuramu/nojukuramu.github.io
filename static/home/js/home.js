@@ -101,7 +101,8 @@
     tower: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 3-3 3-3-3z"/><path d="M7 8h10l1 5H6z"/><path d="M6 13h12l1.5 8h-15z"/><path d="M10 21v-4M14 21v-4"/></svg>',
     camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l1.5-2h9L18 8h3v11H3z"/><circle cx="12" cy="13" r="3.4"/><path d="M17.5 8.5h.01"/></svg>',
     city:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V9l4-3v15"/><path d="M13 21V5l4-2v18"/><path d="M9 12h.01M9 15h.01M9 18h.01M17 9h.01M17 12h.01M17 15h.01M17 18h.01"/></svg>',
-    spore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10c0-3.6 3.8-6 8.5-6s8.5 2.4 8.5 6z"/><path d="M10 10v7a2 2 0 0 0 4 0v-7"/><path d="M2 21h20"/></svg>'
+    spore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10c0-3.6 3.8-6 8.5-6s8.5 2.4 8.5 6z"/><path d="M10 10v7a2 2 0 0 0 4 0v-7"/><path d="M2 21h20"/></svg>',
+    mic:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4M8 22h8"/></svg>'
   };
   var APPS = [
     {
@@ -151,6 +152,12 @@
       href: "3dtd/", badge: "3D tower defense",
       desc: "A drowned moor, procedurally grown. Root the Bloom around a Heartspore, shape the route with towers, walls and walkable traps, and hold the line against the Rust — with endless promotions and a day/night cycle.",
       tags: ["Three.js", "procedural", "mobile"]
+    },
+    {
+      id: "karaokenatin", name: "KaraokeNatin", accent: "#ff4d8d", icon: ICONS.mic,
+      href: "karaokenatin/", badge: "party",
+      desc: "Turn any screen into a karaoke machine. Guests scan a QR code and their phone becomes the remote — search, queue, skip. Peer-to-peer over WebRTC, so nothing runs on a server of mine.",
+      tags: ["WebRTC", "P2P", "no backend"]
     }
   ];
 
@@ -228,6 +235,7 @@
     { icon: "📸", label: "Burst//Dump", sub: "open app", run: function () { location.href = "burst_dump/"; } },
     { icon: "🏙️", label: "SkyLine", sub: "open app", run: function () { location.href = "citybuilder/"; } },
     { icon: "🍄", label: "VELL", sub: "open app", run: function () { location.href = "3dtd/"; } },
+    { icon: "🎤", label: "KaraokeNatin", sub: "open app", run: function () { location.href = "karaokenatin/"; } },
     { icon: "🎮", label: "Play Elemental Echo", sub: "minigame", run: function () { closePalette(); document.getElementById("play").scrollIntoView(); var s = document.getElementById("echo-start"); if (s) s.focus(); } },
     { icon: "🌗", label: "Toggle theme", sub: "light / dark", run: function () { Atelier.toggleTheme(); } },
     { icon: "💾", label: "Source on GitHub", sub: "repo", run: function () { window.open("https://github.com/nojukuramu/nojukuramu.github.io", "_blank"); } }

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>KaraokeNatin · browser karaoke room</title>
+  <meta name="description" content="Turn any screen into a karaoke machine. Guests scan a QR code, search YouTube from their phones, and queue songs — peer-to-peer over WebRTC, no server, no accounts." />
+  <meta name="theme-color" content="#0b0b12" />
+  <meta name="color-scheme" content="dark" />
+
+  <meta property="og:title" content="KaraokeNatin · browser karaoke room" />
+  <meta property="og:description" content="One screen hosts, everyone's phone is the remote. Peer-to-peer, no install." />
+  <meta property="og:type" content="website" />
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='13' y='3' width='6' height='14' rx='3' fill='%23ff4d8d'/%3E%3Cpath d='M8 15a8 8 0 0 0 16 0' fill='none' stroke='%236C5CE7' stroke-width='2.5' stroke-linecap='round'/%3E%3Cpath d='M16 23v6' stroke='%236C5CE7' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+
+<body>
+  <!-- ══════════════ HOME ══════════════ -->
+  <section id="view-home" class="view">
+    <header class="home-head">
+      <a class="back" href="/">← the atelier</a>
+    </header>
+
+    <div class="hero">
+      <div class="mic" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><rect x="13" y="3" width="6" height="14" rx="3" /><path class="mic-arc" d="M8 15a8 8 0 0 0 16 0" /><path class="mic-arc" d="M16 23v6" /><path class="mic-arc" d="M11 29h10" /></svg>
+      </div>
+      <h1>Karaoke<span>Natin</span></h1>
+      <p class="tagline">
+        One screen sings. Every phone is a remote.<br />
+        Peer-to-peer over WebRTC — no account, no install, no server of ours.
+      </p>
+
+      <div id="resume" class="resume" hidden>
+        <p id="resume-text"></p>
+        <div class="resume-actions">
+          <button id="resume-btn" class="btn btn-primary">Reopen it</button>
+          <button id="resume-dismiss" class="btn btn-quiet">Discard</button>
+        </div>
+      </div>
+
+      <div class="choices">
+        <div class="choice">
+          <h2>Host</h2>
+          <p>Open this on the TV, laptop, or whatever screen everyone can see.</p>
+          <button id="host-btn" class="btn btn-primary btn-big">Start a room</button>
+        </div>
+
+        <div class="choice">
+          <h2>Join</h2>
+          <p>Scan the host's QR code, or type the six-character room code.</p>
+          <form id="join-form" class="join-form">
+            <input id="join-code" type="text" inputmode="latin" autocapitalize="characters"
+                   autocomplete="off" spellcheck="false" maxlength="6" placeholder="ABC123"
+                   aria-label="Room code" />
+            <button type="submit" class="btn btn-ghost">Join</button>
+          </form>
+        </div>
+      </div>
+
+      <details class="how">
+        <summary>How does this work without a server?</summary>
+        <div class="how-body">
+          <p>
+            Phones and the host screen talk <strong>directly</strong> to each other over a WebRTC
+            data channel. The only thing two browsers cannot do alone is find each other in the
+            first place, so the app borrows a <strong>public PeerJS broker</strong> as a meeting
+            point: it passes along a few lines of connection details keyed by your room code, and
+            then it is out of the loop. Your queue, your names, and your commands never touch it.
+          </p>
+          <p>
+            Song search goes through public <strong>Piped</strong> mirrors, falling back to
+            <strong>Invidious</strong> if those are down. If every mirror is unreachable you can
+            still paste a YouTube link — that path needs nobody's API.
+          </p>
+          <p class="how-fine">
+            Practical limits: the host tab has to stay open, and a very restrictive network
+            (some corporate or campus Wi-Fi) can block peer-to-peer entirely.
+          </p>
+        </div>
+      </details>
+    </div>
+
+    <footer class="home-foot">
+      <a href="https://github.com/nojukuramu/KaraokeNatin" rel="noopener">the desktop original</a> ·
+      <a href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">source</a>
+    </footer>
+  </section>
+
+  <!-- ══════════════ ROOM ══════════════ -->
+  <section id="view-room" class="view" hidden>
+    <header class="room-head">
+      <div class="head-left">
+        <span class="label">room</span>
+        <strong id="room-code" class="code">------</strong>
+        <span id="conn" class="conn">offline</span>
+        <button id="retry-btn" class="btn btn-quiet btn-sm" hidden>Retry</button>
+      </div>
+      <div class="head-right">
+        <span class="pill" title="Connected guests">👥 <span id="guest-count">0</span></span>
+        <span class="pill host-only" title="Signalling brokers online">📡 <span id="broker-count">0</span></span>
+        <button id="leave-btn" class="btn btn-quiet btn-sm">Leave</button>
+      </div>
+    </header>
+
+    <!-- host-only video stage -->
+    <div id="stage" class="stage host-only">
+      <div id="yt-mount" class="yt-mount">
+        <button id="tap-to-play" class="tap-to-play" hidden>
+          <span class="tap-icon" aria-hidden="true">▶</span>
+          <span class="tap-text">Tap to start playing</span>
+          <span class="tap-sub">Your browser needs one tap before it will play sound</span>
+        </button>
+      </div>
+      <button id="fs-btn" class="fs-btn" title="Fullscreen" aria-label="Toggle fullscreen">⛶</button>
+    </div>
+
+    <div id="now" class="now"></div>
+
+    <div class="transport">
+      <div class="seekrow">
+        <span id="t-now" class="t">0:00</span>
+        <input id="seek" type="range" min="0" max="1" value="0" step="1" aria-label="Seek" />
+        <span id="t-end" class="t">--:--</span>
+      </div>
+      <div class="buttons">
+        <button id="restart-btn" class="icon-btn big" title="Restart song" aria-label="Restart song">⟲</button>
+        <button id="play-btn" class="icon-btn big primary" title="Play / pause" aria-label="Play">▶</button>
+        <button id="skip-btn" class="icon-btn big" title="Skip song" aria-label="Skip song">⏭</button>
+        <button id="mute-btn" class="icon-btn big" title="Mute" aria-pressed="false" aria-label="Mute">🔊</button>
+        <input id="vol" type="range" min="0" max="100" value="80" aria-label="Volume" />
+      </div>
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab on" data-tab="queue" role="tab" aria-selected="true">Queue <span id="queue-count" class="badge">0</span></button>
+      <button class="tab" data-tab="search" role="tab" aria-selected="false">Search</button>
+      <button class="tab" data-tab="share" role="tab" aria-selected="false">Invite</button>
+    </nav>
+
+    <!-- queue -->
+    <div class="panel" data-panel="queue">
+      <ul id="queue" class="list"></ul>
+      <button id="clear-btn" class="btn btn-quiet btn-sm clear">Clear queue</button>
+    </div>
+
+    <!-- search -->
+    <div class="panel" data-panel="search" hidden>
+      <form id="search-form" class="search-form">
+        <input id="q" type="search" placeholder="Song title, artist, or a YouTube link"
+               autocomplete="off" aria-label="Search for a song" />
+        <button type="submit" class="btn btn-primary">Search</button>
+      </form>
+      <p id="search-status" class="status" aria-live="polite"></p>
+      <ul id="results" class="list"></ul>
+    </div>
+
+    <!-- invite -->
+    <div class="panel" data-panel="share" hidden>
+      <div class="share">
+        <canvas id="qr" class="qr" aria-label="QR code with the join link"></canvas>
+        <p id="qr-fallback" class="status" hidden>QR could not be drawn — use the code or link below.</p>
+        <p class="share-code" aria-label="Room code"><span id="room-code-2"></span></p>
+        <p class="share-url"><span id="share-url"></span></p>
+        <div class="share-actions">
+          <button id="copy-btn" class="btn btn-ghost">Copy link</button>
+          <button id="share-btn" class="btn btn-ghost">Share…</button>
+        </div>
+        <label class="namefield">
+          Your name
+          <input id="name-input" type="text" maxlength="24" placeholder="Anonymous singer" autocomplete="nickname" />
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="js/qr.js"></script>
+  <script src="js/peer.js"></script>
+  <script src="js/search.js"></script>
+  <script src="js/room.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

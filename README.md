@@ -14,6 +14,7 @@ discreet, multi-step treasure hunt for the curious. (Start at the ✦ in the foo
 | [`/magic_circles/`](magic_circles/) | **Magic Circles — A Certain RPG Game** | A magic-based RPG prototype where spells are *drawn*, not picked from a menu. Includes a canvas build, a Phaser.js edition, and a world-chunk editor. |
 | [`/task-notes/`](task-notes/) | **Task Notes** | Installable PWA sticky-note reminders — add tasks, set interval/datetime alerts, auto-snooze, tags, subtasks, and more. All data saved locally in the browser. |
 | [`/3dtd/`](3dtd/) | **VELL** | A procedurally generated 3D tower defense on a drowned moor — free camera, walkable traps, endless promotions, day/night cycle, synthesised audio. See [`3dtd/README.md`](3dtd/README.md). |
+| [`/karaokenatin/`](karaokenatin/) | **KaraokeNatin** | A karaoke room in the browser. One screen hosts and plays; guests scan a QR code and their phones become remotes — search, queue, reorder, skip. Peer-to-peer over WebRTC with no backend. See [`karaokenatin/README.md`](karaokenatin/README.md). |
 
 ### Magic Circles
 
