@@ -49,7 +49,8 @@
   var STORE = {
     host: "kn:host",
     guest: "kn:guest",
-    name: "kn:name"
+    name: "kn:name",
+    installDismissed: "kn:install-dismissed"
   };
   var RESUME_WINDOW_MS = 12 * 60 * 60 * 1000;
 
@@ -80,7 +81,10 @@
     guestNames: {},    // host only: link.id -> display name
     searchBusy: false,
     lastResults: [],
-    tab: "queue"
+    tab: "queue",
+    openPlaylists: {},   // pid -> expanded in the library view
+    pickerSong: null,
+    railOpen: true
   };
 
   /* ================= HOST ================= */
@@ -418,10 +422,21 @@
 
   /* ---------------- screen: home ---------------- */
 
+  function showLibrary() {
+    $("#view-home").hidden = true;
+    $("#view-room").hidden = true;
+    $("#view-library").hidden = false;
+    document.body.classList.remove("in-room", "is-host");
+    mountInto("search-root", "search-slot-library");
+    mountLibrary("library-slot-standalone");
+  }
+
   function showHome() {
     $("#view-home").hidden = false;
     $("#view-room").hidden = true;
+    $("#view-library").hidden = true;
     document.body.classList.remove("in-room", "is-host");
+    renderLibrary();
 
     // Offer to pick up wherever this browser left off — hosting outranks
     // guesting, since a host walking away ends everyone else's night.
@@ -449,11 +464,13 @@
 
   function showRoom() {
     $("#view-home").hidden = true;
+    $("#view-library").hidden = true;
     $("#view-room").hidden = false;
     document.body.classList.add("in-room");
     document.body.classList.toggle("is-host", app.role === "host");
     $("#room-code").textContent = app.state.code;
     $("#room-code-2").textContent = app.state.code;
+    $("#room-code-3").textContent = app.state.code;
     $("#name-input").value = app.name;
     renderShare();
     render();
@@ -465,21 +482,27 @@
 
   function renderShare() {
     $("#share-url").textContent = joinUrl().replace(/^https?:\/\//, "");
-    var canvas = $("#qr");
-    try {
-      QR.draw(canvas, joinUrl(), {
-        ecc: "M",
-        px: 260,
-        dark: "#0b0b12",
-        light: "#ffffff",
-        quiet: 3
-      });
-      canvas.hidden = false;
-      $("#qr-fallback").hidden = true;
-    } catch (e) {
-      canvas.hidden = true;
-      $("#qr-fallback").hidden = false;
-    }
+    var url = joinUrl();
+    var ok = true;
+
+    [["#qr", 260], ["#qr-rail", 180]].forEach(function (pair) {
+      var canvas = $(pair[0]);
+      if (!canvas) return;
+      try {
+        QR.draw(canvas, url, { ecc: "M", px: pair[1], dark: "#0b0b12", light: "#ffffff", quiet: 3 });
+        canvas.hidden = false;
+      } catch (e) {
+        canvas.hidden = true;
+        ok = false;
+      }
+    });
+    $("#qr-fallback").hidden = ok;
+
+    // The rail is the host's always-visible copy; a guest already has the room.
+    var rail = $("#invite-rail");
+    rail.hidden = app.role !== "host";
+    rail.classList.toggle("collapsed", !app.railOpen);
+    $("#rail-toggle").setAttribute("aria-expanded", String(app.railOpen));
   }
 
   function renderConnection(detail) {
@@ -574,8 +597,8 @@
           el("span", { class: "row-time", text: song.duration ? R.fmtTime(song.duration) : "" }),
           el("div", { class: "row-actions" }, [
             btn("⤒", "Play next", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "top" }); }),
-            btn("▲", "Move up", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "up" }); }),
-            btn("▼", "Move down", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "down" }); }),
+            btn("▲", "Move up", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "up" }); }, "opt"),
+            btn("▼", "Move down", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "down" }); }, "opt"),
             btn("▶", "Play now", function () { dispatch({ type: CMD.PLAY_NOW, sid: song.sid }); }),
             btn("✕", "Remove", function () { dispatch({ type: CMD.REMOVE, sid: song.sid }); })
           ])
@@ -584,8 +607,14 @@
     });
   }
 
-  function btn(label, title, onClick) {
-    return el("button", { class: "icon-btn", title: title, "aria-label": title, onclick: onClick, text: label });
+  function btn(label, title, onClick, cls) {
+    return el("button", {
+      class: "icon-btn" + (cls ? " " + cls : ""),
+      title: title,
+      "aria-label": title,
+      onclick: onClick,
+      text: label
+    });
   }
 
   function thumb(cls, src) {
@@ -616,11 +645,19 @@
       KN.search
         .resolve(q)
         .then(function (video) {
-          dispatch({ type: CMD.ADD, video: video });
           input.value = "";
           status.textContent = "";
-          confirmAdded(video.title);
-          switchTab("queue");
+          if (app.role) {
+            dispatch({ type: CMD.ADD, video: video });
+            confirmAdded(video.title);
+            switchTab("queue");
+          } else {
+            // Outside a room there is no queue to add to, so a pasted link
+            // goes where it can still be useful later.
+            if (!LIB.hasSong(video.id)) LIB.toggleSong(video);
+            renderLibrary();
+            toast("Saved “" + video.title + "” to your library");
+          }
         })
         .catch(function (e) { status.textContent = e.message; })
         .finally(function () { app.searchBusy = false; });
@@ -657,6 +694,20 @@
     var box = $("#results");
     box.innerHTML = "";
     results.forEach(function (v) {
+      var star = el("button", {
+        class: "icon-btn star" + (LIB.hasSong(v.id) ? " on" : ""),
+        title: "Save to your library",
+        "aria-label": "Save to your library",
+        text: LIB.hasSong(v.id) ? "★" : "☆",
+        onclick: function () {
+          var saved = LIB.toggleSong(v);
+          this.textContent = saved ? "★" : "☆";
+          this.classList.toggle("on", saved);
+          toast(saved ? "Saved “" + v.title + "”" : "Removed from saved");
+          renderLibrary();
+        }
+      });
+
       box.appendChild(
         el("li", { class: "row row-result" }, [
           thumb("row-thumb", v.thumb),
@@ -665,17 +716,193 @@
             el("div", { class: "row-sub", text: v.author || "" })
           ]),
           el("span", { class: "row-time", text: v.duration ? R.fmtTime(v.duration) : "" }),
-          el("button", {
-            class: "add-btn",
-            text: "Add",
-            onclick: function () {
-              dispatch({ type: CMD.ADD, video: v });
-              confirmAdded(v.title);
+          el("div", { class: "row-actions" }, [
+            star,
+            btn("＋", "Add to a playlist", function () { openPicker(v); })
+          ]),
+          app.role
+            ? el("button", {
+                class: "add-btn",
+                text: "Add",
+                onclick: function () {
+                  dispatch({ type: CMD.ADD, video: v });
+                  confirmAdded(v.title);
+                }
+              })
+            : null
+        ])
+      );
+    });
+  }
+
+  /* ---------------- library ----------------
+   * The same markup serves the standalone view and the in-room tab — it is
+   * moved between mount points rather than rendered twice, so there is one
+   * set of handlers and no chance of the two drifting apart.
+   */
+
+  var LIB = KN.library;
+
+  function mountInto(rootId, slotId) {
+    var root = $("#" + rootId);
+    var slot = $("#" + slotId);
+    if (slot && root.parentNode !== slot) slot.appendChild(root);
+    root.hidden = false;
+  }
+
+  function mountLibrary(slotId) {
+    mountInto("library-root", slotId);
+    renderLibrary();
+  }
+
+  function renderLibrary() {
+    var songs = LIB.songs();
+    var lists = LIB.playlists();
+    $("#lib-song-count").textContent = String(songs.length);
+    $("#lib-list-count").textContent = String(lists.length);
+
+    var box = $("#lib-songs");
+    box.innerHTML = "";
+    if (!songs.length) {
+      box.appendChild(el("li", {
+        class: "empty",
+        text: "No saved songs yet. Tap ☆ on a search result to keep it here."
+      }));
+    } else {
+      songs.forEach(function (song) {
+        box.appendChild(songRow(song, [
+          queueButton(song),
+          btn("＋", "Add to a playlist", function () { openPicker(song); }),
+          btn("✕", "Remove from saved", function () {
+            LIB.removeSong(song.id);
+            renderLibrary();
+          })
+        ]));
+      });
+    }
+
+    var lp = $("#lib-playlists");
+    lp.innerHTML = "";
+    if (!lists.length) {
+      lp.appendChild(el("p", { class: "empty", text: "No playlists yet. Make one below." }));
+    }
+    lists.forEach(function (p) {
+      var open = app.openPlaylists[p.pid];
+      var head = el("div", { class: "pl-head" }, [
+        el("button", {
+          class: "pl-toggle",
+          "aria-expanded": open ? "true" : "false",
+          onclick: function () {
+            app.openPlaylists[p.pid] = !open;
+            renderLibrary();
+          },
+          text: (open ? "▾ " : "▸ ") + p.name
+        }),
+        el("span", { class: "pl-count", text: p.songs.length + (p.songs.length === 1 ? " song" : " songs") }),
+        el("div", { class: "pl-actions" }, [
+          app.role
+            ? btn("▶", "Queue this playlist", function () { queuePlaylist(p); })
+            : null,
+          btn("✎", "Rename playlist", function () {
+            var name = prompt("Rename playlist", p.name);
+            if (name !== null) { LIB.renamePlaylist(p.pid, name); renderLibrary(); }
+          }),
+          btn("✕", "Delete playlist", function () {
+            if (confirm("Delete “" + p.name + "”? The songs stay in Saved songs if you saved them there.")) {
+              LIB.deletePlaylist(p.pid);
+              renderLibrary();
             }
+          })
+        ])
+      ]);
+
+      var body = el("ul", { class: "list pl-songs" });
+      if (open) {
+        if (!p.songs.length) {
+          body.appendChild(el("li", { class: "empty", text: "Empty — add songs from search or your saved songs." }));
+        }
+        p.songs.forEach(function (song) {
+          body.appendChild(songRow(song, [
+            queueButton(song),
+            btn("▲", "Move up", function () { LIB.moveInPlaylist(p.pid, song.id, "up"); renderLibrary(); }),
+            btn("▼", "Move down", function () { LIB.moveInPlaylist(p.pid, song.id, "down"); renderLibrary(); }),
+            btn("✕", "Remove from playlist", function () { LIB.removeFromPlaylist(p.pid, song.id); renderLibrary(); })
+          ]));
+        });
+      }
+
+      lp.appendChild(el("div", { class: "pl" }, [head, open ? body : null]));
+    });
+
+    $("#library-stats").textContent =
+      songs.length || lists.length ? "· " + songs.length + " songs, " + lists.length + " playlists" : "";
+  }
+
+  function songRow(song, actions) {
+    return el("li", { class: "row" }, [
+      thumb("row-thumb", song.thumb),
+      el("div", { class: "row-meta" }, [
+        el("div", { class: "row-title", text: song.title }),
+        el("div", { class: "row-sub", text: song.author || "" })
+      ]),
+      el("span", { class: "row-time", text: song.duration ? R.fmtTime(song.duration) : "" }),
+      el("div", { class: "row-actions" }, actions.filter(Boolean))
+    ]);
+  }
+
+  /** Queueing is only meaningful inside a room; outside one the button is absent. */
+  function queueButton(song) {
+    if (!app.role) return null;
+    return btn("↗", "Add to the room queue", function () {
+      dispatch({ type: CMD.ADD, video: song });
+      confirmAdded(song.title);
+    });
+  }
+
+  function queuePlaylist(p) {
+    if (!app.role || !p.songs.length) return;
+    p.songs.forEach(function (song) { dispatch({ type: CMD.ADD, video: song }); });
+    toast("Queued " + p.songs.length + " from “" + p.name + "”");
+    switchTab("queue");
+  }
+
+  /* ---------------- add-to-playlist picker ---------------- */
+
+  function openPicker(video) {
+    app.pickerSong = video;
+    $("#picker-song").textContent = video.title;
+    var list = $("#picker-list");
+    list.innerHTML = "";
+    var lists = LIB.playlists();
+    if (!lists.length) {
+      list.appendChild(el("li", { class: "empty", text: "No playlists yet — name one below." }));
+    }
+    lists.forEach(function (p) {
+      var already = p.songs.some(function (x) { return x.id === video.id; });
+      list.appendChild(
+        el("li", {}, [
+          el("button", {
+            class: "picker-item" + (already ? " on" : ""),
+            disabled: already ? "disabled" : null,
+            onclick: function () {
+              if (LIB.addToPlaylist(p.pid, video)) {
+                toast("Added to “" + p.name + "”");
+                closePicker();
+                renderLibrary();
+              }
+            },
+            text: (already ? "✓ " : "") + p.name
           })
         ])
       );
     });
+    $("#picker").hidden = false;
+    $("#picker-new-name").value = "";
+  }
+
+  function closePicker() {
+    $("#picker").hidden = true;
+    app.pickerSong = null;
   }
 
   /* ---------------- tabs ---------------- */
@@ -688,6 +915,8 @@
       b.setAttribute("aria-selected", String(on));
     });
     $$(".panel").forEach(function (p) { p.hidden = p.dataset.panel !== name; });
+    if (name === "search") mountInto("search-root", "search-slot-room");
+    if (name === "library") mountLibrary("library-slot-room");
   }
 
   /* ---------------- wake lock ---------------- */
@@ -705,6 +934,88 @@
     document.addEventListener("visibilitychange", function () {
       if (!document.hidden && !lock) acquire();
     });
+  }
+
+  /* ---------------- install (PWA) ----------------
+   * Installed, the app opens full-screen with no browser chrome — which for a
+   * TV or a phone-as-remote is the difference between a web page and an app.
+   *
+   * Chromium-family browsers hand us a deferred prompt we can fire on a click.
+   * Safari and Firefox never do, so rather than showing a button that does
+   * nothing, those get the same button with the manual steps behind it.
+   */
+
+  function installedAlready() {
+    return (
+      (global.matchMedia && global.matchMedia("(display-mode: standalone)").matches) ||
+      global.navigator.standalone === true
+    );
+  }
+
+  function manualInstallSteps() {
+    var ua = navigator.userAgent;
+    var iOS = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    if (iOS) return "In Safari, tap the Share button, then choose “Add to Home Screen”.";
+    if (/Firefox/.test(ua)) return "In Firefox, open the ⋯ menu and choose “Install” or “Add to Home screen”.";
+    if (/Android/.test(ua)) return "Open your browser's ⋮ menu and choose “Install app” or “Add to Home screen”.";
+    return "Open your browser's menu and look for “Install app”, “Add to Home screen”, or an install icon in the address bar.";
+  }
+
+  function setupInstall() {
+    var bar = $("#install-bar");
+    var deferred = null;
+
+    if ("serviceWorker" in navigator && location.protocol !== "file:") {
+      navigator.serviceWorker.register("sw.js").catch(function () {
+        // Offline support and installability are both nice-to-have; a browser
+        // that refuses the worker still gets a fully working app.
+      });
+    }
+
+    function show() {
+      if (installedAlready() || load(STORE.installDismissed)) return;
+      bar.hidden = false;
+    }
+
+    global.addEventListener("beforeinstallprompt", function (e) {
+      e.preventDefault();       // keep the browser's own mini-bar out of the way
+      deferred = e;
+      show();
+    });
+
+    global.addEventListener("appinstalled", function () {
+      deferred = null;
+      bar.hidden = true;
+      toast("Installed — you can open KaraokeNatin from your home screen.");
+    });
+
+    $("#install-btn").addEventListener("click", function () {
+      if (deferred) {
+        deferred.prompt();
+        deferred.userChoice.then(function (choice) {
+          if (choice && choice.outcome === "accepted") bar.hidden = true;
+          deferred = null;
+        });
+        return;
+      }
+      $("#install-help-body").textContent = manualInstallSteps();
+      $("#install-help").hidden = false;
+    });
+
+    $("#install-dismiss").addEventListener("click", function () {
+      bar.hidden = true;
+      // No `at`, so this is not on the 12-hour resume clock: "not now" from a
+      // user who knows where their browser menu is should mean not again.
+      save(STORE.installDismissed, { dismissed: true });
+    });
+
+    $("#install-help-close").addEventListener("click", function () { $("#install-help").hidden = true; });
+    $("#install-help").addEventListener("click", function (e) { if (e.target === this) this.hidden = true; });
+
+    // No beforeinstallprompt is coming on Safari or Firefox, and it can also
+    // be missed on a warm load in Chromium. Offer the manual route instead of
+    // leaving the option invisible.
+    setTimeout(function () { if (!deferred) show(); }, 2500);
   }
 
   /* ---------------- routing ---------------- */
@@ -727,6 +1038,13 @@
         clearInterval(ticker);
       }
       startGuest(code);
+      return;
+    }
+    if (hash.indexOf("#/library") === 0) {
+      // Reachable mid-room too: leaving the room to browse would be absurd, so
+      // in that case the Library tab is the right destination instead.
+      if (app.role) { switchTab("library"); location.hash = app.role === "host" ? "#/host" : "#/r/" + app.state.code; return; }
+      showLibrary();
       return;
     }
     if (hash.indexOf("#/host") === 0) {
@@ -839,6 +1157,109 @@
 
     // search
     $("#search-form").addEventListener("submit", function (e) { e.preventDefault(); runSearch(); });
+
+    /* ---- library ---- */
+    $("#library-btn").addEventListener("click", function () { location.hash = "#/library"; });
+    $("#lib-back").addEventListener("click", function () { location.hash = "#/"; });
+
+    $$(".lib-tab").forEach(function (b) {
+      b.addEventListener("click", function () {
+        $$(".lib-tab").forEach(function (o) {
+          var on = o === b;
+          o.classList.toggle("on", on);
+          o.setAttribute("aria-selected", String(on));
+        });
+        $$(".lib-panel").forEach(function (p) { p.hidden = p.dataset.libpanel !== b.dataset.libtab; });
+      });
+    });
+
+    $("#new-playlist-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var input = $("#new-playlist-name");
+      var name = input.value.trim();
+      if (!name) return;
+      var p = LIB.createPlaylist(name);
+      app.openPlaylists[p.pid] = true;
+      input.value = "";
+      renderLibrary();
+      toast("Created “" + p.name + "”");
+    });
+
+    $("#lib-export").addEventListener("click", function () {
+      var blob = new Blob([LIB.exportAll()], { type: "application/json" });
+      var a = el("a", { href: URL.createObjectURL(blob), download: "karaokenatin-library.json" });
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    });
+
+    $("#lib-import").addEventListener("click", function () { $("#lib-import-file").click(); });
+    $("#lib-import-file").addEventListener("change", function () {
+      var file = this.files && this.files[0];
+      this.value = "";
+      if (!file) return;
+      file.text().then(
+        function (text) {
+          try {
+            var added = LIB.importAll(text);
+            renderLibrary();
+            toast("Imported " + added.songs + " songs and " + added.playlists + " playlists");
+          } catch (err) {
+            toast(err.message, "warn");
+          }
+        },
+        function () { toast("Could not read that file.", "warn"); }
+      );
+    });
+
+    $("#lib-clear").addEventListener("click", function () {
+      if (confirm("Delete every saved song and playlist on this device? This cannot be undone.")) {
+        LIB.clearAll();
+        app.openPlaylists = {};
+        renderLibrary();
+        toast("Library cleared");
+      }
+    });
+
+    LIB.onChange(function (kind, detail) {
+      if (kind === "error") toast(detail, "warn");
+    });
+
+    /* ---- add-to-playlist picker ---- */
+    $("#picker-close").addEventListener("click", closePicker);
+    $("#picker").addEventListener("click", function (e) { if (e.target === this) closePicker(); });
+    $("#picker-new").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var name = $("#picker-new-name").value.trim();
+      if (!name || !app.pickerSong) return;
+      var p = LIB.createPlaylist(name);
+      LIB.addToPlaylist(p.pid, app.pickerSong);
+      toast("Added to “" + p.name + "”");
+      closePicker();
+      renderLibrary();
+    });
+
+    /* ---- invite rail ---- */
+    $("#rail-toggle").addEventListener("click", function () {
+      app.railOpen = !app.railOpen;
+      $("#invite-rail").classList.toggle("collapsed", !app.railOpen);
+      this.setAttribute("aria-expanded", String(app.railOpen));
+    });
+
+    /* ---- disclaimer ---- */
+    $$(".disclaimer-open").forEach(function (b) {
+      b.addEventListener("click", function () { $("#disclaimer").hidden = false; });
+    });
+    $$(".disclaimer-close").forEach(function (b) {
+      b.addEventListener("click", function () { $("#disclaimer").hidden = true; });
+    });
+    $("#disclaimer").addEventListener("click", function (e) { if (e.target === this) this.hidden = true; });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      if (!$("#picker").hidden) closePicker();
+      else if (!$("#disclaimer").hidden) $("#disclaimer").hidden = true;
+    });
     $$(".tab").forEach(function (b) {
       b.addEventListener("click", function () { switchTab(b.dataset.tab); });
     });
@@ -850,6 +1271,7 @@
 
     switchTab("queue");
     startLocalClock();
+    setupInstall();
     route();
   }
 

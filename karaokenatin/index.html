@@ -13,6 +13,12 @@
   <meta property="og:type" content="website" />
 
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='13' y='3' width='6' height='14' rx='3' fill='%23ff4d8d'/%3E%3Cpath d='M8 15a8 8 0 0 0 16 0' fill='none' stroke='%236C5CE7' stroke-width='2.5' stroke-linecap='round'/%3E%3Cpath d='M16 23v6' stroke='%236C5CE7' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/apple-touch.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="KaraokeNatin" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <link rel="stylesheet" href="css/app.css" />
 </head>
 
@@ -32,6 +38,17 @@
         One screen sings. Every phone is a remote.<br />
         Peer-to-peer over WebRTC — no account, no install, no server of ours.
       </p>
+
+      <div id="install-bar" class="install-bar" hidden>
+        <div class="install-text">
+          <strong>Install KaraokeNatin</strong>
+          <span>Runs full-screen from your home screen or desktop, and opens without a browser bar.</span>
+        </div>
+        <div class="install-actions">
+          <button id="install-btn" class="btn btn-primary">Install</button>
+          <button id="install-dismiss" class="btn btn-quiet btn-sm" aria-label="Dismiss install prompt">Not now</button>
+        </div>
+      </div>
 
       <div id="resume" class="resume" hidden>
         <p id="resume-text"></p>
@@ -57,6 +74,15 @@
                    aria-label="Room code" />
             <button type="submit" class="btn btn-ghost">Join</button>
           </form>
+        </div>
+
+        <div class="choice choice-wide">
+          <h2>Library</h2>
+          <p>
+            Your saved songs and playlists, kept in this browser. Build a set list on the couch
+            and queue the whole thing when the room opens — no room needed to browse it.
+          </p>
+          <button id="library-btn" class="btn btn-ghost btn-big">Open library <span id="library-stats" class="muted-inline"></span></button>
         </div>
       </div>
 
@@ -84,10 +110,144 @@
     </div>
 
     <footer class="home-foot">
+      <button class="linklike disclaimer-open">Disclaimer</button> ·
       <a href="https://github.com/nojukuramu/KaraokeNatin" rel="noopener">the desktop original</a> ·
       <a href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">source</a>
     </footer>
   </section>
+
+  <!-- ══════════════ LIBRARY (standalone) ══════════════ -->
+  <section id="view-library" class="view" hidden>
+    <header class="room-head">
+      <div class="head-left">
+        <strong class="code code-plain">Library</strong>
+      </div>
+      <div class="head-right">
+        <button id="lib-back" class="btn btn-quiet btn-sm">Back</button>
+      </div>
+    </header>
+    <p class="lib-hint">
+      Saved on this device only. Nothing here is uploaded, and it is not shared with a room until
+      you queue it.
+    </p>
+    <div id="search-slot-library"></div>
+    <div id="library-slot-standalone"></div>
+  </section>
+
+  <!-- Search block, moved between the room's Search tab and the library view. -->
+  <div id="search-root" class="search-root" hidden>
+    <form id="search-form" class="search-form">
+      <input id="q" type="search" placeholder="Song title, artist, or a YouTube link"
+             autocomplete="off" aria-label="Search for a song" />
+      <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+    <p id="search-status" class="status" aria-live="polite"></p>
+    <ul id="results" class="list"></ul>
+  </div>
+
+  <!-- ══════════════ DISCLAIMER ══════════════ -->
+  <div id="disclaimer" class="modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="disclaimer-title">
+      <button class="modal-close disclaimer-close" aria-label="Close">✕</button>
+      <h2 id="disclaimer-title">Disclaimer</h2>
+
+      <h3>Video content</h3>
+      <p>
+        KaraokeNatin does not host, store, upload, or stream any video. It embeds YouTube's own
+        player, and every video plays from YouTube exactly as it would on their site. All content
+        belongs to its respective owners, and your use of it is subject to
+        <a href="https://www.youtube.com/t/terms" rel="noopener">YouTube's Terms of Service</a>.
+        This project is not affiliated with, endorsed by, or connected to YouTube or Google.
+      </p>
+
+      <h3>Third-party services</h3>
+      <p>
+        Search results come from public <strong>Piped</strong> and <strong>Invidious</strong>
+        mirrors, and rooms are paired through a public <strong>PeerJS</strong> broker. None of
+        these are operated by this project. They are volunteer-run, they can be slow, change, or
+        disappear without notice, and their availability is not something this app controls.
+      </p>
+
+      <h3>Your data</h3>
+      <p>
+        There is no account, no analytics, and no backend. Your library, name, and room details
+        are stored in this browser's local storage and never leave your device unless you export
+        them. Once a room is connected, song queues travel directly between your device and the
+        other people in the room.
+      </p>
+
+      <h3>Rooms are open to anyone with the code</h3>
+      <p>
+        A room code is the only thing standing between your room and a stranger, and six
+        characters is guessable given enough attempts. Treat a room as public: fine for a party,
+        not for anything private. Close it when you are done.
+      </p>
+
+      <h3>No warranty</h3>
+      <p>
+        This is a hobby project provided as-is, without warranty of any kind. Peer-to-peer
+        connections can fail entirely on restrictive networks, and no guarantee is made that it
+        will work in any particular setting.
+      </p>
+    </div>
+  </div>
+
+  <!-- Library markup lives here once and is moved into whichever slot is showing. -->
+  <div id="library-root" class="library" hidden>
+    <div class="lib-tabs" role="tablist">
+      <button class="lib-tab on" data-libtab="songs" role="tab" aria-selected="true">
+        Saved songs <span id="lib-song-count" class="badge">0</span>
+      </button>
+      <button class="lib-tab" data-libtab="playlists" role="tab" aria-selected="false">
+        Playlists <span id="lib-list-count" class="badge">0</span>
+      </button>
+    </div>
+
+    <!-- saved songs -->
+    <div class="lib-panel" data-libpanel="songs">
+      <ul id="lib-songs" class="list"></ul>
+    </div>
+
+    <!-- playlists -->
+    <div class="lib-panel" data-libpanel="playlists" hidden>
+      <div id="lib-playlists"></div>
+      <form id="new-playlist-form" class="new-playlist">
+        <input id="new-playlist-name" type="text" maxlength="60" placeholder="New playlist name"
+               autocomplete="off" aria-label="New playlist name" />
+        <button type="submit" class="btn btn-ghost">Create</button>
+      </form>
+    </div>
+
+    <div class="lib-foot">
+      <button id="lib-export" class="btn btn-quiet btn-sm">Export</button>
+      <button id="lib-import" class="btn btn-quiet btn-sm">Import</button>
+      <input id="lib-import-file" type="file" accept="application/json,.json" hidden />
+      <button id="lib-clear" class="btn btn-quiet btn-sm">Clear all</button>
+    </div>
+  </div>
+
+  <!-- Manual install instructions, for browsers with no install prompt API -->
+  <div id="install-help" class="modal-backdrop" hidden>
+    <div class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="install-help-title">
+      <button class="modal-close" id="install-help-close" aria-label="Close">✕</button>
+      <h2 id="install-help-title">Add to your home screen</h2>
+      <p id="install-help-body"></p>
+    </div>
+  </div>
+
+  <!-- Add-to-playlist chooser -->
+  <div id="picker" class="modal-backdrop" hidden>
+    <div class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+      <button class="modal-close" id="picker-close" aria-label="Close">✕</button>
+      <h2 id="picker-title">Add to playlist</h2>
+      <p id="picker-song" class="picker-song"></p>
+      <ul id="picker-list" class="picker-list"></ul>
+      <form id="picker-new" class="new-playlist">
+        <input id="picker-new-name" type="text" maxlength="60" placeholder="New playlist…" autocomplete="off" aria-label="New playlist name" />
+        <button type="submit" class="btn btn-ghost">Create &amp; add</button>
+      </form>
+    </div>
+  </div>
 
   <!-- ══════════════ ROOM ══════════════ -->
   <section id="view-room" class="view" hidden>
@@ -104,6 +264,19 @@
         <button id="leave-btn" class="btn btn-quiet btn-sm">Leave</button>
       </div>
     </header>
+
+    <!-- Wide screens keep the join code permanently scannable beside the video
+         instead of hiding it behind a tab. Collapses to a tab on the edge. -->
+    <aside id="invite-rail" class="invite-rail" hidden>
+      <button id="rail-toggle" class="rail-toggle" aria-expanded="true" aria-controls="rail-body">
+        <span class="rail-toggle-label">Invite</span>
+      </button>
+      <div id="rail-body" class="rail-body">
+        <canvas id="qr-rail" class="qr" aria-label="QR code with the join link"></canvas>
+        <p class="rail-code"><span id="room-code-3"></span></p>
+        <p class="rail-hint">Point a phone camera here</p>
+      </div>
+    </aside>
 
     <!-- host-only video stage -->
     <div id="stage" class="stage host-only">
@@ -137,6 +310,7 @@
     <nav class="tabs" role="tablist">
       <button class="tab on" data-tab="queue" role="tab" aria-selected="true">Queue <span id="queue-count" class="badge">0</span></button>
       <button class="tab" data-tab="search" role="tab" aria-selected="false">Search</button>
+      <button class="tab" data-tab="library" role="tab" aria-selected="false">Library</button>
       <button class="tab" data-tab="share" role="tab" aria-selected="false">Invite</button>
     </nav>
 
@@ -148,13 +322,12 @@
 
     <!-- search -->
     <div class="panel" data-panel="search" hidden>
-      <form id="search-form" class="search-form">
-        <input id="q" type="search" placeholder="Song title, artist, or a YouTube link"
-               autocomplete="off" aria-label="Search for a song" />
-        <button type="submit" class="btn btn-primary">Search</button>
-      </form>
-      <p id="search-status" class="status" aria-live="polite"></p>
-      <ul id="results" class="list"></ul>
+      <div id="search-slot-room"></div>
+    </div>
+
+    <!-- library -->
+    <div class="panel" data-panel="library" hidden>
+      <div id="library-slot-room"></div>
     </div>
 
     <!-- invite -->
@@ -172,6 +345,10 @@
           Your name
           <input id="name-input" type="text" maxlength="24" placeholder="Anonymous singer" autocomplete="nickname" />
         </label>
+        <p class="room-fine">
+          Anyone with this code can join and control the queue.
+          <button class="linklike disclaimer-open">Disclaimer</button>
+        </p>
       </div>
     </div>
   </section>
@@ -181,6 +358,7 @@
   <script src="js/qr.js"></script>
   <script src="js/peer.js"></script>
   <script src="js/search.js"></script>
+  <script src="js/library.js"></script>
   <script src="js/room.js"></script>
   <script src="js/player.js"></script>
   <script src="js/app.js"></script>

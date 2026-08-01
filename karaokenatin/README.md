@@ -66,6 +66,34 @@ exhausted the app says search is unavailable rather than spinning — and **past
 link always works**, since that path needs no mirror at all (title lookup falls back through
 YouTube's own oembed, then Piped, then Invidious, then a bare playable entry).
 
+Queries are quietly biased toward karaoke tracks: `anak` goes to the mirror as `anak karaoke`,
+because this is a karaoke app and the official music video is almost never what you want. The
+bias never appears in the search box — echoing back a query the user did not type reads as a
+bug — and is skipped when they already said "karaoke" themselves. See `biasToKaraoke` in
+`js/search.js`.
+
+## Library
+
+Saved songs and playlists live in this browser and nowhere else. Tap ☆ on any search result to
+keep it, ＋ to file it into a playlist. The library opens **without a room** (`#/library`), so a
+set list can be built on the couch and queued in one tap when the room opens; search works there
+too. Playlists can be reordered, renamed, and exported to JSON — local-only storage is one
+cleared cache away from gone, so it has to be something you can carry out.
+
+The relationship with a room is one-way: a room borrows from your library, never the reverse.
+Nothing another guest does can reach into it.
+
+## Install
+
+The app is a PWA — installable on a phone, a desktop, or an Android TV, where it opens
+full-screen with no browser chrome. The Install button on the home screen fires the browser's
+own prompt where one exists (Chromium), and shows the manual steps where it does not (Safari,
+Firefox). A service worker precaches the shell, so the app and your library open with no
+network; playback still needs one.
+
+Icons are generated from the desktop app's icon by `tools/make-icons.py` and committed, so the
+site keeps its no-build-step promise.
+
 ## Files
 
 | Path | What it is |
@@ -77,15 +105,19 @@ YouTube's own oembed, then Piped, then Invidious, then a bare playable entry).
 | `js/search.js` | Piped → Invidious fallback, link parsing |
 | `js/player.js` | YouTube IFrame API wrapper (host only) |
 | `js/qr.js` | QR encoder, written from scratch (byte mode, v1–12, ECC L/M) |
+| `js/library.js` | Saved songs and playlists, stored in the browser |
 | `js/app.js` | Screens, wiring, and the host/guest seam |
-| `tools/` | Tests — not served, not needed at runtime |
+| `sw.js` · `manifest.webmanifest` · `icons/` | Makes it installable and offline-capable |
+| `tools/` | Tests and the icon generator — not served, not needed at runtime |
 
 ## Tests
 
 ```bash
-node tools/qr-test.js     # QR conformance: module counts, block layouts, capacities
-node tools/e2e.js         # two real browsers, one real WebRTC link   (needs playwright)
-node tools/player-e2e.js  # playback state machine against a mock player (needs playwright)
+node tools/qr-test.js      # QR conformance: module counts, block layouts, capacities
+node tools/e2e.js          # two real browsers, one real WebRTC link    (needs playwright)
+node tools/player-e2e.js   # playback state machine against a mock player      (playwright)
+node tools/library-e2e.js  # library, playlists, export/import, karaoke bias   (playwright)
+node tools/install-e2e.js  # manifest, service worker, install button          (playwright)
 ```
 
 `tools/e2e.js` boots a static server and a local stand-in for the broker
@@ -93,6 +125,15 @@ node tools/player-e2e.js  # playback state machine against a mock player (needs 
 Chromium, and drives a full session: connect, search, queue, reorder, remove, sever the link
 and reconnect, reload the host. It never contacts a public broker, Piped, or YouTube — the
 YouTube API is deliberately blocked, which also exercises the degraded-player path.
+
+`tools/library-e2e.js` builds a library with no room at all, checks it survives a reload and a
+round-trip through export/import, and then joins a room to queue a playlist into it. It also
+asserts the karaoke bias reaches the wire and never the input box.
+
+`tools/install-e2e.js` checks the static installability contract (manifest fields, icon sizes,
+a worker with a fetch handler) and then our behaviour around the prompt — deferring it, firing
+it on click, remembering a dismissal, and falling back to manual instructions when no prompt
+event ever arrives.
 
 `tools/player-e2e.js` covers playback by serving a stand-in for the IFrame API that behaves
 the way YouTube's really does in the two awkward cases: `loadVideoById` landing in `CUED`
