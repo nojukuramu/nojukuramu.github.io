@@ -83,8 +83,9 @@ YouTube's own oembed, then Piped, then Invidious, then a bare playable entry).
 ## Tests
 
 ```bash
-node tools/qr-test.js   # QR conformance: module counts, block layouts, capacities
-node tools/e2e.js       # two real browsers, one real WebRTC link  (needs playwright)
+node tools/qr-test.js     # QR conformance: module counts, block layouts, capacities
+node tools/e2e.js         # two real browsers, one real WebRTC link   (needs playwright)
+node tools/player-e2e.js  # playback state machine against a mock player (needs playwright)
 ```
 
 `tools/e2e.js` boots a static server and a local stand-in for the broker
@@ -93,10 +94,22 @@ Chromium, and drives a full session: connect, search, queue, reorder, remove, se
 and reconnect, reload the host. It never contacts a public broker, Piped, or YouTube — the
 YouTube API is deliberately blocked, which also exercises the degraded-player path.
 
+`tools/player-e2e.js` covers playback by serving a stand-in for the IFrame API that behaves
+the way YouTube's really does in the two awkward cases: `loadVideoById` landing in `CUED`
+instead of playing, and `playVideo` being ignored until the page has seen a user gesture. It
+checks the CUED kick, the blocked-autoplay prompt, the tap that clears it, the state
+reaching a guest, remote pause, `ENDED` advancing the queue, and volume/mute reaching the
+player.
+
 ## Known limits
 
 - **The host tab must stay open.** It is the player and the source of truth. It requests a
   screen wake lock where the browser allows one.
+- **One tap on the host, once per session.** The desktop app plays straight away because a
+  Tauri webview has no autoplay policy; a browser refuses to start audible video until the
+  page has seen a user gesture. When the first song is queued from a phone and nobody has
+  touched the host screen, the room puts up a tap-to-play prompt instead of appearing to
+  hang. After that tap, songs start on their own for the rest of the session.
 - **Very restrictive networks can block peer-to-peer entirely.** TURN covers most of it, but
   not a firewall that drops UDP and non-standard TCP alike.
 - **Public brokers and mirrors are other people's infrastructure.** They go down. The

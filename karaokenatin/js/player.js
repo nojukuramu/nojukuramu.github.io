@@ -44,14 +44,16 @@
    *
    * player: load(id) play() pause() seek(t) volume(v) mute(on)
    *         time() duration() destroy()
-   * events: 'ready' 'playing' 'paused' 'ended' 'buffering' 'error' 'meta'
+   * events: 'ready' 'playing' 'paused' 'ended' 'buffering' 'error' 'meta' 'blocked'
    */
   function create(elementId) {
     var self = {};
     var listeners = {};
     var yt = null;
     var ready = false;
-    var wanted = null;   // video id requested before the player was ready
+    var wanted = null;      // video id requested before the player was ready
+    var wantPlaying = false; // we have asked for playback and not seen it start
+    var blockTimer = null;
 
     self.on = function (name, fn) {
       (listeners[name] = listeners[name] || []).push(fn);
@@ -73,13 +75,42 @@
       };
     }
 
+    /* A browser will refuse to start audible video without a recent user
+     * gesture, which a Tauri webview never does — this is the one place the
+     * web port has to do more than the desktop app. A refusal leaves the
+     * player parked in UNSTARTED or CUED, so watch for that and let the UI
+     * put up a tap-to-play prompt rather than looking silently broken. */
+    function watchForBlock() {
+      clearTimeout(blockTimer);
+      if (!wantPlaying) return;
+      blockTimer = setTimeout(function () {
+        if (!wantPlaying || !ready || !yt.getPlayerState) return;
+        var s = yt.getPlayerState();
+        if (s === -1 || s === 5) emit("blocked");
+      }, 2500);
+    }
+
     self.load = function (videoId, startAt) {
-      if (!ready) { wanted = videoId; return; }
+      wantPlaying = true;
+      if (!ready) { wanted = { id: videoId, at: startAt || 0 }; return; }
       yt.loadVideoById({ videoId: videoId, startSeconds: startAt || 0 });
+      watchForBlock();
     };
-    self.play = function () { if (ready && yt.playVideo) yt.playVideo(); };
-    self.pause = function () { if (ready && yt.pauseVideo) yt.pauseVideo(); };
-    self.stop = function () { if (ready && yt.stopVideo) yt.stopVideo(); };
+    self.play = function () {
+      wantPlaying = true;
+      if (ready && yt.playVideo) yt.playVideo();
+      watchForBlock();
+    };
+    self.pause = function () {
+      wantPlaying = false;
+      clearTimeout(blockTimer);
+      if (ready && yt.pauseVideo) yt.pauseVideo();
+    };
+    self.stop = function () {
+      wantPlaying = false;
+      clearTimeout(blockTimer);
+      if (ready && yt.stopVideo) yt.stopVideo();
+    };
     self.seek = function (t) { if (ready && yt.seekTo) yt.seekTo(Math.max(0, t), true); };
     self.volume = function (v) { if (ready && yt.setVolume) yt.setVolume(Math.max(0, Math.min(100, v))); };
     self.mute = function (on) {
@@ -89,36 +120,51 @@
     self.time = function () { return ready && yt.getCurrentTime ? yt.getCurrentTime() || 0 : 0; };
     self.duration = function () { return ready && yt.getDuration ? yt.getDuration() || 0 : 0; };
     self.meta = meta;
-    self.destroy = function () { if (yt && yt.destroy) yt.destroy(); ready = false; };
+    self.destroy = function () {
+      clearTimeout(blockTimer);
+      if (yt && yt.destroy) yt.destroy();
+      ready = false;
+    };
 
     return loadApi().then(function (YT) {
       return new Promise(function (resolve) {
         yt = new YT.Player(elementId, {
-          host: "https://www.youtube-nocookie.com",
+          height: "100%",
+          width: "100%",
+          // Same configuration as the desktop app: the default youtube.com
+          // host, no native chrome (the room supplies its own transport).
           playerVars: {
             autoplay: 0,
             controls: 0,
             disablekb: 1,
             rel: 0,
-            fs: 0,
             modestbranding: 1,
             iv_load_policy: 3,
             playsinline: 1,
-            origin: global.location.origin
+            origin: /^https?:$/.test(global.location.protocol) ? global.location.origin : undefined
           },
           events: {
             onReady: function () {
               ready = true;
-              if (wanted) { yt.loadVideoById(wanted); wanted = null; }
+              if (wanted) { yt.loadVideoById({ videoId: wanted.id, startSeconds: wanted.at }); wanted = null; watchForBlock(); }
               emit("ready");
               resolve(self);
             },
             onStateChange: function (e) {
               var S = YT.PlayerState;
-              if (e.data === S.ENDED) emit("ended");
-              else if (e.data === S.PLAYING) { emit("playing"); emit("meta", meta()); }
-              else if (e.data === S.PAUSED) emit("paused");
+              if (e.data === S.ENDED) { wantPlaying = false; emit("ended"); }
+              else if (e.data === S.PLAYING) {
+                wantPlaying = false;
+                clearTimeout(blockTimer);
+                emit("playing");
+                emit("meta", meta());
+              } else if (e.data === S.PAUSED) emit("paused");
               else if (e.data === S.BUFFERING) emit("buffering");
+              else if (e.data === S.CUED) {
+                // loadVideoById can land here instead of playing outright.
+                // The desktop app kicks it the same way.
+                if (wantPlaying) { yt.playVideo(); watchForBlock(); }
+              }
             },
             onError: function (e) {
               // 2 bad id · 5 html5 · 100 gone · 101/150 embedding disabled

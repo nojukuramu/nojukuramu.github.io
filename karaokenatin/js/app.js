@@ -134,17 +134,25 @@
 
   function setupPlayer() {
     var mount = $("#yt-mount");
-    mount.innerHTML = "";
-    mount.appendChild(el("div", { id: "yt-frame" }));
+    // The API replaces its target element with the iframe, so give it a fresh
+    // placeholder — but leave the overlay button in the mount alone.
+    var stale = $("#yt-frame");
+    if (stale) stale.remove();
+    var err = $(".player-error");
+    if (err) err.remove();
+    mount.insertBefore(el("div", { id: "yt-frame" }), mount.firstChild);
 
     KN.player
       .create("yt-frame")
       .then(function (p) {
         app.player = p;
         p.volume(app.state.player.volume);
+        p.mute(app.state.player.muted);
 
         p.on("ended", function () { nextSong(); });
+        p.on("blocked", function () { $("#tap-to-play").hidden = false; });
         p.on("playing", function () {
+          $("#tap-to-play").hidden = true;
           app.state.player.status = "playing";
           var m = p.meta();
           if (m && app.state.now) {
@@ -815,6 +823,18 @@
     });
     $("#clear-btn").addEventListener("click", function () {
       if (confirm("Clear the whole queue?")) dispatch({ type: CMD.CLEAR });
+    });
+
+    // The click itself is the user gesture the browser was holding out for.
+    $("#tap-to-play").addEventListener("click", function () {
+      this.hidden = true;
+      if (app.player) app.player.play();
+    });
+
+    $("#fs-btn").addEventListener("click", function () {
+      var stage = $("#stage");
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (stage.requestFullscreen) stage.requestFullscreen().catch(function () { /* refused */ });
     });
 
     // search

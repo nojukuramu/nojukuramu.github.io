@@ -107,7 +107,14 @@
 
     <!-- host-only video stage -->
     <div id="stage" class="stage host-only">
-      <div id="yt-mount" class="yt-mount"></div>
+      <div id="yt-mount" class="yt-mount">
+        <button id="tap-to-play" class="tap-to-play" hidden>
+          <span class="tap-icon" aria-hidden="true">▶</span>
+          <span class="tap-text">Tap to start playing</span>
+          <span class="tap-sub">Your browser needs one tap before it will play sound</span>
+        </button>
+      </div>
+      <button id="fs-btn" class="fs-btn" title="Fullscreen" aria-label="Toggle fullscreen">⛶</button>
     </div>
 
     <div id="now" class="now"></div>
