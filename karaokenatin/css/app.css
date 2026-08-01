@@ -353,10 +353,12 @@ input[type="range"]:disabled { opacity: 0.45; cursor: default; }
 }
 .add-btn:hover { border-color: var(--pink); color: var(--pink); }
 
-/* the per-row action cluster is too dense for a phone; keep the essentials */
+/* The per-row action cluster is too dense for a phone. Buttons marked `.opt`
+   are the ones with another route to the same thing (queue reordering also has
+   "play next"), so they are the only ones that go — hiding by position would
+   silently take out whichever button happened to land there. */
 @media (max-width: 560px) {
-  .row-actions .icon-btn:nth-child(2),
-  .row-actions .icon-btn:nth-child(3) { display: none; }
+  .row-actions .opt { display: none; }
   .row-num { display: none; }
   .row-time { display: none; }
   .code { font-size: 17px; letter-spacing: 0.12em; }
@@ -417,6 +419,255 @@ input[type="range"]:disabled { opacity: 0.45; cursor: default; }
 .toast.out { opacity: 0; transition: opacity 0.35s; }
 @keyframes rise { from { transform: translateY(8px); opacity: 0; } }
 
+/* ─────────────── modals ─────────────── */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(4, 4, 9, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+.modal-backdrop[hidden] { display: none; }
+.modal {
+  position: relative;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 26px 24px;
+  max-width: 620px;
+  width: 100%;
+  max-height: 88dvh;
+  overflow-y: auto;
+}
+.modal-sm { max-width: 400px; }
+.modal h2 { margin: 0 0 4px; font-size: 20px; }
+.modal h3 { margin: 20px 0 4px; font-size: 14px; color: var(--pink); letter-spacing: 0.02em; }
+.modal p { margin: 0; color: var(--ink-2); font-size: 14px; }
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: transparent;
+  border: 0;
+  color: var(--ink-3);
+  font-size: 18px;
+  cursor: pointer;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+}
+.modal-close:hover { color: var(--ink); background: var(--bg-3); }
+
+.linklike {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+.linklike:hover { color: var(--pink); }
+.muted-inline { color: var(--ink-3); font-weight: 400; font-size: 13px; }
+.room-fine { color: var(--ink-3); font-size: 12px; margin: 18px 0 0; }
+.lib-hint { color: var(--ink-3); font-size: 13px; margin: 0 0 14px; }
+.code-plain { letter-spacing: 0; font-size: 20px; }
+.choice-wide { grid-column: 1 / -1; }
+
+/* ─────────────── library ─────────────── */
+
+.library[hidden] { display: none; }
+.lib-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.lib-tab {
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  padding: 9px 12px; color: var(--ink-3); font-weight: 600; cursor: pointer; font-size: 14px;
+}
+.lib-tab.on { color: var(--ink); border-bottom-color: var(--violet); }
+
+.pl {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  background: var(--bg-2);
+}
+.pl-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.pl-toggle {
+  background: none; border: 0; color: var(--ink); font-weight: 700; font-size: 14px;
+  cursor: pointer; text-align: left; flex: 1; min-width: 0; padding: 6px 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pl-count { color: var(--ink-3); font-size: 12px; flex: none; }
+.pl-actions { display: flex; gap: 4px; flex: none; }
+.pl-songs { padding: 0 10px 10px; }
+
+.new-playlist { display: flex; gap: 8px; margin-top: 12px; }
+.new-playlist input {
+  flex: 1; min-width: 0; background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 10px; height: var(--tap); padding: 0 14px;
+}
+.lib-foot { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+
+.icon-btn.star.on { color: var(--pink); border-color: rgba(255, 77, 141, 0.5); }
+
+.picker-song { color: var(--ink-2); font-size: 13px; margin: 0 0 14px; }
+.picker-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.picker-item {
+  width: 100%; text-align: left; background: var(--bg-3); border: 1px solid var(--line);
+  color: var(--ink); border-radius: 10px; padding: 12px 14px; cursor: pointer; font-weight: 600;
+}
+.picker-item:hover:not(:disabled) { border-color: var(--pink); }
+.picker-item:disabled { color: var(--ink-3); cursor: default; }
+
+/* ─────────────── invite rail (wide screens only) ─────────────── */
+
+.invite-rail { display: none; }
+
+/* ─────────────── phones ─────────────── */
+
+@media (max-width: 720px) {
+  .view { padding: 0 12px 24px; }
+
+  /* Two rows beats a wrapping flex line: identity on top, actions beneath. */
+  .room-head {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 8px;
+    padding: 8px 0 10px;
+  }
+  .head-left { min-width: 0; }
+  .head-left .label { display: none; }
+  .head-right { justify-self: end; }
+
+  .now-thumb { width: 76px; }
+  .now-title { font-size: 15px; }
+
+  /* Volume gets its own line so the transport buttons keep full-size targets. */
+  .transport { padding: 10px 12px; }
+  .buttons { flex-wrap: wrap; row-gap: 10px; }
+  .buttons #vol { order: 5; flex-basis: 100%; }
+
+  .tabs { gap: 0; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { padding: 10px 11px; font-size: 14px; white-space: nowrap; }
+
+  .row { padding: 7px 8px; gap: 6px; }
+  .row-thumb { width: 54px; }
+  .row-title { font-size: 13px; }
+  /* Give the title back the width the action cluster was taking. */
+  .add-btn { padding: 0 10px; }
+  .row-actions { gap: 3px; }
+
+  /* Stack the search field over its button — a 2-up row leaves neither usable. */
+  .search-form { flex-wrap: wrap; }
+  .search-form #q { flex: 1 1 100%; }
+  .search-form .btn { flex: 1 1 100%; }
+
+  .lib-foot .btn { flex: 1; }
+  .modal { padding: 22px 18px; }
+}
+
+/* ─────────────── desktop and TV ─────────────── */
+
+@media (min-width: 1024px) {
+  .view { max-width: 1120px; }
+
+  /* The video is the centrepiece and stays centred; the queue and everything
+     else sit under it rather than beside it, so nothing pushes it off-axis. */
+  body.is-host .stage { max-width: 100%; }
+  body.is-host .yt-mount { max-width: calc(62vh * 16 / 9); }
+
+  .now-card { justify-content: center; }
+  .now { text-align: left; }
+
+  /* Join code parked at the edge, always scannable, out of the way when not. */
+  body.is-host .invite-rail {
+    display: flex;
+    position: fixed;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 20;
+    align-items: stretch;
+    transition: transform 0.22s ease;
+  }
+  body.is-host .invite-rail.collapsed { transform: translate(calc(100% - 34px), -50%); }
+
+  .rail-toggle {
+    flex: none;
+    width: 34px;
+    background: var(--bg-3);
+    border: 1px solid var(--line);
+    border-right: 0;
+    border-radius: 12px 0 0 12px;
+    color: var(--ink-2);
+    cursor: pointer;
+    padding: 0;
+  }
+  .rail-toggle:hover { color: var(--ink); }
+  .rail-toggle-label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .rail-body {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-right: 0;
+    border-radius: 12px 0 0 12px;
+    padding: 14px;
+    text-align: center;
+  }
+  .rail-body .qr { border-radius: 8px; }
+  .rail-code { font-size: 20px; font-weight: 800; letter-spacing: 0.2em; margin: 10px 0 0; }
+  .rail-hint { color: var(--ink-3); font-size: 11px; margin: 2px 0 0; }
+}
+
+/* Big-screen / TV: everything scales up, the video takes the room. */
+@media (min-width: 1600px) {
+  .view { max-width: 1320px; }
+  html { font-size: 17px; }
+  body.is-host .yt-mount { max-width: calc(66vh * 16 / 9); }
+  .code { font-size: 24px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
+}
+
+/* ─────────────── install prompt ─────────────── */
+
+.install-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  background: linear-gradient(100deg, rgba(255, 77, 141, 0.14), rgba(108, 92, 231, 0.14));
+  border: 1px solid rgba(255, 77, 141, 0.4);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 0 0 20px;
+}
+.install-bar[hidden] { display: none; }
+.install-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.install-text strong { font-size: 15px; }
+.install-text span { color: var(--ink-2); font-size: 13px; }
+.install-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+
+@media (max-width: 560px) {
+  .install-bar { flex-direction: column; align-items: stretch; }
+  .install-actions { justify-content: space-between; }
+  .install-actions .btn-primary { flex: 1; }
+}
+
+/* Installed, there is no browser chrome to scroll away — pad for the notch. */
+@media (display-mode: standalone) {
+  .room-head, .home-head { padding-top: max(10px, env(safe-area-inset-top)); }
 }

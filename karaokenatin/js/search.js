@@ -187,12 +187,27 @@
   }
 
   /**
+   * This is a karaoke app, so a search for a song title means the karaoke
+   * track, not the official music video. Biasing the query is what actually
+   * gets those to the top — ranking the raw results ourselves cannot, since
+   * the mirrors only return what they were asked for.
+   *
+   * Kept out of the input box on purpose: the user typed a song, and echoing
+   * back a query they did not write reads as the app being broken. Skipped
+   * when they already said it, so nobody searches "karaoke karaoke".
+   */
+  function biasToKaraoke(q) {
+    return /\bkaraoke\b/i.test(q) ? q : q + " karaoke";
+  }
+
+  /**
    * Search both tiers. Resolves with { results, source } or rejects with an
    * Error whose message is safe to show the user.
    */
   function search(query) {
-    var q = String(query || "").trim();
-    if (!q) return Promise.resolve({ results: [], source: null });
+    var raw = String(query || "").trim();
+    if (!raw) return Promise.resolve({ results: [], source: null });
+    var q = biasToKaraoke(raw);
 
     return hedge(ordered(PIPED, "piped"), function (base) {
       return getJSON(base + "/search?q=" + encodeURIComponent(q) + "&filter=videos").then(function (data) {
@@ -268,6 +283,7 @@
     parseVideoId: parseVideoId,
     looksLikeUrl: looksLikeUrl,
     thumbFor: thumbFor,
+    biasToKaraoke: biasToKaraoke,
     PIPED: PIPED,
     INVIDIOUS: INVIDIOUS
   };

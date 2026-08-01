@@ -156,8 +156,8 @@
     {
       id: "karaokenatin", name: "KaraokeNatin", accent: "#ff4d8d", icon: ICONS.mic,
       href: "karaokenatin/", badge: "party",
-      desc: "Turn any screen into a karaoke machine. Guests scan a QR code and their phone becomes the remote — search, queue, skip. Peer-to-peer over WebRTC, so nothing runs on a server of mine.",
-      tags: ["WebRTC", "P2P", "no backend"]
+      desc: "Turn any screen into a karaoke machine. Guests scan a QR code and their phone becomes the remote — search, queue, skip. Peer-to-peer over WebRTC, so nothing runs on a server of mine. Installable, with a local library of saved songs and playlists.",
+      tags: ["WebRTC", "P2P", "PWA", "no backend"]
     }
   ];
 
