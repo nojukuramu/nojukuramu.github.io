@@ -6,6 +6,24 @@ No samples anywhere — the four strings are digital waveguides running in an
 AudioWorklet, so they are genuinely vibrating and bends, slides, double stops
 and sympathetic decay fall out of the physics rather than being faked.
 
+## Fullscreen and installing
+
+Browser chrome eats the top of the fan, and a stray edge-swipe mid-strum is a
+wrong note, so there are three ways into a clean screen:
+
+- **Double-tap the portrait screen.** Goes fullscreen and rotates to landscape
+  in one gesture. Bound to the portrait overlay only — never to the playing
+  surface, because a fast repeat tap there is tremolo picking.
+- **The ⛶ button**, any time.
+- **Install it.** Launches fullscreen and landscape with no chrome at all, and
+  runs with no network — there are no samples to download, the strings are
+  synthesised on the device.
+
+iPhone Safari has neither the Fullscreen API nor orientation lock, so there
+installing is the only real route to fullscreen. The UI detects that and says
+so instead of showing a button that silently does nothing; if a rotate attempt
+leaves you still in portrait, it tells you to turn the phone yourself.
+
 ## The idea
 
 Most phone instruments shrink a piano or a fretboard onto glass. You get an
@@ -93,6 +111,11 @@ pick one string.
 | `js/engine.js` | audio graph, body resonators, reverb, instrument presets |
 | `js/input.js` | arc geometry, thumbs, sensors, keyboard |
 | `js/render.js` | canvas: the fan, the strings, the readouts |
+| `js/shell.js` | fullscreen, orientation lock, install prompt, service worker |
 | `js/app.js` | toolbar, trainer, frame loop |
+| `sw.js` | caches the whole shell so it plays offline |
+| `manifest.webmanifest` | installs fullscreen, locked to landscape |
 
 Needs AudioWorklet. Tilt needs HTTPS, and iOS asks permission on first use.
+Installing and the service worker need HTTPS too, so both are inert on
+`file://` and active on the deployed site.
