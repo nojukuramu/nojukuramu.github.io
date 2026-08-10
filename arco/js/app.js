@@ -151,6 +151,37 @@ window.ARCO = window.ARCO || {};
     requestAnimationFrame(frame);
   }
 
+  /* ------------------------------------------------------- fullscreen / install */
+
+  function syncShell(st) {
+    st = st || A.shell.status();
+
+    var fs = $("btnFull");
+    fs.hidden = !st.canFullscreen;
+    fs.classList.toggle("on", st.fullscreen);
+    fs.title = st.fullscreen ? "Leave fullscreen" : "Fullscreen";
+    $("rowFull").hidden = !st.canFullscreen;
+    $("setFull").textContent = st.fullscreen ? "Leave fullscreen" : "Go fullscreen";
+
+    /* Only offer installing when the browser has actually said it is possible.
+     * iPhone never fires that event and has no Fullscreen API either, so it
+     * gets the manual Add-to-Home-Screen line instead of a dead button. */
+    var canInstall = st.installable && !st.installed;
+    var iosHint = st.ios && !st.installed && !st.canFullscreen;
+    $("startInstall").hidden = !canInstall;
+    $("rowInstall").hidden = !canInstall;
+    $("startIosNote").hidden = !iosHint;
+    $("installNote").hidden = !(canInstall || iosHint);
+  }
+
+  function doInstall() {
+    A.shell.install().then(function () { syncShell(); });
+  }
+
+  function toggleFull() {
+    A.shell.toggleFullscreen().then(function (st) { syncShell(st); });
+  }
+
   /* --------------------------------------------------------------- overlays */
 
   function checkOrientation() {
@@ -210,6 +241,35 @@ window.ARCO = window.ARCO || {};
       o.value = String(i);
       o.textContent = s.name;
       ss.appendChild(o);
+    });
+
+    A.shell.init();
+    A.shell.on(function (st) {
+      syncShell(st);
+      /* Entering or leaving fullscreen changes the viewport; re-measure once the
+       * transition has settled so the arcs use the space they actually have. */
+      setTimeout(function () { A.render.resize(); checkOrientation(); }, 130);
+    });
+    $("btnFull").addEventListener("click", toggleFull);
+    $("setFull").addEventListener("click", toggleFull);
+    $("startInstall").addEventListener("click", doInstall);
+    $("setInstall").addEventListener("click", doInstall);
+
+    /* The portrait screen is itself the button: double-tap goes fullscreen and
+     * rotates in one gesture. Bound here and not on the canvas, because a fast
+     * repeat tap on the playing surface is tremolo picking. */
+    A.shell.onDoubleTap($("rotate"), function () {
+      A.shell.goImmersive().then(function () {
+        setTimeout(function () {
+          A.render.resize();
+          checkOrientation();
+          /* Still portrait means the rotation lock was refused — Safari, every
+           * desktop browser, and anything that would not go fullscreen first.
+           * Say so, rather than leaving the same prompt sitting there looking
+           * like it did nothing. */
+          if (window.innerHeight > window.innerWidth) $("rotFail").hidden = false;
+        }, 300);
+      });
     });
 
     $("startBtn").addEventListener("click", begin);
@@ -334,6 +394,7 @@ window.ARCO = window.ARCO || {};
 
     checkOrientation();
     syncHud();
+    syncShell();
   }
 
   A.app = { init: init, trainerTarget: trainerTarget, SONGS: SONGS };

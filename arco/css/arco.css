@@ -126,6 +126,9 @@ button:active { transform: translateY(1px); }
   background: var(--accent);
   border-color: var(--accent);
 }
+/* Icon-only buttons have no text to give them width, and a 21px target is a
+ * miss waiting to happen. */
+.tog.icon { min-width: 30px; font-size: 13px; padding: 4px 5px; }
 
 /* ------------------------------------------------------------------ trainer */
 
@@ -274,9 +277,52 @@ kbd {
   line-height: 1;
 }
 
-.rotmsg { text-align: center; color: var(--muted); }
+.ctarow { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.cta.ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  box-shadow: none;
+  padding: 11px 22px;
+  font-size: 14px;
+}
+.iosnote { margin-top: 8px; }
+
+/* ------------------------------------------------------------ portrait way in */
+
+.rotmsg { text-align: center; color: var(--muted); padding: 16px; }
 .rotico { font-size: 44px; color: var(--accent); animation: spin 2.4s ease-in-out infinite; }
 @keyframes spin { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(90deg); } }
+.rottitle { margin: 6px 0 2px; font-size: 15px; font-weight: 700; color: var(--ink); }
+
+.taphint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  margin: 22px auto 0;
+  padding: 16px 22px;
+  max-width: 260px;
+  border: 1px dashed rgba(255, 180, 84, 0.42);
+  border-radius: 16px;
+  background: rgba(255, 180, 84, 0.06);
+  color: var(--ink);
+  font-size: 13px;
+}
+.taphint .fine { margin: 0; }
+.tapdots { display: flex; gap: 7px; margin-bottom: 5px; }
+.tapdots i {
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: tapz 1.5s ease-in-out infinite;
+}
+.tapdots i:nth-child(2) { animation-delay: 0.19s; }
+@keyframes tapz {
+  0%, 62%, 100% { transform: scale(0.6); opacity: 0.35; }
+  22% { transform: scale(1); opacity: 1; }
+}
+.rotfail { margin-top: 14px; max-width: 280px; color: #ffb08a; }
 
 /* Landscape phones are short — tighten the chrome so the arcs keep the room,
  * and lay the start panel out in two columns so the button stays above the fold
@@ -284,6 +330,7 @@ kbd {
 @media (max-height: 430px) {
   .bar { height: 34px; }
   .tog { font-size: 10px; padding: 4px 6px; min-height: 24px; }
+  .tog.icon { min-width: 29px; min-height: 26px; font-size: 12.5px; }
   .segbtn { padding: 4px 8px; }
   .trainer { top: 36px; padding: 4px 7px; }
 
@@ -301,6 +348,8 @@ kbd {
   .rules li { margin-bottom: 3px; }
   .startfine { font-size: 10px; margin: 7px 0 0; }
   .cta { margin-top: 8px; padding: 9px 26px; font-size: 14px; }
+  .cta.ghost { padding: 8px 18px; font-size: 13px; }
+  .iosnote { margin-top: 5px; font-size: 9.5px; }
   .kb { display: none; }
 }
 @media (max-width: 720px) {

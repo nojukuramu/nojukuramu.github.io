@@ -163,8 +163,8 @@
     {
       id: "arco", name: "ARCO", accent: "#6fd0ff", icon: ICONS.arc,
       href: "arco/", badge: "instrument",
-      desc: "A two-thumb instrument built for a phone held sideways. The left thumb sweeps a fan of scale degrees, the right thumb plucks or bows four physically modelled strings, and tilt shapes the tone. Learn a melody once and it plays in all twelve keys.",
-      tags: ["AudioWorklet", "waveguide", "sensors", "no samples"]
+      desc: "A two-thumb instrument built for a phone held sideways. The left thumb sweeps a fan of scale degrees, the right thumb plucks or bows four physically modelled strings, and tilt shapes the tone. Learn a melody once and it plays in all twelve keys. Installs fullscreen and plays offline — there are no samples to download.",
+      tags: ["AudioWorklet", "waveguide", "PWA", "offline"]
     }
   ];
 

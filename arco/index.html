@@ -16,6 +16,8 @@
   <meta property="og:type" content="website" />
 
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 28 A24 24 0 0 1 28 4' fill='none' stroke='%23ffb454' stroke-width='2.5'/%3E%3Cpath d='M4 20 A16 16 0 0 1 20 4' fill='none' stroke='%236fd0ff' stroke-width='2'/%3E%3Ccircle cx='4' cy='28' r='2.5' fill='%2334e0c0'/%3E%3C/svg%3E" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/apple-touch.png" />
   <link rel="stylesheet" href="css/arco.css" />
 </head>
 
@@ -48,7 +50,8 @@
       <button id="btnLock"   class="tog on" title="Show or hide the chromatic wedges">diatonic</button>
       <button id="btnLearn"  class="tog" title="Practise a melody by scale degree">learn</button>
       <button id="btnMotion" class="tog" title="Use tilt for tone and bend">tilt</button>
-      <button id="btnSettings" class="tog" aria-label="Settings">⚙</button>
+      <button id="btnFull" class="tog icon" title="Fullscreen" aria-label="Toggle fullscreen">⛶</button>
+      <button id="btnSettings" class="tog icon" aria-label="Settings">⚙</button>
     </div>
   </header>
 
@@ -95,7 +98,11 @@
 
       <p class="fine startfine">Because the fan is degrees and not note names, a melody learned once plays in every key with the same motion. No headphones needed, but they help.</p>
 
-      <button id="startBtn" class="cta">tap to tune up</button>
+      <div class="ctarow">
+        <button id="startBtn" class="cta">tap to tune up</button>
+        <button id="startInstall" class="cta ghost" hidden>install</button>
+      </div>
+      <p class="fine iosnote" id="startIosNote" hidden>For true fullscreen on iPhone: <b>Share → Add to Home Screen</b>.</p>
       <p class="err" id="startErr" hidden></p>
       <p class="fine kb">On a desktop: <kbd>A W S E D F T G Y H U J</kbd> are the degrees, <kbd>Z</kbd>/<kbd>X</kbd> change octave, <kbd>space</kbd> strums, <kbd>1</kbd>–<kbd>4</kbd> pick one string.</p>
     </div>
@@ -136,6 +143,17 @@
         <select id="songSel" class="sel"></select>
       </div>
 
+      <div class="row" id="rowFull">
+        <label>Screen</label>
+        <button id="setFull" class="mini wide">Go fullscreen</button>
+      </div>
+
+      <div class="row" id="rowInstall" hidden>
+        <label>Install</label>
+        <button id="setInstall" class="mini wide">Add to home screen</button>
+      </div>
+      <p class="fine" id="installNote" hidden>Installed ARCO launches fullscreen in landscape with no browser chrome, and plays with no network — there are no samples to download.</p>
+
       <h3>What each hand does</h3>
       <p class="fine">
         The four strings are a voicing of whatever degree the left thumb is holding, stacked bass to treble:
@@ -153,10 +171,18 @@
   <div class="overlay hard" id="rotate" hidden>
     <div class="rotmsg">
       <div class="rotico">⟳</div>
-      <p>Turn the phone sideways.<br /><span class="fine">ARCO is played in landscape, one thumb per corner.</span></p>
+      <p class="rottitle">Turn the phone sideways</p>
+      <p class="fine">ARCO is played in landscape, one thumb per corner.</p>
+      <div class="taphint" id="tapHint">
+        <span class="tapdots" aria-hidden="true"><i></i><i></i></span>
+        <b>Double-tap anywhere</b>
+        <span class="fine">go fullscreen and rotate</span>
+      </div>
+      <p class="fine rotfail" id="rotFail" hidden>This browser will not rotate for you — turn the phone yourself. Installing ARCO to the home screen gives you fullscreen landscape for good.</p>
     </div>
   </div>
 
+  <script src="js/shell.js"></script>
   <script src="js/theory.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/input.js"></script>
