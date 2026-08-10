@@ -64,7 +64,9 @@ rather than fighting it.
 
 - **Radius** picks which of the four strings you are on. The innermost lane,
   where a relaxed thumb sits, is the melody voice; reaching outward adds the
-  chord underneath it.
+  chord underneath it. *String order* in Setup flips that, putting the bass
+  nearest the corner instead — the way round a guitar sits when you look down
+  at it.
 - **Motion** is what makes sound. In Pluck mode, crossing a string plucks it, so
   a slow sweep genuinely arpeggiates and a fast one strums; reversing direction
   on one lane is tremolo picking. In Bow mode the thumb *is* the bow — sound

@@ -26,6 +26,7 @@ window.ARCO = window.ARCO || {};
     octave: 3,
     instrument: "guitar",
     lock: true,          // diatonic lock — hides the chromatic wedges
+    invert: false,       // string order: false = melody nearest the corner
     sevenths: false,
     latch: false,
     reach: 1.0,
@@ -356,9 +357,19 @@ window.ARCO = window.ARCO || {};
     }
   }
 
+  /* Lane (0 = nearest the thumb's corner) to string index (0 = bass).
+   * By default the nearest lane is the melody voice, so a relaxed curled thumb
+   * plays the tune and reaching outward adds the chord under it. Inverted puts
+   * the bass nearest instead, which is the way round a guitar sits when you look
+   * down at it. Both mappings are their own inverse, so this one function
+   * converts in either direction. */
+  function stringForLane(lane) {
+    return state.invert ? lane : 3 - lane;
+  }
+
   function pluckLane(lane, amp, tone) {
     lane = Math.max(0, Math.min(3, lane));
-    var s = 3 - lane;                     // inner lane = melody = string 3
+    var s = stringForLane(lane);
     A.engine.damp(s, 0);
     A.engine.pluck(s, amp, tone);
     state.ringVis[s] = Math.min(1, state.ringVis[s] + amp * 2.2);
@@ -394,7 +405,7 @@ window.ARCO = window.ARCO || {};
         var v = Math.min(1, Math.sqrt(R.speed / 900));
         var frac = R.laneF - Math.floor(R.laneF);
         for (var s = 0; s < 4; s++) {
-          var lane = 3 - s;
+          var lane = stringForLane(s);
           var amt = 0;
           if (lane === R.lane) amt = 1;
           /* Riding a boundary catches the neighbour too — double stops. */
@@ -600,6 +611,7 @@ window.ARCO = window.ARCO || {};
     calibrate: calibrate,
     hasTilt: function () { return haveTilt; },
     pluckLane: pluckLane,
+    stringForLane: stringForLane,
     silenceBows: silenceBows,
     on: function (fn) { listeners.push(fn); }
   };
