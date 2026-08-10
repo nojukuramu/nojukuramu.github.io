@@ -102,6 +102,7 @@
     camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l1.5-2h9L18 8h3v11H3z"/><circle cx="12" cy="13" r="3.4"/><path d="M17.5 8.5h.01"/></svg>',
     city:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V9l4-3v15"/><path d="M13 21V5l4-2v18"/><path d="M9 12h.01M9 15h.01M9 18h.01M17 9h.01M17 12h.01M17 15h.01M17 18h.01"/></svg>',
     spore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10c0-3.6 3.8-6 8.5-6s8.5 2.4 8.5 6z"/><path d="M10 10v7a2 2 0 0 0 4 0v-7"/><path d="M2 21h20"/></svg>',
+    arc:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21A18 18 0 0 1 21 3"/><path d="M3 21A12 12 0 0 1 15 9"/><path d="M3 21a6 6 0 0 1 6-6"/><circle cx="3.2" cy="20.8" r="1.5" fill="currentColor" stroke="none"/></svg>',
     mic:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4M8 22h8"/></svg>'
   };
   var APPS = [
@@ -158,6 +159,12 @@
       href: "karaokenatin/", badge: "party",
       desc: "Turn any screen into a karaoke machine. Guests scan a QR code and their phone becomes the remote — search, queue, skip. Peer-to-peer over WebRTC, so nothing runs on a server of mine. Installable, with a local library of saved songs and playlists.",
       tags: ["WebRTC", "P2P", "PWA", "no backend"]
+    },
+    {
+      id: "arco", name: "ARCO", accent: "#6fd0ff", icon: ICONS.arc,
+      href: "arco/", badge: "instrument",
+      desc: "A two-thumb instrument built for a phone held sideways. The left thumb sweeps a fan of scale degrees, the right thumb plucks or bows four physically modelled strings, and tilt shapes the tone. Learn a melody once and it plays in all twelve keys.",
+      tags: ["AudioWorklet", "waveguide", "sensors", "no samples"]
     }
   ];
 
@@ -236,6 +243,7 @@
     { icon: "🏙️", label: "SkyLine", sub: "open app", run: function () { location.href = "citybuilder/"; } },
     { icon: "🍄", label: "VELL", sub: "open app", run: function () { location.href = "3dtd/"; } },
     { icon: "🎤", label: "KaraokeNatin", sub: "open app", run: function () { location.href = "karaokenatin/"; } },
+    { icon: "🎻", label: "ARCO", sub: "open app", run: function () { location.href = "arco/"; } },
     { icon: "🎮", label: "Play Elemental Echo", sub: "minigame", run: function () { closePalette(); document.getElementById("play").scrollIntoView(); var s = document.getElementById("echo-start"); if (s) s.focus(); } },
     { icon: "🌗", label: "Toggle theme", sub: "light / dark", run: function () { Atelier.toggleTheme(); } },
     { icon: "💾", label: "Source on GitHub", sub: "repo", run: function () { window.open("https://github.com/nojukuramu/nojukuramu.github.io", "_blank"); } }
