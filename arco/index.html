@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>ARCO · a two-thumb instrument for phones</title>
+  <meta name="description" content="A phone instrument you play with both thumbs. The left thumb stops scale degrees on a fan, the right thumb bows or plucks four physically modelled strings, and tilt shapes the tone. Learn a melody once and it plays in all twelve keys." />
+  <meta name="theme-color" content="#07080e" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <meta property="og:title" content="ARCO · a two-thumb instrument for phones" />
+  <meta property="og:description" content="Degrees under the left thumb, a bow under the right, and real waveguide strings in between. Master the shapes once, play in any key." />
+  <meta property="og:type" content="website" />
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 28 A24 24 0 0 1 28 4' fill='none' stroke='%23ffb454' stroke-width='2.5'/%3E%3Cpath d='M4 20 A16 16 0 0 1 20 4' fill='none' stroke='%236fd0ff' stroke-width='2'/%3E%3Ccircle cx='4' cy='28' r='2.5' fill='%2334e0c0'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/arco.css" />
+</head>
+
+<body data-inst="guitar">
+
+  <canvas id="stage"></canvas>
+
+  <!-- Toolbar -->
+  <header class="bar" id="bar">
+    <div class="bar-l">
+      <span class="wordmark">ARCO</span>
+    </div>
+
+    <div class="bar-c">
+      <div class="keypick">
+        <button id="keyDown" class="mini" aria-label="Key down">◀</button>
+        <button id="keyName" class="keyname" title="Tap to move around the circle of fifths">C</button>
+        <button id="keyUp" class="mini" aria-label="Key up">▶</button>
+      </div>
+      <select id="modeSel" class="sel" aria-label="Mode"></select>
+      <div class="seg" role="group" aria-label="Instrument">
+        <button id="btnGuitar" class="segbtn on">Pluck</button>
+        <button id="btnViolin" class="segbtn">Bow</button>
+      </div>
+    </div>
+
+    <div class="bar-r">
+      <button id="btn7th"    class="tog" title="Add sevenths to the voicing">7th</button>
+      <button id="btnLatch"  class="tog" title="Hold the chord, keep the melody string live">latch</button>
+      <button id="btnLock"   class="tog on" title="Show or hide the chromatic wedges">diatonic</button>
+      <button id="btnLearn"  class="tog" title="Practise a melody by scale degree">learn</button>
+      <button id="btnMotion" class="tog" title="Use tilt for tone and bend">tilt</button>
+      <button id="btnSettings" class="tog" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <!-- Trainer strip -->
+  <div class="trainer" id="trainer" hidden>
+    <div class="trainer-head">
+      <strong id="trainerName">—</strong>
+      <span id="trainerHint" class="muted"></span>
+    </div>
+    <div class="trainer-row" id="trainerRow"></div>
+    <div class="trainer-act">
+      <button id="trainerKey" class="mini wide" title="Same shapes, new key">↻ new key</button>
+      <button id="trainerClose" class="mini" aria-label="Close trainer">✕</button>
+    </div>
+  </div>
+
+  <!-- Start -->
+  <div class="overlay" id="start">
+    <div class="panel">
+      <h1 class="title">ARCO</h1>
+      <p class="sub">A two-thumb instrument. Real strings, no samples.</p>
+
+      <div class="startgrid">
+      <svg class="holdfig" viewBox="0 0 340 150" aria-label="Hold the phone in landscape with both hands; thumbs on the screen, fingers behind">
+        <rect x="34" y="22" width="272" height="106" rx="14" fill="#0c0f1a" stroke="#2a3350" stroke-width="2"/>
+        <path d="M44 122 A76 76 0 0 1 120 46" fill="none" stroke="#ffb454" stroke-width="3" opacity=".85"/>
+        <path d="M44 122 A48 48 0 0 1 92 74" fill="none" stroke="#ffb454" stroke-width="2" opacity=".4"/>
+        <path d="M296 122 A76 76 0 0 0 220 46" fill="none" stroke="#6fd0ff" stroke-width="3" opacity=".85"/>
+        <path d="M296 122 A48 48 0 0 0 248 74" fill="none" stroke="#6fd0ff" stroke-width="2" opacity=".4"/>
+        <circle cx="44" cy="122" r="6" fill="#34e0c0"/>
+        <circle cx="296" cy="122" r="6" fill="#34e0c0"/>
+        <path d="M18 128 q-12 -18 2 -34" fill="none" stroke="#59668f" stroke-width="4" stroke-linecap="round"/>
+        <path d="M322 128 q12 -18 -2 -34" fill="none" stroke="#59668f" stroke-width="4" stroke-linecap="round"/>
+        <text x="86" y="142" fill="#ffb454" font-size="11" font-family="system-ui" text-anchor="middle">left · stops the note</text>
+        <text x="254" y="142" fill="#6fd0ff" font-size="11" font-family="system-ui" text-anchor="middle">right · makes the sound</text>
+      </svg>
+
+      <ul class="rules">
+        <li><b>Left thumb</b> sweeps a fan of <b>scale degrees</b> — angle picks the degree, reaching further out jumps an octave, and small wiggles bend the pitch.</li>
+        <li><b>Right thumb</b> is the picking or bowing hand. Sweep across the four strings to strum; in Bow mode the sound only lives while your thumb keeps moving.</li>
+        <li><b>Tilt</b> shapes tone and bend. It never picks notes — thumbs are precise, tilt is not.</li>
+      </ul>
+      </div>
+
+      <p class="fine startfine">Because the fan is degrees and not note names, a melody learned once plays in every key with the same motion. No headphones needed, but they help.</p>
+
+      <button id="startBtn" class="cta">tap to tune up</button>
+      <p class="err" id="startErr" hidden></p>
+      <p class="fine kb">On a desktop: <kbd>A W S E D F T G Y H U J</kbd> are the degrees, <kbd>Z</kbd>/<kbd>X</kbd> change octave, <kbd>space</kbd> strums, <kbd>1</kbd>–<kbd>4</kbd> pick one string.</p>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="overlay soft" id="settings" hidden>
+    <div class="panel small">
+      <button class="x" id="settingsClose" aria-label="Close">✕</button>
+      <h2>Setup</h2>
+
+      <div class="row">
+        <label for="reachSel">Thumb reach</label>
+        <select id="reachSel" class="sel">
+          <option value="0.86">Short</option>
+          <option value="1" selected>Medium</option>
+          <option value="1.14">Long</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label>Register</label>
+        <div class="stepper">
+          <button id="octDown" class="mini">−</button>
+          <span id="octVal">3</span>
+          <button id="octUp" class="mini">+</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <label>Tilt</label>
+        <button id="btnCalibrate" class="mini wide">Set neutral pose</button>
+      </div>
+      <p class="fine" id="motionNote" hidden>Motion access was refused, so tilt is off. Everything else still works.</p>
+
+      <div class="row">
+        <label for="songSel">Practice</label>
+        <select id="songSel" class="sel"></select>
+      </div>
+
+      <h3>What each hand does</h3>
+      <p class="fine">
+        The four strings are a voicing of whatever degree the left thumb is holding, stacked bass to treble:
+        root, third, fifth, and the degree itself an octave up. The innermost lane — where a relaxed thumb sits —
+        is that top voice, so brushing one lane plays a melody and sweeping outward fills in the chord.
+        <b>7th</b> swaps the fifth for the seventh. <b>Latch</b> freezes the chord under the lower three strings
+        and lets the melody string keep following your left thumb, which is how you accompany yourself.
+      </p>
+      <p class="fine">
+        Tap the back of the phone while <b>tilt</b> is on and the body gets struck, like knocking on a soundboard.
+      </p>
+    </div>
+  </div>
+
+  <div class="overlay hard" id="rotate" hidden>
+    <div class="rotmsg">
+      <div class="rotico">⟳</div>
+      <p>Turn the phone sideways.<br /><span class="fine">ARCO is played in landscape, one thumb per corner.</span></p>
+    </div>
+  </div>
+
+  <script src="js/theory.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
