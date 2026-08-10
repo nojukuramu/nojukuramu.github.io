@@ -197,10 +197,10 @@ window.ARCO = window.ARCO || {};
     var voi = A.input.voicing();
 
     for (var lane = 0; lane < 4; lane++) {
-      var s = 3 - lane;
+      var s = A.input.stringForLane(lane);
       var rc = R.rMin + (lane + 0.5) * G.laneH;
       var amp = S.ringVis[s] * G.laneH * 0.40;
-      var thick = 1.2 + (3 - lane) * 0.9;              // bass strings look heavier
+      var thick = 1.2 + (3 - s) * 0.9;                 // bass strings look heavier
       var live = S.right && S.right.lane === lane;
 
       /* Lane bed */

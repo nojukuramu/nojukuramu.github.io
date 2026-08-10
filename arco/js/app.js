@@ -122,6 +122,7 @@ window.ARCO = window.ARCO || {};
     v.classList.toggle("on", S.instrument === "violin");
     document.body.dataset.inst = S.instrument;
     $("octVal").textContent = S.octave;
+    $("setInvert").textContent = S.invert ? "Bass nearest" : "Melody nearest";
     var rs = $("reachSel");
     if (rs) rs.value = String(S.reach);
   }
@@ -342,6 +343,13 @@ window.ARCO = window.ARCO || {};
     });
     $("octUp").addEventListener("click", function () {
       S.octave = Math.min(5, S.octave + 1); syncHud();
+    });
+    $("setInvert").addEventListener("click", function () {
+      S.invert = !S.invert;
+      /* A bow already riding a lane would otherwise keep driving the string it
+       * used to be on. */
+      A.input.silenceBows();
+      syncHud();
     });
     $("btnCalibrate").addEventListener("click", function () {
       A.input.calibrate();
