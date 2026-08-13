@@ -1,995 +1,1317 @@
+/* ui.js — application shell: sidebar, toolbar, the five views, note cards,
+ * multi-select, drag ordering, menus and toasts.
+ */
 var UI = (function () {
-  var _searchQuery = '';
-  var _activeEditorId = null;
-  var _addInputVisible = false;
+  'use strict';
 
-  // ---- Helpers ----
+  var $ = function (sel, root) { return (root || document).querySelector(sel); };
+  var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
+  var esc = function (s) { return MD.esc(s); };
 
-  function esc(s) {
-    return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  var state = {
+    query: '',
+    selection: {},
+    selecting: false,
+    dragId: null,
+    calendarMonth: null,
+    sidebarOpen: false
+  };
+
+  var VIEWS = [
+    { id: 'grid', icon: '▦', label: 'Grid' },
+    { id: 'list', icon: '☰', label: 'List' },
+    { id: 'board', icon: '▤', label: 'Board' },
+    { id: 'agenda', icon: '📅', label: 'Agenda' },
+    { id: 'calendar', icon: '🗓', label: 'Calendar' }
+  ];
+
+  var SORTS = [
+    { id: 'manual', label: 'Manual order' },
+    { id: 'updated', label: 'Last edited' },
+    { id: 'created', label: 'Date created' },
+    { id: 'title', label: 'Title A–Z' },
+    { id: 'due', label: 'Next alarm' },
+    { id: 'priority', label: 'Priority' }
+  ];
+
+  var PRIORITY_RANK = { high: 0, medium: 1, low: 2, none: 3 };
+
+  /* ================= scope helpers ================= */
+
+  function scopeInfo(scope) {
+    scope = scope || 'all';
+    if (scope.indexOf('notebook:') === 0) {
+      var nb = Store.notebookById(scope.slice(9));
+      return { kind: 'notebook', id: scope.slice(9), title: nb ? nb.name : 'Notebook', icon: nb ? nb.icon : '📓' };
+    }
+    if (scope.indexOf('tag:') === 0) {
+      return { kind: 'tag', id: scope.slice(4), title: '#' + scope.slice(4), icon: '#' };
+    }
+    var map = {
+      all: { title: 'All notes', icon: '🗒' },
+      today: { title: 'Today', icon: '☀️' },
+      upcoming: { title: 'Upcoming', icon: '📆' },
+      overdue: { title: 'Overdue', icon: '⚠️' },
+      starred: { title: 'Starred', icon: '⭐' },
+      alarms: { title: 'Alarms', icon: '⏰' },
+      done: { title: 'Completed', icon: '✅' },
+      archive: { title: 'Archive', icon: '📦' },
+      trash: { title: 'Trash', icon: '🗑' }
+    };
+    var m = map[scope] || map.all;
+    return { kind: scope, title: m.title, icon: m.icon };
   }
 
-  function fmtDate(ms) {
-    if (!ms) return '';
-    var d = new Date(ms);
-    var now = new Date();
-    var diff = ms - Date.now();
-    var abs = Math.abs(diff);
-    if (abs < 60000) return diff < 0 ? 'just now' : 'in <1m';
-    if (abs < 3600000) {
-      var m = Math.round(abs / 60000);
-      return diff < 0 ? m + 'm ago' : 'in ' + m + 'm';
-    }
-    if (abs < 86400000) {
-      var h = Math.round(abs / 3600000);
-      return diff < 0 ? h + 'h ago' : 'in ' + h + 'h';
-    }
-    var opts = { month: 'short', day: 'numeric' };
-    if (d.getFullYear() !== now.getFullYear()) opts.year = 'numeric';
-    return d.toLocaleDateString(undefined, opts) + ' ' +
-      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  function nextAlarmAt(note) {
+    var best = null;
+    note.reminders.forEach(function (r) {
+      if (!r.enabled) return;
+      var at = Sched.effectiveNext(r);
+      if (at && (best == null || at < best)) best = at;
+    });
+    return best;
   }
 
-  function reminderChip(task) {
-    var rem = task.reminder;
-    if (!rem.enabled || rem.mode === 'none') return '';
+  function isOverdue(note) {
     var now = Date.now();
-    var isOverdue = rem.nextFireAt && rem.nextFireAt < now;
-    var cls = isOverdue ? 'chip-overdue' : 'chip-reminder';
-    var icon, text;
-    if (rem.mode === 'interval') {
-      var itype = rem.intervalType || 'frequency';
-      if (itype === 'monthly-date') {
-        icon = '🔁'; text = 'every ' + _ordinal(rem.intervalMonthDay || 1);
-      } else if (itype === 'weekly-day') {
-        icon = '🔁'; text = 'every ' + _weekdayName(rem.intervalWeekDay != null ? rem.intervalWeekDay : 1);
-      } else {
-        icon = '🔁'; text = 'every ' + rem.intervalEvery + rem.intervalUnit[0];
+    if (note.done) return false;
+    return note.reminders.some(function (r) {
+      if (!r.enabled || r.kind !== 'once') return false;
+      if (r.snoozedUntil && r.snoozedUntil > now) return false;  // answered, just later
+      return r.at && r.at < now;
+    });
+  }
+
+  function inScope(note, scope) {
+    if (scope === 'trash') return note.trashed;
+    if (note.trashed) return false;
+    if (scope === 'archive') return note.archived;
+    if (note.archived) return false;
+
+    var s = Store.settings();
+    if (scope === 'done') return note.done;
+    if (!s.showCompleted && note.done && scope !== 'all') return false;
+
+    if (scope === 'all') return true;
+    if (scope === 'starred') return note.starred;
+    if (scope === 'alarms') return note.reminders.some(function (r) { return r.enabled; });
+    if (scope === 'overdue') return isOverdue(note);
+    if (scope === 'today') {
+      var at = nextAlarmAt(note);
+      if (isOverdue(note)) return true;
+      return at != null && Sched.startOfDay(at) === Sched.startOfDay(Date.now());
+    }
+    if (scope === 'upcoming') {
+      var a = nextAlarmAt(note);
+      return a != null && a <= Date.now() + 7 * Sched.DAY;
+    }
+    if (scope.indexOf('notebook:') === 0) return note.notebook === scope.slice(9);
+    if (scope.indexOf('tag:') === 0) return note.tags.indexOf(scope.slice(4)) > -1;
+    return true;
+  }
+
+  function matchesQuery(note, q) {
+    if (!q) return true;
+    var hay = (note.title + ' ' + note.body + ' ' + note.tags.join(' ')).toLowerCase();
+    return q.toLowerCase().split(/\s+/).filter(Boolean).every(function (term) {
+      if (term.indexOf('#') === 0) return note.tags.some(function (t) { return t.toLowerCase().indexOf(term.slice(1)) === 0; });
+      if (term === 'is:done') return note.done;
+      if (term === 'is:open') return !note.done;
+      if (term === 'is:alarm') return note.reminders.some(function (r) { return r.enabled; });
+      if (term === 'is:pinned') return note.pinned;
+      return hay.indexOf(term) > -1;
+    });
+  }
+
+  function sortNotes(list, sort) {
+    var arr = list.slice();
+    arr.sort(function (a, b) {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      switch (sort) {
+        case 'updated': return b.updatedAt - a.updatedAt;
+        case 'created': return b.createdAt - a.createdAt;
+        case 'title': return (a.title || MD.plain(a.body, 40)).localeCompare(b.title || MD.plain(b.body, 40));
+        case 'priority': return (PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]) || (b.updatedAt - a.updatedAt);
+        case 'due': {
+          var x = nextAlarmAt(a), y = nextAlarmAt(b);
+          if (x == null && y == null) return b.updatedAt - a.updatedAt;
+          if (x == null) return 1;
+          if (y == null) return -1;
+          return x - y;
+        }
+        default: return b.order - a.order;
       }
-    } else if (rem.mode === 'datetime') {
-      icon = rem.dueAt < now ? '⚠' : '📅';
-      text = fmtDate(rem.dueAt);
+    });
+    return arr;
+  }
+
+  function visibleNotes() {
+    var s = Store.settings();
+    var list = Store.notes().filter(function (n) {
+      return inScope(n, s.scope) && matchesQuery(n, state.query);
+    });
+    return sortNotes(list, s.sort);
+  }
+
+  function counts() {
+    var notes = Store.notes();
+    var c = { all: 0, today: 0, upcoming: 0, overdue: 0, starred: 0, alarms: 0, done: 0, archive: 0, trash: 0 };
+    notes.forEach(function (n) {
+      if (n.trashed) { c.trash++; return; }
+      if (n.archived) { c.archive++; return; }
+      c.all++;
+      if (n.starred) c.starred++;
+      if (n.done) c.done++;
+      if (n.reminders.some(function (r) { return r.enabled; })) c.alarms++;
+      if (isOverdue(n)) c.overdue++;
+      var at = nextAlarmAt(n);
+      if (isOverdue(n) || (at != null && Sched.startOfDay(at) === Sched.startOfDay(Date.now()))) c.today++;
+      if (at != null && at <= Date.now() + 7 * Sched.DAY) c.upcoming++;
+    });
+    return c;
+  }
+
+  /* ================= sidebar ================= */
+
+  function navItem(scope, label, icon, count, active) {
+    return '<button class="sb-item' + (active ? ' is-active' : '') + '" data-scope="' + esc(scope) + '">' +
+      '<span class="sb-icon" aria-hidden="true">' + icon + '</span>' +
+      '<span class="sb-label">' + esc(label) + '</span>' +
+      (count ? '<span class="sb-count">' + count + '</span>' : '') +
+      '</button>';
+  }
+
+  function renderSidebar() {
+    var s = Store.settings();
+    var c = counts();
+    var host = $('#sidebar-body');
+    if (!host) return;
+
+    var books = Store.notebooks();
+    var tags = Store.allTags();
+
+    host.innerHTML =
+      '<div class="sb-group">' +
+        navItem('all', 'All notes', '🗒', c.all, s.scope === 'all') +
+        navItem('today', 'Today', '☀️', c.today, s.scope === 'today') +
+        navItem('upcoming', 'Upcoming', '📆', c.upcoming, s.scope === 'upcoming') +
+        navItem('overdue', 'Overdue', '⚠️', c.overdue, s.scope === 'overdue') +
+        navItem('alarms', 'Alarms', '⏰', c.alarms, s.scope === 'alarms') +
+        navItem('starred', 'Starred', '⭐', c.starred, s.scope === 'starred') +
+        navItem('done', 'Completed', '✅', c.done, s.scope === 'done') +
+      '</div>' +
+
+      '<div class="sb-group">' +
+        '<div class="sb-group-head">' +
+          '<span>Notebooks</span>' +
+          '<button class="sb-add" data-act="add-notebook" title="New notebook" aria-label="New notebook">+</button>' +
+        '</div>' +
+        (books.length ? books.map(function (b) {
+          var n = Store.notes().filter(function (x) { return !x.trashed && !x.archived && x.notebook === b.id; }).length;
+          return '<button class="sb-item' + (s.scope === 'notebook:' + b.id ? ' is-active' : '') + '" data-scope="notebook:' + esc(b.id) + '" data-notebook="' + esc(b.id) + '">' +
+            '<span class="sb-icon" aria-hidden="true">' + esc(b.icon || '📓') + '</span>' +
+            '<span class="sb-label">' + esc(b.name) + '</span>' +
+            (n ? '<span class="sb-count">' + n + '</span>' : '') +
+            '<span class="sb-more" data-act="notebook-menu" data-id="' + esc(b.id) + '" role="button" tabindex="0" aria-label="Notebook options">⋯</span>' +
+            '</button>';
+        }).join('') : '<p class="sb-empty">No notebooks yet</p>') +
+      '</div>' +
+
+      '<div class="sb-group">' +
+        '<div class="sb-group-head"><span>Tags</span></div>' +
+        (tags.length ? '<div class="sb-tags">' + tags.slice(0, 40).map(function (t) {
+          return '<button class="tag-chip' + (s.scope === 'tag:' + t.name ? ' is-active' : '') + '" data-scope="tag:' + esc(t.name) + '">#' + esc(t.name) +
+            '<span>' + t.count + '</span></button>';
+        }).join('') + '</div>' : '<p class="sb-empty">Add tags in the editor</p>') +
+      '</div>' +
+
+      '<div class="sb-group">' +
+        navItem('archive', 'Archive', '📦', c.archive, s.scope === 'archive') +
+        navItem('trash', 'Trash', '🗑', c.trash, s.scope === 'trash') +
+      '</div>';
+  }
+
+  /* ================= topbar ================= */
+
+  function renderTopbar() {
+    var s = Store.settings();
+    var info = scopeInfo(s.scope);
+    var title = $('#scope-title');
+    if (title) {
+      title.innerHTML = '<span class="scope-icon" aria-hidden="true">' + esc(info.icon) + '</span>' + esc(info.title);
     }
-    if (rem.nextFireAt) {
-      text = (isOverdue ? '⚠ ' : '') + fmtDate(rem.nextFireAt);
-    }
-    return '<span class="chip ' + cls + '">' + icon + ' ' + esc(text) + '</span>';
-  }
 
-  function _ordinal(n) {
-    var s = ['th', 'st', 'nd', 'rd'];
-    var v = n % 100;
-    return n + (s[(v - 20) % 10] || s[v] || s[0]);
-  }
-
-  function _weekdayName(d) {
-    return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d] || 'Mon';
-  }
-
-  function priorityIcon(p) {
-    return { high: '🔴', normal: '', low: '🔵' }[p] || '';
-  }
-
-  // ---- Task list ----
-
-  function renderTaskList() {
-    var container = document.getElementById('task-list');
-    if (!container) return;
-    var tasks = Store.getTasks();
-    var settings = Store.getSettings();
-    var filtered = Search.filterAndSort(tasks, settings, _searchQuery);
-
-    if (filtered.length === 0) {
-      container.innerHTML = '<div class="empty-state">' +
-        '<div class="empty-icon">📝</div>' +
-        '<div class="empty-text">No tasks yet — tap <strong>+</strong> to add one</div>' +
-        '</div>';
-      return;
-    }
-
-    container.innerHTML = filtered.map(function (task) {
-      var doneCls = task.done ? ' done' : '';
-      var pinnedCls = task.pinned ? ' pinned' : '';
-      var subtasksDone = task.subtasks.filter(function (s) { return s.done; }).length;
-      var subtasksTotal = task.subtasks.length;
-      var allSubtasksDone = subtasksTotal > 0 && subtasksDone === subtasksTotal;
-      var subtaskChip = subtasksTotal > 0
-        ? '<span class="chip chip-subtasks' + (allSubtasksDone ? ' chip-subtasks-done' : '') + '">' + subtasksDone + '/' + subtasksTotal + ' ✓</span>'
-        : '';
-      var tagChips = task.tags.map(function (tag) {
-        return '<span class="chip chip-tag">' + esc(tag) + '</span>';
+    var vs = $('#view-switch');
+    if (vs) {
+      vs.innerHTML = VIEWS.map(function (v) {
+        return '<button class="' + (s.view === v.id ? 'is-active' : '') + '" data-view="' + v.id + '" title="' + v.label + ' view" aria-label="' + v.label + ' view" aria-pressed="' + (s.view === v.id) + '">' + v.icon + '</button>';
       }).join('');
-      var popoutBtn = '<button class="btn-popout" title="Pop out as sticky note" data-id="' + esc(task.id) + '" aria-label="Pop out">⧉</button>';
-      var resetBtn = (task.done && subtasksTotal > 0)
-        ? '<button class="btn-reset-task" data-id="' + esc(task.id) + '" title="Reset subtasks and reopen task" aria-label="Reset task">↺ Reset</button>'
-        : '';
+    }
 
-      return '<li class="task-card color-' + esc(task.color) + doneCls + pinnedCls +
-        '" data-id="' + esc(task.id) + '" tabindex="0" role="article" aria-label="Task: ' + esc(task.title) + '">' +
-        '<div class="card-top">' +
-          '<label class="checkbox-wrap" title="Mark done" aria-label="' + (task.done ? 'Mark undone' : 'Mark done') + '">' +
-            '<input type="checkbox" class="task-done-cb" data-id="' + esc(task.id) + '"' + (task.done ? ' checked' : '') + '>' +
-            '<span class="checkbox-custom"></span>' +
-          '</label>' +
-          '<span class="card-title">' + esc(task.title) + '</span>' +
-          '<span class="card-priority">' + priorityIcon(task.priority) + '</span>' +
-          (task.pinned ? '<span class="pin-icon" title="Pinned">📌</span>' : '') +
-          popoutBtn +
+    $$('#bottom-nav [data-scope]').forEach(function (b) {
+      b.classList.toggle('is-on', b.getAttribute('data-scope') === s.scope);
+    });
+
+    var perm = Notifier.permission();
+    var nb = $('#btn-notif');
+    if (nb) {
+      nb.style.display = (perm === 'granted' || perm === 'unsupported') ? 'none' : '';
+      nb.textContent = perm === 'denied' ? '🔕 Alerts blocked' : '🔔 Enable alerts';
+      nb.classList.toggle('is-denied', perm === 'denied');
+    }
+
+    var search = $('#search-input');
+    if (search && search.value !== state.query) search.value = state.query;
+    var clear = $('#search-clear');
+    if (clear) clear.style.display = state.query ? '' : 'none';
+  }
+
+  function renderStatus() {
+    var host = $('#status-strip');
+    if (!host) return;
+    var s = Store.settings();
+    var up = Engine.upcoming(1);
+    var over = Engine.overdueNotes().length;
+    var bits = [];
+
+    if (over) bits.push('<button class="chip chip-warn" data-scope="overdue">⚠️ ' + over + ' overdue</button>');
+    if (up.length) {
+      bits.push('<span class="chip">⏰ Next: ' + esc(Notifier.titleFor(up[0].note, up[0].reminder)) +
+        ' · ' + esc(Sched.relative(up[0].at)) + '</span>');
+    }
+    if (Notifier.permission() === 'granted' && !Notifier.triggersSupported()) {
+      bits.push('<span class="chip chip-quiet" title="This browser can only fire alarms while a tab is open. Keep the app installed or a tab pinned.">ℹ️ Alarms need an open tab</span>');
+    }
+    if (s.quietHours && s.quietHours.enabled) {
+      bits.push('<span class="chip chip-quiet">🌙 Quiet ' + esc(s.quietHours.start) + '–' + esc(s.quietHours.end) + '</span>');
+    }
+    host.innerHTML = bits.join('');
+    host.style.display = bits.length ? '' : 'none';
+  }
+
+  /* ================= note cards ================= */
+
+  function reminderChip(note, rem) {
+    var s = Store.settings();
+    var at = Sched.effectiveNext(rem);
+    var late = rem.kind === 'once' && rem.at && rem.at < Date.now() && !note.done;
+    var cls = 'rem-chip' + (rem.alarm ? ' is-alarm' : '') + (late ? ' is-late' : '') + (rem.enabled ? '' : ' is-off');
+    var label = rem.enabled
+      ? (at ? Sched.dateLabel(at, s.time24) : Sched.describe(rem, s.time24))
+      : 'Off';
+    if (rem.snoozedUntil) label = 'Snoozed · ' + Sched.relative(rem.snoozedUntil);
+    return '<button class="' + cls + '" data-act="edit-reminder" data-rid="' + esc(rem.id) + '" title="' + esc(Sched.describe(rem, s.time24)) + '">' +
+      '<span aria-hidden="true">' + (rem.alarm ? '⏰' : '🔔') + '</span>' + esc(label) +
+      (rem.kind !== 'once' ? '<span class="rem-repeat" aria-hidden="true">↻</span>' : '') +
+      '</button>';
+  }
+
+  function cardHTML(note, opts) {
+    opts = opts || {};
+    var s = Store.settings();
+    var stats = Model.checklistStats(note.body);
+    var selected = !!state.selection[note.id];
+    var bodyHtml = MD.render(note.body, { interactive: true });
+    var nb = note.notebook ? Store.notebookById(note.notebook) : null;
+
+    var cls = ['note-card', 'color-' + note.color];
+    if (note.done) cls.push('is-done');
+    if (note.pinned) cls.push('is-pinned');
+    if (selected) cls.push('is-selected');
+    if (note.priority !== 'none') cls.push('prio-' + note.priority);
+    if (isOverdue(note)) cls.push('is-overdue');
+    if (opts.compact) cls.push('is-compact');
+
+    return '<article class="' + cls.join(' ') + '" data-id="' + esc(note.id) + '" tabindex="0" ' +
+      (s.sort === 'manual' && !state.selecting ? 'draggable="true"' : '') +
+      ' aria-label="' + esc(note.title || MD.plain(note.body, 40) || 'Untitled note') + '">' +
+
+      '<button class="nc-select" data-act="select" aria-label="Select note" aria-pressed="' + selected + '"></button>' +
+
+      '<div class="nc-main" data-act="open">' +
+        (note.priority !== 'none' ? '<span class="nc-prio" title="' + note.priority + ' priority"></span>' : '') +
+        (note.title ? '<h3 class="nc-title">' + esc(note.title) + '</h3>' : '') +
+        (note.body ? '<div class="nc-body md">' + bodyHtml + '</div>' : (note.title ? '' : '<div class="nc-body md nc-empty">Empty note</div>')) +
+      '</div>' +
+
+      (stats.total ? '<div class="nc-progress" title="' + stats.done + ' of ' + stats.total + ' done">' +
+        '<div class="nc-progress-bar"><span style="width:' + Math.round(stats.done / stats.total * 100) + '%"></span></div>' +
+        '<span class="nc-progress-label">' + stats.done + '/' + stats.total + '</span>' +
+      '</div>' : '') +
+
+      ((note.tags.length || nb) ? '<div class="nc-tags">' +
+        (nb ? '<span class="nc-book">' + esc(nb.icon || '📓') + ' ' + esc(nb.name) + '</span>' : '') +
+        note.tags.map(function (t) { return '<button class="nc-tag" data-act="tag" data-tag="' + esc(t) + '">#' + esc(t) + '</button>'; }).join('') +
+      '</div>' : '') +
+
+      (note.reminders.length ? '<div class="nc-alarms">' +
+        note.reminders.map(function (r) { return reminderChip(note, r); }).join('') +
+      '</div>' : '') +
+
+      '<footer class="nc-foot">' +
+        '<span class="nc-meta">' + esc(Sched.relative(note.updatedAt)) + '</span>' +
+        '<div class="nc-actions">' +
+          '<button data-act="done" title="' + (note.done ? 'Mark as not done' : 'Mark done') + '" aria-label="Toggle done">' + (note.done ? '☑' : '☐') + '</button>' +
+          '<button data-act="alarm" title="Add alarm" aria-label="Add alarm">⏰</button>' +
+          '<button data-act="star" class="' + (note.starred ? 'is-on' : '') + '" title="Star" aria-label="Star">' + (note.starred ? '★' : '☆') + '</button>' +
+          '<button data-act="pin" class="' + (note.pinned ? 'is-on' : '') + '" title="Pin" aria-label="Pin">📌</button>' +
+          '<button data-act="palette" title="Colour" aria-label="Colour">🎨</button>' +
+          '<button data-act="more" title="More" aria-label="More options">⋯</button>' +
         '</div>' +
-        (task.notes ? '<div class="card-notes">' + esc(task.notes.slice(0, 80)) + (task.notes.length > 80 ? '…' : '') + '</div>' : '') +
-        '<div class="card-chips">' +
-          reminderChip(task) +
-          subtaskChip +
-          tagChips +
+      '</footer>' +
+    '</article>';
+  }
+
+  /* ================= views ================= */
+
+  function emptyState() {
+    var s = Store.settings();
+    var info = scopeInfo(s.scope);
+    var msg = state.query
+      ? { icon: '🔍', title: 'Nothing matched', sub: 'Try a different search, or clear it to see everything.' }
+      : {
+        trash: { icon: '🗑', title: 'Trash is empty', sub: 'Deleted notes rest here for as long as you like.' },
+        archive: { icon: '📦', title: 'Nothing archived', sub: 'Archive notes you want out of the way but not gone.' },
+        today: { icon: '☀️', title: 'Nothing due today', sub: 'Enjoy it, or add an alarm to something.' },
+        upcoming: { icon: '📆', title: 'Nothing in the next week', sub: 'Set an alarm and it will show up here.' },
+        overdue: { icon: '🎉', title: 'Nothing overdue', sub: 'You are completely caught up.' },
+        starred: { icon: '⭐', title: 'No starred notes', sub: 'Star a note to keep it close at hand.' },
+        alarms: { icon: '⏰', title: 'No alarms set', sub: 'Open a note and press ⏰ to set one.' },
+        done: { icon: '✅', title: 'Nothing completed yet', sub: 'Tick a note off and it lands here.' }
+      }[s.scope] || { icon: '🗒', title: 'No notes yet', sub: 'Press N, or the + button, to write your first one.' };
+
+    return '<div class="empty-state">' +
+      '<div class="empty-icon" aria-hidden="true">' + msg.icon + '</div>' +
+      '<h2>' + esc(msg.title) + '</h2>' +
+      '<p>' + esc(msg.sub) + '</p>' +
+      (s.scope === 'trash' ? '' : '<button class="btn-primary" data-act="new-note">New note</button>') +
+      '</div>';
+  }
+
+  function renderGrid(list) {
+    return '<div class="note-grid">' + list.map(function (n) { return cardHTML(n); }).join('') + '</div>';
+  }
+
+  function renderList(list) {
+    return '<div class="note-list">' + list.map(function (n) { return cardHTML(n, { compact: true }); }).join('') + '</div>';
+  }
+
+  function renderBoard(list) {
+    var cols = [
+      { id: 'high', label: '🔴 High', test: function (n) { return !n.done && n.priority === 'high'; } },
+      { id: 'medium', label: '🟠 Medium', test: function (n) { return !n.done && n.priority === 'medium'; } },
+      { id: 'low', label: '🔵 Low / none', test: function (n) { return !n.done && (n.priority === 'low' || n.priority === 'none'); } },
+      { id: 'done', label: '✅ Done', test: function (n) { return n.done; } }
+    ];
+    return '<div class="board">' + cols.map(function (col) {
+      var items = list.filter(col.test);
+      return '<section class="board-col" data-col="' + col.id + '">' +
+        '<header class="board-head">' + col.label + '<span>' + items.length + '</span></header>' +
+        '<div class="board-body">' +
+          (items.length ? items.map(function (n) { return cardHTML(n, { compact: true }); }).join('')
+            : '<p class="board-empty">Drop a note here</p>') +
         '</div>' +
-        (resetBtn ? '<div class="card-reset-row">' + resetBtn + '</div>' : '') +
-        '</li>';
+      '</section>';
+    }).join('') + '</div>';
+  }
+
+  function renderAgenda(list) {
+    var now = Date.now();
+    var today = Sched.startOfDay(now);
+    var buckets = [
+      { id: 'overdue', label: '⚠️ Overdue', items: [] },
+      { id: 'today', label: '☀️ Today', items: [] },
+      { id: 'tomorrow', label: '🌤 Tomorrow', items: [] },
+      { id: 'week', label: '📆 This week', items: [] },
+      { id: 'later', label: '🌙 Later', items: [] },
+      { id: 'none', label: '💤 No alarm', items: [] }
+    ];
+    var index = {};
+    buckets.forEach(function (b) { index[b.id] = b; });
+
+    list.forEach(function (note) {
+      var at = nextAlarmAt(note);
+      if (at == null) { index.none.items.push({ note: note, at: null }); return; }
+      var day = Sched.startOfDay(at);
+      if (at < now && isOverdue(note)) index.overdue.items.push({ note: note, at: at });
+      else if (day === today) index.today.items.push({ note: note, at: at });
+      else if (day === today + Sched.DAY) index.tomorrow.items.push({ note: note, at: at });
+      else if (at <= now + 7 * Sched.DAY) index.week.items.push({ note: note, at: at });
+      else index.later.items.push({ note: note, at: at });
+    });
+
+    var s = Store.settings();
+    var html = buckets.filter(function (b) { return b.items.length; }).map(function (b) {
+      b.items.sort(function (x, y) { return (x.at || Infinity) - (y.at || Infinity); });
+      return '<section class="agenda-group">' +
+        '<header class="agenda-head">' + b.label + '<span>' + b.items.length + '</span></header>' +
+        b.items.map(function (it) {
+          var note = it.note;
+          return '<div class="agenda-row note-card color-' + esc(note.color) + (note.done ? ' is-done' : '') + '" data-id="' + esc(note.id) + '" tabindex="0">' +
+            '<button class="agenda-check" data-act="done" aria-label="Toggle done">' + (note.done ? '☑' : '☐') + '</button>' +
+            '<div class="agenda-main" data-act="open">' +
+              '<div class="agenda-title">' + esc(note.title || MD.plain(note.body, 60) || 'Untitled') + '</div>' +
+              '<div class="agenda-sub">' +
+                (it.at ? esc(Sched.dateLabel(it.at, s.time24)) + ' · ' + esc(Sched.relative(it.at)) : 'No alarm set') +
+              '</div>' +
+            '</div>' +
+            '<div class="agenda-actions">' +
+              '<button data-act="alarm" aria-label="Alarms">⏰</button>' +
+              '<button data-act="more" aria-label="More">⋯</button>' +
+            '</div>' +
+          '</div>';
+        }).join('') +
+      '</section>';
     }).join('');
 
-    // Wire card click → open editor
-    container.querySelectorAll('.task-card').forEach(function (card) {
-      card.addEventListener('click', function (e) {
-        if (e.target.closest('.task-done-cb') || e.target.closest('.btn-popout') || e.target.closest('.btn-reset-task')) return;
-        openEditor(card.dataset.id);
-      });
-      card.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === 'e') { e.preventDefault(); openEditor(card.dataset.id); }
-        if (e.key === ' ') {
-          e.preventDefault();
-          var t = _findTask(card.dataset.id);
-          if (t) { t.done = !t.done; Store.upsertTask(t); }
+    return '<div class="agenda">' + html + '</div>';
+  }
+
+  function renderCalendar(list) {
+    var s = Store.settings();
+    var ref = state.calendarMonth ? new Date(state.calendarMonth) : new Date();
+    var year = ref.getFullYear();
+    var month = ref.getMonth();
+    var first = new Date(year, month, 1);
+    var startPad = (first.getDay() - s.weekStart + 7) % 7;
+    var total = Sched.daysInMonth(year, month);
+    var todayKey = Sched.startOfDay(Date.now());
+
+    // Map every upcoming occurrence in this month to its day.
+    var byDay = {};
+    list.forEach(function (note) {
+      note.reminders.forEach(function (rem) {
+        if (!rem.enabled) return;
+        var cursor = Date.now() - Sched.DAY;
+        for (var i = 0; i < 40; i++) {
+          var at = (i === 0 && Sched.effectiveNext(rem)) ? Sched.effectiveNext(rem)
+            : Sched.nextOccurrence(rem, cursor, { quietHours: s.quietHours });
+          if (!at) break;
+          cursor = at;
+          var d = new Date(at);
+          if (d.getFullYear() > year || (d.getFullYear() === year && d.getMonth() > month)) break;
+          if (d.getFullYear() === year && d.getMonth() === month) {
+            var key = d.getDate();
+            (byDay[key] = byDay[key] || []).push({ note: note, rem: rem, at: at });
+          }
+          if (rem.kind === 'once') break;
         }
       });
     });
 
-    container.querySelectorAll('.task-done-cb').forEach(function (cb) {
-      cb.addEventListener('change', function () {
-        var task = _findTask(cb.dataset.id);
-        if (!task) return;
-        task.done = cb.checked;
-        Store.upsertTask(task);
-      });
-    });
+    var dayNames = [];
+    for (var i = 0; i < 7; i++) dayNames.push(Sched.DAY_NAMES[(s.weekStart + i) % 7]);
 
-    container.querySelectorAll('.btn-popout').forEach(function (btn) {
-      btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        Modes.popOut(btn.dataset.id);
-      });
-    });
-
-    container.querySelectorAll('.btn-reset-task').forEach(function (btn) {
-      btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var task = _findTask(btn.dataset.id);
-        if (!task) return;
-        task.done = false;
-        task.subtasks.forEach(function (s) { s.done = false; });
-        Store.upsertTask(task);
-      });
-    });
-  }
-
-  // ---- Editor ----
-
-  function openEditor(id) {
-    _activeEditorId = id;
-    var task = _findTask(id);
-    if (!task) return;
-    _renderEditor(task);
-    var panel = document.getElementById('editor-panel');
-    if (panel) {
-      panel.classList.add('open');
-      panel.querySelector('.editor-title-input').focus();
-    }
-    document.getElementById('editor-overlay') && document.getElementById('editor-overlay').classList.add('open');
-  }
-
-  function closeEditor() {
-    _activeEditorId = null;
-    var panel = document.getElementById('editor-panel');
-    if (panel) panel.classList.remove('open');
-    var overlay = document.getElementById('editor-overlay');
-    if (overlay) overlay.classList.remove('open');
-  }
-
-  function _findTask(id) {
-    return Store.getTasks().find(function (t) { return t.id === id; });
-  }
-
-  function _toDatetimeLocal(ms) {
-    if (!ms) return '';
-    var d = new Date(ms);
-    var pad = function (n) { return String(n).padStart(2, '0'); };
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
-      'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-  }
-
-  function _renderEditor(task) {
-    var panel = document.getElementById('editor-panel');
-    if (!panel) return;
-    var rem = task.reminder;
-
-    var colorSwatches = ['yellow', 'pink', 'blue', 'green', 'purple', 'gray'].map(function (c) {
-      return '<button class="color-swatch color-swatch-' + c + (task.color === c ? ' selected' : '') +
-        '" data-color="' + c + '" title="' + c + '" aria-label="Color: ' + c + '" aria-pressed="' + (task.color === c) + '"></button>';
-    }).join('');
-
-    var dueVal = rem.dueAt ? _toDatetimeLocal(rem.dueAt) : '';
-    var repeatOpts = ['none', 'daily', 'weekly', 'weekdays', 'monthly', 'custom'].map(function (v) {
-      return '<option value="' + v + '"' + (rem.repeat === v ? ' selected' : '') + '>' + v.charAt(0).toUpperCase() + v.slice(1) + '</option>';
-    }).join('');
-    var repeatUnitOpts = ['days', 'hours', 'minutes'].map(function (v) {
-      return '<option value="' + v + '"' + (rem.customRepeatUnit === v ? ' selected' : '') + '>' + v + '</option>';
-    }).join('');
-    var intervalUnitOpts = ['minutes', 'hours', 'days'].map(function (v) {
-      return '<option value="' + v + '"' + (rem.intervalUnit === v ? ' selected' : '') + '>' + v + '</option>';
-    }).join('');
-    var snoozeUnitOpts = ['minutes', 'hours'].map(function (v) {
-      return '<option value="' + v + '"' + (rem.snoozeUnit === v ? ' selected' : '') + '>' + v + '</option>';
-    }).join('');
-    var priorityOpts = ['low', 'normal', 'high'].map(function (v) {
-      return '<option value="' + v + '"' + (task.priority === v ? ' selected' : '') + '>' + v.charAt(0).toUpperCase() + v.slice(1) + '</option>';
-    }).join('');
-
-    var itype = rem.intervalType || 'frequency';
-    var intervalTypeOpts = ['frequency', 'monthly-date', 'weekly-day'].map(function (v) {
-      var labels = { 'frequency': 'Every N units', 'monthly-date': 'Day of month', 'weekly-day': 'Day of week' };
-      return '<option value="' + v + '"' + (itype === v ? ' selected' : '') + '>' + labels[v] + '</option>';
-    }).join('');
-
-    var weekdayOpts = [['0','Sunday'],['1','Monday'],['2','Tuesday'],['3','Wednesday'],['4','Thursday'],['5','Friday'],['6','Saturday']].map(function (pair) {
-      return '<option value="' + pair[0] + '"' + (String(rem.intervalWeekDay) === pair[0] ? ' selected' : '') + '>' + pair[1] + '</option>';
-    }).join('');
-
-    var nextFire = rem.nextFireAt ? fmtDate(rem.nextFireAt) : (rem.enabled ? '—' : '');
-
-    var tagsHtml = task.tags.map(function (tag) {
-      return '<span class="tag-pill">' + esc(tag) +
-        '<button class="btn-tag-remove" data-tag="' + esc(tag) + '" aria-label="Remove tag ' + esc(tag) + '">✕</button></span>';
-    }).join('');
-
-    var subtasksHtml = task.subtasks.map(function (s) {
-      return _buildSubtaskCardHtml(s);
-    }).join('');
-
-    panel.innerHTML =
-      '<div class="editor-header">' +
-        '<h2 class="editor-heading">Edit Task</h2>' +
-        '<button id="btn-editor-close" aria-label="Close editor">✕</button>' +
-      '</div>' +
-
-      '<div class="editor-body">' +
-        '<label class="field-label" for="editor-title">Title</label>' +
-        '<input id="editor-title" class="editor-title-input" type="text" value="' + esc(task.title) + '" placeholder="Task title…" aria-required="true">' +
-
-        '<label class="field-label" for="editor-notes">Notes</label>' +
-        '<textarea id="editor-notes" class="editor-notes" placeholder="Optional notes…">' + esc(task.notes) + '</textarea>' +
-
-        '<label class="field-label">Color</label>' +
-        '<div class="color-swatches">' + colorSwatches + '</div>' +
-
-        '<div class="editor-row">' +
-          '<label class="editor-row-label">' +
-            '<input type="checkbox" id="editor-pinned"' + (task.pinned ? ' checked' : '') + '> 📌 Pin to top' +
-          '</label>' +
-          '<label class="editor-row-label">Priority: ' +
-            '<select id="editor-priority">' + priorityOpts + '</select>' +
-          '</label>' +
-        '</div>' +
-
-        // Tags
-        '<label class="field-label">Tags</label>' +
-        '<div class="tags-editor">' +
-          '<div class="tag-pills" id="tag-pills">' + tagsHtml + '</div>' +
-          '<div class="tag-input-row">' +
-            '<input id="tag-input" type="text" placeholder="Add tag…" class="tag-input">' +
-            '<button id="btn-add-tag" class="btn-sm">Add</button>' +
-          '</div>' +
-        '</div>' +
-
-        // Subtasks
-        '<div class="subtasks-header">' +
-          '<span class="field-label" style="margin-bottom:0">Subtasks</span>' +
-          (task.done && task.subtasks.length > 0 ?
-            '<button id="btn-reset-subtasks" class="btn-sm btn-reset" title="Reset all subtasks and reopen task">↺ Reset</button>' : '') +
-        '</div>' +
-        '<div class="subtasks-list" id="subtasks-list">' + subtasksHtml + '</div>' +
-        '<div class="subtask-add-row">' +
-          '<input id="subtask-input" type="text" placeholder="Add subtask…" class="subtask-input">' +
-          '<button id="btn-add-subtask" class="btn-sm">Add</button>' +
-        '</div>' +
-
-        // Reminder
-        '<label class="field-label">Reminder</label>' +
-        '<div class="reminder-section">' +
-          '<label class="toggle-label">' +
-            '<input type="checkbox" id="rem-enabled"' + (rem.enabled ? ' checked' : '') + '> Remind me' +
-          '</label>' +
-
-          '<div class="rem-config" id="rem-config" style="' + (rem.enabled ? '' : 'display:none') + '">' +
-            '<div class="seg-control" role="group" aria-label="Reminder mode">' +
-              '<button class="seg-btn' + (rem.mode === 'none' ? ' active' : '') + '" data-mode="none">Off</button>' +
-              '<button class="seg-btn' + (rem.mode === 'datetime' ? ' active' : '') + '" data-mode="datetime">At a time</button>' +
-              '<button class="seg-btn' + (rem.mode === 'interval' ? ' active' : '') + '" data-mode="interval">Every…</button>' +
-            '</div>' +
-
-            '<div class="rem-datetime-opts" style="' + (rem.mode === 'datetime' ? '' : 'display:none') + '">' +
-              '<label>Due date/time <input type="datetime-local" id="rem-due" value="' + dueVal + '"></label>' +
-              '<label>Repeat <select id="rem-repeat">' + repeatOpts + '</select></label>' +
-              '<div id="rem-custom-repeat" style="' + (rem.repeat === 'custom' ? '' : 'display:none') + '">' +
-                '<label>Every <input type="number" id="rem-custom-every" value="' + (rem.customRepeatEvery || 1) + '" min="1" style="width:60px"></label>' +
-                '<select id="rem-custom-unit">' + repeatUnitOpts + '</select>' +
-              '</div>' +
-              '<label>Heads-up <input type="number" id="rem-lead" value="' + (rem.leadTime || 0) + '" min="0" style="width:60px"> min before</label>' +
-            '</div>' +
-
-            '<div class="rem-interval-opts" style="' + (rem.mode === 'interval' ? '' : 'display:none') + '">' +
-              '<label>Type <select id="rem-interval-type">' + intervalTypeOpts + '</select></label>' +
-              '<div id="rem-interval-freq" style="' + (itype !== 'frequency' ? 'display:none' : '') + '">' +
-                '<label>Every <input type="number" id="rem-interval-every" value="' + (rem.intervalEvery || 1) + '" min="1" style="width:60px"> ' +
-                  '<select id="rem-interval-unit">' + intervalUnitOpts + '</select>' +
-                '</label>' +
-              '</div>' +
-              '<div id="rem-interval-monthly" style="' + (itype !== 'monthly-date' ? 'display:none' : '') + '">' +
-                '<label>Day of month (1–31) <input type="number" id="rem-month-day" value="' + (rem.intervalMonthDay || 1) + '" min="1" max="31" style="width:60px"></label>' +
-                '<label>At time <input type="time" id="rem-interval-day-time" value="' + (rem.intervalDayTime || '09:00') + '"></label>' +
-              '</div>' +
-              '<div id="rem-interval-weekly" style="' + (itype !== 'weekly-day' ? 'display:none' : '') + '">' +
-                '<label>Day of week <select id="rem-week-day">' + weekdayOpts + '</select></label>' +
-                '<label>At time <input type="time" id="rem-interval-day-time-weekly" value="' + (rem.intervalDayTime || '09:00') + '"></label>' +
-              '</div>' +
-            '</div>' +
-
-            '<div class="rem-snooze-opts">' +
-              '<label class="toggle-label">' +
-                '<input type="checkbox" id="rem-autosnooze"' + (rem.autoSnooze ? ' checked' : '') + '> Auto-snooze if not dismissed' +
-              '</label>' +
-              '<div id="rem-snooze-detail" style="' + (rem.autoSnooze ? '' : 'display:none') + '">' +
-                '<label>Re-alert every <input type="number" id="rem-snooze-every" value="' + (rem.snoozeEvery || 5) + '" min="1" style="width:50px"> ' +
-                  '<select id="rem-snooze-unit">' + snoozeUnitOpts + '</select>' +
-                '</label>' +
-                '<label>Max snoozes <input type="number" id="rem-max-snoozes" value="' + (rem.maxSnoozes || 12) + '" min="1" style="width:50px"></label>' +
-              '</div>' +
-            '</div>' +
-
-            '<details class="rem-advanced">' +
-              '<summary>Advanced</summary>' +
-              '<label>Quiet hours (no alerts from–to)<br>' +
-                'From <input type="time" id="rem-quiet-start" value="' + (rem.quietHours ? rem.quietHours.start : '22:00') + '">' +
-                ' to <input type="time" id="rem-quiet-end" value="' + (rem.quietHours ? rem.quietHours.end : '07:00') + '">' +
-                '<label class="toggle-label" style="margin-top:4px"><input type="checkbox" id="rem-quiet-enabled"' +
-                (rem.quietHours ? ' checked' : '') + '> Enable quiet hours</label>' +
-              '</label>' +
-            '</details>' +
-
-            (nextFire ? '<div class="next-fire-preview">⏰ Next alert: <strong>' + esc(nextFire) + '</strong></div>' : '') +
-          '</div>' +
-        '</div>' +
-
-        '<div class="editor-footer">' +
-          '<button id="btn-save-task" class="btn-primary">Save</button>' +
-          '<button id="btn-delete-task" class="btn-danger">🗑 Delete</button>' +
-        '</div>' +
+    var cells = '';
+    for (var p = 0; p < startPad; p++) cells += '<div class="cal-cell is-pad"></div>';
+    for (var d = 1; d <= total; d++) {
+      var dayStart = new Date(year, month, d).getTime();
+      var items = (byDay[d] || []).sort(function (a, b) { return a.at - b.at; });
+      cells += '<div class="cal-cell' + (dayStart === todayKey ? ' is-today' : '') + '" data-day="' + d + '">' +
+        '<div class="cal-num">' + d + '</div>' +
+        items.slice(0, 4).map(function (it) {
+          return '<button class="cal-item color-' + esc(it.note.color) + '" data-id="' + esc(it.note.id) + '" data-act="open" title="' + esc(Notifier.titleFor(it.note, it.rem)) + '">' +
+            '<span class="cal-time">' + esc(Sched.timeLabel(it.at, s.time24)) + '</span> ' +
+            esc(MD.plain(it.note.title || it.note.body, 22) || 'Note') +
+          '</button>';
+        }).join('') +
+        (items.length > 4 ? '<span class="cal-more">+' + (items.length - 4) + ' more</span>' : '') +
       '</div>';
+    }
 
-    _wireEditor(task);
-  }
-
-  function _buildSubtaskCardHtml(s) {
-    var srem = s.reminder;
-    var hasReminder = srem && srem.enabled && srem.mode !== 'none';
-    var remChip = hasReminder
-      ? '<span class="chip chip-reminder subtask-rem-chip">' +
-          (srem.mode === 'interval' ? '🔁' : '📅') + ' ' +
-          esc(srem.nextFireAt ? fmtDate(srem.nextFireAt) : '—') +
-        '</span>'
-      : '';
-
-    var dueVal = (srem && srem.dueAt) ? _toDatetimeLocal(srem.dueAt) : '';
-    var sIntervalUnitOpts = ['minutes', 'hours', 'days'].map(function (v) {
-      return '<option value="' + v + '"' + (srem && srem.intervalUnit === v ? ' selected' : '') + '>' + v + '</option>';
-    }).join('');
-    var sSnoozeUnitOpts = ['minutes', 'hours'].map(function (v) {
-      return '<option value="' + v + '"' + (srem && srem.snoozeUnit === v ? ' selected' : '') + '>' + v + '</option>';
-    }).join('');
-
-    return '<div class="subtask-card' + (s.done ? ' subtask-done' : '') + '" data-sid="' + esc(s.id) + '">' +
-      '<div class="subtask-card-header">' +
-        '<label class="checkbox-wrap" aria-label="' + (s.done ? 'Mark undone' : 'Mark done') + '">' +
-          '<input type="checkbox" class="subtask-cb"' + (s.done ? ' checked' : '') + '>' +
-          '<span class="checkbox-custom"></span>' +
-        '</label>' +
-        '<input type="text" class="subtask-title-input" value="' + esc(s.title) + '" placeholder="Subtask title…" aria-label="Subtask title">' +
-        remChip +
-        '<button class="btn-subtask-toggle" aria-label="Expand subtask details" title="Expand">▼</button>' +
-        '<button class="btn-subtask-del" aria-label="Remove subtask" title="Remove">✕</button>' +
-      '</div>' +
-      '<div class="subtask-card-body" style="display:none">' +
-        '<textarea class="subtask-notes-input" placeholder="Notes / description…" aria-label="Subtask notes">' + esc(s.notes) + '</textarea>' +
-        '<div class="subtask-rem-section">' +
-          '<label class="toggle-label">' +
-            '<input type="checkbox" class="subtask-rem-enabled"' + (srem && srem.enabled ? ' checked' : '') + '> Reminder' +
-          '</label>' +
-          '<div class="subtask-rem-config" style="' + (srem && srem.enabled ? '' : 'display:none') + '">' +
-            '<div class="seg-control" role="group" aria-label="Subtask reminder mode">' +
-              '<button class="subtask-seg-btn' + (srem && srem.mode === 'none' ? ' active' : '') + '" data-mode="none">Off</button>' +
-              '<button class="subtask-seg-btn' + (srem && srem.mode === 'datetime' ? ' active' : '') + '" data-mode="datetime">At a time</button>' +
-              '<button class="subtask-seg-btn' + (srem && srem.mode === 'interval' ? ' active' : '') + '" data-mode="interval">Every…</button>' +
-            '</div>' +
-            '<div class="subtask-rem-datetime" style="' + (srem && srem.mode === 'datetime' ? '' : 'display:none') + '">' +
-              '<label>Due <input type="datetime-local" class="subtask-rem-due" value="' + dueVal + '"></label>' +
-            '</div>' +
-            '<div class="subtask-rem-interval" style="' + (srem && srem.mode === 'interval' ? '' : 'display:none') + '">' +
-              '<label>Every <input type="number" class="subtask-rem-interval-every" value="' + (srem ? srem.intervalEvery || 1 : 1) + '" min="1" style="width:55px"> ' +
-                '<select class="subtask-rem-interval-unit">' + sIntervalUnitOpts + '</select>' +
-              '</label>' +
-            '</div>' +
-            '<div class="subtask-rem-snooze">' +
-              '<label class="toggle-label" style="font-size:12px">' +
-                '<input type="checkbox" class="subtask-rem-autosnooze"' + (srem && srem.autoSnooze ? ' checked' : '') + '> Auto-snooze' +
-              '</label>' +
-              '<div class="subtask-snooze-detail" style="' + (srem && srem.autoSnooze ? '' : 'display:none') + '">' +
-                '<label>Every <input type="number" class="subtask-snooze-every" value="' + (srem ? srem.snoozeEvery || 5 : 5) + '" min="1" style="width:45px"> ' +
-                  '<select class="subtask-snooze-unit">' + sSnoozeUnitOpts + '</select>' +
-                '</label>' +
-              '</div>' +
-            '</div>' +
-            (srem && srem.nextFireAt ? '<div class="next-fire-preview" style="font-size:11px">⏰ Next: <strong>' + esc(fmtDate(srem.nextFireAt)) + '</strong></div>' : '') +
-          '</div>' +
-        '</div>' +
+    return '<div class="calendar">' +
+      '<header class="cal-head">' +
+        '<button data-act="cal-prev" aria-label="Previous month">‹</button>' +
+        '<h2>' + Sched.MONTH_LONG[month] + ' ' + year + '</h2>' +
+        '<button data-act="cal-next" aria-label="Next month">›</button>' +
+        '<button class="cal-today" data-act="cal-today">Today</button>' +
+      '</header>' +
+      '<div class="cal-grid">' +
+        dayNames.map(function (n) { return '<div class="cal-dow">' + n + '</div>'; }).join('') +
+        cells +
       '</div>' +
     '</div>';
   }
 
-  function _wireSubtaskCard(parentTask, s, cardEl) {
-    var titleInput = cardEl.querySelector('.subtask-title-input');
-    titleInput.addEventListener('input', function () { s.title = this.value; });
+  function renderContent() {
+    var host = $('#content');
+    if (!host) return;
+    var s = Store.settings();
+    var list = visibleNotes();
 
-    var cb = cardEl.querySelector('.subtask-cb');
-    cb.addEventListener('change', function () {
-      s.done = this.checked;
-      cardEl.classList.toggle('subtask-done', s.done);
-      _checkAutoComplete(parentTask);
+    if (s.scope === 'trash' && list.length) {
+      host.innerHTML = '<div class="trash-bar">Notes in the trash stay until you empty it. ' +
+        '<button class="btn-danger-ghost" data-act="empty-trash">Empty trash</button></div>' +
+        (s.view === 'list' ? renderList(list) : renderGrid(list));
+      return;
+    }
+
+    if (!list.length) {
+      host.innerHTML = emptyState();
+      return;
+    }
+
+    if (s.view === 'list') host.innerHTML = renderList(list);
+    else if (s.view === 'board') host.innerHTML = renderBoard(list);
+    else if (s.view === 'agenda') host.innerHTML = renderAgenda(list);
+    else if (s.view === 'calendar') host.innerHTML = renderCalendar(list);
+    else host.innerHTML = renderGrid(list);
+  }
+
+  function renderSelectionBar() {
+    var bar = $('#selection-bar');
+    if (!bar) return;
+    var ids = Object.keys(state.selection);
+    state.selecting = ids.length > 0;
+    document.documentElement.classList.toggle('is-selecting', state.selecting);
+    bar.style.display = ids.length ? '' : 'none';
+    if (!ids.length) return;
+    bar.innerHTML =
+      '<span class="sel-count">' + ids.length + ' selected</span>' +
+      '<div class="sel-actions">' +
+        '<button data-act="sel-done">☑ Done</button>' +
+        '<button data-act="sel-pin">📌 Pin</button>' +
+        '<button data-act="sel-color">🎨 Colour</button>' +
+        '<button data-act="sel-tag">🏷 Tag</button>' +
+        '<button data-act="sel-notebook">📓 Move</button>' +
+        '<button data-act="sel-archive">📦 Archive</button>' +
+        '<button data-act="sel-trash" class="danger">🗑 Delete</button>' +
+        '<button data-act="sel-clear" aria-label="Clear selection">✕</button>' +
+      '</div>';
+  }
+
+  var _renderQueued = false;
+  function render() {
+    if (_renderQueued) return;
+    _renderQueued = true;
+    requestAnimationFrame(function () {
+      _renderQueued = false;
+      applyTheme();
+      renderSidebar();
+      renderTopbar();
+      renderStatus();
+      renderSelectionBar();
+      renderContent();
     });
+  }
 
-    var toggleBtn = cardEl.querySelector('.btn-subtask-toggle');
-    var body = cardEl.querySelector('.subtask-card-body');
-    toggleBtn.addEventListener('click', function () {
-      var isOpen = body.style.display !== 'none';
-      body.style.display = isOpen ? 'none' : '';
-      toggleBtn.textContent = isOpen ? '▼' : '▲';
-      toggleBtn.setAttribute('aria-label', isOpen ? 'Expand subtask details' : 'Collapse subtask details');
-    });
+  /* ================= theme ================= */
 
-    var notesTextarea = cardEl.querySelector('.subtask-notes-input');
-    notesTextarea.addEventListener('input', function () { s.notes = this.value; });
+  function applyTheme() {
+    var s = Store.settings();
+    var root = document.documentElement;
+    var theme = s.theme;
+    if (theme === 'system') {
+      theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    root.setAttribute('data-theme', theme);
+    root.setAttribute('data-accent', s.accent || 'violet');
+    root.setAttribute('data-density', s.density || 'comfortable');
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#101018' : '#f6f5f9');
+    // Mirrored so the inline head script can paint before IndexedDB answers.
+    try {
+      localStorage.setItem('tn:theme', s.theme);
+      localStorage.setItem('tn:accent', s.accent || 'violet');
+    } catch (_) {}
+  }
 
-    var remEnabled = cardEl.querySelector('.subtask-rem-enabled');
-    var remConfig = cardEl.querySelector('.subtask-rem-config');
-    remEnabled.addEventListener('change', function () {
-      s.reminder.enabled = this.checked;
-      remConfig.style.display = this.checked ? '' : 'none';
-      if (this.checked && Notification && Notification.permission === 'default') {
-        Notifier.requestPermission(function () {});
-      }
-    });
+  /* ================= toasts ================= */
 
-    cardEl.querySelectorAll('.subtask-seg-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        cardEl.querySelectorAll('.subtask-seg-btn').forEach(function (b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-        s.reminder.mode = btn.dataset.mode;
-        cardEl.querySelector('.subtask-rem-datetime').style.display = btn.dataset.mode === 'datetime' ? '' : 'none';
-        cardEl.querySelector('.subtask-rem-interval').style.display = btn.dataset.mode === 'interval' ? '' : 'none';
+  function toast(message, opts) {
+    opts = opts || {};
+    var host = $('#toasts');
+    if (!host) return;
+    var el = document.createElement('div');
+    el.className = 'toast' + (opts.kind ? ' toast-' + opts.kind : '');
+    el.innerHTML = '<span class="toast-msg">' + esc(message) + '</span>' +
+      (opts.actionLabel ? '<button class="toast-action">' + esc(opts.actionLabel) + '</button>' : '') +
+      '<button class="toast-close" aria-label="Dismiss">✕</button>';
+
+    var timer = setTimeout(remove, opts.duration || 5000);
+    function remove() {
+      clearTimeout(timer);
+      el.classList.add('is-out');
+      setTimeout(function () { el.remove(); }, 220);
+    }
+    if (opts.onAction) {
+      el.querySelector('.toast-action').addEventListener('click', function () {
+        opts.onAction();
+        remove();
+      });
+    }
+    el.querySelector('.toast-close').addEventListener('click', remove);
+    host.appendChild(el);
+    return remove;
+  }
+
+  /* A quiet reminder — shows as an actionable toast instead of taking over. */
+  function toastReminder(item) {
+    var host = $('#toasts');
+    if (!host) return;
+    var note = item.note, rem = item.reminder;
+    var s = Store.settings();
+    var el = document.createElement('div');
+    el.className = 'toast toast-reminder color-' + esc(note.color);
+    el.innerHTML =
+      '<div class="tr-main">' +
+        '<div class="tr-title">🔔 ' + esc(Notifier.titleFor(note, rem)) + '</div>' +
+        '<div class="tr-sub">' + esc(MD.plain(note.body, 90) || Sched.describe(rem, s.time24)) + '</div>' +
+      '</div>' +
+      '<div class="tr-actions">' +
+        '<button data-a="snooze">Snooze</button>' +
+        '<button data-a="done">Done</button>' +
+        '<button data-a="open">Open</button>' +
+        '<button data-a="dismiss" aria-label="Dismiss">✕</button>' +
+      '</div>';
+
+    if (s.sound !== false) Ringtone.play(rem.ringtone || s.defaultRingtone, { loop: false, volume: (rem.volume == null ? s.defaultVolume : rem.volume) * 0.7 });
+    if (rem.vibrate && s.vibrate !== false) Ringtone.vibrate([200, 100, 200]);
+
+    var timer = setTimeout(close, 30000);
+    function close() { clearTimeout(timer); el.classList.add('is-out'); setTimeout(function () { el.remove(); }, 220); }
+
+    el.querySelectorAll('[data-a]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var a = b.getAttribute('data-a');
+        if (a === 'snooze') { var d = s.defaultSnooze; Engine.snooze(note.id, rem.id, d.every, d.unit); toast('Snoozed for ' + d.every + ' ' + d.unit); }
+        else if (a === 'done') { Engine.complete(note.id, rem.id); }
+        else if (a === 'open') { Engine.dismiss(note.id, rem.id); openEditor(note.id); }
+        else Engine.dismiss(note.id, rem.id);
+        close();
       });
     });
-
-    cardEl.querySelector('.subtask-rem-due').addEventListener('change', function () {
-      s.reminder.dueAt = this.value ? new Date(this.value).getTime() : null;
-    });
-    cardEl.querySelector('.subtask-rem-interval-every').addEventListener('change', function () {
-      s.reminder.intervalEvery = parseInt(this.value, 10) || 1;
-      if (!s.reminder.intervalAnchor) s.reminder.intervalAnchor = Date.now();
-    });
-    cardEl.querySelector('.subtask-rem-interval-unit').addEventListener('change', function () {
-      s.reminder.intervalUnit = this.value;
-    });
-
-    var autoSnoozeCb = cardEl.querySelector('.subtask-rem-autosnooze');
-    var snoozDetail = cardEl.querySelector('.subtask-snooze-detail');
-    autoSnoozeCb.addEventListener('change', function () {
-      s.reminder.autoSnooze = this.checked;
-      snoozDetail.style.display = this.checked ? '' : 'none';
-    });
-    cardEl.querySelector('.subtask-snooze-every').addEventListener('change', function () {
-      s.reminder.snoozeEvery = parseInt(this.value, 10) || 5;
-    });
-    cardEl.querySelector('.subtask-snooze-unit').addEventListener('change', function () {
-      s.reminder.snoozeUnit = this.value;
-    });
-
-    cardEl.querySelector('.btn-subtask-del').addEventListener('click', function () {
-      parentTask.subtasks = parentTask.subtasks.filter(function (st) { return st.id !== s.id; });
-      cardEl.remove();
-    });
+    host.appendChild(el);
   }
 
-  function _wireSubtasksList(task) {
-    var list = document.getElementById('subtasks-list');
-    if (!list) return;
-    list.querySelectorAll('.subtask-card').forEach(function (cardEl) {
-      var sid = cardEl.dataset.sid;
-      var s = task.subtasks.find(function (st) { return st.id === sid; });
-      if (!s) return;
-      _wireSubtaskCard(task, s, cardEl);
-    });
+  /* ================= menus ================= */
+
+  var _menu = null;
+
+  function closeMenu() {
+    if (_menu) { _menu.remove(); _menu = null; }
   }
 
-  // Auto-complete is buffered (not persisted here): the whole editor commits on
-  // Save via _readEditor + a single Store.upsertTask, so we never write a stale
-  // snapshot or persist edits the user might cancel. We only flip task.done in
-  // memory and surface the Reset affordance.
-  function _checkAutoComplete(task) {
-    if (task.subtasks.length === 0) return;
-    var allDone = task.subtasks.every(function (s) { return s.done; });
-    if (allDone && !task.done) {
-      task.done = true;
-      _showResetButton(task);
-    }
-  }
-
-  function _showResetButton(task) {
-    if (document.getElementById('btn-reset-subtasks')) return;
-    var subtasksHeader = document.querySelector('.subtasks-header');
-    if (!subtasksHeader) return;
-    var btn = document.createElement('button');
-    btn.id = 'btn-reset-subtasks';
-    btn.className = 'btn-sm btn-reset';
-    btn.title = 'Reset all subtasks and reopen task';
-    btn.textContent = '↺ Reset';
-    subtasksHeader.appendChild(btn);
-    _wireResetSubtasks(task, btn);
-  }
-
-  // Editor-context reset: buffer the change (reopen task + clear subtasks) and
-  // reflect it in the open editor. Persisted on Save like every other edit.
-  function _wireResetSubtasks(task, btn) {
-    if (!btn) return;
-    btn.addEventListener('click', function () {
-      task.done = false;
-      task.subtasks.forEach(function (s) {
-        s.done = false;
-        var cardEl = document.querySelector('.subtask-card[data-sid="' + s.id + '"]');
-        if (cardEl) {
-          cardEl.querySelector('.subtask-cb').checked = false;
-          cardEl.classList.remove('subtask-done');
-        }
-      });
-      btn.remove();
-    });
-  }
-
-  function _readEditor(task) {
-    var p = document.getElementById('editor-panel');
-    task.title = p.querySelector('#editor-title').value.trim();
-    task.notes = p.querySelector('#editor-notes').value.trim();
-    task.pinned = p.querySelector('#editor-pinned').checked;
-    task.priority = p.querySelector('#editor-priority').value;
-
-    var rem = task.reminder;
-    rem.enabled = p.querySelector('#rem-enabled').checked;
-    rem.mode = p.querySelector('.seg-btn.active') ? p.querySelector('.seg-btn.active').dataset.mode : 'none';
-
-    if (rem.mode === 'datetime') {
-      var dueInput = p.querySelector('#rem-due').value;
-      rem.dueAt = dueInput ? new Date(dueInput).getTime() : null;
-      rem.repeat = p.querySelector('#rem-repeat').value;
-      rem.customRepeatEvery = parseInt(p.querySelector('#rem-custom-every').value, 10) || 1;
-      rem.customRepeatUnit = p.querySelector('#rem-custom-unit').value;
-      rem.leadTime = parseInt(p.querySelector('#rem-lead').value, 10) || 0;
-    } else if (rem.mode === 'interval') {
-      rem.intervalType = p.querySelector('#rem-interval-type').value;
-      if (rem.intervalType === 'frequency') {
-        rem.intervalEvery = parseInt(p.querySelector('#rem-interval-every').value, 10) || 1;
-        rem.intervalUnit = p.querySelector('#rem-interval-unit').value;
-        if (!rem.intervalAnchor) rem.intervalAnchor = Date.now();
-      } else if (rem.intervalType === 'monthly-date') {
-        rem.intervalMonthDay = parseInt(p.querySelector('#rem-month-day').value, 10) || 1;
-        rem.intervalDayTime = p.querySelector('#rem-interval-day-time').value || '09:00';
-      } else if (rem.intervalType === 'weekly-day') {
-        var wd = parseInt(p.querySelector('#rem-week-day').value, 10);
-        rem.intervalWeekDay = isNaN(wd) ? 1 : wd;  // keep 0 (Sunday) intact
-        rem.intervalDayTime = p.querySelector('#rem-interval-day-time-weekly').value || '09:00';
+  /* items: [{label, icon, act, danger, checked, sep}] */
+  function menu(anchor, items, onPick) {
+    closeMenu();
+    var m = document.createElement('div');
+    m.className = 'popmenu';
+    m.setAttribute('role', 'menu');
+    m.innerHTML = items.map(function (it, i) {
+      if (it.sep) return '<div class="popmenu-sep"></div>';
+      if (it.heading) return '<div class="popmenu-heading">' + esc(it.heading) + '</div>';
+      if (it.swatches) {
+        return '<div class="popmenu-swatches">' + it.swatches.map(function (c) {
+          return '<button class="swatch color-' + c + (it.current === c ? ' is-on' : '') + '" data-i="' + i + '" data-val="' + c + '" title="' + c + '" aria-label="' + c + '"></button>';
+        }).join('') + '</div>';
       }
-    }
+      return '<button role="menuitem" class="popmenu-item' + (it.danger ? ' is-danger' : '') + '" data-i="' + i + '">' +
+        '<span class="popmenu-icon" aria-hidden="true">' + (it.icon || '') + '</span>' +
+        '<span>' + esc(it.label) + '</span>' +
+        (it.checked ? '<span class="popmenu-check">✓</span>' : '') +
+        (it.hint ? '<kbd>' + esc(it.hint) + '</kbd>' : '') +
+      '</button>';
+    }).join('');
 
-    rem.autoSnooze = p.querySelector('#rem-autosnooze').checked;
-    rem.snoozeEvery = parseInt(p.querySelector('#rem-snooze-every').value, 10) || 5;
-    rem.snoozeUnit = p.querySelector('#rem-snooze-unit').value;
-    rem.maxSnoozes = parseInt(p.querySelector('#rem-max-snoozes').value, 10) || 12;
+    document.body.appendChild(m);
+    var r = anchor.getBoundingClientRect();
+    var mw = m.offsetWidth, mh = m.offsetHeight;
+    var left = Math.min(Math.max(8, r.left), window.innerWidth - mw - 8);
+    var top = r.bottom + 6;
+    if (top + mh > window.innerHeight - 8) top = Math.max(8, r.top - mh - 6);
+    m.style.left = left + 'px';
+    m.style.top = top + 'px';
 
-    var quietEnabled = p.querySelector('#rem-quiet-enabled').checked;
-    if (quietEnabled) {
-      rem.quietHours = {
-        start: p.querySelector('#rem-quiet-start').value || '22:00',
-        end: p.querySelector('#rem-quiet-end').value || '07:00'
-      };
-    } else {
-      rem.quietHours = null;
-    }
-
-    return task;
+    m.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-i]');
+      if (!btn) return;
+      var item = items[Number(btn.getAttribute('data-i'))];
+      var val = btn.getAttribute('data-val');
+      closeMenu();
+      onPick(item, val);
+    });
+    _menu = m;
+    setTimeout(function () {
+      document.addEventListener('click', onDocClick, { once: true });
+    }, 0);
+    function onDocClick() { closeMenu(); }
+    return m;
   }
 
-  function _wireEditor(task) {
-    var p = document.getElementById('editor-panel');
+  /* ================= note actions ================= */
 
-    p.querySelector('#btn-editor-close').addEventListener('click', closeEditor);
+  function newNote(fields) {
+    var s = Store.settings();
+    var seed = { order: Date.now() };
+    if (s.scope.indexOf('notebook:') === 0) seed.notebook = s.scope.slice(9);
+    if (s.scope.indexOf('tag:') === 0) seed.tags = [s.scope.slice(4)];
+    if (s.scope === 'starred') seed.starred = true;
+    var note = Model.createNote(Object.assign(seed, fields || {}), s);
+    return Store.put(note).then(function () {
+      openEditor(note.id, { fresh: true });
+      return note;
+    });
+  }
 
-    // Color swatches
-    p.querySelectorAll('.color-swatch').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        p.querySelectorAll('.color-swatch').forEach(function (b) {
-          b.classList.remove('selected');
-          b.setAttribute('aria-pressed', 'false');
+  function toggleDone(note) {
+    Store.snapshot('done');
+    note.done = !note.done;
+    note.doneAt = note.done ? Date.now() : null;
+    if (note.done) Ringtone.blip('done');
+    Store.put(note);
+  }
+
+  function trashNote(note) {
+    Store.snapshot('trash');
+    note.trashed = true;
+    note.trashedAt = Date.now();
+    Engine.silence(note);
+    Store.put(note).then(function () {
+      toast('Moved to trash', { actionLabel: 'Undo', onAction: function () { Store.undo(); } });
+    });
+  }
+
+  function restoreNote(note) {
+    note.trashed = false;
+    note.trashedAt = null;
+    note.archived = false;
+    Store.put(note).then(function () { toast('Restored'); });
+  }
+
+  function archiveNote(note) {
+    Store.snapshot('archive');
+    note.archived = !note.archived;
+    note.archivedAt = note.archived ? Date.now() : null;
+    if (note.archived) Engine.silence(note);
+    Store.put(note).then(function () {
+      toast(note.archived ? 'Archived' : 'Restored from archive', {
+        actionLabel: 'Undo', onAction: function () { Store.undo(); }
+      });
+    });
+  }
+
+  function duplicateNote(note) {
+    var copy = Model.normalizeNote(JSON.parse(JSON.stringify(note)), Store.settings());
+    copy.id = Model.uid('n');
+    copy.title = note.title ? note.title + ' (copy)' : '';
+    copy.createdAt = copy.updatedAt = copy.order = Date.now();
+    copy.reminders = copy.reminders.map(function (r) {
+      r.id = Model.uid('r');
+      r.nextAt = null; r.snoozedUntil = null; r.firedCount = 0; r.snoozeCount = 0;
+      return r;
+    });
+    Store.put(copy).then(function () { toast('Duplicated'); });
+  }
+
+  function deleteForever(note) {
+    Store.snapshot('delete');
+    Engine.silence(note);
+    Store.remove(note.id).then(function () {
+      toast('Deleted permanently', { actionLabel: 'Undo', onAction: function () { Store.undo(); } });
+    });
+  }
+
+  function copyNote(note) {
+    var text = (note.title ? note.title + '\n\n' : '') + note.body;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(function () { toast('Copied to clipboard'); })
+        .catch(function () { toast('Could not copy', { kind: 'error' }); });
+    }
+  }
+
+  /* ================= selection ================= */
+
+  function toggleSelect(id) {
+    if (state.selection[id]) delete state.selection[id];
+    else state.selection[id] = true;
+    render();
+  }
+
+  function clearSelection() {
+    state.selection = {};
+    render();
+  }
+
+  function selectedNotes() {
+    return Object.keys(state.selection).map(Store.byId).filter(Boolean);
+  }
+
+  function bulk(act, anchor) {
+    var list = selectedNotes();
+    if (!list.length) return;
+    Store.snapshot('bulk');
+
+    if (act === 'sel-done') {
+      var allDone = list.every(function (n) { return n.done; });
+      list.forEach(function (n) { n.done = !allDone; n.doneAt = n.done ? Date.now() : null; });
+      Store.putMany(list).then(function () { toast((allDone ? 'Reopened ' : 'Completed ') + list.length + ' notes'); clearSelection(); });
+      return;
+    }
+    if (act === 'sel-pin') {
+      var allPinned = list.every(function (n) { return n.pinned; });
+      list.forEach(function (n) { n.pinned = !allPinned; });
+      Store.putMany(list).then(function () { clearSelection(); });
+      return;
+    }
+    if (act === 'sel-archive') {
+      list.forEach(function (n) { n.archived = true; n.archivedAt = Date.now(); Engine.silence(n); });
+      Store.putMany(list).then(function () {
+        toast('Archived ' + list.length + ' notes', { actionLabel: 'Undo', onAction: function () { Store.undo(); } });
+        clearSelection();
+      });
+      return;
+    }
+    if (act === 'sel-trash') {
+      var inTrash = Store.settings().scope === 'trash';
+      if (inTrash) {
+        Store.removeMany(list.map(function (n) { return n.id; })).then(function () {
+          toast('Deleted ' + list.length + ' notes', { actionLabel: 'Undo', onAction: function () { Store.undo(); } });
+          clearSelection();
         });
-        btn.classList.add('selected');
-        btn.setAttribute('aria-pressed', 'true');
-        task.color = btn.dataset.color;
-      });
-    });
-
-    // Segment mode
-    p.querySelectorAll('.seg-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        // Only handle main task seg-btns (not subtask ones)
-        if (btn.closest('.subtask-rem-config')) return;
-        p.querySelectorAll('.editor-body > .reminder-section .seg-btn').forEach(function (b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-        var mode = btn.dataset.mode;
-        p.querySelector('.rem-datetime-opts').style.display = mode === 'datetime' ? '' : 'none';
-        p.querySelector('.rem-interval-opts').style.display = mode === 'interval' ? '' : 'none';
-        _updateNextFirePreview(task);
-      });
-    });
-
-    // Interval type switcher
-    p.querySelector('#rem-interval-type').addEventListener('change', function () {
-      var v = this.value;
-      p.querySelector('#rem-interval-freq').style.display = v === 'frequency' ? '' : 'none';
-      p.querySelector('#rem-interval-monthly').style.display = v === 'monthly-date' ? '' : 'none';
-      p.querySelector('#rem-interval-weekly').style.display = v === 'weekly-day' ? '' : 'none';
-      _updateNextFirePreview(task);
-    });
-
-    // Reminder enabled toggle
-    p.querySelector('#rem-enabled').addEventListener('change', function () {
-      p.querySelector('#rem-config').style.display = this.checked ? '' : 'none';
-      if (this.checked && Notification.permission === 'default') {
-        Notifier.requestPermission(function () { renderToolbar(); });
-      }
-    });
-
-    // Auto-snooze toggle
-    p.querySelector('#rem-autosnooze').addEventListener('change', function () {
-      p.querySelector('#rem-snooze-detail').style.display = this.checked ? '' : 'none';
-    });
-
-    // Repeat change
-    p.querySelector('#rem-repeat').addEventListener('change', function () {
-      p.querySelector('#rem-custom-repeat').style.display = this.value === 'custom' ? '' : 'none';
-    });
-
-    // Live next-fire preview
-    p.querySelector('.rem-config').querySelectorAll('input, select').forEach(function (el) {
-      el.addEventListener('change', function () { _updateNextFirePreview(task); });
-    });
-
-    // Tags
-    p.querySelector('#btn-add-tag').addEventListener('click', function () { _addTag(task); });
-    p.querySelector('#tag-input').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); _addTag(task); }
-    });
-    _refreshTagPills(task);
-
-    // Subtasks: wire existing cards
-    _wireSubtasksList(task);
-
-    // Add subtask
-    p.querySelector('#btn-add-subtask').addEventListener('click', function () { _addSubtask(task); });
-    p.querySelector('#subtask-input').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); _addSubtask(task); }
-    });
-
-    // Reset subtasks button (if present)
-    var resetBtn = p.querySelector('#btn-reset-subtasks');
-    if (resetBtn) _wireResetSubtasks(task, resetBtn);
-
-    // Save — compute all reminder schedules in memory, then persist once.
-    p.querySelector('#btn-save-task').addEventListener('click', function () {
-      _readEditor(task);
-      if (!task.title) { p.querySelector('#editor-title').focus(); return; }
-      ReminderEngine.applyReminderState(task.reminder);
-      task.subtasks.forEach(function (s) {
-        ReminderEngine.applyReminderState(s.reminder);
-      });
-      Store.upsertTask(task);
-      closeEditor();
-    });
-
-    // Delete
-    p.querySelector('#btn-delete-task').addEventListener('click', function () {
-      if (confirm('Delete "' + task.title + '"?')) {
-        Store.deleteTask(task.id);
-        closeEditor();
-      }
-    });
-  }
-
-  function _updateNextFirePreview(task) {
-    var p = document.getElementById('editor-panel');
-    if (!p) return;
-    var tempTask = _readEditor(JSON.parse(JSON.stringify(task)));
-    var rem = tempTask.reminder;
-    var next = (rem.enabled && rem.mode !== 'none') ? ReminderEngine.computeNextFireAt(rem) : null;
-    var preview = p.querySelector('.next-fire-preview');
-    if (preview) {
-      preview.textContent = next ? '⏰ Next alert: ' + fmtDate(next) : '';
-    } else if (next) {
-      var div = document.createElement('div');
-      div.className = 'next-fire-preview';
-      div.textContent = '⏰ Next alert: ' + fmtDate(next);
-      p.querySelector('.rem-config').appendChild(div);
-    }
-  }
-
-  function _addTag(task) {
-    var input = document.getElementById('tag-input');
-    var val = input.value.trim().replace(/\s+/g, '-').toLowerCase();
-    if (!val || task.tags.indexOf(val) !== -1) { input.value = ''; return; }
-    task.tags.push(val);
-    input.value = '';
-    _refreshTagPills(task);
-    renderFilterBar();
-  }
-
-  function _refreshTagPills(task) {
-    var pills = document.getElementById('tag-pills');
-    if (!pills) return;
-    pills.innerHTML = task.tags.map(function (tag) {
-      return '<span class="tag-pill">' + esc(tag) +
-        '<button class="btn-tag-remove" data-tag="' + esc(tag) + '" aria-label="Remove tag">✕</button></span>';
-    }).join('');
-    pills.querySelectorAll('.btn-tag-remove').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        task.tags = task.tags.filter(function (t) { return t !== btn.dataset.tag; });
-        _refreshTagPills(task);
-      });
-    });
-  }
-
-  function _addSubtask(task) {
-    var input = document.getElementById('subtask-input');
-    var val = input.value.trim();
-    if (!val) return;
-    var s = Model.createSubtask(val);
-    task.subtasks.push(s);
-    input.value = '';
-    var list = document.getElementById('subtasks-list');
-    var cardHtml = _buildSubtaskCardHtml(s);
-    var tmp = document.createElement('div');
-    tmp.innerHTML = cardHtml;
-    var cardEl = tmp.firstElementChild;
-    list.appendChild(cardEl);
-    _wireSubtaskCard(task, s, cardEl);
-    input.focus();
-  }
-
-  // ---- Toolbar ----
-
-  function renderToolbar() {
-    var notifBtn = document.getElementById('btn-notif');
-    if (notifBtn) {
-      if (Notification && Notification.permission === 'granted') {
-        notifBtn.style.display = 'none';
-      } else if (Notification && Notification.permission === 'denied') {
-        notifBtn.textContent = '🔕 Notifications blocked';
-        notifBtn.title = 'Notifications are blocked. Enable in browser site settings.';
-        notifBtn.classList.add('blocked');
       } else {
-        notifBtn.style.display = '';
+        list.forEach(function (n) { n.trashed = true; n.trashedAt = Date.now(); Engine.silence(n); });
+        Store.putMany(list).then(function () {
+          toast('Moved ' + list.length + ' notes to trash', { actionLabel: 'Undo', onAction: function () { Store.undo(); } });
+          clearSelection();
+        });
       }
+      return;
+    }
+    if (act === 'sel-color') {
+      menu(anchor, [{ heading: 'Colour' }, { swatches: Model.COLORS }], function (item, val) {
+        if (!val) return;
+        list.forEach(function (n) { n.color = val; });
+        Store.putMany(list).then(clearSelection);
+      });
+      return;
+    }
+    if (act === 'sel-tag') {
+      var tag = prompt('Add a tag to ' + list.length + ' notes:');
+      if (!tag) return;
+      tag = tag.replace(/^#/, '').trim();
+      if (!tag) return;
+      list.forEach(function (n) { if (n.tags.indexOf(tag) === -1) n.tags.push(tag); });
+      Store.putMany(list).then(function () { toast('Tagged #' + tag); clearSelection(); });
+      return;
+    }
+    if (act === 'sel-notebook') {
+      var books = Store.notebooks();
+      var items = [{ heading: 'Move to notebook' }, { label: 'No notebook', icon: '⊘', act: '' }]
+        .concat(books.map(function (b) { return { label: b.name, icon: b.icon || '📓', act: b.id }; }));
+      menu(anchor, items, function (item) {
+        if (!item || item.heading) return;
+        list.forEach(function (n) { n.notebook = item.act || null; });
+        Store.putMany(list).then(clearSelection);
+      });
+      return;
     }
   }
 
-  // ---- Filter bar ----
+  /* ================= drag ordering ================= */
 
-  function renderFilterBar() {
-    var filterBar = document.getElementById('filter-bar');
-    if (!filterBar) return;
-    var settings = Store.getSettings();
-    var tags = Search.getAllTags(Store.getTasks());
-
-    var statusOpts = ['all', 'active', 'done', 'overdue'].map(function (v) {
-      return '<option value="' + v + '"' + (settings.filter === v ? ' selected' : '') + '>' +
-        { all: 'All', active: 'Active', done: 'Done', overdue: 'Overdue' }[v] + '</option>';
-    }).join('');
-
-    var tagOpts = '<option value="">All tags</option>' + tags.map(function (tag) {
-      return '<option value="' + esc(tag) + '"' + (settings.filterTag === tag ? ' selected' : '') + '>' + esc(tag) + '</option>';
-    }).join('');
-
-    var sortOpts = ['createdAt', 'priority', 'due', 'alpha'].map(function (v) {
-      return '<option value="' + v + '"' + (settings.sort === v ? ' selected' : '') + '>' +
-        { createdAt: 'Newest', priority: 'Priority', due: 'Due date', alpha: 'A–Z' }[v] + '</option>';
-    }).join('');
-
-    filterBar.innerHTML =
-      '<select id="filter-status" aria-label="Filter by status">' + statusOpts + '</select>' +
-      (tags.length ? '<select id="filter-tag" aria-label="Filter by tag">' + tagOpts + '</select>' : '') +
-      '<select id="filter-sort" aria-label="Sort by">' + sortOpts + '</select>';
-
-    var statusSel = document.getElementById('filter-status');
-    if (statusSel) statusSel.addEventListener('change', function () {
-      Store.updateSettings({ filter: this.value });
+  function bindDrag(host) {
+    host.addEventListener('dragstart', function (e) {
+      var card = e.target.closest('.note-card');
+      if (!card) return;
+      state.dragId = card.dataset.id;
+      card.classList.add('is-dragging');
+      try { e.dataTransfer.setData('text/plain', card.dataset.id); } catch (_) {}
+      e.dataTransfer.effectAllowed = 'move';
     });
-    var tagSel = document.getElementById('filter-tag');
-    if (tagSel) tagSel.addEventListener('change', function () {
-      Store.updateSettings({ filterTag: this.value });
+    host.addEventListener('dragend', function () {
+      $$('.note-card').forEach(function (c) { c.classList.remove('is-dragging', 'is-drop-before', 'is-drop-after'); });
+      state.dragId = null;
     });
-    var sortSel = document.getElementById('filter-sort');
-    if (sortSel) sortSel.addEventListener('change', function () {
-      Store.updateSettings({ sort: this.value });
+    host.addEventListener('dragover', function (e) {
+      if (!state.dragId) return;
+      e.preventDefault();
+      var card = e.target.closest('.note-card');
+      $$('.note-card').forEach(function (c) { c.classList.remove('is-drop-before', 'is-drop-after'); });
+      if (!card || card.dataset.id === state.dragId) return;
+      var r = card.getBoundingClientRect();
+      var before = (e.clientY - r.top) < r.height / 2;
+      card.classList.add(before ? 'is-drop-before' : 'is-drop-after');
+    });
+    host.addEventListener('drop', function (e) {
+      if (!state.dragId) return;
+      e.preventDefault();
+      var target = e.target.closest('.note-card');
+      if (!target || target.dataset.id === state.dragId) return;
+      var before = target.classList.contains('is-drop-before');
+      reorder(state.dragId, target.dataset.id, before);
     });
   }
 
-  // ---- Add task input ----
+  function reorder(dragId, targetId, before) {
+    var list = visibleNotes();
+    var dragged = Store.byId(dragId);
+    var idx = list.findIndex(function (n) { return n.id === targetId; });
+    if (!dragged || idx === -1) return;
 
-  function _showAddInput() {
-    var wrap = document.getElementById('add-input-wrap');
-    if (!wrap) return;
-    _addInputVisible = true;
-    wrap.style.display = '';
-    var input = document.getElementById('add-task-input');
-    if (input) { input.value = ''; input.focus(); }
+    var ordered = list.filter(function (n) { return n.id !== dragId; });
+    var at = ordered.findIndex(function (n) { return n.id === targetId; });
+    ordered.splice(before ? at : at + 1, 0, dragged);
+
+    var base = Date.now();
+    ordered.forEach(function (n, i) { n.order = base - i; });
+    if (Store.settings().sort !== 'manual') Store.updateSettings({ sort: 'manual' }, { silent: true });
+    Store.putMany(ordered, { touch: false });
   }
 
-  function _hideAddInput() {
-    _addInputVisible = false;
-    var wrap = document.getElementById('add-input-wrap');
-    if (wrap) wrap.style.display = 'none';
+  /* ================= events ================= */
+
+  function noteFromEvent(e) {
+    var card = e.target.closest('[data-id]');
+    if (!card) return null;
+    return Store.byId(card.dataset.id);
   }
 
-  function _commitAdd() {
-    var input = document.getElementById('add-task-input');
-    if (!input) return;
-    var title = input.value.trim();
-    if (title) {
-      var task = Model.createTask({ title: title });
-      Store.upsertTask(task);
-    }
-    input.value = '';
-    input.focus();
+  function noteMenu(note, anchor) {
+    var s = Store.settings();
+    var items = note.trashed
+      ? [
+        { label: 'Restore', icon: '↩️', act: 'restore' },
+        { label: 'Delete permanently', icon: '🗑', act: 'delete', danger: true }
+      ]
+      : [
+        { label: note.done ? 'Mark not done' : 'Mark done', icon: note.done ? '☐' : '☑', act: 'done' },
+        { label: note.pinned ? 'Unpin' : 'Pin to top', icon: '📌', act: 'pin' },
+        { label: note.starred ? 'Unstar' : 'Star', icon: '⭐', act: 'star' },
+        { sep: true },
+        { heading: 'Priority' },
+        { label: 'High', icon: '🔴', act: 'prio:high', checked: note.priority === 'high' },
+        { label: 'Medium', icon: '🟠', act: 'prio:medium', checked: note.priority === 'medium' },
+        { label: 'Low', icon: '🔵', act: 'prio:low', checked: note.priority === 'low' },
+        { label: 'None', icon: '⚪', act: 'prio:none', checked: note.priority === 'none' },
+        { sep: true },
+        { label: 'Add alarm', icon: '⏰', act: 'alarm' },
+        { label: 'Move to notebook', icon: '📓', act: 'notebook' },
+        { label: 'Duplicate', icon: '⧉', act: 'duplicate' },
+        { label: 'Copy text', icon: '📋', act: 'copy' },
+        { label: 'Export as Markdown', icon: '⬇', act: 'export-md' },
+        { sep: true },
+        { label: note.archived ? 'Unarchive' : 'Archive', icon: '📦', act: 'archive' },
+        { label: 'Move to trash', icon: '🗑', act: 'trash', danger: true }
+      ];
+
+    menu(anchor, items, function (item) {
+      if (!item || !item.act) return;
+      if (item.act.indexOf('prio:') === 0) {
+        note.priority = item.act.slice(5);
+        Store.put(note);
+        return;
+      }
+      switch (item.act) {
+        case 'done': toggleDone(note); break;
+        case 'pin': note.pinned = !note.pinned; Store.put(note); break;
+        case 'star': note.starred = !note.starred; Store.put(note); break;
+        case 'alarm': Editor.openReminder(note.id, null); break;
+        case 'notebook': pickNotebook(note, anchor); break;
+        case 'duplicate': duplicateNote(note); break;
+        case 'copy': copyNote(note); break;
+        case 'export-md': exportNoteMd(note); break;
+        case 'archive': archiveNote(note); break;
+        case 'trash': trashNote(note); break;
+        case 'restore': restoreNote(note); break;
+        case 'delete': deleteForever(note); break;
+      }
+    });
   }
 
-  // ---- Export / Import ----
+  function pickNotebook(note, anchor) {
+    var books = Store.notebooks();
+    var items = [{ heading: 'Notebook' }, { label: 'No notebook', icon: '⊘', act: '' }]
+      .concat(books.map(function (b) {
+        return { label: b.name, icon: b.icon || '📓', act: b.id, checked: note.notebook === b.id };
+      }))
+      .concat([{ sep: true }, { label: 'New notebook…', icon: '＋', act: '__new' }]);
+    menu(anchor, items, function (item) {
+      if (!item || item.heading) return;
+      if (item.act === '__new') {
+        var name = prompt('Notebook name:');
+        if (!name) return;
+        Store.addNotebook(name).then(function (nb) {
+          note.notebook = nb.id;
+          Store.put(note);
+        });
+        return;
+      }
+      note.notebook = item.act || null;
+      Store.put(note);
+    });
+  }
 
-  function exportData() {
-    var data = Store.get();
-    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  function exportNoteMd(note) {
+    var body = (note.title ? '# ' + note.title + '\n\n' : '') + note.body + '\n';
+    download((note.title || 'note').replace(/[^\w\- ]+/g, '').slice(0, 40) + '.md', body, 'text/markdown');
+  }
+
+  function download(filename, content, mime) {
+    var blob = new Blob([content], { type: mime || 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = 'task-notes-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 500);
   }
 
-  function importData(file) {
-    var reader = new FileReader();
-    reader.onload = function (e) {
-      try {
-        var parsed = JSON.parse(e.target.result);
-        if (!parsed.tasks) throw new Error('Invalid backup file');
-        if (!confirm('Import will replace your current tasks. Continue?')) return;
-        var data = Store.get();
-        data.tasks = parsed.tasks.map(Model.normalizeTask);
-        if (parsed.settings) Object.assign(data.settings, parsed.settings);
-        Store.flush();
-        location.reload();
-      } catch (err) {
-        alert('Could not import: ' + err.message);
+  function colorMenu(note, anchor) {
+    menu(anchor, [
+      { heading: 'Colour' },
+      { swatches: Model.COLORS, current: note.color }
+    ], function (item, val) {
+      if (!val) return;
+      note.color = val;
+      Store.put(note);
+    });
+  }
+
+  function onContentClick(e) {
+    var actEl = e.target.closest('[data-act]');
+    var act = actEl && actEl.getAttribute('data-act');
+
+    // markdown checkbox toggling works directly on the card
+    var box = e.target.closest('.md-box');
+    if (box) {
+      e.stopPropagation();
+      var n = noteFromEvent(e);
+      if (!n) return;
+      n.body = Model.toggleChecklistLine(n.body, Number(box.getAttribute('data-md-line')));
+      Ringtone.blip();
+      Store.put(n);
+      return;
+    }
+
+    if (act === 'cal-prev' || act === 'cal-next' || act === 'cal-today') {
+      var ref = state.calendarMonth ? new Date(state.calendarMonth) : new Date();
+      if (act === 'cal-today') state.calendarMonth = null;
+      else {
+        ref.setDate(1);
+        ref.setMonth(ref.getMonth() + (act === 'cal-next' ? 1 : -1));
+        state.calendarMonth = ref.getTime();
       }
-    };
-    reader.readAsText(file);
+      render();
+      return;
+    }
+    if (act === 'new-note') { newNote(); return; }
+    if (act === 'empty-trash') {
+      var trashed = Store.notes().filter(function (n) { return n.trashed; });
+      if (!trashed.length) return;
+      if (!confirm('Permanently delete ' + trashed.length + ' note' + (trashed.length === 1 ? '' : 's') + '?')) return;
+      Store.snapshot('empty-trash');
+      Store.removeMany(trashed.map(function (n) { return n.id; })).then(function () {
+        toast('Trash emptied', { actionLabel: 'Undo', onAction: function () { Store.undo(); } });
+      });
+      return;
+    }
+    if (act === 'tag') {
+      Store.updateSettings({ scope: 'tag:' + actEl.getAttribute('data-tag') });
+      return;
+    }
+
+    var note = noteFromEvent(e);
+    if (!note) return;
+
+    if (state.selecting && !act) { toggleSelect(note.id); return; }
+
+    switch (act) {
+      case 'select': toggleSelect(note.id); break;
+      case 'open': if (state.selecting) toggleSelect(note.id); else openEditor(note.id); break;
+      case 'done': toggleDone(note); break;
+      case 'star': note.starred = !note.starred; Store.put(note); break;
+      case 'pin': note.pinned = !note.pinned; Store.put(note); break;
+      case 'alarm': Editor.openReminder(note.id, null); break;
+      case 'edit-reminder': Editor.openReminder(note.id, actEl.getAttribute('data-rid')); break;
+      case 'palette': colorMenu(note, actEl); break;
+      case 'more': noteMenu(note, actEl); break;
+      default: if (!act) openEditor(note.id);
+    }
   }
 
-  // ---- Main init ----
+  /* ================= public ================= */
+
+  function openEditor(id, opts) {
+    Editor.open(id, opts);
+  }
+
+  function setScope(scope) {
+    Store.updateSettings({ scope: scope });
+    closeSidebar();
+  }
+
+  function openSidebar() {
+    state.sidebarOpen = true;
+    document.documentElement.classList.add('sidebar-open');
+  }
+
+  function closeSidebar() {
+    state.sidebarOpen = false;
+    document.documentElement.classList.remove('sidebar-open');
+  }
+
+  function focusSearch() {
+    var el = $('#search-input');
+    if (el) { el.focus(); el.select(); }
+  }
 
   function init() {
-    Notifier.setBannerContainer(document.getElementById('alert-banners'));
+    applyTheme();
 
-    var btnAdd = document.getElementById('btn-add');
-    if (btnAdd) btnAdd.addEventListener('click', _showAddInput);
-
-    var addWrap = document.getElementById('add-input-wrap');
-    if (addWrap) addWrap.style.display = 'none';
-
-    var addInput = document.getElementById('add-task-input');
-    if (addInput) {
-      addInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); _commitAdd(); }
-        if (e.key === 'Escape') { _hideAddInput(); }
-      });
-    }
-    var btnAddCommit = document.getElementById('btn-add-commit');
-    if (btnAddCommit) btnAddCommit.addEventListener('click', _commitAdd);
-    var btnAddCancel = document.getElementById('btn-add-cancel');
-    if (btnAddCancel) btnAddCancel.addEventListener('click', _hideAddInput);
-
-    var overlay = document.getElementById('editor-overlay');
-    if (overlay) overlay.addEventListener('click', closeEditor);
-
-    var modeBtn = document.getElementById('btn-mode-toggle');
-    if (modeBtn) modeBtn.addEventListener('click', Modes.toggle);
-
-    var notifBtn = document.getElementById('btn-notif');
-    if (notifBtn) {
-      notifBtn.addEventListener('click', function () {
-        Notifier.requestPermission(function () { renderToolbar(); });
-      });
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+      var onScheme = function () { if (Store.settings().theme === 'system') applyTheme(); };
+      if (mq.addEventListener) mq.addEventListener('change', onScheme);
+      else if (mq.addListener) mq.addListener(onScheme);
     }
 
-    var searchInput = document.getElementById('search-input');
-    if (searchInput) {
-      searchInput.addEventListener('input', function () {
-        _searchQuery = this.value;
-        renderTaskList();
-      });
-    }
+    var content = $('#content');
+    content.addEventListener('click', onContentClick);
+    bindDrag(content);
 
-    var btnExport = document.getElementById('btn-export');
-    if (btnExport) btnExport.addEventListener('click', exportData);
-    var importInput = document.getElementById('import-input');
-    if (importInput) {
-      importInput.addEventListener('change', function () {
-        if (this.files[0]) importData(this.files[0]);
-      });
-    }
-    var btnImport = document.getElementById('btn-import');
-    if (btnImport) btnImport.addEventListener('click', function () {
-      document.getElementById('import-input').click();
-    });
-
-    document.addEventListener('keydown', function (e) {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
-      if ((e.key === '+' || e.key === 'n') && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault(); _showAddInput();
+    $('#sidebar-body').addEventListener('click', function (e) {
+      var more = e.target.closest('[data-act="notebook-menu"]');
+      if (more) {
+        e.stopPropagation();
+        var nb = Store.notebookById(more.getAttribute('data-id'));
+        if (!nb) return;
+        menu(more, [
+          { label: 'Rename', icon: '✏️', act: 'rename' },
+          { label: 'Delete notebook', icon: '🗑', act: 'delete', danger: true }
+        ], function (item) {
+          if (!item) return;
+          if (item.act === 'rename') {
+            var name = prompt('Notebook name:', nb.name);
+            if (name) { nb.name = name; Store.updateNotebook(nb); }
+          } else if (item.act === 'delete') {
+            if (confirm('Delete "' + nb.name + '"? Its notes are kept.')) {
+              Store.removeNotebook(nb.id).then(function () {
+                if (Store.settings().scope === 'notebook:' + nb.id) Store.updateSettings({ scope: 'all' });
+              });
+            }
+          }
+        });
+        return;
       }
-      if (e.key === 'Escape' && _addInputVisible) _hideAddInput();
-      if (e.key === 'Escape' && _activeEditorId) closeEditor();
+      var add = e.target.closest('[data-act="add-notebook"]');
+      if (add) {
+        e.stopPropagation();
+        var name = prompt('Notebook name:');
+        if (name) Store.addNotebook(name);
+        return;
+      }
+      var item = e.target.closest('[data-scope]');
+      if (item) setScope(item.getAttribute('data-scope'));
     });
 
-    Store.onChange(function () {
-      renderTaskList();
-      renderFilterBar();
-      renderToolbar();
+    $('#status-strip').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-scope]');
+      if (b) setScope(b.getAttribute('data-scope'));
     });
 
-    renderTaskList();
-    renderFilterBar();
-    renderToolbar();
+    $('#selection-bar').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-act]');
+      if (!b) return;
+      var act = b.getAttribute('data-act');
+      if (act === 'sel-clear') clearSelection();
+      else bulk(act, b);
+    });
+
+    $('#view-switch').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-view]');
+      if (b) Store.updateSettings({ view: b.getAttribute('data-view') });
+    });
+
+    $('#btn-sort').addEventListener('click', function () {
+      var s = Store.settings();
+      menu($('#btn-sort'), [{ heading: 'Sort by' }].concat(SORTS.map(function (x) {
+        return { label: x.label, act: x.id, checked: s.sort === x.id };
+      })).concat([
+        { sep: true },
+        { label: 'Show completed', icon: s.showCompleted ? '👁' : '🚫', act: '__completed', checked: s.showCompleted }
+      ]), function (item) {
+        if (!item || !item.act) return;
+        if (item.act === '__completed') Store.updateSettings({ showCompleted: !s.showCompleted });
+        else Store.updateSettings({ sort: item.act });
+      });
+    });
+
+    $('#btn-menu').addEventListener('click', function () {
+      if (state.sidebarOpen) closeSidebar(); else openSidebar();
+    });
+    $('#scrim').addEventListener('click', closeSidebar);
+    $('#btn-sb-close').addEventListener('click', closeSidebar);
+
+    $('#btn-new').addEventListener('click', function () { newNote(); });
+    $('#fab').addEventListener('click', function () { newNote(); });
+
+    $('#btn-notif').addEventListener('click', function () {
+      Notifier.request().then(function (p) {
+        renderTopbar();
+        if (p === 'granted') { toast('Alerts enabled'); Engine.plan(); }
+        else if (p === 'denied') toast('Your browser blocked alerts. Enable them in site settings.', { kind: 'error', duration: 8000 });
+      });
+    });
+
+    $('#btn-settings').addEventListener('click', function () { Editor.openSettings(); });
+
+    var search = $('#search-input');
+    search.addEventListener('input', function () {
+      state.query = search.value;
+      renderContent();
+      var clear = $('#search-clear');
+      if (clear) clear.style.display = state.query ? '' : 'none';
+    });
+    $('#search-clear').addEventListener('click', function () {
+      state.query = '';
+      search.value = '';
+      search.focus();
+      render();
+    });
+
+    $$('#bottom-nav [data-scope]').forEach(function (b) {
+      b.addEventListener('click', function () { setScope(b.getAttribute('data-scope')); });
+    });
+
+    Store.onChange(function () { render(); });
+    window.addEventListener('resize', function () { closeMenu(); });
+
+    // Keep relative times honest without a full re-render storm.
+    setInterval(function () {
+      if (document.visibilityState === 'visible' && !Alarm.isRinging()) renderStatus();
+    }, 30000);
+
+    render();
   }
 
   return {
     init: init,
+    render: render,
+    renderTopbar: renderTopbar,
+    renderStatus: renderStatus,
+    state: state,
+    toast: toast,
+    toastReminder: toastReminder,
+    menu: menu,
+    closeMenu: closeMenu,
+    newNote: newNote,
     openEditor: openEditor,
-    closeEditor: closeEditor,
-    renderTaskList: renderTaskList,
-    renderFilterBar: renderFilterBar,
-    renderToolbar: renderToolbar
+    setScope: setScope,
+    focusSearch: focusSearch,
+    clearSelection: clearSelection,
+    toggleSelect: toggleSelect,
+    visibleNotes: visibleNotes,
+    nextAlarmAt: nextAlarmAt,
+    isOverdue: isOverdue,
+    download: download,
+    applyTheme: applyTheme,
+    trashNote: trashNote,
+    archiveNote: archiveNote,
+    duplicateNote: duplicateNote,
+    toggleDone: toggleDone,
+    SORTS: SORTS,
+    VIEWS: VIEWS
   };
 })();

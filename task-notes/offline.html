@@ -2,49 +2,38 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Offline — Task Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task Notes — offline</title>
+  <meta name="color-scheme" content="light dark">
   <style>
+    :root { color-scheme: light dark; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-      background: #fdf8ef;
-      color: #2d2d2d;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      margin: 0;
-      text-align: center;
-      padding: 24px;
+      margin: 0; min-height: 100dvh;
+      display: grid; place-items: center; padding: 24px;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #f6f5f9; color: #1b1b23;
     }
-    .card {
-      background: #fff7c0;
-      border-radius: 18px;
-      padding: 40px 32px;
-      box-shadow: 2px 4px 16px rgba(0,0,0,0.12);
-      max-width: 360px;
+    @media (prefers-color-scheme: dark) { body { background: #101018; color: #edecf3; } }
+    .box { max-width: 380px; text-align: center; }
+    .mark {
+      width: 66px; height: 66px; margin: 0 auto 18px;
+      border-radius: 50%; border: 3px solid #7c5cff;
+      display: grid; place-items: center; font-size: 28px;
     }
-    .icon { font-size: 48px; margin-bottom: 16px; }
-    h1 { font-size: 22px; margin-bottom: 8px; }
-    p  { font-size: 15px; color: #6b6b6b; margin-bottom: 20px; }
-    a  {
-      display: inline-block;
-      padding: 10px 24px;
-      background: #f59e0b;
-      color: #fff;
-      border-radius: 20px;
-      text-decoration: none;
-      font-weight: 600;
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p { margin: 0 0 18px; opacity: .7; line-height: 1.6; font-size: 14px; }
+    a {
+      display: inline-block; padding: 10px 20px; border-radius: 999px;
+      background: #7c5cff; color: #fff; text-decoration: none; font-weight: 600;
     }
-    a:hover { background: #d97706; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="icon">📴</div>
-    <h1>You're offline</h1>
-    <p>Task Notes couldn't reach the network. Your tasks are still safe in your browser.</p>
-    <a href="index.html">Try again</a>
+  <div class="box">
+    <div class="mark">⏰</div>
+    <h1>Task Notes is offline</h1>
+    <p>The app itself works without a connection — this page only appears when the cached copy could not be found. Reloading usually fixes it.</p>
+    <a href="./">Reload Task Notes</a>
   </div>
 </body>
 </html>

@@ -1,141 +1,164 @@
+/* notify.js — system notifications.
+ *
+ * Three delivery paths, best available wins:
+ *   1. Notification Triggers (Chromium) — the OS fires the alert even with the
+ *      app fully closed. Scheduled ahead of time.
+ *   2. The service worker's periodic sync — fires from IndexedDB when the
+ *      worker is woken up.
+ *   3. The page itself, while a tab is open.
+ */
 var Notifier = (function () {
-  var _swReg = null;
-  var _bannerQueue = [];
-  var _bannerContainer = null;
+  'use strict';
 
-  function setSwReg(reg) { _swReg = reg; }
+  var _reg = null;
 
-  function setBannerContainer(el) { _bannerContainer = el; }
+  function supported() {
+    return typeof Notification !== 'undefined';
+  }
 
-  function requestPermission(onResult) {
-    if (!('Notification' in window)) {
-      if (onResult) onResult('denied');
-      return;
-    }
-    if (Notification.permission === 'granted') {
-      if (onResult) onResult('granted');
-      return;
-    }
-    if (Notification.permission === 'denied') {
-      if (onResult) onResult('denied');
-      return;
-    }
-    Notification.requestPermission().then(function (p) {
+  function permission() {
+    return supported() ? Notification.permission : 'unsupported';
+  }
+
+  function setRegistration(reg) {
+    _reg = reg;
+  }
+
+  function registration() {
+    return _reg;
+  }
+
+  function request() {
+    if (!supported()) return Promise.resolve('unsupported');
+    if (Notification.permission !== 'default') return Promise.resolve(Notification.permission);
+    return Notification.requestPermission().then(function (p) {
       Store.updateSettings({ notificationsAsked: true });
-      if (onResult) onResult(p);
-    });
+      return p;
+    }).catch(function () { return 'denied'; });
   }
 
-  function _makeBeep(priority) {
-    try {
-      var ctx = new (window.AudioContext || window.webkitAudioContext)();
-      var osc = ctx.createOscillator();
-      var gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = priority === 'high' ? 880 : priority === 'low' ? 440 : 660;
-      gain.gain.setValueAtTime(0.18, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.4);
-    } catch (_) {}
+  function triggersSupported() {
+    return supported() && 'showTrigger' in Notification.prototype && typeof TimestampTrigger !== 'undefined';
   }
 
-  function _showWebNotification(task) {
-    var title = task.title || 'Task reminder';
-    var opts = {
-      body: task.notes ? task.notes.slice(0, 100) : 'Your task reminder is due.',
-      tag: task.id,
-      requireInteraction: task.priority === 'high',
+  function titleFor(note, rem) {
+    if (rem && rem.label) return rem.label;
+    if (note.title) return note.title;
+    var p = MD.plain(note.body, 60);
+    return p || 'Reminder';
+  }
+
+  function bodyFor(note, rem, missed) {
+    var parts = [];
+    if (missed) parts.push('Missed reminder');
+    if (rem && rem.label && note.title) parts.push(note.title);
+    var p = MD.plain(note.body, 140);
+    if (p) parts.push(p);
+    if (!parts.length) parts.push(rem && rem.alarm ? 'Alarm' : 'Reminder');
+    return parts.join(' · ');
+  }
+
+  function optionsFor(note, rem, opts) {
+    opts = opts || {};
+    return {
+      body: bodyFor(note, rem, opts.missed),
+      tag: 'tn:' + rem.id,
+      renotify: true,
+      requireInteraction: !!rem.alarm,
       icon: 'static/icons/icon-192.png',
-      badge: 'static/icons/icon-192.png',
+      badge: 'static/icons/badge-96.png',
+      vibrate: rem.vibrate ? [300, 120, 300, 120, 300] : undefined,
+      timestamp: opts.at || Date.now(),
+      silent: false,
+      data: {
+        noteId: note.id,
+        reminderId: rem.id,
+        alarm: !!rem.alarm,
+        url: './?note=' + encodeURIComponent(note.id)
+      },
       actions: [
-        { action: 'dismiss', title: 'Dismiss' },
-        { action: 'snooze', title: 'Snooze 5m' }
+        { action: 'snooze', title: 'Snooze' },
+        { action: 'done', title: 'Mark done' }
       ]
     };
-    if (_swReg && _swReg.showNotification) {
-      _swReg.showNotification(title, opts);
-    } else {
-      try { new Notification(title, opts); } catch (_) {}
+  }
+
+  /* Immediate notification for something firing right now. */
+  function show(note, rem, opts) {
+    if (permission() !== 'granted') return Promise.resolve(false);
+    var options = optionsFor(note, rem, opts);
+    if (_reg && _reg.showNotification) {
+      return _reg.showNotification(titleFor(note, rem), options)
+        .then(function () { return true; })
+        .catch(function () { return false; });
+    }
+    try {
+      new Notification(titleFor(note, rem), options);
+      return Promise.resolve(true);
+    } catch (_) {
+      return Promise.resolve(false);
     }
   }
 
-  function _createBanner(task, onSnooze, onDismiss, onOpen, missed) {
-    var banner = document.createElement('div');
-    banner.className = 'alert-banner priority-' + (task.priority || 'normal') + (missed ? ' missed' : '');
-    banner.dataset.taskId = task.id;
-    banner.setAttribute('role', 'alert');
-    banner.setAttribute('aria-live', 'assertive');
+  /* Hand upcoming alerts to the OS so they survive the app being closed.
+   * `items` is [{note, reminder, at}]. */
+  function scheduleTriggers(items) {
+    if (!triggersSupported() || !_reg || permission() !== 'granted') return Promise.resolve(0);
 
-    var emoji = { high: '🚨', normal: '⏰', low: '🔔' }[task.priority || 'normal'];
-    var label = missed ? '(missed) ' : '';
+    return _reg.getNotifications({ includeTriggered: true }).then(function (existing) {
+      existing.forEach(function (n) {
+        if (n.data && n.data.scheduled) n.close();
+      });
 
-    banner.innerHTML =
-      '<span class="alert-icon">' + emoji + '</span>' +
-      '<span class="alert-title">' + label + _esc(task.title) + '</span>' +
-      '<span class="alert-actions">' +
-        '<button class="btn-snooze" title="Snooze 5 minutes">Snooze 5m</button>' +
-        '<button class="btn-snooze-15" title="Snooze 15 minutes">15m</button>' +
-        '<button class="btn-snooze-1h" title="Snooze 1 hour">1h</button>' +
-        '<button class="btn-open" title="Open task">Open</button>' +
-        '<button class="btn-dismiss" title="Dismiss" aria-label="Dismiss alert">✕</button>' +
-      '</span>';
+      var now = Date.now();
+      var queued = items
+        .filter(function (it) { return it.at > now + 2000; })
+        .sort(function (a, b) { return a.at - b.at; })
+        .slice(0, 30);
 
-    banner.querySelector('.btn-snooze').addEventListener('click', function () {
-      if (onSnooze) onSnooze(5, 'minutes');
-      banner.remove();
-    });
-    banner.querySelector('.btn-snooze-15').addEventListener('click', function () {
-      if (onSnooze) onSnooze(15, 'minutes');
-      banner.remove();
-    });
-    banner.querySelector('.btn-snooze-1h').addEventListener('click', function () {
-      if (onSnooze) onSnooze(60, 'minutes');
-      banner.remove();
-    });
-    banner.querySelector('.btn-open').addEventListener('click', function () {
-      if (onOpen) onOpen();
-      banner.remove();
-    });
-    banner.querySelector('.btn-dismiss').addEventListener('click', function () {
-      if (onDismiss) onDismiss();
-      banner.remove();
-    });
-
-    return banner;
+      return Promise.all(queued.map(function (it) {
+        var options = optionsFor(it.note, it.reminder, { at: it.at });
+        options.tag = 'tn-sched:' + it.reminder.id;
+        options.data.scheduled = true;
+        options.data.at = it.at;
+        try {
+          options.showTrigger = new TimestampTrigger(it.at);
+        } catch (_) {
+          return null;
+        }
+        return _reg.showNotification(titleFor(it.note, it.reminder), options).catch(function () {});
+      })).then(function () { return queued.length; });
+    }).catch(function () { return 0; });
   }
 
-  function _esc(s) {
-    return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  function clearFor(reminderId) {
+    if (!_reg || !_reg.getNotifications) return Promise.resolve();
+    return _reg.getNotifications({ includeTriggered: true }).then(function (list) {
+      list.forEach(function (n) {
+        if (n.tag === 'tn:' + reminderId || n.tag === 'tn-sched:' + reminderId) n.close();
+      });
+    }).catch(function () {});
   }
 
-  function alert(task, onSnooze, onDismiss, onOpen, missed) {
-    if (!_bannerContainer) return;
-    var banner = _createBanner(task, onSnooze, onDismiss, onOpen, missed);
-    _bannerContainer.prepend(banner);
-
-    var settings = Store.getSettings();
-    if (settings.soundEnabled) _makeBeep(task.priority);
-    if (navigator.vibrate && task.priority === 'high') navigator.vibrate([200, 100, 200]);
-
-    if (Notification.permission === 'granted') {
-      _showWebNotification(task);
-    }
-  }
-
-  function clearBannersForTask(id) {
-    if (!_bannerContainer) return;
-    _bannerContainer.querySelectorAll('.alert-banner').forEach(function (b) {
-      if (b.dataset.taskId === id) b.remove();
-    });
+  function clearAll() {
+    if (!_reg || !_reg.getNotifications) return Promise.resolve();
+    return _reg.getNotifications({ includeTriggered: true }).then(function (list) {
+      list.forEach(function (n) { n.close(); });
+    }).catch(function () {});
   }
 
   return {
-    setSwReg: setSwReg,
-    setBannerContainer: setBannerContainer,
-    requestPermission: requestPermission,
-    alert: alert,
-    clearBannersForTask: clearBannersForTask
+    supported: supported,
+    permission: permission,
+    request: request,
+    setRegistration: setRegistration,
+    registration: registration,
+    triggersSupported: triggersSupported,
+    show: show,
+    scheduleTriggers: scheduleTriggers,
+    clearFor: clearFor,
+    clearAll: clearAll,
+    titleFor: titleFor,
+    bodyFor: bodyFor
   };
 })();
