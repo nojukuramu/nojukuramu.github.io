@@ -1,118 +1,135 @@
 <!DOCTYPE html>
-<html lang="en" data-mode="full">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Task Notes</title>
-  <meta name="description" content="Sticky-note task reminders. Add tasks, set alerts, and stay on top of what matters — all in your browser.">
-  <meta name="theme-color" content="#f59e0b">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Task Notes — notes with a real alarm clock</title>
+  <meta name="description" content="A local-first notes app with proper alarms: markdown notes, repeating reminders, snooze, notebooks, tags and offline support. No account, no server.">
+  <meta name="theme-color" content="#faf9fc">
+  <meta name="color-scheme" content="light dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Task Notes">
+  <meta property="og:title" content="Task Notes">
+  <meta property="og:description" content="Notes with a real alarm clock inside them. Local-first, installable, offline.">
+  <meta property="og:type" content="website">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
   <link rel="icon" href="static/icons/favicon.png" type="image/png">
   <link rel="stylesheet" href="static/css/app.css">
+  <script>
+    // Paint the right theme before first frame; the real value lands from
+    // IndexedDB a moment later.
+    (function () {
+      try {
+        var t = localStorage.getItem('tn:theme');
+        if (!t || t === 'system') {
+          t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+        document.documentElement.setAttribute('data-accent', localStorage.getItem('tn:accent') || 'violet');
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
 
-<div id="alert-banners" aria-label="Reminder alerts" aria-live="assertive"></div>
-
-<div class="app-root">
-
-  <!-- Header -->
-  <header class="app-header" role="banner">
-    <div class="app-title">
-      <span aria-hidden="true">📝</span> Task Notes
+<div id="splash" aria-hidden="true">
+  <div class="splash-inner">
+    <div class="splash-mark" aria-hidden="true">
+      <span class="splash-clock"></span>
     </div>
-
-    <div class="search-wrap">
-      <span aria-hidden="true">🔍</span>
-      <input type="search" id="search-input" placeholder="Search tasks…" aria-label="Search tasks">
-    </div>
-
-    <div class="header-spacer"></div>
-
-    <button id="btn-notif" class="btn-icon" title="Enable desktop notifications" aria-label="Enable notifications">
-      🔔 Enable alerts
-    </button>
-
-    <button id="btn-install" class="btn-icon" title="Install as desktop app" aria-label="Install app" style="display:none">
-      ⬇ Install
-    </button>
-
-    <button id="btn-mode-toggle" class="btn-icon" title="Toggle compact / full view" aria-label="Toggle layout">
-      ⊞
-    </button>
-
-    <!-- Overflow menu -->
-    <div class="overflow-menu">
-      <button class="btn-icon" id="btn-overflow" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋯</button>
-      <div class="overflow-dropdown" id="overflow-dropdown" role="menu">
-        <button id="btn-export" role="menuitem">⬆ Export backup</button>
-        <button id="btn-import" role="menuitem">⬇ Import backup</button>
-        <input type="file" id="import-input" accept=".json" style="display:none" aria-hidden="true">
-      </div>
-    </div>
-  </header>
-
-  <!-- iOS install tip -->
-  <div id="ios-install-tip" role="note" aria-label="Install instructions">
-    📲 Tap the Share button then "Add to Home Screen" to install.
+    <p>Task Notes</p>
   </div>
+</div>
 
-  <!-- Main -->
-  <main class="app-main" role="main">
-    <div class="content-area">
+<div class="app">
 
-      <!-- Add task bar -->
-      <div class="add-task-bar">
-        <div id="add-input-wrap" role="search" aria-label="Add a new task">
-          <input type="text" id="add-task-input" placeholder="Add a task…" aria-label="New task title" autocomplete="off" maxlength="200">
-          <button id="btn-add-commit" aria-label="Confirm add task">Add</button>
-          <button id="btn-add-cancel" aria-label="Cancel">✕</button>
-        </div>
-        <button id="btn-add" aria-label="Add task" title="Add task (shortcut: +)">+</button>
+  <!-- ===== Sidebar ===== -->
+  <aside class="sidebar" id="sidebar" aria-label="Navigation">
+    <div class="sb-top">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">⏰</span>
+        <span class="brand-name">Task Notes</span>
+      </div>
+      <button class="icon-btn sb-close" id="btn-sb-close" aria-label="Close navigation">✕</button>
+    </div>
+
+    <button class="btn-primary btn-new" id="btn-new">
+      <span aria-hidden="true">＋</span> New note
+    </button>
+
+    <div class="sb-body" id="sidebar-body"></div>
+
+    <div class="sb-foot">
+      <button class="sb-foot-btn" id="btn-install" hidden>⬇ Install app</button>
+      <button class="sb-foot-btn" id="btn-settings">⚙️ Settings</button>
+    </div>
+  </aside>
+
+  <div class="scrim" id="scrim"></div>
+
+  <!-- ===== Main ===== -->
+  <main class="main" id="main">
+    <header class="topbar">
+      <button class="icon-btn only-mobile" id="btn-menu" aria-label="Open navigation">☰</button>
+
+      <h1 class="scope-title" id="scope-title"></h1>
+
+      <div class="search">
+        <span class="search-icon" aria-hidden="true">🔍</span>
+        <input type="search" id="search-input" placeholder="Search notes…  try #tag or is:done" aria-label="Search notes" autocomplete="off">
+        <button class="search-clear" id="search-clear" aria-label="Clear search" style="display:none">✕</button>
       </div>
 
-      <!-- Filter bar -->
-      <div class="filter-bar" id="filter-bar" role="toolbar" aria-label="Filter and sort tasks"></div>
+      <div class="topbar-actions">
+        <div class="view-switch" id="view-switch" role="group" aria-label="Change view"></div>
+        <button class="icon-btn" id="btn-sort" aria-label="Sort and filter" title="Sort &amp; filter">⇅</button>
+        <button class="pill-btn" id="btn-notif">🔔 Enable alerts</button>
+      </div>
+    </header>
 
-      <!-- Task list -->
-      <ul id="task-list" aria-label="Tasks" aria-live="polite"></ul>
-    </div>
+    <div class="status-strip" id="status-strip"></div>
+    <div class="selection-bar" id="selection-bar" style="display:none"></div>
+
+    <div class="content" id="content"></div>
   </main>
 
-</div><!-- .app-root -->
+  <button class="fab" id="fab" aria-label="New note">＋</button>
 
-<!-- Editor overlay and panel (outside .app-root so it overlays everything) -->
-<div id="editor-overlay" aria-hidden="true"></div>
-<aside id="editor-panel" role="dialog" aria-label="Task editor" aria-modal="true"></aside>
+  <nav class="bottom-nav" id="bottom-nav" aria-label="Sections">
+    <button data-scope="all"><span aria-hidden="true">🗒</span>Notes</button>
+    <button data-scope="today"><span aria-hidden="true">☀️</span>Today</button>
+    <button data-scope="upcoming"><span aria-hidden="true">📆</span>Upcoming</button>
+    <button data-scope="alarms"><span aria-hidden="true">⏰</span>Alarms</button>
+  </nav>
+</div>
 
-<!-- Scripts — ordered classic scripts, no modules -->
+<!-- ===== Overlays ===== -->
+<aside class="editor" id="editor" aria-hidden="true" aria-label="Note editor"></aside>
+<div class="alarm-screen" id="alarm-screen"></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<noscript>
+  <div style="padding:2rem;font-family:system-ui">
+    <h1>Task Notes needs JavaScript</h1>
+    <p>The whole app runs in your browser — there is no server to fall back to.</p>
+  </div>
+</noscript>
+
+<script src="static/js/db.js"></script>
+<script src="static/js/schedule.js"></script>
 <script src="static/js/model.js"></script>
 <script src="static/js/store.js"></script>
+<script src="static/js/markdown.js"></script>
+<script src="static/js/audio.js"></script>
 <script src="static/js/notify.js"></script>
-<script src="static/js/reminders.js"></script>
-<script src="static/js/search.js"></script>
-<script src="static/js/modes.js"></script>
+<script src="static/js/engine.js"></script>
+<script src="static/js/alarm.js"></script>
 <script src="static/js/ui.js"></script>
-<script src="static/js/pwa.js"></script>
+<script src="static/js/editor.js"></script>
 <script src="static/js/app.js"></script>
-
-<script>
-  // Overflow menu toggle
-  document.getElementById('btn-overflow').addEventListener('click', function () {
-    var dd = document.getElementById('overflow-dropdown');
-    var open = dd.classList.toggle('open');
-    this.setAttribute('aria-expanded', open);
-  });
-  document.addEventListener('click', function (e) {
-    if (!e.target.closest('.overflow-menu')) {
-      document.getElementById('overflow-dropdown').classList.remove('open');
-      document.getElementById('btn-overflow').setAttribute('aria-expanded', false);
-    }
-  });
-</script>
 </body>
 </html>

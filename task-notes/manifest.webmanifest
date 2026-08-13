@@ -1,28 +1,45 @@
 {
-  "name": "Task Notes",
+  "name": "Task Notes — notes with alarms",
   "short_name": "Task Notes",
-  "description": "Sticky-note task reminders. Add tasks, set alerts, and stay on top of what matters — all in your browser.",
+  "description": "A local-first notes app with proper alarms: markdown notes, repeating reminders, snooze, notebooks and tags. Works offline, no account.",
   "id": "/task-notes/",
   "start_url": "./?source=pwa",
   "scope": "./",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone"],
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "orientation": "any",
-  "background_color": "#fdf8ef",
-  "theme_color": "#f59e0b",
-  "categories": ["productivity", "utilities"],
+  "background_color": "#f6f5f9",
+  "theme_color": "#7c5cff",
+  "categories": ["productivity", "utilities", "lifestyle"],
+  "lang": "en",
+  "dir": "ltr",
   "icons": [
     { "src": "static/icons/icon-192.png",          "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "static/icons/icon-512.png",          "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "static/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "static/icons/badge-96.png",          "sizes": "96x96",   "type": "image/png", "purpose": "monochrome" }
   ],
   "shortcuts": [
     {
-      "name": "Add task",
-      "short_name": "Add",
-      "description": "Quickly add a new task",
+      "name": "New note",
+      "short_name": "New",
+      "description": "Start writing straight away",
       "url": "./?action=add",
+      "icons": [{ "src": "static/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Today",
+      "short_name": "Today",
+      "description": "Everything due today",
+      "url": "./?scope=today",
+      "icons": [{ "src": "static/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Alarms",
+      "short_name": "Alarms",
+      "description": "Every note with an alarm on it",
+      "url": "./?scope=alarms",
       "icons": [{ "src": "static/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]

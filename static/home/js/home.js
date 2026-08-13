@@ -119,9 +119,9 @@
       tags: ["Three.js", "canvas", "roguelite"]
     },
     {
-      id: "task-notes", name: "Task Notes", accent: "#f59e0b", icon: ICONS.notes,
+      id: "task-notes", name: "Task Notes", accent: "#7c5cff", icon: ICONS.notes,
       href: "task-notes/", badge: "PWA",
-      desc: "Installable sticky-note reminders — intervals, datetime alerts, auto-snooze, tags, subtasks. All saved locally, no account.",
+      desc: "A notebook with a real alarm clock inside it — markdown notes, repeating alarms that ring until answered, notebooks, tags, and five views. Local-first, works offline.",
       tags: ["PWA", "offline", "local-first"]
     },
     {

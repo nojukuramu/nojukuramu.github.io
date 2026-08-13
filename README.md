@@ -12,7 +12,7 @@ discreet, multi-step treasure hunt for the curious. (Start at the ✦ in the foo
 | Path | Project | Description |
 |------|---------|-------------|
 | [`/magic_circles/`](magic_circles/) | **Magic Circles — A Certain RPG Game** | A magic-based RPG prototype where spells are *drawn*, not picked from a menu. Includes a canvas build, a Phaser.js edition, and a world-chunk editor. |
-| [`/task-notes/`](task-notes/) | **Task Notes** | Installable PWA sticky-note reminders — add tasks, set interval/datetime alerts, auto-snooze, tags, subtasks, and more. All data saved locally in the browser. |
+| [`/task-notes/`](task-notes/) | **Task Notes** | A notebook with a real alarm clock inside it — markdown notes, repeating alarms that ring until answered, notebooks, tags, five views, and offline background notifications. All data saved locally in the browser. See [`task-notes/README.md`](task-notes/README.md). |
 | [`/3dtd/`](3dtd/) | **VELL** | A procedurally generated 3D tower defense on a drowned moor — free camera, walkable traps, endless promotions, day/night cycle, synthesised audio. See [`3dtd/README.md`](3dtd/README.md). |
 | [`/karaokenatin/`](karaokenatin/) | **KaraokeNatin** | A karaoke room in the browser. One screen hosts and plays; guests scan a QR code and their phones become remotes — search, queue, reorder, skip. Peer-to-peer over WebRTC with no backend, installable as a PWA, with a local library of saved songs and playlists. See [`karaokenatin/README.md`](karaokenatin/README.md). |
 
@@ -30,14 +30,23 @@ stack layers into combos, and cast.
 
 ### Task Notes
 
-A browser-based sticky-note reminder app installable as a PWA. Highlights:
+A local-first notes app with alarms that actually ring, installable as a PWA. Highlights:
 
-- Add, color, pin, tag, and subtask tasks
-- Rich reminders: interval-based, datetime (with recurring), auto-snooze, lead-time heads-up, quiet hours
-- **Reminder caveat:** reminders fire reliably while the app is open. There is no backend server, so alerts
-  cannot reach you when the tab is fully closed — missed reminders catch up immediately on next open.
-- All data stored in `localStorage` (namespaced key `task-notes:v1`) — no sign-in, no server
-- Offline-capable (service worker caches app shell); installable via Chrome/Edge "Install" prompt or iOS Share → Add to Home Screen
+- Markdown notes with inline checklists, nine colours, pin/star, priority, tags and notebooks
+- Many alarms per note — once, daily, weekly, monthly, yearly or every-N — each either a
+  full-screen ringing **alarm** or a quiet **notification**, with its own ringtone, volume,
+  auto-snooze rule and end date
+- Five views (grid, list, board, agenda, calendar), archive, trash, multi-select bulk edits,
+  drag ordering, undo/redo, and a `Ctrl+K` command palette
+- **Background alarms:** notes live in IndexedDB so the service worker can read them, decide
+  what is due and post notifications with no tab open. On Chromium, Notification Triggers
+  hand upcoming alarms to the OS so they fire with the app fully closed. Elsewhere alarms
+  need a running tab, which the app states plainly, and anything genuinely missed is shown
+  as a *missed alarm* rather than silently swallowed.
+- All data stored in the `task-notes` IndexedDB database — no sign-in, no server. Data from
+  the old `localStorage` version is imported automatically on first run.
+- Offline-capable (service worker caches the app shell); installable via Chrome/Edge "Install"
+  prompt or iOS Share → Add to Home Screen
 
 - **App:** [`task-notes/index.html`](task-notes/index.html)
 - **Full documentation:** [`task-notes/README.md`](task-notes/README.md)
@@ -54,7 +63,7 @@ A browser-based sticky-note reminder app installable as a PWA. Highlights:
 │   ├── editor.html    # Chunk editor
 │   ├── README.md      # Magic-circle system documentation
 │   └── static/        # css / js / assets (game logic from source + minor bug-fixes)
-└── task-notes/        # Task Notes — sticky-note reminder PWA
+└── task-notes/        # Task Notes — notes-with-alarms PWA (see its README)
     ├── index.html     # App shell
     ├── manifest.webmanifest
     ├── sw.js          # Service worker
