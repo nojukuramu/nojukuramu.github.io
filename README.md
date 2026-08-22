@@ -3,9 +3,12 @@
 Personal GitHub Pages site. Each sub-folder is a self-contained static project that can be
 visited directly at `https://nojukuramu.github.io/<folder>/`.
 
-The root (`index.html`) is a small interactive landing page — **"The Atelier"** — that ties the
-projects together: light/dark themes, a command palette (`/`), an *Elemental Echo* minigame, and a
-discreet, multi-step treasure hunt for the curious. (Start at the ✦ in the footer.)
+The root (`index.html`) is the landing page that ties the projects together: a warm, paper-toned
+layout with light/dark themes, a search palette (`/` or `Ctrl`/`Cmd`+`K`), and an *Elemental Echo*
+memory minigame. Its styles and scripts live in [`static/home/`](static/home/); the project grid
+and the palette are both driven by the `PROJECTS` array at the top of
+[`static/home/js/home.js`](static/home/js/home.js), so adding a project means adding one object
+there.
 
 ## Projects
 
@@ -15,6 +18,12 @@ discreet, multi-step treasure hunt for the curious. (Start at the ✦ in the foo
 | [`/task-notes/`](task-notes/) | **Task Notes** | A notebook with a real alarm clock inside it — markdown notes, repeating alarms that ring until answered, notebooks, tags, five views, and offline background notifications. All data saved locally in the browser. See [`task-notes/README.md`](task-notes/README.md). |
 | [`/3dtd/`](3dtd/) | **VELL** | A procedurally generated 3D tower defense on a drowned moor — free camera, walkable traps, endless promotions, day/night cycle, synthesised audio. See [`3dtd/README.md`](3dtd/README.md). |
 | [`/karaokenatin/`](karaokenatin/) | **KaraokeNatin** | A karaoke room in the browser. One screen hosts and plays; guests scan a QR code and their phones become remotes — search, queue, reorder, skip. Peer-to-peer over WebRTC with no backend, installable as a PWA, with a local library of saved songs and playlists. See [`karaokenatin/README.md`](karaokenatin/README.md). |
+| [`/magic_sandbox/`](magic_sandbox/) | **Magic Sandbox** | The Loom Tower — a 3D top-down spell-crafting roguelite. Weave runes into elemental circles in the Spellforge, then ascend floor by floor. |
+| [`/pwg/`](pwg/) | **Pinoy Word Games** | Hulaan ang dalawang salita — 100 cozy Filipino word levels, progress saved locally. See [`pwg/MANUAL.md`](pwg/MANUAL.md). |
+| [`/antiafk/`](antiafk/) | **Anti-AFK** | Keeps a screen awake with a Screen Wake Lock held open behind a decoy video player. |
+| [`/burst_dump/`](burst_dump/) | **Burst//Dump** | Cuts a folder of photos into a seeded photo-dump reel and records it to MP4/WebM in the browser. |
+| [`/citybuilder/`](citybuilder/) | **SkyLine** | A pocket city sim — terraform, lay roads, zone a skyline that grows itself, with a day/night cycle and weather. |
+| [`/arco/`](arco/) | **ARCO** | A two-thumb instrument for a phone held sideways: four physically modelled strings, tilt-shaped tone, playable in all twelve keys. Offline, no samples. |
 
 ### Magic Circles
 

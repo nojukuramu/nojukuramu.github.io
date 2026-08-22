@@ -1,6 +1,6 @@
 /* ============================================================
    Elemental Echo — a Simon-style memory minigame.
-   Watch the runes light up, then repeat the growing sequence.
+   Watch the pads light up, then repeat the growing sequence.
    ============================================================ */
 (function () {
   "use strict";
@@ -19,6 +19,7 @@
   var roundEl = document.getElementById("echo-round");
   var bestEl = document.getElementById("echo-best");
 
+  // legacy key name, kept so existing visitors keep their best score
   var BEST_KEY = "atelier:echo-best";
   var best = 0;
   try { best = parseInt(localStorage.getItem(BEST_KEY) || "0", 10) || 0; } catch (e) {}
@@ -69,7 +70,7 @@
     (function next() {
       if (i >= seq.length) {
         playing = false; accepting = true; input = [];
-        setStatus("your turn ✦");
+        setStatus("your turn");
         return;
       }
       flash(seq[i], speed).then(function () { i++; next(); });
@@ -99,19 +100,14 @@
       try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) {}
       bestEl.textContent = best;
     }
-    setStatus("missed at round " + (reached) + " — Begin again?");
+    setStatus("missed at round " + reached);
     startBtn.textContent = "Begin";
     startBtn.disabled = false;
   }
 
   function roundClear() {
     accepting = false;
-    setStatus("nice — round " + seq.length + " ✓");
-    if (seq.length >= 7 && window.Atelier) {
-      if (Atelier.addEgg("echo")) {
-        Atelier.toast("✦ seven runes, perfectly echoed. you have a good memory — the footer rewards it too.");
-      }
-    }
+    setStatus("round " + seq.length + " cleared");
     setTimeout(function () { addStep(); playback(); }, 720);
   }
 
