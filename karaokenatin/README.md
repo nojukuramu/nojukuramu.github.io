@@ -44,15 +44,42 @@ Room connections are the part that actually breaks in the wild, so redundancy is
 - **Heartbeats.** Every data channel pings; twenty seconds of silence is treated as death
   rather than waiting for a TCP timeout that may never come.
 - **Backoff with jitter** on every reconnect, so a flapping network does not turn into a
-  stampede.
-- **Wake-ups.** A phone returning from sleep, or a network coming back, retries immediately
-  instead of sitting on a socket that is quietly dead.
-- **Queued commands.** Anything you tap while offline is held and flushed when the channel
-  reopens.
+  stampede — capped hard while the tab is on screen, because somebody is watching it.
 - **Snapshot state.** The host broadcasts the whole room state on every change, so a guest
   that missed messages is correct again the moment one lands — no patch replay to get wrong.
+- **Queued commands.** Anything you tap while offline is held and flushed when the channel
+  reopens.
 - **Session resume.** The host's room code, token, and queue survive a reload; guests are
   offered a rejoin. Reopening the same code puts everyone back in the same room.
+
+### Coming back
+
+The hard case is not a link that breaks — it is a *page* that stops. A pocketed phone, a
+closed lid, a tab left behind for an hour: the socket still reports `open`, the timers that
+would have noticed never ran, and the browser says nothing on the way back in. Everything the
+page believed about its connection was frozen along with it, so none of it can be trusted.
+
+- **Every wake-up is heard.** Visibility, `focus`, `online`, a bfcache restore (the only
+  signal iOS Safari gives), and a clock-gap check for the case none of those fire at all — a
+  laptop that slept with this tab in front, where the page never lost focus and every timer in
+  it simply stopped. Both roles listen: a host nobody can find is as dead as a guest.
+- **Ask, don't assume.** A channel that claims to be open is probed on wake, and rebuilt at
+  once if it does not answer — rather than waiting out a silence timer that was not running
+  anyway. The same silence measured *across* a freeze proves nothing, so it never kills a link
+  that was fine.
+- **One attempt at a time.** Reconnection is a single supervised attempt guarded by a
+  generation counter, with every timer owned and cancellable. Wake-ups used to each start a
+  fresh attempt without cancelling the one already scheduled — all sharing one connection id,
+  so each new attempt made the host discard the previous link, whose close scheduled another
+  attempt. A phone picked up twice could sit there retrying forever.
+- **A stale id is not a lost room.** A broker holds a peer id for a while after the socket
+  behind it dies, so a host that reconnects quickly is told its own room code is taken. It
+  waits that out with the same token instead of believing it, and only surrenders the code
+  after every broker has said so several times over. Renaming the room strands every guest
+  holding the old one.
+- **The host cleans up after itself.** On wake it re-registers, proves each guest link, and
+  re-broadcasts the room — so the guest list is not full of people who left during the nap,
+  and everyone still there is looking at the same queue.
 
 ## Search
 
@@ -113,11 +140,12 @@ site keeps its no-build-step promise.
 ## Tests
 
 ```bash
-node tools/qr-test.js      # QR conformance: module counts, block layouts, capacities
-node tools/e2e.js          # two real browsers, one real WebRTC link    (needs playwright)
-node tools/player-e2e.js   # playback state machine against a mock player      (playwright)
-node tools/library-e2e.js  # library, playlists, export/import, karaoke bias   (playwright)
-node tools/install-e2e.js  # manifest, service worker, install button          (playwright)
+node tools/qr-test.js         # QR conformance: module counts, block layouts, capacities
+node tools/e2e.js             # two real browsers, one real WebRTC link (needs playwright)
+node tools/reconnect-e2e.js   # leaving the browser and coming back           (playwright)
+node tools/player-e2e.js      # playback state machine against a mock player  (playwright)
+node tools/library-e2e.js     # library, playlists, export/import, karaoke bias (playwright)
+node tools/install-e2e.js     # manifest, service worker, install button      (playwright)
 ```
 
 `tools/e2e.js` boots a static server and a local stand-in for the broker
@@ -125,6 +153,14 @@ node tools/install-e2e.js  # manifest, service worker, install button          (
 Chromium, and drives a full session: connect, search, queue, reorder, remove, sever the link
 and reconnect, reload the host. It never contacts a public broker, Piped, or YouTube — the
 YouTube API is deliberately blocked, which also exercises the degraded-player path.
+
+`tools/reconnect-e2e.js` covers the other half of that: not a link cut, but a page that went
+away. It hides the guest tab and restarts the host underneath it, fires a flurry of wake-ups at
+a guest whose room has vanished and counts the retry loops that result, kills the host's
+signalling socket the way a sleeping laptop does, and squats on the host's peer id with a
+foreign token to check the room keeps its code rather than renaming itself. Each check stands
+for a way the room used to stay broken; two of them fail outright against the previous
+connection code.
 
 `tools/library-e2e.js` builds a library with no room at all, checks it survives a reload and a
 round-trip through export/import, and then joins a room to queue a playlist into it. It also
