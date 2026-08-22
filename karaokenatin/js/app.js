@@ -84,7 +84,8 @@
     tab: "queue",
     openPlaylists: {},   // pid -> expanded in the library view
     pickerSong: null,
-    railOpen: true
+    railOpen: true,
+    hostWasListed: false   // host only: has any broker ever answered?
   };
 
   /* ================= HOST ================= */
@@ -94,6 +95,7 @@
     app.state = R.createState(code);
     app.name = app.name || loadName() || "Host";
     app.hostToken = (resumed && resumed.token) || null;
+    app.hostWasListed = false;
 
     if (resumed && resumed.queue) {
       app.state.queue = resumed.queue;
@@ -117,6 +119,13 @@
           broadcastState();
         },
         broker: function () { render(); },
+        wake: function () {
+          // Back from sleep: the guest list has just been re-proved, and any
+          // guest that stayed is holding a snapshot from before the nap.
+          refreshGuestList();
+          broadcastState();
+          render();
+        },
         "code-taken": function () {
           // Every broker says the id is in use, so someone else really is on
           // this code. Move rather than fight over it — but keep the queue.
@@ -346,7 +355,12 @@
         app.net.send({ type: CMD.RESYNC });
       },
       message: function (data) { onHostMessage(data); },
-      closed: function () { renderConnection(); }
+      closed: function () { renderConnection(); },
+      wake: function () {
+        // The channel proved itself alive, but it was deaf while we were away.
+        app.net.send({ type: CMD.HELLO, name: app.name || "Guest" });
+        app.net.send({ type: CMD.RESYNC });
+      }
     });
 
     save(STORE.guest, { at: Date.now(), code: code });
@@ -508,12 +522,22 @@
   function renderConnection(detail) {
     var badge = $("#conn");
     if (!badge) return;
+    // A host with no broker left is still hosting, but nobody new can find it
+    // — and that is exactly the moment worth showing. Before the first one
+    // answers there is nothing to have lost yet, so that reads as connecting.
+    if (app.role === "host" && app.net) {
+      var listed = app.net.onlineBrokers() > 0;
+      if (listed) app.hostWasListed = true;
+      app.connection = listed ? "hosting" : (app.hostWasListed ? "unlisted" : "connecting");
+    }
     var map = {
       connected: ["ok", "connected"],
       connecting: ["warn", "connecting…"],
+      waiting: ["warn", "waiting for the host…"],
       retrying: ["warn", "reconnecting…"],
       stopped: ["bad", "left"],
-      hosting: ["ok", "hosting"]
+      hosting: ["ok", "hosting"],
+      unlisted: ["warn", "reconnecting…"]
     };
     var e = map[app.connection] || ["bad", app.connection];
     badge.className = "conn conn-" + e[0];
