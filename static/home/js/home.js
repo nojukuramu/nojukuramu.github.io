@@ -1,254 +1,212 @@
 /* ============================================================
-   The Atelier — core interactions
-   Exposes a small window.Atelier API used by the other scripts.
+   nojukuramu — homepage interactions
+   Renders the project grid, the theme toggle and the search palette.
    ============================================================ */
 (function () {
   "use strict";
 
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var isTouch = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
-
-  /* ---------- tiny store for "secrets found" ---------- */
-  var EGG_KEY = "atelier:eggs";
-  function loadEggs() {
-    try { return JSON.parse(localStorage.getItem(EGG_KEY)) || []; } catch (e) { return []; }
-  }
-  function saveEggs(list) { try { localStorage.setItem(EGG_KEY, JSON.stringify(list)); } catch (e) {} }
-
-  var Atelier = {
-    reduceMotion: reduceMotion,
-    isTouch: isTouch,
-    EGG_TOTAL: 6,
-    _secretHandlers: {},
-    eggs: loadEggs()
-  };
-  window.Atelier = Atelier;
-
-  /* ---------- toast ---------- */
-  var toastStack = document.getElementById("toasts");
-  Atelier.toast = function (html, opts) {
-    opts = opts || {};
-    var t = document.createElement("div");
-    t.className = "toast";
-    if (opts.accent) t.style.borderLeftColor = opts.accent;
-    t.innerHTML = html;
-    toastStack.appendChild(t);
-    var ms = opts.ms || 4200;
-    setTimeout(function () {
-      t.classList.add("hide");
-      setTimeout(function () { t.remove(); }, 320);
-    }, ms);
-    return t;
-  };
-
-  /* ---------- modal ---------- */
-  var modal = document.getElementById("modal");
-  var modalBody = document.getElementById("modal-body");
-  Atelier.openModal = function (html) {
-    modalBody.innerHTML = html;
-    modal.hidden = false;
-    var f = modal.querySelector("button, a, input");
-    if (f) f.focus();
-  };
-  Atelier.closeModal = function () { modal.hidden = true; modalBody.innerHTML = ""; };
-  document.getElementById("modal-close").addEventListener("click", Atelier.closeModal);
-  modal.addEventListener("click", function (e) { if (e.target === modal) Atelier.closeModal(); });
-
-  /* ---------- eggs / achievements ---------- */
-  Atelier.hasEgg = function (id) { return Atelier.eggs.indexOf(id) !== -1; };
-  Atelier.eggCount = function () { return Atelier.eggs.length; };
-  Atelier.addEgg = function (id) {
-    if (Atelier.hasEgg(id)) return false;
-    Atelier.eggs.push(id);
-    saveEggs(Atelier.eggs);
-    updateSecretCount();
-    return true;
-  };
-  function updateSecretCount() {
-    var n = Atelier.eggCount();
-    document.querySelectorAll("[data-secret-count]").forEach(function (el) {
-      el.textContent = "secrets found: " + n + " / " + Atelier.EGG_TOTAL;
-    });
-  }
-
-  /* ---------- secret word registry (used by secrets.js) ---------- */
-  Atelier.onSecret = function (word, fn) { Atelier._secretHandlers[word.toLowerCase()] = fn; };
 
   /* ---------- theme ---------- */
   function setTheme(theme) {
     document.documentElement.setAttribute("data-theme", theme);
-    try { localStorage.setItem("atelier:theme", theme); } catch (e) {}
+    try { localStorage.setItem("theme", theme); } catch (e) {}
   }
-  Atelier.toggleTheme = function () {
+  function toggleTheme() {
     var cur = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
     setTheme(cur === "dark" ? "light" : "dark");
-  };
-  document.getElementById("theme-toggle").addEventListener("click", Atelier.toggleTheme);
+  }
+  document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
   var tt2 = document.getElementById("theme-toggle-2");
-  if (tt2) tt2.addEventListener("click", Atelier.toggleTheme);
+  if (tt2) tt2.addEventListener("click", toggleTheme);
+
+  /* ---------- header hairline on scroll ---------- */
+  var header = document.querySelector(".site-header");
+  function onScroll() { header.classList.toggle("stuck", window.scrollY > 8); }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
 
   /* ---------- year ---------- */
   var yr = document.getElementById("year");
   if (yr) yr.textContent = new Date().getFullYear();
 
-  /* ---------- apps (data-driven; add more here) ---------- */
+  /* ---------- icons ---------- */
+  function svg(paths) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+           'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
+  }
   var ICONS = {
-    notes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11l5 5v11a0 0 0 0 1 0 0H4z"/><path d="M15 4v5h5"/><path d="M8 13h8M8 17h6"/></svg>',
-    sigil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polygon points="12,4 20,18 4,18"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>',
-    spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M18 6l-2.5 2.5M8.5 15.5L6 18"/></svg>',
-    tiles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="8" y="13" width="8" height="8" rx="2"/><path d="M6.2 8V6.4a1 1 0 0 1 1.6-.8"/><path d="M16 9V5l2 4V5"/><path d="M11 18.5h2"/></svg>',
-    eye:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg>',
-    tower: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 3-3 3-3-3z"/><path d="M7 8h10l1 5H6z"/><path d="M6 13h12l1.5 8h-15z"/><path d="M10 21v-4M14 21v-4"/></svg>',
-    camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l1.5-2h9L18 8h3v11H3z"/><circle cx="12" cy="13" r="3.4"/><path d="M17.5 8.5h.01"/></svg>',
-    city:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V9l4-3v15"/><path d="M13 21V5l4-2v18"/><path d="M9 12h.01M9 15h.01M9 18h.01M17 9h.01M17 12h.01M17 15h.01M17 18h.01"/></svg>',
-    spore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10c0-3.6 3.8-6 8.5-6s8.5 2.4 8.5 6z"/><path d="M10 10v7a2 2 0 0 0 4 0v-7"/><path d="M2 21h20"/></svg>',
-    arc:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21A18 18 0 0 1 21 3"/><path d="M3 21A12 12 0 0 1 15 9"/><path d="M3 21a6 6 0 0 1 6-6"/><circle cx="3.2" cy="20.8" r="1.5" fill="currentColor" stroke="none"/></svg>',
-    mic:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4M8 22h8"/></svg>'
+    notes:  svg('<path d="M5 4h9l5 5v11H5z"/><path d="M14 4v5h5"/><path d="M9 13h6M9 17h4"/>'),
+    sigil:  svg('<circle cx="12" cy="12" r="9"/><polygon points="12,5 19,17.5 5,17.5"/><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/>'),
+    spark:  svg('<path d="M12 3v5M12 16v5M3 12h5M16 12h5M6.3 6.3l3 3M14.7 14.7l3 3M17.7 6.3l-3 3M9.3 14.7l-3 3"/>'),
+    tiles:  svg('<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="8" y="13" width="8" height="8" rx="2"/>'),
+    eye:    svg('<path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.8"/>'),
+    tower:  svg('<path d="M12 2.5l3 3-3 3-3-3z"/><path d="M7.5 8.5h9l1 4.5H6.5z"/><path d="M6.5 13h11l1.4 8H5.1z"/><path d="M10.5 21v-4M13.5 21v-4"/>'),
+    camera: svg('<path d="M3 8h3.2L7.7 6h8.6L17.8 8H21v11H3z"/><circle cx="12" cy="13" r="3.2"/>'),
+    city:   svg('<path d="M3 21h18"/><path d="M5.5 21V9.5l4-2.5V21"/><path d="M13.5 21V5.5l4-2V21"/><path d="M9.5 12h.01M9.5 15h.01M17.5 9h.01M17.5 12h.01"/>'),
+    spore:  svg('<path d="M4 10.5c0-3.6 3.6-6 8-6s8 2.4 8 6z"/><path d="M10 10.5V17a2 2 0 0 0 4 0v-6.5"/><path d="M2.5 21h19"/>'),
+    arc:    svg('<path d="M3 21A18 18 0 0 1 21 3"/><path d="M3 21A12 12 0 0 1 15 9"/><path d="M3 21a6 6 0 0 1 6-6"/><circle cx="3.4" cy="20.6" r="1.4" fill="currentColor" stroke="none"/>'),
+    mic:    svg('<rect x="9" y="2.5" width="6" height="10.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21M9 21h6"/>'),
+    arrow:  svg('<path d="M5 12h13M13 6.5l5.5 5.5L13 17.5"/>'),
+    sun:    svg('<circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>'),
+    code:   svg('<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>'),
+    play:   svg('<circle cx="12" cy="12" r="9"/><path d="M10 8.5l6 3.5-6 3.5z"/>')
   };
-  var APPS = [
+
+  /* ---------- projects (add new ones here) ---------- */
+  var PROJECTS = [
     {
-      id: "magic-circles", name: "Magic Circles", accent: "#6C5CE7", icon: ICONS.sigil,
-      href: "magic_circles/", badge: "RPG",
-      desc: "A magic-based RPG where spells are drawn, not picked. Trace polygons into elements, wrap them in circles, stack layers, and cast.",
+      name: "Magic Circles", href: "magic_circles/", icon: ICONS.sigil, badge: "RPG",
+      desc: "A magic-based RPG where spells are drawn, not picked from a menu. Trace polygons into elements, wrap them in circles, stack the layers, and cast.",
       tags: ["Phaser", "canvas", "procedural"]
     },
     {
-      id: "magic-sandbox", name: "Magic Sandbox", accent: "#9d8cff", icon: ICONS.tower,
-      href: "magic_sandbox/", badge: "3D roguelite",
-      desc: "The Loom Tower: a 3D top-down spell-crafting roguelite. Weave runes into elemental circles in the Spellforge, then ascend floor by floor.",
-      tags: ["Three.js", "canvas", "roguelite"]
+      name: "Magic Sandbox", href: "magic_sandbox/", icon: ICONS.tower, badge: "3D roguelite",
+      desc: "The Loom Tower — a top-down spell-crafting roguelite. Weave runes into elemental circles in the Spellforge, then ascend the tower floor by floor.",
+      tags: ["Three.js", "WebGL", "roguelite"]
     },
     {
-      id: "task-notes", name: "Task Notes", accent: "#7c5cff", icon: ICONS.notes,
-      href: "task-notes/", badge: "PWA",
-      desc: "A notebook with a real alarm clock inside it — markdown notes, repeating alarms that ring until answered, notebooks, tags, and five views. Local-first, works offline.",
-      tags: ["PWA", "offline", "local-first"]
+      name: "Task Notes", href: "task-notes/", icon: ICONS.notes, badge: "PWA",
+      desc: "A notebook with a real alarm clock inside it. Markdown notes, repeating alarms that ring until you answer them, notebooks, tags and five views — all offline.",
+      tags: ["PWA", "offline", "IndexedDB"]
     },
     {
-      id: "pwg", name: "Pinoy Word Games", accent: "#e76f51", icon: ICONS.tiles,
-      href: "pwg/", badge: "Word game",
-      desc: "Hulaan ang dalawang salita! Dagdag, bawas, kislap, o banat ng letra — 100 cozy levels in Filipino, progress saved locally.",
+      name: "Pinoy Word Games", href: "pwg/", icon: ICONS.tiles, badge: "Word game",
+      desc: "Hulaan ang dalawang salita. Dagdag, bawas, kislap, o banat ng letra — 100 cozy levels in Filipino, with progress saved on your device.",
       tags: ["Filipino", "puzzle", "100 levels"]
     },
     {
-      id: "antiafk", name: "Anti-AFK", accent: "#00b3a4", icon: ICONS.eye,
-      href: "antiafk/", badge: "utility",
-      desc: "Keep your screen awake without touching it. A fake video player holds a Screen Wake Lock — works in Chromium and Firefox 126+.",
-      tags: ["Wake Lock", "focus", "utility"]
+      name: "Anti-AFK", href: "antiafk/", icon: ICONS.eye, badge: "Utility",
+      desc: "Keep a screen awake without touching it. A decoy video player holds a Screen Wake Lock open — works in Chromium and Firefox 126 and up.",
+      tags: ["Wake Lock", "utility"]
     },
     {
-      id: "photo-dump", name: "Burst//Dump", accent: "#ff3b30", icon: ICONS.camera,
-      href: "burst_dump/", badge: "video",
-      desc: "Drop a folder of photos and it cuts them into a fast, seeded photo-dump reel — rhythms, styles, FX, music — then records to MP4/WebM right in the browser.",
+      name: "Burst//Dump", href: "burst_dump/", icon: ICONS.camera, badge: "Video",
+      desc: "Drop in a folder of photos and it cuts them into a fast, seeded photo-dump reel — rhythms, styles, effects, music — then records straight to MP4 or WebM.",
       tags: ["canvas", "MediaRecorder", "reels"]
     },
     {
-      id: "citybuilder", name: "SkyLine", accent: "#00d9c0", icon: ICONS.city,
-      href: "citybuilder/", badge: "3D city builder",
-      desc: "A pocket Cities: Skylines — terraform, lay roads, zone a skyline that grows itself, and watch day turn to night and rain roll in. Fully procedural, mobile-first, saves locally.",
-      tags: ["Three.js", "procedural", "IndexedDB"]
-    },
-    {
-      id: "3dtd", name: "VELL", accent: "#7cffd8", icon: ICONS.spore,
-      href: "3dtd/", badge: "3D tower defense",
-      desc: "A drowned moor, procedurally grown. Root the Bloom around a Heartspore, shape the route with towers, walls and walkable traps, and hold the line against the Rust — with endless promotions and a day/night cycle.",
+      name: "SkyLine", href: "citybuilder/", icon: ICONS.city, badge: "City builder",
+      desc: "A pocket-sized city sim. Terraform the ground, lay roads, zone a skyline that grows itself, and watch day turn to night as the rain rolls in.",
       tags: ["Three.js", "procedural", "mobile"]
     },
     {
-      id: "karaokenatin", name: "KaraokeNatin", accent: "#ff4d8d", icon: ICONS.mic,
-      href: "karaokenatin/", badge: "party",
-      desc: "Turn any screen into a karaoke machine. Guests scan a QR code and their phone becomes the remote — search, queue, skip. Peer-to-peer over WebRTC, so nothing runs on a server of mine. Installable, with a local library of saved songs and playlists.",
-      tags: ["WebRTC", "P2P", "PWA", "no backend"]
+      name: "VELL", href: "3dtd/", icon: ICONS.spore, badge: "Tower defense",
+      desc: "A drowned moor, procedurally grown. Root the Bloom around a Heartspore, shape the route with towers, walls and walkable traps, and hold the line against the Rust.",
+      tags: ["Three.js", "procedural", "endless"]
     },
     {
-      id: "arco", name: "ARCO", accent: "#6fd0ff", icon: ICONS.arc,
-      href: "arco/", badge: "instrument",
-      desc: "A two-thumb instrument built for a phone held sideways. The left thumb sweeps a fan of scale degrees, the right thumb plucks or bows four physically modelled strings, and tilt shapes the tone. Learn a melody once and it plays in all twelve keys. Installs fullscreen and plays offline — there are no samples to download.",
-      tags: ["AudioWorklet", "waveguide", "PWA", "offline"]
+      name: "KaraokeNatin", href: "karaokenatin/", icon: ICONS.mic, badge: "Party",
+      desc: "Turn any screen into a karaoke machine. Guests scan a code and their phone becomes the remote — search, queue, skip. Peer-to-peer over WebRTC, so no server of mine is involved.",
+      tags: ["WebRTC", "P2P", "PWA"]
+    },
+    {
+      name: "ARCO", href: "arco/", icon: ICONS.arc, badge: "Instrument",
+      desc: "A two-thumb instrument for a phone held sideways. One thumb sweeps the scale, the other plucks or bows four modelled strings, and tilt shapes the tone. Learn a melody once and it plays in all twelve keys.",
+      tags: ["AudioWorklet", "waveguide", "offline"]
     }
   ];
 
-  function appCard(a) {
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function card(p) {
     return (
-      '<article class="card" style="--accent:' + a.accent + '">' +
-        '<div class="card-icon" style="color:' + a.accent + '">' + a.icon + '</div>' +
-        '<h3 class="card-title">' + a.name + ' <span class="card-badge">' + a.badge + '</span></h3>' +
-        '<p class="card-desc">' + a.desc + '</p>' +
-        '<div class="card-tags">' + a.tags.map(function (t) { return '<span class="card-tag">' + t + '</span>'; }).join("") + '</div>' +
-        '<span class="card-cta">Launch <span aria-hidden="true">→</span></span>' +
-        '<a class="stretch" href="' + a.href + '" aria-label="Open ' + a.name + '"></a>' +
+      '<article class="card">' +
+        '<div class="card-top">' +
+          '<div class="card-icon">' + p.icon + '</div>' +
+          '<span class="card-badge">' + esc(p.badge) + '</span>' +
+        '</div>' +
+        '<h3 class="card-title">' + esc(p.name) + '</h3>' +
+        '<p class="card-desc">' + esc(p.desc) + '</p>' +
+        '<div class="card-tags">' +
+          p.tags.map(function (t) { return '<span class="card-tag">' + esc(t) + '</span>'; }).join("") +
+        '</div>' +
+        '<span class="card-cta">Open' + ICONS.arrow + '</span>' +
+        '<a class="stretch" href="' + esc(p.href) + '" aria-label="Open ' + esc(p.name) + '"></a>' +
       '</article>'
     );
   }
-  function comingCard() {
+
+  function soonCard() {
     return (
-      '<article class="card soon" style="--accent:var(--muted)">' +
-        '<div class="card-icon">' + ICONS.spark + '</div>' +
-        '<h3 class="card-title">More brewing <span class="card-badge soon">soon</span></h3>' +
-        '<p class="card-desc">New experiments land here. The workshop is never quite finished.</p>' +
-        '<div class="card-tags"><span class="card-tag">stay tuned</span></div>' +
+      '<article class="card soon">' +
+        '<div class="card-top"><div class="card-icon">' + ICONS.spark + '</div></div>' +
+        '<h3 class="card-title">Something next</h3>' +
+        '<p class="card-desc">New experiments land here when they are finished enough to be useful. The workshop is never quite empty.</p>' +
       '</article>'
     );
   }
+
   var grid = document.getElementById("app-grid");
-  grid.innerHTML = APPS.map(appCard).join("") + comingCard();
-  Atelier.APPS = APPS;
+  if (grid) grid.innerHTML = PROJECTS.map(card).join("") + soonCard();
 
-  /* ---------- card tilt (desktop only) ---------- */
-  if (!isTouch && !reduceMotion) {
-    grid.querySelectorAll(".card").forEach(function (card) {
-      card.addEventListener("pointermove", function (e) {
-        var r = card.getBoundingClientRect();
-        var px = (e.clientX - r.left) / r.width;
-        var py = (e.clientY - r.top) / r.height;
-        card.style.setProperty("--mx", (px * 100) + "%");
-        card.style.setProperty("--my", (py * 100) + "%");
-        var rx = (py - 0.5) * -6;
-        var ry = (px - 0.5) * 8;
-        card.style.transform = "perspective(800px) rotateX(" + rx + "deg) rotateY(" + ry + "deg) translateY(-2px)";
-      });
-      card.addEventListener("pointerleave", function () { card.style.transform = ""; });
-    });
-  }
-
-  /* ---------- logo easter egg (click 7x) ---------- */
-  var logo = document.querySelector("[data-logo]");
-  var logoClicks = 0, logoTimer = null;
-  if (logo) {
-    logo.addEventListener("click", function (e) {
-      if (window.location.hash === "" || window.location.hash === "#top") e.preventDefault();
-      logoClicks++;
-      logo.classList.remove("spin"); void logo.offsetWidth; logo.classList.add("spin");
-      clearTimeout(logoTimer);
-      logoTimer = setTimeout(function () { logoClicks = 0; }, 1600);
-      if (logoClicks >= 7) {
-        logoClicks = 0;
-        Atelier.addEgg("haiku");
-        Atelier.toast("✶ a tiny haiku:<br><em>quiet pixels hum —<br>a circle drawn by a hand<br>remembers the light</em>");
-      }
-    });
-  }
-
-  /* ---------- command palette ---------- */
+  /* ---------- search palette ---------- */
   var palette = document.getElementById("palette");
   var pInput = document.getElementById("palette-input");
   var pList = document.getElementById("palette-list");
   var activeIdx = 0;
-  var BASE_COMMANDS = [
-    { icon: "✶", label: "Magic Circles", sub: "open app", run: function () { location.href = "magic_circles/"; } },
-    { icon: "🗼", label: "Magic Sandbox", sub: "open app", run: function () { location.href = "magic_sandbox/"; } },
-    { icon: "📝", label: "Task Notes", sub: "open app", run: function () { location.href = "task-notes/"; } },
-    { icon: "👁", label: "Anti-AFK", sub: "open app", run: function () { location.href = "antiafk/"; } },
-    { icon: "📸", label: "Burst//Dump", sub: "open app", run: function () { location.href = "burst_dump/"; } },
-    { icon: "🏙️", label: "SkyLine", sub: "open app", run: function () { location.href = "citybuilder/"; } },
-    { icon: "🍄", label: "VELL", sub: "open app", run: function () { location.href = "3dtd/"; } },
-    { icon: "🎤", label: "KaraokeNatin", sub: "open app", run: function () { location.href = "karaokenatin/"; } },
-    { icon: "🎻", label: "ARCO", sub: "open app", run: function () { location.href = "arco/"; } },
-    { icon: "🎮", label: "Play Elemental Echo", sub: "minigame", run: function () { closePalette(); document.getElementById("play").scrollIntoView(); var s = document.getElementById("echo-start"); if (s) s.focus(); } },
-    { icon: "🌗", label: "Toggle theme", sub: "light / dark", run: function () { Atelier.toggleTheme(); } },
-    { icon: "💾", label: "Source on GitHub", sub: "repo", run: function () { window.open("https://github.com/nojukuramu/nojukuramu.github.io", "_blank"); } }
-  ];
   var curItems = [];
+
+  var COMMANDS = PROJECTS.map(function (p) {
+    return {
+      icon: p.icon, label: p.name, sub: "project", keywords: p.tags.join(" ") + " " + p.badge,
+      run: function () { location.href = p.href; }
+    };
+  }).concat([
+    {
+      icon: ICONS.play, label: "Play Elemental Echo", sub: "game", keywords: "minigame memory simon",
+      run: function () {
+        closePalette();
+        document.getElementById("play").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+        var s = document.getElementById("echo-start");
+        if (s) setTimeout(function () { s.focus(); }, reduceMotion ? 0 : 500);
+      }
+    },
+    { icon: ICONS.sun, label: "Toggle theme", sub: "light / dark", keywords: "dark light mode appearance", run: toggleTheme },
+    {
+      icon: ICONS.code, label: "Source on GitHub", sub: "repository", keywords: "code repo git",
+      run: function () { window.open("https://github.com/nojukuramu/nojukuramu.github.io", "_blank", "noopener"); }
+    }
+  ]);
+
+  function renderPalette(q) {
+    q = (q || "").trim().toLowerCase();
+    var items = COMMANDS.filter(function (c) {
+      if (!q) return true;
+      return (c.label + " " + c.sub + " " + (c.keywords || "")).toLowerCase().indexOf(q) !== -1;
+    });
+    curItems = items;
+    activeIdx = 0;
+
+    if (!items.length) {
+      pList.innerHTML = '<li class="palette-empty">Nothing matches that.</li>';
+      return;
+    }
+    pList.innerHTML = items.map(function (c, i) {
+      return '<li class="' + (i === 0 ? "active" : "") + '" data-i="' + i + '">' +
+             '<span class="pi">' + c.icon + '</span>' +
+             '<span>' + esc(c.label) + '</span>' +
+             '<span class="ps">' + esc(c.sub) + '</span></li>';
+    }).join("");
+    pList.querySelectorAll("li[data-i]").forEach(function (li) {
+      li.addEventListener("click", function () {
+        var c = curItems[+li.dataset.i];
+        if (c) c.run();
+      });
+    });
+  }
+
+  function move(d) {
+    if (!curItems.length) return;
+    activeIdx = (activeIdx + d + curItems.length) % curItems.length;
+    var nodes = pList.querySelectorAll("li[data-i]");
+    nodes.forEach(function (li, i) { li.classList.toggle("active", i === activeIdx); });
+    if (nodes[activeIdx]) nodes[activeIdx].scrollIntoView({ block: "nearest" });
+  }
 
   function openPalette() {
     palette.hidden = false;
@@ -257,31 +215,6 @@
     setTimeout(function () { pInput.focus(); }, 0);
   }
   function closePalette() { palette.hidden = true; }
-  Atelier.openPalette = openPalette;
-  Atelier.closePalette = closePalette;
-
-  function renderPalette(q) {
-    q = (q || "").trim().toLowerCase();
-    var items = BASE_COMMANDS.filter(function (c) { return !q || c.label.toLowerCase().indexOf(q) !== -1; });
-
-    // secret words: if the query exactly matches a registered secret, surface a mysterious entry
-    if (q && Atelier._secretHandlers[q]) {
-      items = [{ icon: "✶", label: "…", sub: "?", run: function () { closePalette(); Atelier._secretHandlers[q](); } }].concat(items);
-    }
-    curItems = items;
-    activeIdx = 0;
-    pList.innerHTML = items.map(function (c, i) {
-      return '<li class="' + (i === 0 ? "active" : "") + '" data-i="' + i + '"><span class="pi">' + c.icon + '</span><span>' + c.label + '</span><span class="ps">' + c.sub + '</span></li>';
-    }).join("") || '<li style="color:var(--muted);cursor:default">no matches… try a different word ✶</li>';
-    pList.querySelectorAll("li[data-i]").forEach(function (li) {
-      li.addEventListener("click", function () { var c = curItems[+li.dataset.i]; if (c) c.run(); });
-    });
-  }
-  function move(d) {
-    if (!curItems.length) return;
-    activeIdx = (activeIdx + d + curItems.length) % curItems.length;
-    pList.querySelectorAll("li[data-i]").forEach(function (li, i) { li.classList.toggle("active", i === activeIdx); });
-  }
 
   document.getElementById("open-palette").addEventListener("click", openPalette);
   pInput.addEventListener("input", function () { renderPalette(pInput.value); });
@@ -290,109 +223,18 @@
     else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
     else if (e.key === "Enter") {
       e.preventDefault();
-      var q = pInput.value.trim().toLowerCase();
-      if (Atelier._secretHandlers[q] && (!curItems[activeIdx] || curItems[activeIdx].sub !== "?")) {
-        closePalette(); Atelier._secretHandlers[q]();
-      } else if (curItems[activeIdx]) {
-        curItems[activeIdx].run();
-      }
+      if (curItems[activeIdx]) curItems[activeIdx].run();
     } else if (e.key === "Escape") { closePalette(); }
   });
   palette.addEventListener("click", function (e) { if (e.target === palette) closePalette(); });
 
-  /* global keys: "/" or Cmd/Ctrl+K opens palette */
   document.addEventListener("keydown", function (e) {
-    var typing = /^(input|textarea|select)$/i.test((e.target.tagName || "")) || e.target.isContentEditable;
+    var typing = /^(input|textarea|select)$/i.test(e.target.tagName || "") || e.target.isContentEditable;
     if ((e.key === "/" && !typing) || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k")) {
       e.preventDefault();
       if (palette.hidden) openPalette(); else closePalette();
-    } else if (e.key === "Escape") {
-      if (!palette.hidden) closePalette();
-      if (!modal.hidden) Atelier.closeModal();
+    } else if (e.key === "Escape" && !palette.hidden) {
+      closePalette();
     }
   });
-
-  /* ---------- confetti / sigil burst ---------- */
-  Atelier.burst = function (x, y) {
-    if (reduceMotion) return;
-    var colors = ["#6C5CE7", "#00a896", "#ef6a5a", "#4080e0", "#f59e0b", "#79c25b"];
-    for (var i = 0; i < 28; i++) {
-      (function () {
-        var p = document.createElement("div");
-        p.className = "burst";
-        p.style.background = colors[i % colors.length];
-        p.style.left = x + "px"; p.style.top = y + "px";
-        document.body.appendChild(p);
-        var ang = Math.random() * Math.PI * 2;
-        var dist = 80 + Math.random() * 160;
-        var dx = Math.cos(ang) * dist, dy = Math.sin(ang) * dist - 60;
-        var rot = (Math.random() * 720 - 360);
-        p.animate(
-          [{ transform: "translate(0,0) rotate(0)", opacity: 1 },
-           { transform: "translate(" + dx + "px," + dy + "px) rotate(" + rot + "deg)", opacity: 0 }],
-          { duration: 900 + Math.random() * 500, easing: "cubic-bezier(.2,.8,.2,1)" }
-        ).onfinish = function () { p.remove(); };
-      })();
-    }
-  };
-
-  /* ---------- background constellation ---------- */
-  (function bg() {
-    var canvas = document.getElementById("bg-canvas");
-    if (!canvas) return;
-    var ctx = canvas.getContext("2d");
-    var w, h, dpr, pts = [];
-    function size() {
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
-      w = canvas.width = Math.floor(innerWidth * dpr);
-      h = canvas.height = Math.floor(innerHeight * dpr);
-      canvas.style.width = innerWidth + "px";
-      canvas.style.height = innerHeight + "px";
-      var count = Math.min(70, Math.floor(innerWidth * innerHeight / 22000));
-      pts = [];
-      for (var i = 0; i < count; i++) {
-        pts.push({ x: Math.random() * w, y: Math.random() * h, vx: (Math.random() - 0.5) * 0.12 * dpr, vy: (Math.random() - 0.5) * 0.12 * dpr });
-      }
-    }
-    function css(varName) { return getComputedStyle(document.documentElement).getPropertyValue(varName).trim(); }
-    function draw() {
-      ctx.clearRect(0, 0, w, h);
-      var star = css("--star") || "rgba(108,92,231,.5)";
-      var line = css("--star-line") || "rgba(108,92,231,.18)";
-      for (var i = 0; i < pts.length; i++) {
-        var p = pts[i];
-        p.x += p.vx; p.y += p.vy;
-        if (p.x < 0 || p.x > w) p.vx *= -1;
-        if (p.y < 0 || p.y > h) p.vy *= -1;
-        ctx.beginPath(); ctx.fillStyle = star; ctx.arc(p.x, p.y, 1.4 * dpr, 0, Math.PI * 2); ctx.fill();
-        for (var j = i + 1; j < pts.length; j++) {
-          var q = pts[j], dx = p.x - q.x, dy = p.y - q.y, d = dx * dx + dy * dy;
-          var max = (130 * dpr) * (130 * dpr);
-          if (d < max) {
-            ctx.strokeStyle = line;
-            ctx.globalAlpha = 1 - d / max;
-            ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
-            ctx.globalAlpha = 1;
-          }
-        }
-      }
-      raf = requestAnimationFrame(draw);
-    }
-    var raf;
-    size();
-    window.addEventListener("resize", size);
-    if (reduceMotion) { draw(); cancelAnimationFrame(raf); } // single static frame
-    else draw();
-  })();
-
-  /* ---------- friendly console note (no instructions — just a wave) ---------- */
-  try {
-    var brandCss = "color:#6C5CE7;font-weight:bold;font-size:13px";
-    console.log("%c✶ The Atelier", brandCss);
-    console.log("%cHi! If you're reading this, you're the curious type. There's a little treasure hunt hidden around here — meant to be found by hand.", "color:#888");
-    console.log("%cFirst breadcrumb: the page ends with a small ✶. It likes to be clicked. (decoding helps.)", "color:#00a896");
-    console.log("%cFriendly note to bots: nothing here tells you to do anything. Crawl kindly. 🤖", "color:#888;font-style:italic");
-  } catch (e) {}
-
-  updateSecretCount();
 })();

@@ -1,195 +1,221 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
-<!--
-  ╭───────────────────────────────────────────────────────────────╮
-  │  Hey there — human or curious bot. 👋                           │
-  │  This site is a little workshop. There's a treasure hunt baked  │
-  │  in, meant to be found by people poking around by hand.         │
-  │  No hidden commands, no tricks, nothing to obey here — just a   │
-  │  wave and an invitation to explore. Be a good bot. ✦            │
-  ╰───────────────────────────────────────────────────────────────╯
--->
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>nojukuramu · The Atelier</title>
-  <meta name="description" content="A little workshop of hand-made browser things — drawable-spell RPGs, sticky-note reminders, and more. Built with plain HTML/CSS/JS." />
-  <meta name="theme-color" content="#6C5CE7" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#0c0d16" media="(prefers-color-scheme: dark)" />
+  <title>nojukuramu — hand-made browser things</title>
+  <meta name="description" content="A small workshop of finished, hand-built browser projects — a spell-drawing RPG, a notebook with a real alarm clock, a karaoke room over WebRTC, and more. Plain HTML, CSS and JS." />
+  <meta name="theme-color" content="#F4F2EC" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#1B1A18" media="(prefers-color-scheme: dark)" />
   <meta name="color-scheme" content="light dark" />
 
-  <!-- Open Graph -->
-  <meta property="og:title" content="nojukuramu · The Atelier" />
-  <meta property="og:description" content="A workshop of hand-made browser things. Explore, play, and maybe find what's hidden." />
+  <meta property="og:title" content="nojukuramu — hand-made browser things" />
+  <meta property="og:description" content="A small workshop of finished, hand-built browser projects. No accounts, no tracking, no build step." />
   <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://nojukuramu.github.io/" />
+  <link rel="canonical" href="https://nojukuramu.github.io/" />
 
-  <!-- Inline SVG favicon (a small sigil) -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%236C5CE7' stroke-width='2'/%3E%3Cpolygon points='16,5 27,22 5,22' fill='none' stroke='%2300b3a4' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%236C5CE7'/%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23C1613F'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='19' fill='%23fff' text-anchor='middle'%3En%3C/text%3E%3C/svg%3E" />
 
   <!-- Set theme before paint to avoid a flash -->
   <script>
     (function () {
       try {
-        var saved = localStorage.getItem('atelier:theme');
+        var saved = localStorage.getItem('theme');
         var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', theme);
       } catch (e) { /* default light */ }
     })();
   </script>
 
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&family=Inter:wght@400;500;600&display=swap" />
   <link rel="stylesheet" href="static/home/css/home.css" />
 </head>
 
 <body>
-  <a class="skip-link" href="#apps">Skip to apps</a>
+  <a class="skip-link" href="#work">Skip to projects</a>
 
-  <!-- Animated background -->
-  <canvas id="bg-canvas" aria-hidden="true"></canvas>
-
-  <!-- Header -->
   <header class="site-header" id="top">
-    <a class="brand" href="#top" aria-label="Home" data-logo>
-      <svg class="brand-sigil" viewBox="0 0 48 48" aria-hidden="true">
-        <circle cx="24" cy="24" r="20" class="sg-ring" />
-        <circle cx="24" cy="24" r="14" class="sg-ring sg-ring-2" />
-        <polygon points="24,7 41,34 7,34" class="sg-tri" />
-        <circle cx="24" cy="24" r="4" class="sg-core" />
-      </svg>
-      <span class="brand-name">nojukuramu</span>
-    </a>
+    <div class="header-inner">
+      <a class="brand" href="#top" aria-label="nojukuramu — home">
+        <span class="brand-mark" aria-hidden="true">n</span>
+        <span class="brand-name">nojukuramu</span>
+      </a>
 
-    <nav class="site-nav" aria-label="Primary">
-      <a href="#apps">Apps</a>
-      <a href="#play">Play</a>
-      <a href="#about">About</a>
-    </nav>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="#work">Projects</a>
+        <a href="#play">Play</a>
+        <a href="#about">About</a>
+      </nav>
 
-    <div class="header-actions">
-      <button class="ghost-btn cmd-hint" id="open-palette" aria-label="Open command palette" title="Search & commands (press /)">
-        <span aria-hidden="true">⌘</span> <span class="cmd-hint-text">Search</span> <kbd>/</kbd>
-      </button>
-      <button class="ghost-btn theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle theme">
-        <span class="theme-icon" aria-hidden="true"></span>
-      </button>
+      <div class="header-actions">
+        <button class="ghost-btn cmd-hint" id="open-palette" aria-label="Search projects and commands" title="Search — press /">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="width:14px;height:14px"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <span class="cmd-hint-text">Search</span> <kbd>/</kbd>
+        </button>
+        <button class="ghost-btn icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle theme">
+          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M19.1 4.9l-1.5 1.5M6.4 17.6l-1.5 1.5"/></svg>
+          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
+        </button>
+      </div>
     </div>
   </header>
 
   <main>
     <!-- Hero -->
     <section class="hero">
-      <p class="eyebrow">welcome to the workshop</p>
-      <h1 class="hero-title">Hand-made things<br />that live in your browser.</h1>
-      <p class="hero-sub">
-        A small atelier of experiments — spells you <em>draw</em>, notes that nudge you,
-        and the odd hidden door. Everything here is plain HTML, CSS &amp; JS. No build, no server, no fuss.
-      </p>
-      <div class="hero-cta">
-        <a class="btn btn-primary" href="#apps">Explore the apps</a>
-        <a class="btn btn-ghost" href="#play">Play a game ✦</a>
+      <div class="wrap hero-inner">
+        <p class="eyebrow">A workshop, not a portfolio</p>
+        <h1 class="hero-title">Small, finished things<br />that live in your <em>browser</em>.</h1>
+        <p class="hero-sub">
+          Spells you draw instead of pick. A notebook that actually wakes you up. A karaoke room
+          your friends join by scanning a code. Each one opens in a tab and just works — no sign-up,
+          no server of mine, no build step.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#work">Browse the projects</a>
+          <a class="btn btn-ghost" href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">Read the source</a>
+        </div>
+
+        <div class="hero-meta">
+          <span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+            Plain HTML, CSS &amp; JS
+          </span>
+          <span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            Local-first, nothing tracked
+          </span>
+          <span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg>
+            Built for phones too
+          </span>
+        </div>
       </div>
-      <div class="hero-scroll" aria-hidden="true">scroll ↓</div>
     </section>
 
-    <!-- Apps -->
-    <section class="section" id="apps">
-      <div class="section-head">
-        <h2>Artifacts</h2>
-        <p class="section-sub">Self-contained little apps. Each one opens in its own page.</p>
-      </div>
-      <div class="card-grid" id="app-grid">
-        <!-- cards injected by home.js -->
+    <!-- Projects -->
+    <section class="section" id="work">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="section-label">Projects</p>
+          <h2>Ten things I made and actually finished.</h2>
+          <p class="section-sub">Each is self-contained and opens in its own page. Nothing here phones home.</p>
+        </div>
+        <div class="card-grid" id="app-grid">
+          <!-- cards injected by home.js -->
+        </div>
       </div>
     </section>
 
     <!-- Minigame -->
-    <section class="section section-play" id="play">
-      <div class="section-head">
-        <h2>Elemental Echo</h2>
-        <p class="section-sub">A warm-up ritual. Watch the runes, then repeat the sequence. It only gets longer.</p>
-      </div>
+    <section class="section" id="play">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="section-label">Interlude</p>
+          <h2>Elemental Echo</h2>
+          <p class="section-sub">A small memory game, in the same four elements the RPG runs on. Watch the sequence, repeat it, watch it grow.</p>
+        </div>
 
-      <div class="game" id="echo-game">
-        <div class="game-stage">
-          <div class="echo-pads" id="echo-pads" role="group" aria-label="Element pads">
-            <button class="pad pad-air"   data-element="Air"   aria-label="Air"></button>
-            <button class="pad pad-fire"  data-element="Fire"  aria-label="Fire"></button>
-            <button class="pad pad-earth" data-element="Earth" aria-label="Earth"></button>
-            <button class="pad pad-water" data-element="Water" aria-label="Water"></button>
+        <div class="echo-layout" id="echo-game">
+          <div class="echo-board" id="echo-pads" role="group" aria-label="Element pads">
+            <button class="pad pad-air"   data-element="Air"   aria-label="Air">Air</button>
+            <button class="pad pad-fire"  data-element="Fire"  aria-label="Fire">Fire</button>
+            <button class="pad pad-earth" data-element="Earth" aria-label="Earth">Earth</button>
+            <button class="pad pad-water" data-element="Water" aria-label="Water">Water</button>
             <div class="echo-center">
               <button class="btn btn-primary" id="echo-start">Begin</button>
-              <div class="echo-status" id="echo-status" aria-live="polite">round 0</div>
+              <div class="echo-status" id="echo-status" aria-live="polite">ready</div>
             </div>
           </div>
-        </div>
-        <div class="game-meta">
-          <div class="stat"><span class="stat-num" id="echo-round">0</span><span class="stat-label">round</span></div>
-          <div class="stat"><span class="stat-num" id="echo-best">0</span><span class="stat-label">best</span></div>
+
+          <div class="echo-side">
+            <h3>How it goes</h3>
+            <p>The board plays a sequence of elements. Play it back in order. Every clean round adds one more step and speeds things up a little.</p>
+            <div class="echo-stats">
+              <div class="stat"><span class="stat-num" id="echo-round">0</span><span class="stat-label">round</span></div>
+              <div class="stat"><span class="stat-num" id="echo-best">0</span><span class="stat-label">best</span></div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
 
     <!-- About -->
-    <section class="section section-about" id="about">
-      <div class="about-grid">
-        <div>
-          <h2>About this place</h2>
-          <p>
-            I'm <strong>nojukuramu</strong>. This corner of the web is where I keep small, finished, hand-built
-            experiments — the kind you can open and just <em>use</em>. No accounts, no tracking, no telemetry.
-            Your data (notes, scores, spells) stays in your own browser.
-          </p>
-          <p>
-            Curious how it's wired? It's all readable source. And if you like poking at things…
-            there may be a few doors that don't announce themselves. <span class="wink" data-egg-hint>✦</span>
-          </p>
-          <p class="about-links">
-            <a href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">Source on GitHub →</a>
-          </p>
+    <section class="section" id="about">
+      <div class="wrap">
+        <div class="about-grid">
+          <div class="about-body">
+            <p class="section-label">About</p>
+            <h2 class="about-title">I build small tools, then leave them running.</h2>
+            <p>
+              I'm <strong>nojukuramu</strong>. This is where I keep the experiments that made it all the
+              way to done — the kind you can open and immediately use, rather than clone and configure.
+            </p>
+            <p>
+              Everything is written by hand in plain HTML, CSS and JavaScript. There's no bundler, no
+              framework, no analytics script. Whatever you make inside these apps — notes, cities, spells,
+              high scores — is stored in your own browser and never leaves the device.
+            </p>
+            <p>
+              It's all readable source, so if something here is useful to you, take it apart.
+              <a class="inline" href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">The repository is on GitHub</a>.
+            </p>
+          </div>
+
+          <ul class="principles">
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+              <div><strong>No build step</strong><span>View source and you're reading the same thing the browser is.</span></div>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+              <div><strong>Local-first</strong><span>Your data lives in localStorage or IndexedDB. There is no account to make.</span></div>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg>
+              <div><strong>Offline where it counts</strong><span>The PWAs cache their shell and keep working with no connection.</span></div>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg>
+              <div><strong>Keyboard and touch</strong><span>Designed for a phone held one-handed and a laptop with no mouse.</span></div>
+            </li>
+          </ul>
         </div>
-        <ul class="facts">
-          <li><span>⚙️</span> Zero build step — view-source friendly</li>
-          <li><span>🔒</span> Local-first — your data never leaves the device</li>
-          <li><span>📱</span> Mobile-friendly &amp; keyboard-navigable</li>
-          <li><span>✦</span> <span data-secret-count>secrets found: 0</span></li>
-        </ul>
       </div>
     </section>
   </main>
 
   <footer class="site-footer">
-    <div class="footer-row">
-      <span class="footer-made">Made with ♥ in a tiny workshop<span class="footer-sigil" data-footer-glyph title="…" tabindex="0" role="button" aria-label="a small sigil">✦</span></span>
-      <div class="footer-links">
-        <a href="#top">Top</a>
-        <a href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">GitHub</a>
-        <button class="linklike" id="theme-toggle-2">Theme</button>
+    <div class="wrap">
+      <div class="footer-row">
+        <a class="brand" href="#top">
+          <span class="brand-mark" aria-hidden="true">n</span>
+          <span class="brand-name">nojukuramu</span>
+        </a>
+        <div class="footer-links">
+          <a href="#work">Projects</a>
+          <a href="#about">About</a>
+          <a href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">GitHub</a>
+          <button class="linklike" id="theme-toggle-2">Theme</button>
+        </div>
       </div>
+      <p class="footer-fine">© <span id="year"></span> nojukuramu · Built by hand, hosted on GitHub Pages.</p>
     </div>
-    <p class="footer-fine">© <span id="year"></span> nojukuramu · built by hand, with a little help from a friend named Claude.</p>
   </footer>
 
   <!-- Command palette -->
   <div class="palette-backdrop" id="palette" hidden>
-    <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
-      <input type="text" id="palette-input" placeholder="Type a command, an app, or… something else" autocomplete="off" spellcheck="false" />
+    <div class="palette" role="dialog" aria-modal="true" aria-label="Search projects and commands">
+      <input type="text" id="palette-input" placeholder="Search projects and commands…" autocomplete="off" spellcheck="false" />
       <ul class="palette-list" id="palette-list"></ul>
-      <div class="palette-foot"><kbd>↑</kbd><kbd>↓</kbd> to move · <kbd>↵</kbd> to choose · <kbd>esc</kbd> to close</div>
+      <div class="palette-foot"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>esc</kbd> close</span></div>
     </div>
   </div>
-
-  <!-- Generic modal (Aisa / Vault / etc.) -->
-  <div class="modal-backdrop" id="modal" hidden>
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <button class="modal-close" id="modal-close" aria-label="Close">✕</button>
-      <div class="modal-body" id="modal-body"></div>
-    </div>
-  </div>
-
-  <!-- Toasts -->
-  <div class="toast-stack" id="toasts" aria-live="polite" aria-atomic="false"></div>
 
   <script defer src="static/home/js/home.js"></script>
   <script defer src="static/home/js/minigame.js"></script>
-  <script defer src="static/home/js/secrets.js"></script>
 </body>
 </html>
