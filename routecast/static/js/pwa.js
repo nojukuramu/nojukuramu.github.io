@@ -13,7 +13,13 @@
      --------------------------------------------------------- */
   function isStandalone() {
     try {
-      return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+      // The manifest declares display_override, so an installed app can report
+      // fullscreen or minimal-ui rather than standalone. Checking only
+      // standalone left the install button showing inside the installed app.
+      return (window.matchMedia && (
+          window.matchMedia("(display-mode: standalone)").matches ||
+          window.matchMedia("(display-mode: fullscreen)").matches ||
+          window.matchMedia("(display-mode: minimal-ui)").matches)) ||
         window.navigator.standalone === true;
     } catch (e) { return false; }
   }
