@@ -1,0 +1,19 @@
+{
+  "name": "RouteCast — weather along your route",
+  "short_name": "RouteCast",
+  "description": "Plan a car or motorcycle route and see the weather waiting for you at each point, at the hour you will actually be there.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F4F2EC",
+  "theme_color": "#C1613F",
+  "icons": [
+    {
+      "src": "static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

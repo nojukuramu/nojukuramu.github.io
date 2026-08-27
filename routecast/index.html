@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>RouteCast — weather along your route</title>
+  <meta name="description" content="Plan a drive or ride and see the weather waiting for you at every checkpoint along the way — rain, wind and risk, timed to your ETA." />
+  <meta name="theme-color" content="#F4F2EC" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#1B1A18" media="(prefers-color-scheme: dark)" />
+  <meta name="color-scheme" content="light dark" />
+
+  <meta property="og:title" content="RouteCast — weather along your route" />
+  <meta property="og:description" content="Plan a drive or ride and see the weather waiting for you at every checkpoint along the way." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://nojukuramu.github.io/routecast/" />
+  <link rel="canonical" href="https://nojukuramu.github.io/routecast/" />
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23C1613F'/%3E%3Cpath d='M8 20c0-6 4-11 8-11s8 5 8 11' stroke='%23fff' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='22.5' r='2.4' fill='%23fff'/%3E%3C/svg%3E" />
+
+  <!-- Set theme before paint to avoid a flash -->
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('theme');
+        var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) { /* default light */ }
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&family=Inter:wght@400;500;600&display=swap" />
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="static/css/app.css" />
+</head>
+
+<body>
+  <div class="rc-app">
+    <header class="rc-header">
+      <a class="rc-back" href="../" aria-label="Back to nojukuramu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 5l-7 7 7 7M9.5 12H21"/></svg>
+      </a>
+      <div class="rc-wordmark">
+        <span class="rc-wordmark-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21.5s-6.8-6.3-6.8-11.3a6.8 6.8 0 1 1 13.6 0c0 5-6.8 11.3-6.8 11.3Z"/><circle cx="12" cy="10.2" r="2.3"/></svg>
+        </span>
+        RouteCast
+      </div>
+      <div class="rc-header-actions">
+        <button class="rc-iconbtn" id="units" type="button" aria-label="Toggle units" title="Toggle units">km</button>
+        <button class="rc-iconbtn" id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle theme">
+          <svg class="rc-theme-icon rc-theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.6M12 18.9v2.6M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M2.5 12h2.6M18.9 12h2.6M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/></svg>
+          <svg class="rc-theme-icon rc-theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="rc-body">
+      <div id="map" class="rc-map"></div>
+
+      <aside id="panel" class="rc-panel" data-sheet="open">
+        <button class="rc-sheet-handle" id="sheet-handle" type="button" aria-label="Expand or collapse panel"></button>
+
+        <div class="rc-panel-scroll">
+          <div class="rc-empty" id="empty-state">
+            <p>RouteCast plans a drive or ride between two places and checks the forecast at every
+            stretch along the way, so you know exactly where the rain, wind or heat will catch you —
+            timed to when you'll actually be there.</p>
+          </div>
+
+          <div id="status" class="rc-status" role="status" aria-live="polite"></div>
+
+          <form id="plan-form" class="rc-form" autocomplete="off">
+            <div class="rc-field-group">
+              <label class="rc-label" for="from-input">From</label>
+              <div class="rc-input-row">
+                <input type="text" id="from-input" class="rc-input" placeholder="Starting point" />
+                <button type="button" class="rc-inputbtn" id="use-location" aria-label="Use my location" title="Use my location">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3"/><circle cx="12" cy="12" r="4.6"/></svg>
+                </button>
+              </div>
+              <ul id="from-results" class="rc-results" hidden></ul>
+            </div>
+
+            <div class="rc-swap-row">
+              <button type="button" class="rc-inputbtn rc-swap" id="swap-btn" aria-label="Swap from and to">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 4v13.5M6.5 4L3 7.5M6.5 4L10 7.5"/><path d="M17.5 20V6.5M17.5 20L21 16.5M17.5 20L14 16.5"/></svg>
+              </button>
+            </div>
+
+            <div class="rc-field-group">
+              <label class="rc-label" for="to-input">To</label>
+              <div class="rc-input-row">
+                <input type="text" id="to-input" class="rc-input" placeholder="Destination" />
+              </div>
+              <ul id="to-results" class="rc-results" hidden></ul>
+            </div>
+
+            <div id="stops" class="rc-stops"></div>
+
+            <button type="button" class="rc-textbtn" id="add-stop">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              Add a stop
+            </button>
+
+            <div class="rc-field-group">
+              <span class="rc-label">Vehicle</span>
+              <div class="rc-segmented" role="group" aria-label="Vehicle">
+                <button type="button" id="vehicle-car" class="rc-seg-btn" aria-pressed="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 16.5V12l1.7-4.3A2 2 0 0 1 8 6.4h8a2 2 0 0 1 1.8 1.3L19.5 12v4.5"/><path d="M4.5 16.5h15v2.2a1 1 0 0 1-1 1h-1.3a1 1 0 0 1-1-1v-1.2h-8.4v1.2a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1v-2.2Z"/><path d="M4.5 12h15M8 12V8.4M16 12V8.4"/></svg>
+                  Car
+                </button>
+                <button type="button" id="vehicle-moto" class="rc-seg-btn" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.5" cy="17" r="2.6"/><circle cx="18.5" cy="17" r="2.6"/><path d="M5.5 17l3.5-6h4.3l1 2.4h3.3l1.9 3.6M9 11l-1.7-2.6h3M13.3 11l1.6-2.6"/></svg>
+                  Motorcycle
+                </button>
+              </div>
+            </div>
+
+            <div class="rc-field-row">
+              <div class="rc-field-group">
+                <label class="rc-label" for="depart-mode">Depart</label>
+                <select id="depart-mode" class="rc-select">
+                  <option value="now">Now</option>
+                  <option value="custom">Choose time</option>
+                </select>
+              </div>
+              <div class="rc-field-group rc-depart-at-group">
+                <label class="rc-label" for="depart-at">At</label>
+                <input type="datetime-local" id="depart-at" class="rc-input" aria-label="Departure date and time" hidden />
+              </div>
+            </div>
+
+            <div class="rc-field-group">
+              <label class="rc-label" for="interval">Check weather every</label>
+              <select id="interval" class="rc-select">
+                <option value="auto">Auto</option>
+                <option value="10">10 km</option>
+                <option value="25">25 km</option>
+                <option value="50">50 km</option>
+              </select>
+            </div>
+
+            <div class="rc-form-actions">
+              <button type="button" class="rc-textbtn" id="reset-btn">Reset</button>
+              <button type="submit" class="rc-btn-primary" id="plan-btn">Plan route</button>
+            </div>
+          </form>
+
+          <div id="summary" class="rc-summary" hidden>
+            <div class="rc-summary-top">
+              <div class="rc-summary-stats">
+                <span id="summary-dist" class="rc-summary-stat"></span>
+                <span id="summary-dur" class="rc-summary-stat"></span>
+                <span id="summary-eta" class="rc-summary-stat"></span>
+              </div>
+              <span id="summary-verdict" class="rc-badge"></span>
+            </div>
+            <p id="summary-rain" class="rc-summary-rain"></p>
+            <ul id="summary-advice" class="rc-advice-list"></ul>
+          </div>
+
+          <div id="alts" class="rc-alts"></div>
+
+          <div id="depart-planner" class="rc-depart-planner"></div>
+
+          <div id="timeline" class="rc-timeline"></div>
+
+          <div id="details" class="rc-details" hidden></div>
+
+          <div id="legend" class="rc-legend">
+            <span class="rc-legend-item"><i class="rc-legend-dot" data-level="clear"></i>Clear</span>
+            <span class="rc-legend-item"><i class="rc-legend-dot" data-level="watch"></i>Watch</span>
+            <span class="rc-legend-item"><i class="rc-legend-dot" data-level="caution"></i>Caution</span>
+            <span class="rc-legend-item"><i class="rc-legend-dot" data-level="danger"></i>Danger</span>
+          </div>
+
+          <p id="attrib" class="rc-attrib">
+            Map data &copy; <a href="https://www.openstreetmap.org/copyright" rel="noopener" target="_blank">OpenStreetMap</a> contributors ·
+            Routing by <a href="https://project-osrm.org/" rel="noopener" target="_blank">OSRM</a> ·
+            Search by <a href="https://nominatim.org/" rel="noopener" target="_blank">Nominatim</a> ·
+            Forecasts by <a href="https://open-meteo.com/" rel="noopener" target="_blank">Open-Meteo</a>
+          </p>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="static/js/util.js"></script>
+  <script src="static/js/icons.js"></script>
+  <script src="static/js/geocode.js"></script>
+  <script src="static/js/router.js"></script>
+  <script src="static/js/sampler.js"></script>
+  <script src="static/js/weather.js"></script>
+  <script src="static/js/risk.js"></script>
+  <script src="static/js/app.js"></script>
+  <script>
+    // Cache the shell so the app opens instantly; the forecast is never cached.
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("sw.js").catch(function () {});
+      });
+    }
+  </script>
+</body>
+</html>
