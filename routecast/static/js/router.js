@@ -32,8 +32,16 @@ RC.router = (function () {
 
   var VEHICLE = {
     car:        { label: "Car",        factor: 1.00 },
-    motorcycle: { label: "Motorcycle", factor: 0.93 } // filters traffic; approximation
+    // Filters traffic (approximation) and, being under 400cc territory in
+    // practice, legally banned from PH expressways (NLEX/SLEX/SCTEX/
+    // CAVITEX/Skyway etc, all OSM `motorway` class) — see avoidMotorways.
+    motorcycle: { label: "Motorcycle", factor: 0.93, avoidMotorways: true }
   };
+
+  // OSRM codes that mean "the exclude=motorway parameter itself is why this
+  // failed" (server doesn't support it, or genuinely can't route around the
+  // expressway) as opposed to an unrelated problem with the request.
+  var EXCLUDE_RETRY_CODES = { InvalidValue: "unsupported", NotImplemented: "unsupported", NoRoute: "no-route" };
 
   var OSRM_ERROR_MESSAGES = {
     NoRoute: "No road route between those points.",
@@ -180,18 +188,44 @@ RC.router = (function () {
     var vehicle = VEHICLE[vehicleKey] || VEHICLE.car;
     var alternatives = opts.alternatives == null ? true : opts.alternatives;
 
-    var url = BASE + "/route/v1/driving/" + buildCoordString(waypoints) +
+    var baseUrl = BASE + "/route/v1/driving/" + buildCoordString(waypoints) +
       "?overview=full&geometries=geojson&steps=true&annotations=duration,distance" +
       "&alternatives=" + (alternatives ? "true" : "false");
 
-    return RC.jsonGet(url, { signal: opts.signal }).then(function (data) {
-      if (!data || data.code !== "Ok") {
-        var code = data && data.code;
-        var msg = OSRM_ERROR_MESSAGES[code] || (data && data.message) || "Could not calculate a route.";
-        throw RC.error(msg, "route");
-      }
-      return (data.routes || []).map(function (r) { return parseRoute(r, vehicle.factor); });
-    });
+    // attempt(useExclude) fires one OSRM request, with or without
+    // exclude=motorway. On a code that indicates the exclusion itself is
+    // the problem, it retries exactly once without it and flags the
+    // returned routes as an honest fallback rather than pretending the
+    // avoidance worked. A network/timeout/abort error (rejected promise,
+    // no OSRM `code` at all) is never retried here — RC.jsonGet already
+    // owns its own retry policy for those.
+    function attempt(useExclude) {
+      var url = baseUrl + (useExclude ? "&exclude=motorway" : "");
+      return RC.jsonGet(url, { signal: opts.signal }).then(function (data) {
+        if (!data || data.code !== "Ok") {
+          var code = data && data.code;
+          if (useExclude && EXCLUDE_RETRY_CODES.hasOwnProperty(code)) {
+            var reason = EXCLUDE_RETRY_CODES[code];
+            return attempt(false).then(function (routes) {
+              for (var i = 0; i < routes.length; i++) {
+                routes[i].motorwayAvoidanceFailed = true;
+                routes[i].motorwayAvoidanceReason = reason; // "unsupported" | "no-route"
+              }
+              return routes;
+            });
+          }
+          var msg = OSRM_ERROR_MESSAGES[code] || (data && data.message) || "Could not calculate a route.";
+          throw RC.error(msg, "route");
+        }
+        var routes = (data.routes || []).map(function (r) { return parseRoute(r, vehicle.factor); });
+        if (useExclude) {
+          for (var j = 0; j < routes.length; j++) { routes[j].avoidedMotorways = true; }
+        }
+        return routes;
+      });
+    }
+
+    return attempt(!!vehicle.avoidMotorways);
   }
 
   return { route: route, VEHICLE: VEHICLE };

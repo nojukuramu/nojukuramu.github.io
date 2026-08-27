@@ -4,12 +4,25 @@
    Walks route.cumDist and drops a checkpoint roughly every `everyKm`,
    always keeping the start and the destination, and never exceeding
    `maxPoints` (spacing widens instead of dropping the endpoints) or
-   emitting two checkpoints closer than 1 km apart.
+   emitting two checkpoints closer than MIN_GAP_M apart.
    ============================================================ */
 RC.sampler = (function () {
   "use strict";
 
-  var MIN_GAP_M = 1000; // never emit two checkpoints closer than this
+  var MIN_GAP_M = 400; // never emit two checkpoints closer than this
+
+  // RC.sampler.autoSpacingKm(totalMeters) -> km
+  // Ladder of default checkpoint spacing by trip length, so a short urban
+  // ride gets dense weather points and a long haul doesn't blow maxPoints.
+  function autoSpacingKm(totalMeters) {
+    var totalKm = (totalMeters || 0) / 1000;
+    if (totalKm < 25) return 2;
+    if (totalKm < 60) return 4;
+    if (totalKm < 150) return 8;
+    if (totalKm < 400) return 20;
+    if (totalKm < 900) return 40;
+    return 80;
+  }
 
   // Smallest coord index whose cumDist is >= targetM (snap forward to the
   // next coordinate at or past the target distance; never interpolates).
@@ -23,8 +36,7 @@ RC.sampler = (function () {
   // RC.sampler.sample(route, {everyKm, maxPoints, departAt, stopMinutes}) -> Checkpoint[]
   function sample(route, opts) {
     opts = opts || {};
-    var everyKm = opts.everyKm == null ? 25 : opts.everyKm;
-    var maxPoints = opts.maxPoints == null ? 24 : opts.maxPoints;
+    var maxPoints = opts.maxPoints == null ? 48 : opts.maxPoints;
     var departAt = opts.departAt || new Date();
     var stopMinutes = opts.stopMinutes || 0;
 
@@ -35,6 +47,8 @@ RC.sampler = (function () {
     var lastIdx = n - 1;
     var totalM = cumDist[lastIdx];
     var totalKm = totalM / 1000;
+
+    var everyKm = opts.everyKm == null ? autoSpacingKm(totalM) : opts.everyKm;
 
     // Widen spacing so maxPoints is never exceeded by the everyKm request.
     var spacingKm = everyKm;
@@ -106,5 +120,5 @@ RC.sampler = (function () {
     return checkpoints;
   }
 
-  return { sample: sample };
+  return { sample: sample, autoSpacingKm: autoSpacingKm, MIN_GAP_M: MIN_GAP_M };
 })();

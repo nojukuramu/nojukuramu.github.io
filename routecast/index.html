@@ -70,8 +70,61 @@
     <div class="rc-body">
       <div id="map" class="rc-map"></div>
 
+      <div id="pick-root" class="rc-pick" hidden>
+        <div id="pick-pin" class="rc-pick-pin" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21.5s-6.8-6.3-6.8-11.3a6.8 6.8 0 1 1 13.6 0c0 5-6.8 11.3-6.8 11.3Z"/><circle cx="12" cy="10.2" r="2.3"/></svg>
+          <span class="rc-pick-shadow"></span>
+        </div>
+        <div class="rc-pick-card">
+          <p id="pick-title" class="rc-pick-title">Set your start</p>
+          <p id="pick-label" class="rc-pick-label">Locating…</p>
+          <p id="pick-sub" class="rc-pick-sub"></p>
+          <div class="rc-pick-actions">
+            <button type="button" class="rc-textbtn" id="pick-cancel">Cancel</button>
+            <button type="button" class="rc-btn-primary" id="pick-confirm">Set this location</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="map-controls" class="rc-map-controls">
+        <button type="button" class="rc-mapbtn" id="ctl-locate" aria-label="Use my location" title="Use my location">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3"/><circle cx="12" cy="12" r="4.6"/></svg>
+        </button>
+        <button type="button" class="rc-mapbtn" id="ctl-nav" aria-label="Start navigation" title="Start navigation" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 19.5 19 12 15.3 4.5 19 12 2.5Z"/></svg>
+        </button>
+        <button type="button" class="rc-mapbtn" id="ctl-recenter" aria-label="Fit route" title="Fit route" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        </button>
+      </div>
+
+      <div id="nav-hud" class="rc-nav-hud" hidden>
+        <div class="rc-nav-top">
+          <div class="rc-nav-stats">
+            <span id="nav-remaining" class="rc-nav-remaining"></span>
+            <span id="nav-eta" class="rc-nav-eta"></span>
+          </div>
+          <button type="button" class="rc-nav-stop" id="nav-stop" aria-label="End navigation">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+        <div id="nav-next" class="rc-nav-next"></div>
+        <div id="nav-progress" class="rc-nav-progress">
+          <div id="nav-progress-fill" class="rc-nav-progress-fill"></div>
+        </div>
+        <div id="nav-alert" class="rc-nav-alert" hidden></div>
+      </div>
+
       <aside id="panel" class="rc-panel" data-sheet="peek">
         <button class="rc-sheet-handle" id="sheet-handle" type="button" aria-label="Expand or collapse panel"></button>
+
+        <button type="button" id="peek-bar" class="rc-peek-bar">
+          <span class="rc-peek-bar-text">
+            <span id="peek-bar-primary" class="rc-peek-bar-primary">Where to?</span>
+            <span id="peek-bar-secondary" class="rc-peek-bar-secondary"></span>
+          </span>
+          <span id="peek-bar-badge" class="rc-badge"></span>
+        </button>
 
         <div class="rc-panel-scroll">
           <div class="rc-empty" id="empty-state">
@@ -82,11 +135,35 @@
 
           <div id="status" class="rc-status" role="status" aria-live="polite"></div>
 
+          <div id="summary" class="rc-summary" hidden>
+            <div class="rc-summary-top">
+              <div class="rc-summary-stats">
+                <span id="summary-dist" class="rc-summary-stat"></span>
+                <span id="summary-dur" class="rc-summary-stat"></span>
+                <span id="summary-eta" class="rc-summary-stat"></span>
+              </div>
+              <span id="summary-verdict" class="rc-badge"></span>
+            </div>
+            <p id="summary-rain" class="rc-summary-rain"></p>
+            <ul id="summary-advice" class="rc-advice-list"></ul>
+          </div>
+
+          <div id="timeline" class="rc-timeline"></div>
+
+          <div id="depart-planner" class="rc-depart-planner"></div>
+
+          <div id="alts" class="rc-alts"></div>
+
+          <div id="details" class="rc-details" hidden></div>
+
           <form id="plan-form" class="rc-form" autocomplete="off">
             <div class="rc-field-group">
               <label class="rc-label" for="from-input">From</label>
               <div class="rc-input-row">
                 <input type="text" id="from-input" class="rc-input" placeholder="Starting point" />
+                <button type="button" class="rc-inputbtn rc-stop-pick" id="from-pick" aria-label="Pick on map" title="Pick on map">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21.5s-6.8-6.3-6.8-11.3a6.8 6.8 0 1 1 13.6 0c0 5-6.8 11.3-6.8 11.3Z"/><circle cx="12" cy="10.2" r="2.3"/></svg>
+                </button>
                 <button type="button" class="rc-inputbtn" id="use-location" aria-label="Use my location" title="Use my location">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3"/><circle cx="12" cy="12" r="4.6"/></svg>
                 </button>
@@ -104,6 +181,9 @@
               <label class="rc-label" for="to-input">To</label>
               <div class="rc-input-row">
                 <input type="text" id="to-input" class="rc-input" placeholder="Destination" />
+                <button type="button" class="rc-inputbtn rc-stop-pick" id="to-pick" aria-label="Pick on map" title="Pick on map">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21.5s-6.8-6.3-6.8-11.3a6.8 6.8 0 1 1 13.6 0c0 5-6.8 11.3-6.8 11.3Z"/><circle cx="12" cy="10.2" r="2.3"/></svg>
+                </button>
               </div>
               <ul id="to-results" class="rc-results" hidden></ul>
             </div>
@@ -159,27 +239,6 @@
             </div>
           </form>
 
-          <div id="summary" class="rc-summary" hidden>
-            <div class="rc-summary-top">
-              <div class="rc-summary-stats">
-                <span id="summary-dist" class="rc-summary-stat"></span>
-                <span id="summary-dur" class="rc-summary-stat"></span>
-                <span id="summary-eta" class="rc-summary-stat"></span>
-              </div>
-              <span id="summary-verdict" class="rc-badge"></span>
-            </div>
-            <p id="summary-rain" class="rc-summary-rain"></p>
-            <ul id="summary-advice" class="rc-advice-list"></ul>
-          </div>
-
-          <div id="alts" class="rc-alts"></div>
-
-          <div id="depart-planner" class="rc-depart-planner"></div>
-
-          <div id="timeline" class="rc-timeline"></div>
-
-          <div id="details" class="rc-details" hidden></div>
-
           <div id="legend" class="rc-legend">
             <span class="rc-legend-item"><i class="rc-legend-dot" data-level="clear"></i>Clear</span>
             <span class="rc-legend-item"><i class="rc-legend-dot" data-level="watch"></i>Watch</span>
@@ -219,6 +278,8 @@
   <script src="static/js/sampler.js"></script>
   <script src="static/js/weather.js"></script>
   <script src="static/js/risk.js"></script>
+  <script src="static/js/pick.js"></script>
+  <script src="static/js/nav.js"></script>
   <script src="static/js/app.js"></script>
   <script src="static/js/pwa.js"></script>
   <script>

@@ -24,7 +24,19 @@
     planToken: 0
   };
 
-  var map, tileLayer, routeLayers = [], markerLayer, endpointLayer, activeRequest = null;
+  var map, tileLayer, routeLayers = [], dotLayer, chipLayer, endpointLayer, activeRequest = null;
+
+  // Live navigation
+  var riderMarker = null, navFollowStarted = false, lastNavRenderTs = 0;
+
+  // Centre-pin picker
+  var pickPrevSheet = null, activePickTrigger = null;
+
+  // 76px screen-space decluttering threshold for weather chips (CONTRACT2.md).
+  var CHIP_W = 84, CHIP_H = 34, CHIP_GAP = 4;
+  // The start and destination pins stand on the same coordinate as the first
+  // and last checkpoints, so those chips are lifted clear of the pin.
+  var PIN_LIFT = 30;
 
   /* ---------------------------------------------------------
      Map
@@ -37,8 +49,12 @@
       maxZoom: 19,
       crossOrigin: true
     }).addTo(map);
-    markerLayer = L.layerGroup().addTo(map);
+    dotLayer = L.layerGroup().addTo(map);
+    chipLayer = L.layerGroup().addTo(map);
     endpointLayer = L.layerGroup().addTo(map);
+
+    // Re-declutter the weather chips whenever the screen-space layout changes.
+    map.on("zoomend moveend", redrawChips);
 
     // Right-click / long-press to drop a destination.
     map.on("contextmenu", function (e) {
@@ -188,7 +204,10 @@
     var id = "stop-" + Date.now();
     row.innerHTML =
       '<div class="rc-field-group">' +
-        '<input type="text" class="rc-input" id="' + id + '" placeholder="Stop along the way" autocomplete="off" spellcheck="false" />' +
+        '<div class="rc-input-row">' +
+          '<input type="text" class="rc-input" id="' + id + '" placeholder="Stop along the way" autocomplete="off" spellcheck="false" />' +
+          '<button type="button" class="rc-stop-pick" aria-label="Pick on map" title="Pick on map">' + RC.icons.ui("pin") + "</button>" +
+        "</div>" +
         '<ul class="rc-results" id="' + id + '-results" hidden></ul>' +
       "</div>" +
       '<button type="button" class="rc-stop-remove" aria-label="Remove this stop">' + RC.icons.ui("close") + "</button>";
@@ -196,6 +215,9 @@
 
     var ep = makeEndpoint("stop", row.querySelector("input"), row.querySelector(".rc-results"));
     state.endpoints.splice(state.endpoints.length - 1, 0, ep);
+
+    var pickBtn = row.querySelector(".rc-stop-pick");
+    pickBtn.addEventListener("click", function () { openPicker(ep, "Set this stop", pickBtn); });
 
     row.querySelector(".rc-stop-remove").addEventListener("click", function () {
       var idx = state.endpoints.indexOf(ep);
@@ -243,15 +265,6 @@
     });
   }
 
-  function intervalKm(distanceM) {
-    if (state.interval !== "auto") return parseInt(state.interval, 10);
-    var km = distanceM / 1000;
-    if (km < 60) return 10;
-    if (km < 200) return 20;
-    if (km < 600) return 40;
-    return 80;
-  }
-
   function plan(e) {
     if (e) e.preventDefault();
     var token = ++state.planToken;
@@ -290,11 +303,11 @@
   function loadWeatherFor(route, token, signal) {
     var depart = departureDate();
     state.departAt = depart;
-    var checkpoints = RC.sampler.sample(route, {
-      everyKm: intervalKm(route.distance),
-      maxPoints: 24,
-      departAt: depart
-    });
+    // "auto" leaves everyKm unset so RC.sampler falls back to its own
+    // autoSpacingKm ladder, and maxPoints unset so it defaults to 48.
+    var sampleOpts = { departAt: depart };
+    if (state.interval !== "auto") sampleOpts.everyKm = parseInt(state.interval, 10);
+    var checkpoints = RC.sampler.sample(route, sampleOpts);
     setStatus("Reading the sky at " + checkpoints.length + " points along the way…", "busy");
 
     return RC.weather.forecastSeries(checkpoints, { signal: signal }).then(function (series) {
@@ -356,12 +369,19 @@
   function render() {
     var empty = RC.el("empty-state");
     if (empty) empty.hidden = true;
+    // Results are inserted above the form, and the browser's scroll anchoring
+    // compensates to keep the just-pressed button still — which lands the
+    // rider in the middle of the form instead of on their trip. Go to the top.
+    var scroller = document.querySelector(".rc-panel-scroll");
+    if (scroller) scroller.scrollTop = 0;
     drawRoute();
     drawWeatherMarkers();
     renderSummary();
     renderAlternatives();
     renderTimeline();
     renderDetails();
+    renderPeekBar();
+    updateNavControlsVisibility();
     var panel = RC.el("panel");
     if (panel && window.matchMedia && window.matchMedia("(max-width: 820px)").matches) {
       setSheet("half");
@@ -415,27 +435,124 @@
     map.fitBounds(L.latLngBounds(route.coords).pad(0.12));
   }
 
+  // Every checkpoint gets a small dot exactly on its coordinate; a subset
+  // that survives screen-space decluttering also gets a weather chip.
   function drawWeatherMarkers() {
-    markerLayer.clearLayers();
+    dotLayer.clearLayers();
     var cps = state.checkpoints;
     for (var i = 0; i < cps.length; i++) {
       (function (cp, idx) {
         var level = levelOf(cp);
-        var wx = cp.wx || {};
-        var desc = wx.outOfRange ? { icon: "cloud" } : RC.weather.describe(wx.code, wx.isDay);
-        var html =
-          '<span class="rc-marker is-' + level + (idx === state.selected ? " is-selected" : "") + '">' +
-            '<span class="rc-marker-icon">' + RC.icons.weather(desc.icon) + "</span>" +
-            '<span class="rc-marker-temp">' + (wx.outOfRange ? "—" : RC.fmtTemp(wx.tempC, state.units)) + "</span>" +
-          "</span>";
+        var html = '<span class="rc-dot is-' + level + (idx === state.selected ? " is-selected" : "") + '"></span>';
         var m = L.marker([cp.lat, cp.lon], {
-          icon: L.divIcon({ className: "", html: html, iconSize: [58, 26], iconAnchor: [29, 13] }),
-          zIndexOffset: 400 + idx,
+          icon: L.divIcon({ className: "", html: html, iconSize: [10, 10], iconAnchor: [5, 5] }),
+          zIndexOffset: 200 + idx,
           keyboard: false
         });
         m.on("click", function () { selectCheckpoint(idx); });
-        m.addTo(markerLayer);
+        m.addTo(dotLayer);
       })(cps[i], i);
+    }
+    redrawChips();
+  }
+
+  // Screen-space decluttering: with up to 48 checkpoints, every one gets a
+  // dot but only those whose chips do not collide get a chip. Recomputed on
+  // zoomend/moveend as well as on redraw.
+  function chipLift(i, total) {
+    return (i === 0 || i === total - 1) ? PIN_LIFT : 0;
+  }
+
+  function declutterIndices(cps) {
+    var kept = [];
+    if (!map || !cps.length) return kept;
+
+    // A chip is CHIP_W x CHIP_H, anchored bottom-centre on its coordinate, so
+    // its box runs from (x - CHIP_W/2, y - CHIP_H) to (x + CHIP_W/2, y).
+    // Testing real boxes rather than a single radius matters because chips
+    // stacked vertically need far less room than chips side by side.
+    function boxAt(cp, i) {
+      var pt = map.latLngToContainerPoint([cp.lat, cp.lon]);
+      var y = pt.y - chipLift(i, cps.length);
+      return {
+        l: pt.x - CHIP_W / 2 - CHIP_GAP,
+        r: pt.x + CHIP_W / 2 + CHIP_GAP,
+        t: y - CHIP_H - CHIP_GAP,
+        b: y + CHIP_GAP
+      };
+    }
+    function hits(a, b) {
+      return !(a.r < b.l || a.l > b.r || a.b < b.t || a.t > b.b);
+    }
+
+    var boxes = [];
+    function place(i) {
+      var box = boxAt(cps[i], i);
+      for (var n = 0; n < boxes.length; n++) {
+        if (hits(box, boxes[n])) return false;
+      }
+      kept.push(i);
+      boxes.push(box);
+      return true;
+    }
+
+    // The start always gets a chip.
+    place(0);
+    for (var i = 1; i < cps.length - 1; i++) place(i);
+
+    // So does the destination — and it outranks whatever it lands on top of,
+    // otherwise the one checkpoint the rider most wants to read is the one
+    // that gets dropped.
+    if (cps.length > 1) {
+      var last = cps.length - 1;
+      var lastBox = boxAt(cps[last], last);
+      for (var k = kept.length - 1; k > 0; k--) {
+        if (hits(lastBox, boxes[k])) { kept.splice(k, 1); boxes.splice(k, 1); }
+      }
+      kept.push(last);
+      boxes.push(lastBox);
+    }
+
+    kept.sort(function (a, b) { return a - b; });
+    return kept;
+  }
+
+  function redrawChips() {
+    if (!chipLayer) return;
+    chipLayer.clearLayers();
+    var cps = state.checkpoints;
+    if (!cps.length || !map) return;
+    var keep = declutterIndices(cps);
+    for (var k = 0; k < keep.length; k++) {
+      (function (cp, idx) {
+        var level = levelOf(cp);
+        var wx = cp.wx || {};
+        var desc = wx.outOfRange ? { icon: "cloud" } : RC.weather.describe(wx.code, wx.isDay);
+        // The stem tip must land exactly on the coordinate: the wrapper is
+        // sized to the divIcon's iconSize and centres/bottoms the chip
+        // inside it, so iconAnchor (bottom-centre of that box) lines up
+        // with where the chip's stem points.
+        var html =
+          '<div style="width:100%;height:100%;display:flex;align-items:flex-end;justify-content:center;">' +
+            '<span class="rc-marker is-' + level + (idx === state.selected ? " is-selected" : "") + '">' +
+              '<span class="rc-marker-icon">' + RC.icons.weather(desc.icon) + "</span>" +
+              '<span class="rc-marker-temp">' + (wx.outOfRange ? "—" : RC.fmtTemp(wx.tempC, state.units)) + "</span>" +
+              '<span class="rc-marker-stem"></span>' +
+            "</span>" +
+          "</div>";
+        var m = L.marker([cp.lat, cp.lon], {
+          icon: L.divIcon({
+            className: "",
+            html: html,
+            iconSize: [CHIP_W, CHIP_H],
+            iconAnchor: [CHIP_W / 2, CHIP_H + chipLift(idx, cps.length)]
+          }),
+          zIndexOffset: 500 + idx,
+          keyboard: false
+        });
+        m.on("click", function () { selectCheckpoint(idx); });
+        m.addTo(chipLayer);
+      })(cps[keep[k]], keep[k]);
     }
   }
 
@@ -451,21 +568,63 @@
     RC.el("summary-dur").textContent = RC.fmtDur(route.duration);
     RC.el("summary-eta").textContent = RC.fmtTime(arrival) + " · " + RC.fmtDay(arrival);
 
+    // The badge stays a short level label — the reasons live in the advice
+    // list below it, where there's room to wrap instead of overflowing.
     var verdict = RC.el("summary-verdict");
     verdict.className = "rc-badge is-" + trip.level;
-    verdict.textContent = RC.risk.LEVELS[trip.level].label +
-      (trip.level === "clear" ? " run" : " — " + (trip.reasons[0] || "watch the sky"));
+    verdict.textContent = RC.risk.LEVELS[trip.level].label;
 
     RC.el("summary-rain").textContent = trip.rainMinutes > 0
       ? "About " + RC.fmtDur(trip.rainMinutes * 60) + " of this ride is in the wet."
       : "No precipitation expected on the way.";
 
-    var advice = trip.advice.concat(trip.reasons.slice(1));
+    // Riders are legally barred from PH expressways — never silently pretend
+    // motorcycle avoidance worked (or didn't) when it's not true.
+    var motorNote = [];
+    if (state.vehicle === "motorcycle") {
+      if (route.motorwayAvoidanceFailed) {
+        motorNote.push(route.motorwayAvoidanceReason === "no-route"
+          ? "No expressway-free route exists between these points — this route may use expressways, which motorcycles cannot legally ride in the Philippines."
+          : "The routing server could not exclude expressways for this route — watch for NLEX/SLEX/SCTEX/Skyway/CAVITEX signage and take the surface roads instead.");
+      } else if (route.avoidedMotorways) {
+        motorNote.push("Expressways avoided — this route sticks to roads open to motorcycles.");
+      }
+    }
+
+    var advice = motorNote.concat(trip.advice).concat(trip.reasons);
     var html = "";
-    for (var i = 0; i < Math.min(advice.length, 5); i++) {
+    for (var i = 0; i < Math.min(advice.length, 6); i++) {
       html += '<li class="rc-advice">' + RC.escapeHtml(advice[i]) + "</li>";
     }
     RC.el("summary-advice").innerHTML = html;
+  }
+
+  function renderPeekBar() {
+    var primary = RC.el("peek-bar-primary");
+    var secondary = RC.el("peek-bar-secondary");
+    var badge = RC.el("peek-bar-badge");
+    if (!primary || !secondary || !badge) return;
+    var route = state.routes[state.routeIndex];
+    var trip = state.trip;
+    if (!route || !trip) {
+      primary.textContent = "Where to?";
+      secondary.textContent = "";
+      badge.textContent = "";
+      badge.className = "rc-badge";
+      return;
+    }
+    var arrival = new Date(state.departAt.getTime() + route.duration * 1000);
+    primary.textContent = RC.fmtDist(route.distance, state.units) + " · " + RC.fmtDur(route.duration);
+    secondary.textContent = "Arrive " + RC.fmtTime(arrival);
+    badge.className = "rc-badge is-" + trip.level;
+    badge.textContent = RC.risk.LEVELS[trip.level].label;
+  }
+
+  function peekBarTap() {
+    if (!state.routes.length) { setSheet("open"); return; }
+    var panel = RC.el("panel");
+    var cur = panel ? panel.getAttribute("data-sheet") : "half";
+    setSheet(cur === "open" ? "half" : "open");
   }
 
   function renderAlternatives() {
@@ -669,6 +828,7 @@
   function resetAll() {
     state.planToken++;
     if (activeRequest) activeRequest.abort();
+    if (RC.nav.isActive()) stopNav();
     state.routes = []; state.checkpoints = []; state.series = null; state.trip = null; state.selected = -1;
     RC.el("stops").innerHTML = "";
     state.endpoints = [state.endpoints[0], state.endpoints[state.endpoints.length - 1]];
@@ -678,7 +838,8 @@
     }
     for (var r = 0; r < routeLayers.length; r++) map.removeLayer(routeLayers[r]);
     routeLayers = [];
-    markerLayer.clearLayers();
+    dotLayer.clearLayers();
+    chipLayer.clearLayers();
     endpointLayer.clearLayers();
     RC.el("summary").hidden = true;
     RC.el("details").hidden = true;
@@ -688,6 +849,8 @@
     var empty = RC.el("empty-state");
     if (empty) empty.hidden = false;
     setStatus("", "");
+    renderPeekBar();
+    updateNavControlsVisibility();
     map.setView([MAP_START.lat, MAP_START.lon], MAP_START.zoom);
   }
 
@@ -711,6 +874,294 @@
   }
 
   /* ---------------------------------------------------------
+     Floating map controls (#ctl-locate, #ctl-nav, #ctl-recenter)
+     --------------------------------------------------------- */
+  function updateNavControlsVisibility() {
+    var has = state.routes.length > 0;
+    var navBtn = RC.el("ctl-nav");
+    var recenterBtn = RC.el("ctl-recenter");
+    if (navBtn) navBtn.hidden = !has;
+    if (recenterBtn) recenterBtn.hidden = !has;
+  }
+
+  function locateOnMap() {
+    if (!navigator.geolocation) { setStatus("This browser will not share a location.", "error"); return; }
+    setStatus("Finding you…", "busy");
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      setStatus("", "");
+      map.setView([pos.coords.latitude, pos.coords.longitude], Math.max(map.getZoom(), 14));
+    }, function () {
+      setStatus("Location permission was refused.", "error");
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  }
+
+  function recenterRoute() {
+    var route = state.routes[state.routeIndex];
+    if (!route) return;
+    map.fitBounds(L.latLngBounds(route.coords).pad(0.12));
+  }
+
+  /* ---------------------------------------------------------
+     Centre-pin picker (RC.pick) — Start, any Stop, Destination
+     --------------------------------------------------------- */
+  function clearPickActiveClass() {
+    if (activePickTrigger && activePickTrigger.classList) activePickTrigger.classList.remove("is-active");
+    activePickTrigger = null;
+  }
+
+  function restoreSheetAfterPick() {
+    if (pickPrevSheet) { setSheet(pickPrevSheet); pickPrevSheet = null; }
+  }
+
+  // opts.ep: the endpoint object to fill in on confirm.
+  function openPicker(ep, title, triggerBtn) {
+    if (!map || !ep) return;
+    var center = ep.place
+      ? { lat: ep.place.lat, lon: ep.place.lon }
+      : { lat: map.getCenter().lat, lon: map.getCenter().lng };
+
+    var panel = RC.el("panel");
+    pickPrevSheet = panel ? panel.getAttribute("data-sheet") : null;
+    setSheet("peek");
+
+    clearPickActiveClass();
+    if (triggerBtn && triggerBtn.classList) triggerBtn.classList.add("is-active");
+    activePickTrigger = triggerBtn || null;
+
+    RC.pick.start(ep, { center: center, title: title });
+  }
+
+  function initPick() {
+    RC.pick.init({
+      map: map,
+      els: {
+        root: RC.el("pick-root"),
+        pin: RC.el("pick-pin"),
+        label: RC.el("pick-label"),
+        sub: RC.el("pick-sub"),
+        confirm: RC.el("pick-confirm"),
+        cancel: RC.el("pick-cancel")
+      }
+    });
+
+    RC.pick.onConfirm = function (target, place) {
+      var ep = target;
+      clearPickActiveClass();
+      restoreSheetAfterPick();
+      if (!ep) return;
+      ep.place = place;
+      ep.inputEl.value = place.name;
+      drawEndpoints();
+      saveTrip();
+    };
+
+    RC.pick.onCancel = function () {
+      clearPickActiveClass();
+      restoreSheetAfterPick();
+    };
+  }
+
+  /* ---------------------------------------------------------
+     Live navigation (RC.nav) driving #nav-hud
+     --------------------------------------------------------- */
+  function enterNavUI() {
+    document.documentElement.setAttribute("data-nav", "on");
+    setSheet("peek");
+    var hud = RC.el("nav-hud");
+    if (hud) hud.hidden = false;
+    var navBtn = RC.el("ctl-nav");
+    if (navBtn) { navBtn.setAttribute("aria-label", "Stop navigation"); navBtn.title = "Stop navigation"; }
+    navFollowStarted = false;
+    lastNavRenderTs = 0;
+  }
+
+  function exitNavUI() {
+    document.documentElement.removeAttribute("data-nav");
+    var hud = RC.el("nav-hud");
+    if (hud) hud.hidden = true;
+    var alertEl = RC.el("nav-alert");
+    if (alertEl) alertEl.hidden = true;
+    var navBtn = RC.el("ctl-nav");
+    if (navBtn) { navBtn.setAttribute("aria-label", "Start navigation"); navBtn.title = "Start navigation"; }
+    if (riderMarker) { map.removeLayer(riderMarker); riderMarker = null; }
+    navFollowStarted = false;
+  }
+
+  function startNav() {
+    if (RC.nav.isActive()) { stopNav(); return; }
+    var route = state.routes[state.routeIndex];
+    if (!route || !state.checkpoints.length) {
+      setStatus("Plan a route before navigating.", "error");
+      return;
+    }
+    setStatus("Starting navigation…", "busy");
+    RC.nav.start({
+      map: map,
+      route: route,
+      checkpoints: state.checkpoints,
+      vehicle: state.vehicle,
+      series: state.series
+    }).then(function () {
+      setStatus("", "");
+      enterNavUI();
+    }, function (err) {
+      setStatus(err && err.message ? err.message : "Could not start navigation.", "error");
+      exitNavUI();
+    });
+  }
+
+  function stopNav() {
+    RC.nav.stop();
+    exitNavUI();
+  }
+
+  function renderNavTicks() {
+    var track = RC.el("nav-progress");
+    if (!track) return;
+    var old = track.querySelectorAll(".rc-nav-tick");
+    for (var i = 0; i < old.length; i++) old[i].parentNode.removeChild(old[i]);
+    var route = state.routes[state.routeIndex];
+    var cps = state.checkpoints;
+    if (!route || !cps.length || !route.distance) return;
+    for (var j = 0; j < cps.length; j++) {
+      var pct = RC.clamp(cps[j].distance / route.distance * 100, 0, 100);
+      var tick = document.createElement("span");
+      tick.className = "rc-nav-tick is-" + levelOf(cps[j]);
+      tick.style.left = pct + "%";
+      track.appendChild(tick);
+    }
+  }
+
+  function renderNavHud(ns) {
+    var remaining = RC.el("nav-remaining");
+    var eta = RC.el("nav-eta");
+    var next = RC.el("nav-next");
+    var fill = RC.el("nav-progress-fill");
+    var alertEl = RC.el("nav-alert");
+
+    if (remaining) remaining.textContent = RC.fmtDist(ns.remainingM, state.units) + " · " + RC.fmtDur(ns.remainingS);
+    if (eta) eta.textContent = "Arrive " + RC.fmtTime(ns.etaDate);
+
+    if (next) {
+      if (ns.nextCheckpoint) {
+        var cp = ns.nextCheckpoint;
+        var wx = cp.wx || {};
+        var level = levelOf(cp);
+        var desc = wx.outOfRange ? { icon: "cloud" } : RC.weather.describe(wx.code, wx.isDay);
+        next.innerHTML =
+          '<span class="rc-nav-next-icon" style="color:' + colorFor(level) + '">' + RC.icons.weather(desc.icon) + "</span>" +
+          "<span>" + (wx.outOfRange ? "—" : RC.fmtTemp(wx.tempC, state.units)) +
+          " in " + RC.fmtDist(ns.distanceToNextM, state.units) + "</span>";
+      } else {
+        next.innerHTML = "";
+      }
+    }
+
+    if (fill) fill.style.width = Math.round(ns.progress * 100) + "%";
+    renderNavTicks();
+
+    var nextLevel = ns.nextCheckpoint ? levelOf(ns.nextCheckpoint) : "clear";
+    var cautionAhead = nextLevel === "caution" || nextLevel === "danger";
+    if (alertEl) {
+      if (ns.offRoute) {
+        alertEl.hidden = false;
+        alertEl.setAttribute("data-level", "caution");
+        alertEl.innerHTML = RC.icons.ui("alert") + "<span>You're off the planned route.</span>";
+      } else if (cautionAhead) {
+        alertEl.hidden = false;
+        alertEl.setAttribute("data-level", nextLevel);
+        var place = (ns.nextCheckpoint && ns.nextCheckpoint.label) || "the next checkpoint";
+        alertEl.innerHTML = RC.icons.ui("alert") + "<span>" +
+          RC.escapeHtml((nextLevel === "danger" ? "Danger conditions ahead at " : "Caution ahead at ") + place) +
+          "</span>";
+      } else {
+        alertEl.hidden = true;
+      }
+    }
+
+    // Nav re-times downstream checkpoints and re-samples their weather at
+    // most once a minute; re-render the timeline/markers on a much shorter
+    // throttle so the rider's forecast catches up without redrawing on
+    // every single GPS fix.
+    var t = Date.now();
+    if (t - lastNavRenderTs >= 5000) {
+      lastNavRenderTs = t;
+      renderTimeline();
+      drawWeatherMarkers();
+    }
+  }
+
+  function updateRiderMarker(ns) {
+    if (!map) return;
+    var latlng = [ns.lat, ns.lon];
+    if (!riderMarker) {
+      var icon = L.divIcon({
+        className: "",
+        html: '<span style="display:block;width:16px;height:16px;border-radius:50%;' +
+          "background:var(--clay,#C1613F);border:3px solid var(--surface,#fff);" +
+          'box-shadow:0 2px 6px rgba(0,0,0,.4);"></span>',
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
+      riderMarker = L.marker(latlng, { icon: icon, zIndexOffset: 1000, keyboard: false }).addTo(map);
+    } else {
+      riderMarker.setLatLng(latlng);
+    }
+    if (!navFollowStarted) {
+      navFollowStarted = true;
+      map.setView(latlng, Math.max(map.getZoom(), 16));
+    } else {
+      map.panTo(latlng, { animate: true });
+    }
+  }
+
+  RC.nav.onUpdate = function (ns) { renderNavHud(ns); updateRiderMarker(ns); };
+  RC.nav.onArrive = function () { setStatus("You've arrived.", ""); stopNav(); };
+  RC.nav.onOffRoute = function (ns) {
+    var alertEl = RC.el("nav-alert");
+    if (ns && ns.error) { setStatus(ns.error, "error"); return; }
+    if (alertEl && ns) {
+      alertEl.hidden = false;
+      alertEl.setAttribute("data-level", "caution");
+      alertEl.innerHTML = RC.icons.ui("alert") + "<span>You're off the planned route.</span>";
+    }
+  };
+
+  /* ---------------------------------------------------------
+     --sheet-h / --rc-controls-h — kept current so the map controls and
+     Leaflet's zoom control stack above the sheet at every snap point.
+     --------------------------------------------------------- */
+  function updateSheetVars() {
+    var root = document.documentElement;
+    var panel = RC.el("panel");
+    if (panel) {
+      var h = 0;
+      if (sheetIsMobile()) {
+        var rect = panel.getBoundingClientRect();
+        h = Math.max(0, Math.round(window.innerHeight - rect.top));
+      }
+      root.style.setProperty("--sheet-h", h + "px");
+    }
+    var controls = RC.el("map-controls");
+    if (controls) {
+      var ch = Math.round(controls.getBoundingClientRect().height) || 0;
+      root.style.setProperty("--rc-controls-h", ch + "px");
+    }
+  }
+
+  // Keep the vars in sync for the ~280ms the sheet's CSS transition runs.
+  function scheduleSheetVarSync() {
+    updateSheetVars();
+    var ticks = 0;
+    function tick() {
+      updateSheetVars();
+      ticks++;
+      if (ticks < 20) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  /* ---------------------------------------------------------
      Bottom sheet (mobile drag / tap, desktop no-op)
      --------------------------------------------------------- */
   var SHEET_SNAPS = ["peek", "half", "open"];
@@ -728,6 +1179,7 @@
     if (SHEET_SNAPS.indexOf(snap) < 0) snap = "peek";
     panel.setAttribute("data-sheet", snap);
     if (persist !== false) RC.store.set("sheet", snap);
+    scheduleSheetVarSync();
   }
 
   function initSheet() {
@@ -801,6 +1253,7 @@
       var dy = e.clientY - drag.startY;
       var offset = RC.clamp(dy, drag.minOffset, drag.maxOffset);
       panel.style.transform = "translateY(" + offset + "px)";
+      updateSheetVars();
     });
 
     function endDrag(e, cancelled) {
@@ -862,6 +1315,7 @@
      --------------------------------------------------------- */
   function init() {
     initMap();
+    initPick();
 
     state.endpoints = [
       makeEndpoint("from", RC.el("from-input"), RC.el("from-results")),
@@ -879,6 +1333,27 @@
     RC.el("units").addEventListener("click", function () {
       setUnits(state.units === "metric" ? "imperial" : "metric");
     });
+
+    var fromPickBtn = RC.el("from-pick");
+    if (fromPickBtn) fromPickBtn.addEventListener("click", function () {
+      openPicker(state.endpoints[0], "Set your start", fromPickBtn);
+    });
+    var toPickBtn = RC.el("to-pick");
+    if (toPickBtn) toPickBtn.addEventListener("click", function () {
+      openPicker(state.endpoints[state.endpoints.length - 1], "Set your destination", toPickBtn);
+    });
+
+    var ctlLocate = RC.el("ctl-locate");
+    if (ctlLocate) ctlLocate.addEventListener("click", locateOnMap);
+    var ctlNav = RC.el("ctl-nav");
+    if (ctlNav) ctlNav.addEventListener("click", startNav);
+    var ctlRecenter = RC.el("ctl-recenter");
+    if (ctlRecenter) ctlRecenter.addEventListener("click", recenterRoute);
+    var navStop = RC.el("nav-stop");
+    if (navStop) navStop.addEventListener("click", stopNav);
+
+    var peekBar = RC.el("peek-bar");
+    if (peekBar) peekBar.addEventListener("click", peekBarTap);
 
     RC.el("depart-mode").addEventListener("change", function () {
       state.departMode = this.value;
@@ -925,10 +1400,18 @@
       if (e.key === "Escape") { state.selected = -1; drawWeatherMarkers(); renderTimeline(); renderDetails(); }
     });
 
+    window.addEventListener("resize", RC.debounce(function () {
+      updateSheetVars();
+      redrawChips();
+    }, 150));
+
     setVehicle(state.vehicle);
     setUnits(state.units);
     RC.el("interval").value = state.interval;
     restoreTrip();
+    renderPeekBar();
+    updateNavControlsVisibility();
+    updateSheetVars();
   }
 
   if (document.readyState === "loading") {

@@ -25,6 +25,18 @@ Live at <https://nojukuramu.github.io/routecast/>.
   hours earlier to six hours later, so you can see whether waiting an hour dodges the
   squall. No extra network calls — it re-reads the hourly series already fetched.
 - **Gear and riding advice** derived from the actual numbers, not generic filler.
+- **Drop a pin by moving the map.** Start, destination and every stop can be set with the
+  classic centre-pin picker: the pin stays fixed, you move the map under it, and the address
+  updates as you settle. The confirmed coordinate is always the exact centre — never the
+  place Nominatim snapped to, which can be a block away from where you pointed.
+- **Live navigation.** Follow the route as you ride: distance and time remaining, an ETA that
+  slips when you do, a progress track marked with every weather checkpoint, and an alert when
+  the next one turns caution or danger. Because the ETA is live, the forecasts are re-read for
+  when you will *now* arrive — running an hour late can change the weather you meet.
+- **Motorcycles avoid expressways.** Riders are barred from NLEX, SLEX, CAVITEX, Skyway and
+  most Philippine expressways, so motorcycle routes ask the router to exclude motorways. If
+  the routing server cannot honour that, the app says so rather than handing you an illegal
+  route.
 - **Stops, alternative routes, swap, and long-press on the map** to drop a point.
 - **Built for a phone.** The map owns the screen and everything else lives in a bottom sheet you
   drag between three heights. Safe-area aware, dynamic viewport heights so nothing jumps when the
@@ -52,8 +64,8 @@ pretending. Please don't point a load test at them.
 
 ## Honest limitations
 
-- **OSRM has no motorcycle profile.** The motorcycle timing is the driving profile with a
-  speed factor applied — a reasonable approximation of filtering through traffic, not a
+- **OSRM has no motorcycle profile.** Motorcycle routes are the driving profile with
+  motorways excluded and a speed factor applied — a reasonable approximation of filtering through traffic, not a
   simulation of it. Treat the ETA as a good guess, not a promise.
 - **ETAs assume you keep moving.** Fuel, food and photo stops shift every downstream
   checkpoint. Add them as stops if they matter.
@@ -80,6 +92,8 @@ routecast/
     sampler.js              RC.sampler  — walks the route, emits checkpoints with ETAs
     weather.js              RC.weather  — Open-Meteo batching, hourly interpolation, WMO codes
     risk.js                 RC.risk     — vehicle-aware scoring, advice, departure planner
+    pick.js                 RC.pick     — the centre-pin place picker
+    nav.js                  RC.nav      — live navigation: route projection, live ETA, wake lock
     app.js                  the glue: map, form, the render pipeline, the draggable sheet
     pwa.js                  install prompt, iOS fallback, full-screen toggle
 ```
