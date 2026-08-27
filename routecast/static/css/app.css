@@ -299,12 +299,64 @@ button { font: inherit; }
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  /* Results render above the form; without this the browser scrolls to keep
+     the pressed button in place and hides the summary the rider asked for. */
+  overflow-anchor: none;
   overscroll-behavior: contain;
   padding: 18px 18px 28px;
   display: flex;
   flex-direction: column;
   gap: 18px;
   -webkit-overflow-scrolling: touch;
+}
+
+/* ============================================================
+   Peek bar — always-visible summary button under the drag handle
+   ============================================================ */
+.rc-peek-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 18px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+.rc-peek-bar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.rc-peek-bar-primary {
+  font-family: var(--serif);
+  font-size: 1.08rem;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rc-peek-bar-secondary {
+  font-size: .78rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rc-peek-bar-secondary:empty { display: none; }
+#peek-bar-badge { flex: none; max-width: 42%; }
+#peek-bar-badge:empty { display: none; }
+
+@media (min-width: 821px) {
+  .rc-peek-bar { display: none; }
 }
 
 .rc-empty {
@@ -328,6 +380,7 @@ button { font: inherit; }
 }
 .rc-status:empty { display: none; }
 .rc-status[data-kind="error"] { color: var(--rc-danger); }
+.rc-status.rc-busy { color: var(--muted); }
 
 .rc-spinner {
   display: inline-flex;
@@ -376,14 +429,17 @@ button { font: inherit; }
   margin-bottom: 6px;
 }
 
-.rc-field-group { position: relative; }
-.rc-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.rc-field-group { position: relative; min-width: 0; }
+.rc-field-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; }
 .rc-depart-at-group:has(#depart-at[hidden]) { display: none; }
+.rc-field-row:has(.rc-depart-at-group[style*="display: none"]),
+.rc-field-row:has(#depart-at[hidden]) { grid-template-columns: 1fr; }
 
 .rc-input-row { display: flex; gap: 6px; }
 
 .rc-input, .rc-select {
   width: 100%;
+  min-width: 0;
   font: inherit;
   font-size: .92rem;
   padding: 9px 11px;
@@ -559,8 +615,9 @@ button { font: inherit; }
 }
 .rc-summary[hidden] { display: none; }
 
-.rc-summary-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.rc-summary-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.rc-summary-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.rc-summary-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; min-width: 0; }
+.rc-summary-top .rc-badge { flex: 1 1 100%; min-width: 0; max-width: 100%; }
 .rc-summary-stat {
   font-family: var(--serif);
   font-size: 1.05rem;
@@ -599,16 +656,24 @@ button { font: inherit; }
    Badges (risk level)
    ============================================================ */
 .rc-badge {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: flex-start; gap: 6px;
   font-size: .74rem; font-weight: 600;
   letter-spacing: .02em;
   padding: 4px 11px;
-  border-radius: 999px;
-  white-space: nowrap;
+  border-radius: 14px;
+  white-space: normal;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  text-align: left;
 }
+.rc-badge:empty { display: none; }
 .rc-badge::before {
   content: "";
+  flex: none;
   width: 6px; height: 6px;
+  margin-top: 5px;
   border-radius: 50%;
   background: currentColor;
 }
@@ -651,9 +716,8 @@ button { font: inherit; }
    ============================================================ */
 .rc-depart-planner {
   display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 2px;
+  flex-direction: column;
+  gap: 0;
 }
 .rc-depart-planner:empty { display: none; }
 
@@ -674,15 +738,37 @@ button { font: inherit; }
 .rc-offset-h { font-size: .76rem; font-weight: 500; color: var(--ink-soft); }
 .rc-offset-dot { width: 7px; height: 7px; border-radius: 50%; }
 
+.rc-planner-label {
+  font-family: var(--mono);
+  font-size: .68rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 6px;
+  flex: 0 0 100%;
+}
+.rc-planner-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.rc-planner-hint {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .8rem; color: var(--muted);
+  margin-top: 6px;
+  flex: 0 0 100%;
+}
+.rc-planner-hint svg { width: 14px; height: 14px; flex: none; }
+
 /* ============================================================
    Timeline / checkpoint chips
    ============================================================ */
 .rc-timeline {
   display: flex;
+  align-items: stretch;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  overflow-y: visible;
+  padding: 4px 2px 10px;
+  margin: -4px -2px 0;
   scroll-snap-type: x proximity;
+  flex-shrink: 0;
 }
 .rc-timeline:empty { display: none; }
 
@@ -736,9 +822,15 @@ button { font: inherit; }
 }
 .rc-details[hidden] { display: none; }
 
+.rc-detail-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+  flex-wrap: wrap;
+}
+.rc-detail-head .rc-badge { flex: 1 1 100%; min-width: 0; }
+
 .rc-detail-grid {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 5px 12px;
 }
 .rc-detail-k {
@@ -748,7 +840,7 @@ button { font: inherit; }
   text-transform: uppercase;
   color: var(--faint);
 }
-.rc-detail-v { font-size: .86rem; color: var(--ink-soft); }
+.rc-detail-v { font-size: .86rem; color: var(--ink-soft); min-width: 0; overflow-wrap: break-word; word-break: break-word; }
 
 .rc-reason-list, .rc-advice-detail-list { list-style: none; display: flex; flex-direction: column; gap: 5px; }
 
@@ -818,44 +910,384 @@ button { font: inherit; }
 .leaflet-popup-content { font-family: var(--sans); font-size: .85rem; }
 
 /* ============================================================
-   Map markers (.rc-marker divIcon)
+   Map markers — pinned to the ground, not floating
    ============================================================ */
+
+/* .rc-dot — a small checkpoint mark at every sampled coordinate.
+   iconAnchor is set by app.js to the element's centre. */
+.rc-dot {
+  display: block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--rc-clear);
+  border: 2px solid var(--surface);
+  box-shadow: 0 1px 3px rgba(20, 18, 15, .35);
+}
+.rc-dot.is-clear   { background: var(--rc-clear); }
+.rc-dot.is-watch   { background: var(--rc-watch); }
+.rc-dot.is-caution { background: var(--rc-caution); }
+.rc-dot.is-danger  { background: var(--rc-danger); }
+.rc-dot.is-selected {
+  width: 13px; height: 13px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 12%, transparent), 0 1px 3px rgba(20, 18, 15, .4);
+}
+
+/* .rc-marker — a chip drawn only for checkpoints that survive decluttering.
+   iconAnchor is set by app.js to [x, height] so the stem tip lands exactly
+   on the coordinate: the chip body sits above it, solid and grounded. */
 .rc-marker {
-  display: flex;
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px 4px 5px;
+  gap: 5px;
+  padding: 5px 9px 5px 6px;
+  margin-bottom: 7px; /* room for the stem */
   background: var(--surface);
-  border: 1.5px solid var(--line-strong);
+  border: 1.5px solid var(--rc-clear);
   border-radius: 999px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 3px 8px -2px rgba(20, 18, 15, .38), 0 1px 2px rgba(20, 18, 15, .22);
   font-family: var(--sans);
   font-size: .72rem;
   font-weight: 600;
   color: var(--ink);
   white-space: nowrap;
-  transform: translate(-50%, -100%);
 }
-.rc-marker-icon { width: 16px; height: 16px; display: grid; place-items: center; color: var(--muted); }
+.rc-marker-stem {
+  position: absolute;
+  left: 50%; top: 100%;
+  width: 8px; height: 8px;
+  margin-left: -4px;
+  margin-top: -4px;
+  background: var(--surface);
+  border-right: 1.5px solid var(--rc-clear);
+  border-bottom: 1.5px solid var(--rc-clear);
+  transform: rotate(45deg);
+  border-radius: 0 0 2px 0;
+  z-index: -1;
+}
+.rc-marker-icon { width: 15px; height: 15px; display: grid; place-items: center; color: var(--muted); flex: none; }
 .rc-marker-icon svg { width: 100%; height: 100%; }
 .rc-marker-temp { line-height: 1; }
 
+.rc-marker.is-clear,   .rc-marker.is-clear   .rc-marker-stem { border-color: var(--rc-clear); }
+.rc-marker.is-watch,   .rc-marker.is-watch   .rc-marker-stem { border-color: var(--rc-watch); }
+.rc-marker.is-caution, .rc-marker.is-caution .rc-marker-stem { border-color: var(--rc-caution); }
+.rc-marker.is-danger,  .rc-marker.is-danger  .rc-marker-stem { border-color: var(--rc-danger); }
 .rc-marker.is-clear   .rc-marker-icon { color: var(--rc-clear); }
 .rc-marker.is-watch   .rc-marker-icon { color: var(--rc-watch); }
 .rc-marker.is-caution .rc-marker-icon { color: var(--rc-caution); }
 .rc-marker.is-danger  .rc-marker-icon { color: var(--rc-danger); }
-.rc-marker.is-clear   { border-color: color-mix(in srgb, var(--rc-clear) 45%, var(--line-strong)); }
-.rc-marker.is-watch   { border-color: color-mix(in srgb, var(--rc-watch) 45%, var(--line-strong)); }
-.rc-marker.is-caution { border-color: color-mix(in srgb, var(--rc-caution) 45%, var(--line-strong)); }
-.rc-marker.is-danger  { border-color: color-mix(in srgb, var(--rc-danger) 45%, var(--line-strong)); }
 
-.rc-marker-start, .rc-marker-end {
+.rc-marker.is-selected {
+  border-width: 2px;
+  box-shadow: 0 5px 12px -2px rgba(20, 18, 15, .45), 0 1px 3px rgba(20, 18, 15, .3);
+  z-index: 2;
+}
+
+.rc-marker-start, .rc-marker-end,
+.rc-marker-pin.rc-marker-start, .rc-marker-pin.rc-marker-end {
   background: var(--clay);
   color: var(--clay-ink);
   border-color: var(--clay);
 }
 .rc-marker-start .rc-marker-icon,
 .rc-marker-end .rc-marker-icon { color: var(--clay-ink); }
+.rc-marker-start .rc-marker-stem, .rc-marker-end .rc-marker-stem {
+  background: var(--clay);
+  border-color: var(--clay);
+}
+
+/* legacy pin-style start/end divIcon (kept for compatibility) */
+.rc-marker-pin {
+  display: grid; place-items: center;
+  width: 30px; height: 30px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: var(--clay);
+  color: var(--clay-ink);
+  border: 2px solid var(--surface);
+  box-shadow: 0 3px 8px -2px rgba(20, 18, 15, .4);
+}
+.rc-marker-pin svg { width: 15px; height: 15px; transform: rotate(45deg); }
+
+/* ============================================================
+   Floating map controls
+   ============================================================ */
+.rc-map-controls {
+  position: absolute;
+  right: calc(12px + env(safe-area-inset-right));
+  bottom: calc(var(--sheet-h, 150px) + 12px);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: bottom .28s var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-map-controls { transition: none; }
+}
+@media (min-width: 821px) {
+  .rc-map-controls { bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
+
+.rc-mapbtn {
+  display: grid; place-items: center;
+  width: 44px; height: 44px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: color .16s var(--ease), border-color .16s var(--ease), background-color .16s var(--ease);
+}
+.rc-mapbtn:hover { color: var(--clay); border-color: var(--line-strong); }
+.rc-mapbtn:active { transform: translateY(1px); }
+.rc-mapbtn svg { width: 19px; height: 19px; }
+.rc-mapbtn[hidden] { display: none; }
+#ctl-nav { color: var(--clay-ink); background: var(--clay); border-color: var(--clay); }
+#ctl-nav:hover { background: var(--clay-hover); color: var(--clay-ink); }
+
+/* keep Leaflet's own zoom control in the same right-hand column, above the stack.
+   --rc-controls-h is kept current by app.js (the map-controls stack's rendered
+   height); it falls back to room for all three buttons. */
+.leaflet-bottom.leaflet-right {
+  margin-right: calc(12px + env(safe-area-inset-right));
+  margin-bottom: calc(var(--sheet-h, 150px) + 12px + var(--rc-controls-h, 164px));
+  transition: margin-bottom .28s var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .leaflet-bottom.leaflet-right { transition: none; }
+}
+@media (min-width: 821px) {
+  .leaflet-bottom.leaflet-right {
+    margin-bottom: calc(16px + env(safe-area-inset-bottom) + var(--rc-controls-h, 164px));
+  }
+}
+
+/* ============================================================
+   Centre-pin place picker
+   ============================================================ */
+.rc-pick { position: absolute; inset: 0; z-index: 40; pointer-events: none; }
+.rc-pick[hidden] { display: none; }
+
+.rc-pick-pin {
+  position: absolute;
+  left: 50%;
+  top: calc((100% - var(--sheet-h, 150px)) / 2);
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--clay);
+  pointer-events: none;
+  transition: transform .12s var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-pick-pin { transition: none; }
+}
+.rc-pick-pin svg {
+  width: 40px; height: 40px;
+  filter: drop-shadow(0 3px 4px rgba(20, 18, 15, .35));
+  transition: transform .12s var(--ease);
+}
+.rc-pick-shadow {
+  display: block;
+  width: 14px; height: 5px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: rgba(20, 18, 15, .3);
+  transition: transform .12s var(--ease), opacity .12s var(--ease);
+}
+.rc-pick-pin.is-moving { transform: translate(-50%, -114%); }
+.rc-pick-pin.is-moving svg { transform: translateY(-6px); }
+.rc-pick-pin.is-moving .rc-pick-shadow { transform: scale(.55); opacity: .55; }
+
+@media (min-width: 821px) {
+  /* desktop: panel is a sidebar beside the map, not a sheet over it */
+  .rc-pick-pin { top: 50%; }
+  .rc-pick-card { left: 0; right: auto; max-width: 380px; margin: 0 0 20px 20px; border-radius: var(--radius-lg); border: 1px solid var(--line); bottom: 0; }
+}
+
+.rc-pick-card {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  pointer-events: auto;
+  margin: 0 auto;
+  max-width: 480px;
+  padding: 16px 18px calc(16px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rc-pick-title {
+  font-family: var(--mono);
+  font-size: .68rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 4px;
+}
+.rc-pick-label {
+  font-family: var(--serif);
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rc-pick-sub {
+  font-size: .82rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rc-pick-sub:empty { display: none; }
+.rc-pick-actions {
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  margin-top: 12px;
+}
+.rc-pick-actions .rc-textbtn { margin-right: auto; min-height: 44px; }
+.rc-pick-actions .rc-btn-primary { min-height: 44px; padding: 10px 24px; }
+
+/* ============================================================
+   Navigation HUD
+   ============================================================ */
+.rc-nav-hud {
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  z-index: 22;
+  margin: calc(12px + env(safe-area-inset-top)) 12px 0;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(6px);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.rc-nav-hud[hidden] { display: none; }
+
+.rc-nav-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.rc-nav-stats { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.rc-nav-remaining {
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rc-nav-eta { font-size: .8rem; color: var(--muted); }
+
+.rc-nav-stop {
+  flex: none;
+  display: grid; place-items: center;
+  width: 36px; height: 36px;
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.rc-nav-stop:hover { color: var(--rc-danger); border-color: var(--rc-danger); }
+.rc-nav-stop svg { width: 15px; height: 15px; }
+
+.rc-nav-next {
+  display: flex; align-items: center; gap: 8px;
+  font-size: .86rem;
+  color: var(--ink-soft);
+  min-height: 0;
+}
+.rc-nav-next:empty { display: none; }
+.rc-nav-next-icon { width: 20px; height: 20px; flex: none; color: var(--clay); }
+.rc-nav-next-icon svg { width: 100%; height: 100%; }
+
+.rc-nav-progress {
+  position: relative;
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: visible;
+}
+.rc-nav-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--clay);
+  border-radius: 999px;
+  transition: width .3s var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-nav-progress-fill { transition: none; }
+}
+.rc-nav-tick {
+  position: absolute;
+  top: 50%;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--rc-clear);
+  border: 1px solid var(--surface);
+}
+.rc-nav-tick.is-clear   { background: var(--rc-clear); }
+.rc-nav-tick.is-watch   { background: var(--rc-watch); }
+.rc-nav-tick.is-caution { background: var(--rc-caution); }
+.rc-nav-tick.is-danger  { background: var(--rc-danger); }
+
+.rc-nav-alert {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px;
+  background: var(--rc-caution-soft);
+  color: var(--rc-caution);
+  border: 1px solid color-mix(in srgb, var(--rc-caution) 35%, var(--line));
+  border-radius: var(--radius-sm);
+  font-size: .82rem;
+  font-weight: 500;
+}
+.rc-nav-alert[hidden] { display: none; }
+.rc-nav-alert[data-level="danger"] {
+  background: var(--rc-danger-soft);
+  color: var(--rc-danger);
+  border-color: color-mix(in srgb, var(--rc-danger) 35%, var(--line));
+}
+.rc-nav-alert svg { width: 15px; height: 15px; flex: none; }
+
+/* while navigating: sheet drops to peek, HUD owns the top of the map */
+html[data-nav="on"] .rc-panel { pointer-events: auto; }
+html[data-nav="on"] .rc-peek-bar-primary { color: var(--clay); }
+
+/* ============================================================
+   "Pin on map" button — in the From/To rows via .rc-inputbtn,
+   and app.js injects a bare .rc-stop-pick into each stop row.
+   ============================================================ */
+.rc-stop-pick {
+  flex: none;
+  display: grid; place-items: center;
+  width: 30px; height: 30px;
+  background: transparent;
+  color: var(--clay);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color .16s var(--ease), border-color .16s var(--ease), background-color .16s var(--ease);
+}
+.rc-stop-pick svg { width: 14px; height: 14px; }
+.rc-stop-pick:hover { border-color: var(--clay); }
+.rc-stop-pick.is-active,
+.rc-inputbtn.is-active {
+  background: var(--clay-soft);
+  border-color: var(--clay);
+  color: var(--clay);
+}
 
 /* ============================================================
    Responsive: bottom sheet under 820px
@@ -902,13 +1334,11 @@ button { font: inherit; }
     height: 92dvh;
   }
 
-  .rc-field-row { grid-template-columns: 1fr 1fr; }
-
   /* iOS zoom-on-focus guard: inputs need >=16px */
   .rc-input, .rc-select, .rc-stop-row input { font-size: 16px; }
 
   /* comfortable touch targets */
-  .rc-iconbtn, .rc-inputbtn, .rc-stop-remove {
+  .rc-iconbtn, .rc-inputbtn, .rc-stop-remove, .rc-stop-pick, .rc-nav-stop {
     min-width: 44px; min-height: 44px;
   }
   .rc-swap.rc-inputbtn { min-width: 44px; min-height: 44px; width: 44px; height: 44px; }
@@ -931,6 +1361,11 @@ button { font: inherit; }
   .rc-wordmark-mark { width: 22px; height: 22px; }
   .rc-wordmark-mark svg { width: 13px; height: 13px; }
   .rc-header-actions { gap: 5px; }
+
+  /* v2 overlays: keep clear of the sheet at every snap point, safe-area aware */
+  .rc-nav-hud { margin-left: calc(10px + env(safe-area-inset-left)); margin-right: calc(10px + env(safe-area-inset-right)); }
+  .rc-pick-card { max-width: none; }
+  html[data-nav="on"] .rc-panel[data-sheet] { height: calc(150px + env(safe-area-inset-bottom)); }
 }
 
 @media (min-width: 821px) {

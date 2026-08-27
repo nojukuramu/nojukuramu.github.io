@@ -1,7 +1,7 @@
 /* RouteCast service worker — caches the shell so the app opens instantly and
    survives a flaky connection. Forecast, routing and geocoding calls always go
    to the network; stale weather is worse than no weather. */
-var CACHE = "routecast-v2";
+var CACHE = "routecast-v3";
 var SHELL = [
   "./",
   "./index.html",
@@ -20,6 +20,8 @@ var SHELL = [
   "./static/js/sampler.js",
   "./static/js/weather.js",
   "./static/js/risk.js",
+  "./static/js/pick.js",
+  "./static/js/nav.js",
   "./static/js/app.js",
   "./static/js/pwa.js",
   "./vendor/leaflet/leaflet.js",
