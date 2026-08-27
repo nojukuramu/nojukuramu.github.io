@@ -1,12 +1,17 @@
 /* RouteCast service worker — caches the shell so the app opens instantly and
    survives a flaky connection. Forecast, routing and geocoding calls always go
    to the network; stale weather is worse than no weather. */
-var CACHE = "routecast-v1";
+var CACHE = "routecast-v2";
 var SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./static/icon.svg",
+  "./static/icon-192.png",
+  "./static/icon-512.png",
+  "./static/icon-maskable-192.png",
+  "./static/icon-maskable-512.png",
+  "./static/apple-touch-icon.png",
   "./static/css/app.css",
   "./static/js/util.js",
   "./static/js/icons.js",
@@ -16,6 +21,7 @@ var SHELL = [
   "./static/js/weather.js",
   "./static/js/risk.js",
   "./static/js/app.js",
+  "./static/js/pwa.js",
   "./vendor/leaflet/leaflet.js",
   "./vendor/leaflet/leaflet.css",
   "./vendor/leaflet/images/marker-icon.png",

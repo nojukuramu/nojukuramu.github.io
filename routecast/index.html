@@ -16,6 +16,11 @@
   <link rel="canonical" href="https://nojukuramu.github.io/routecast/" />
 
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23C1613F'/%3E%3Cpath d='M8 20c0-6 4-11 8-11s8 5 8 11' stroke='%23fff' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='22.5' r='2.4' fill='%23fff'/%3E%3C/svg%3E" />
+  <link rel="apple-touch-icon" href="static/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="RouteCast">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
   <!-- Set theme before paint to avoid a flash -->
   <script>
@@ -49,6 +54,14 @@
         RouteCast
       </div>
       <div class="rc-header-actions">
+        <button class="rc-btn-install" id="install-btn" type="button" aria-label="Install RouteCast" title="Install RouteCast" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12.5M7 11l5 5 5-5"/><path d="M4.5 17.5V19a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-1.5"/></svg>
+          <span class="rc-btn-install-label">Install</span>
+        </button>
+        <button class="rc-iconbtn" id="fullscreen-btn" type="button" aria-label="Toggle full screen" title="Toggle full screen" aria-pressed="false">
+          <svg class="rc-fs-icon rc-fs-icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>
+          <svg class="rc-fs-icon rc-fs-icon-contract" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5"/></svg>
+        </button>
         <button class="rc-iconbtn" id="units" type="button" aria-label="Toggle units" title="Toggle units">km</button>
         <button class="rc-iconbtn" id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle theme">
           <svg class="rc-theme-icon rc-theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.6M12 18.9v2.6M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M2.5 12h2.6M18.9 12h2.6M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/></svg>
@@ -186,6 +199,19 @@
         </div>
       </aside>
     </div>
+
+    <div id="ios-install" class="rc-ios-install" hidden>
+      <div class="rc-ios-install-scrim" id="ios-install-scrim"></div>
+      <div class="rc-ios-install-card" role="dialog" aria-modal="true" aria-labelledby="ios-install-heading">
+        <h2 id="ios-install-heading" class="rc-ios-install-heading">Install RouteCast</h2>
+        <p class="rc-ios-install-copy">
+          Tap the Share button
+          <svg class="rc-ios-share-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="8.5" width="14" height="12" rx="2.5"/><path d="M12 2.5v11M8 6.3 12 2.3l4 4"/></svg>
+          below, then choose <strong>Add to Home Screen</strong>.
+        </p>
+        <button type="button" class="rc-btn-primary" id="ios-install-close">Got it</button>
+      </div>
+    </div>
   </div>
 
   <script src="vendor/leaflet/leaflet.js"></script>
@@ -197,6 +223,7 @@
   <script src="static/js/weather.js"></script>
   <script src="static/js/risk.js"></script>
   <script src="static/js/app.js"></script>
+  <script src="static/js/pwa.js"></script>
   <script>
     // Cache the shell so the app opens instantly; the forecast is never cached.
     if ("serviceWorker" in navigator) {
