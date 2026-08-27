@@ -47,6 +47,7 @@
     spore:  svg('<path d="M4 10.5c0-3.6 3.6-6 8-6s8 2.4 8 6z"/><path d="M10 10.5V17a2 2 0 0 0 4 0v-6.5"/><path d="M2.5 21h19"/>'),
     arc:    svg('<path d="M3 21A18 18 0 0 1 21 3"/><path d="M3 21A12 12 0 0 1 15 9"/><path d="M3 21a6 6 0 0 1 6-6"/><circle cx="3.4" cy="20.6" r="1.4" fill="currentColor" stroke="none"/>'),
     mic:    svg('<rect x="9" y="2.5" width="6" height="10.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21M9 21h6"/>'),
+    route:  svg('<path d="M6.5 20.5c-2 0-3.5-1.4-3.5-3.2S4.5 14 6.5 14h11c2 0 3.5-1.4 3.5-3.2S19.5 7.5 17.5 7.5H9"/><path d="M6 3.5c1.7 0 3 1.3 3 2.9C9 8 6 11 6 11S3 8 3 6.4c0-1.6 1.3-2.9 3-2.9z"/><circle cx="18.5" cy="18.5" r="2.5"/>'),
     arrow:  svg('<path d="M5 12h13M13 6.5l5.5 5.5L13 17.5"/>'),
     sun:    svg('<circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>'),
     code:   svg('<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>'),
@@ -99,6 +100,11 @@
       name: "KaraokeNatin", href: "karaokenatin/", icon: ICONS.mic, badge: "Party",
       desc: "Turn any screen into a karaoke machine. Guests scan a code and their phone becomes the remote — search, queue, skip. Peer-to-peer over WebRTC, so no server of mine is involved.",
       tags: ["WebRTC", "P2P", "PWA"]
+    },
+    {
+      name: "RouteCast", href: "routecast/", icon: ICONS.route, badge: "Navigation",
+      desc: "Plan a drive or a ride, then see the weather waiting for you at every stretch of it — each checkpoint forecast for the hour you will actually arrive there, with gear advice for a bike and a nudge if leaving an hour later dodges the rain.",
+      tags: ["Leaflet", "OpenStreetMap", "forecast"]
     },
     {
       name: "ARCO", href: "arco/", icon: ICONS.arc, badge: "Instrument",
