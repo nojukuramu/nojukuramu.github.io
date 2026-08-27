@@ -735,8 +735,11 @@
     var handle = RC.el("sheet-handle");
     if (!panel) return;
 
+    // Restore where the user left the sheet — but never open it over the whole
+    // map on startup. A phone should always come up showing the map.
     var stored = RC.store.get("sheet", null);
     if (stored && SHEET_SNAPS.indexOf(stored) > -1) {
+      if (sheetIsMobile() && stored === "open") stored = "half";
       panel.setAttribute("data-sheet", stored);
     }
 
