@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RouteCast">
+  <rect width="512" height="512" fill="#C1613F"/>
+  <g transform="translate(256 256) scale(0.74) translate(-256 -256)">
+    <path d="M120 424c46 0 74-26 74-58s-28-52-74-52-74-22-74-54 28-58 74-58h58"
+          fill="none" stroke="#F7F4EE" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>
+    <circle cx="120" cy="424" r="26" fill="#F7F4EE"/>
+    <path d="M300 118a72 72 0 0 1 138 22 56 56 0 0 1-12 110H312a66 66 0 0 1-12-132z" fill="#F7F4EE"/>
+    <path d="M330 296l-16 42M382 296l-16 42M434 296l-16 42"
+          fill="none" stroke="#F7F4EE" stroke-width="26" stroke-linecap="round" opacity=".9"/>
+  </g>
+</svg>

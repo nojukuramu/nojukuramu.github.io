@@ -362,7 +362,10 @@
     renderAlternatives();
     renderTimeline();
     renderDetails();
-    RC.el("panel").setAttribute("data-sheet", "peek");
+    var panel = RC.el("panel");
+    if (panel && window.matchMedia && window.matchMedia("(max-width: 820px)").matches) {
+      setSheet("half");
+    }
   }
 
   function levelOf(cp) {
@@ -708,6 +711,150 @@
   }
 
   /* ---------------------------------------------------------
+     Bottom sheet (mobile drag / tap, desktop no-op)
+     --------------------------------------------------------- */
+  var SHEET_SNAPS = ["peek", "half", "open"];
+  var SHEET_TAP_MOVE = 8;      // px — under this, a release counts as a tap
+  var SHEET_TAP_TIME = 300;    // ms — under this, a release counts as a tap
+  var SHEET_FLICK_VELOCITY = 0.5; // px/ms — over this, carry one snap further
+
+  function sheetIsMobile() {
+    return window.matchMedia && window.matchMedia("(max-width: 820px)").matches;
+  }
+
+  function setSheet(snap, persist) {
+    var panel = RC.el("panel");
+    if (!panel) return;
+    if (SHEET_SNAPS.indexOf(snap) < 0) snap = "peek";
+    panel.setAttribute("data-sheet", snap);
+    if (persist !== false) RC.store.set("sheet", snap);
+  }
+
+  function initSheet() {
+    var panel = RC.el("panel");
+    var handle = RC.el("sheet-handle");
+    if (!panel) return;
+
+    var stored = RC.store.get("sheet", null);
+    if (stored && SHEET_SNAPS.indexOf(stored) > -1) {
+      panel.setAttribute("data-sheet", stored);
+    }
+
+    if (!handle) return;
+
+    function currentSnap() {
+      var v = panel.getAttribute("data-sheet");
+      return SHEET_SNAPS.indexOf(v) > -1 ? v : "peek";
+    }
+
+    // Reads the natural (untransformed) viewport top of the panel at each
+    // snap point, without letting the browser paint any intermediate state —
+    // the whole loop runs inside one synchronous task, so nothing flashes.
+    function measureTops() {
+      var was = panel.getAttribute("data-sheet");
+      var prevTransition = panel.style.transition;
+      panel.style.transition = "none";
+      var tops = {};
+      for (var i = 0; i < SHEET_SNAPS.length; i++) {
+        panel.setAttribute("data-sheet", SHEET_SNAPS[i]);
+        tops[SHEET_SNAPS[i]] = panel.getBoundingClientRect().top;
+      }
+      panel.setAttribute("data-sheet", was);
+      panel.style.transition = prevTransition;
+      return tops;
+    }
+
+    var drag = null;
+
+    handle.addEventListener("pointerdown", function (e) {
+      if (!sheetIsMobile()) return;
+      if (e.button != null && e.button !== 0) return;
+      var tops = measureTops();
+      var startTop = panel.getBoundingClientRect().top;
+      var minTop = Math.min(tops.peek, tops.half, tops.open);
+      var maxTop = Math.max(tops.peek, tops.half, tops.open);
+      drag = {
+        id: e.pointerId,
+        startY: e.clientY,
+        startT: e.timeStamp,
+        lastY: e.clientY,
+        lastT: e.timeStamp,
+        velocity: 0,
+        tops: tops,
+        minOffset: minTop - startTop,
+        maxOffset: maxTop - startTop
+      };
+      try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+      panel.classList.add("is-dragging");
+    });
+
+    handle.addEventListener("pointermove", function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      e.preventDefault();
+      var dt = e.timeStamp - drag.lastT;
+      if (dt > 0) drag.velocity = (e.clientY - drag.lastY) / dt;
+      drag.lastY = e.clientY;
+      drag.lastT = e.timeStamp;
+      var dy = e.clientY - drag.startY;
+      var offset = RC.clamp(dy, drag.minOffset, drag.maxOffset);
+      panel.style.transform = "translateY(" + offset + "px)";
+    });
+
+    function endDrag(e, cancelled) {
+      var d = drag;
+      drag = null;
+      panel.classList.remove("is-dragging");
+      panel.style.transform = "";
+      try { handle.releasePointerCapture(d.id); } catch (err) {}
+
+      var totalDy = e.clientY - d.startY;
+      var duration = e.timeStamp - d.startT;
+      var isTap = !cancelled && Math.abs(totalDy) <= SHEET_TAP_MOVE && duration <= SHEET_TAP_TIME;
+
+      if (isTap) {
+        var order = ["peek", "half", "open"];
+        var idx = order.indexOf(currentSnap());
+        setSheet(order[(idx + 1) % order.length]);
+        return;
+      }
+      if (cancelled) { setSheet(currentSnap()); return; }
+
+      // Snap to whichever point the release position is nearest, but let a
+      // fast flick carry it one point further in the direction of travel.
+      var offset = RC.clamp(totalDy, d.minOffset, d.maxOffset);
+      var list = [];
+      for (var i = 0; i < SHEET_SNAPS.length; i++) {
+        list.push({ name: SHEET_SNAPS[i], top: d.tops[SHEET_SNAPS[i]] });
+      }
+      list.sort(function (a, b) { return a.top - b.top; });
+
+      // Recover the absolute top the panel was released at from the offset
+      // (list[0].top - d.minOffset is the pointerdown-time natural top).
+      var releaseAbsTop = (list[0].top - d.minOffset) + offset;
+
+      var nearestIdx = 0, bestGap = Infinity;
+      for (var n = 0; n < list.length; n++) {
+        var gap = Math.abs(list[n].top - releaseAbsTop);
+        if (gap < bestGap) { bestGap = gap; nearestIdx = n; }
+      }
+      if (Math.abs(d.velocity) > SHEET_FLICK_VELOCITY) {
+        nearestIdx += d.velocity > 0 ? 1 : -1;
+        nearestIdx = RC.clamp(nearestIdx, 0, list.length - 1);
+      }
+      setSheet(list[nearestIdx].name);
+    }
+
+    handle.addEventListener("pointerup", function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      endDrag(e, false);
+    });
+    handle.addEventListener("pointercancel", function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      endDrag(e, true);
+    });
+  }
+
+  /* ---------------------------------------------------------
      Wiring
      --------------------------------------------------------- */
   function init() {
@@ -769,13 +916,7 @@
       plan();
     });
 
-    var handle = RC.el("sheet-handle");
-    if (handle) {
-      handle.addEventListener("click", function () {
-        var panel = RC.el("panel");
-        panel.setAttribute("data-sheet", panel.getAttribute("data-sheet") === "open" ? "peek" : "open");
-      });
-    }
+    initSheet();
 
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape") { state.selected = -1; drawWeatherMarkers(); renderTimeline(); renderDetails(); }

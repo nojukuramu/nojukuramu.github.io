@@ -120,7 +120,7 @@
   *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
 }
 
-html, body { height: 100%; }
+html, body { height: 100vh; height: 100dvh; }
 
 body {
   background: var(--bg);
@@ -158,10 +158,19 @@ button { font: inherit; }
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
+  padding-top: calc(10px + env(safe-area-inset-top));
+  padding-left: calc(16px + env(safe-area-inset-left));
+  padding-right: calc(16px + env(safe-area-inset-right));
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   flex: none;
   z-index: 30;
+}
+
+[data-fullscreen="on"] .rc-header { display: none; }
+
+@media (display-mode: standalone) {
+  .rc-back { display: none; }
 }
 
 .rc-back {
@@ -190,7 +199,7 @@ button { font: inherit; }
 }
 .rc-wordmark-mark svg { width: 15px; height: 15px; }
 
-.rc-header-actions { margin-left: auto; display: flex; gap: 8px; }
+.rc-header-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 
 .rc-iconbtn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -211,11 +220,36 @@ button { font: inherit; }
 [data-theme="dark"] .rc-theme-icon-sun { display: none; }
 :root:not([data-theme="dark"]) .rc-theme-icon-moon { display: none; }
 
+/* full-screen toggle: expand/contract icon swap, mirrors the theme sun/moon swap */
+.rc-fs-icon { width: 16px; height: 16px; display: block; }
+#fullscreen-btn[aria-pressed="true"] .rc-fs-icon-expand { display: none; }
+#fullscreen-btn[aria-pressed="false"] .rc-fs-icon-contract { display: none; }
+
+/* install button: filled clay pill, the primary header action when visible */
+.rc-btn-install {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 34px;
+  padding: 0 14px 0 11px;
+  background: var(--clay);
+  color: var(--clay-ink);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: .82rem; font-weight: 600;
+  white-space: nowrap;
+  transition: background-color .18s var(--ease), transform .18s var(--ease);
+}
+.rc-btn-install:hover { background: var(--clay-hover); }
+.rc-btn-install:active { transform: translateY(1px); }
+.rc-btn-install svg { width: 16px; height: 16px; flex: none; }
+.rc-btn-install[hidden] { display: none; }
+
 .rc-body {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
+  overflow: hidden;
 }
 
 /* ============================================================
@@ -247,10 +281,13 @@ button { font: inherit; }
 
 .rc-sheet-handle {
   display: none;
+  width: 100%;
+  min-height: 44px;
   border: none;
   background: transparent;
   cursor: grab;
-  padding: 10px 0 6px;
+  padding: 14px 0 12px;
+  touch-action: none;
 }
 .rc-sheet-handle::after {
   content: "";
@@ -260,6 +297,7 @@ button { font: inherit; }
   border-radius: 999px;
   background: var(--line-strong);
 }
+.rc-panel.is-dragging { transition: none !important; }
 
 .rc-panel-scroll {
   flex: 1 1 auto;
@@ -399,7 +437,9 @@ button { font: inherit; }
 .rc-result {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 1px;
+  min-height: 44px;
   padding: 8px 10px;
   border-radius: 6px;
   cursor: pointer;
@@ -752,6 +792,18 @@ button { font: inherit; }
   color: var(--ink) !important;
   border-color: var(--line) !important;
 }
+.leaflet-top.leaflet-left {
+  margin-top: calc(10px + env(safe-area-inset-top));
+  margin-left: calc(10px + env(safe-area-inset-left));
+}
+.leaflet-bottom.leaflet-left {
+  margin-bottom: calc(10px + env(safe-area-inset-bottom));
+  margin-left: calc(10px + env(safe-area-inset-left));
+}
+.leaflet-bottom.leaflet-right {
+  margin-bottom: calc(10px + env(safe-area-inset-bottom));
+  margin-right: calc(10px + env(safe-area-inset-right));
+}
 .leaflet-control-zoom a:hover { background: var(--surface-2) !important; }
 .leaflet-bar { border: 1px solid var(--line) !important; box-shadow: var(--shadow-sm) !important; }
 .leaflet-control-attribution {
@@ -817,33 +869,157 @@ button { font: inherit; }
 
   .rc-body { flex-direction: column; }
 
-  .rc-map { position: absolute; inset: 0; height: 100%; }
+  .rc-map { position: absolute; inset: 0; height: 100%; height: 100dvh; }
+
+  [data-fullscreen="on"] .rc-map { height: 100vh; height: 100dvh; }
 
   .rc-panel {
     position: absolute;
     left: 0; right: 0; bottom: 0;
     width: auto; max-width: none;
     height: auto;
-    max-height: 88vh;
+    max-height: 92vh;
+    max-height: 92dvh;
     border-left: none;
     border-top: 1px solid var(--line);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    transition: transform .28s var(--ease);
+    transition: transform .28s var(--ease), height .28s var(--ease);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rc-panel { transition: none; }
   }
 
-  .rc-sheet-handle { display: block; width: 100%; touch-action: none; }
+  .rc-sheet-handle { display: block; }
 
+  /* three snap points: peek (map owns the screen) / half / open */
   .rc-panel[data-sheet="peek"] {
-    height: 168px;
-    max-height: 40vh;
+    height: calc(150px + env(safe-area-inset-bottom));
   }
   .rc-panel[data-sheet="peek"] .rc-panel-scroll { overflow: hidden; }
 
-  .rc-panel[data-sheet="open"] { height: 88vh; }
+  .rc-panel[data-sheet="half"] {
+    height: 52vh;
+    height: 52dvh;
+  }
+
+  .rc-panel[data-sheet="open"] {
+    height: 92vh;
+    height: 92dvh;
+  }
 
   .rc-field-row { grid-template-columns: 1fr 1fr; }
+
+  /* iOS zoom-on-focus guard: inputs need >=16px */
+  .rc-input, .rc-select, .rc-stop-row input { font-size: 16px; }
+
+  /* comfortable touch targets */
+  .rc-iconbtn, .rc-inputbtn, .rc-stop-remove {
+    min-width: 44px; min-height: 44px;
+  }
+  .rc-swap.rc-inputbtn { min-width: 44px; min-height: 44px; width: 44px; height: 44px; }
+  .rc-btn-install { min-height: 44px; }
+
+  .rc-chip { min-height: 44px; scroll-snap-align: center; }
+  .rc-timeline {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .rc-timeline::-webkit-scrollbar { display: none; }
+
+  .rc-offset { min-height: 44px; }
+  .rc-alt { min-height: 44px; display: flex; flex-direction: column; justify-content: center; }
+
+  /* header: back link, wordmark and up to four actions on a narrow phone */
+  .rc-header { gap: 8px; padding-left: calc(10px + env(safe-area-inset-left)); padding-right: calc(10px + env(safe-area-inset-right)); }
+  .rc-wordmark { font-size: 1rem; gap: 6px; }
+  .rc-wordmark-mark { width: 22px; height: 22px; }
+  .rc-wordmark-mark svg { width: 13px; height: 13px; }
+  .rc-header-actions { gap: 5px; }
 }
 
 @media (min-width: 821px) {
   .rc-sheet-handle { display: none; }
+}
+
+@media (max-width: 380px) {
+  .rc-btn-install-label { display: none; }
+  .rc-btn-install { padding: 0; width: 34px; min-width: 44px; justify-content: center; }
+  .rc-wordmark-mark { display: none; }
+}
+
+@media (max-width: 340px) {
+  .rc-wordmark { font-size: .88rem; }
+  .rc-header { gap: 5px; }
+  .rc-header-actions { gap: 3px; }
+  .rc-back { width: 28px; height: 28px; }
+}
+
+/* ============================================================
+   iOS "Add to Home Screen" instruction sheet
+   ============================================================ */
+#ios-install[hidden] { display: none; }
+
+.rc-ios-install {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.rc-ios-install-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 18, 15, .45);
+}
+
+.rc-ios-install-card {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 22px 22px calc(22px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: rc-sheet-up .32s var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-ios-install-card { animation: none; }
+}
+@keyframes rc-sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.rc-ios-install-heading {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.2rem;
+  color: var(--ink);
+}
+
+.rc-ios-install-copy {
+  font-size: .92rem;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+.rc-ios-share-icon {
+  width: 17px; height: 17px;
+  vertical-align: -3px;
+  margin: 0 2px;
+  color: var(--clay);
+}
+
+#ios-install-close {
+  align-self: stretch;
+  min-height: 44px;
 }

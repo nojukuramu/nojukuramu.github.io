@@ -26,6 +26,14 @@ Live at <https://nojukuramu.github.io/routecast/>.
   squall. No extra network calls — it re-reads the hourly series already fetched.
 - **Gear and riding advice** derived from the actual numbers, not generic filler.
 - **Stops, alternative routes, swap, and long-press on the map** to drop a point.
+- **Built for a phone.** The map owns the screen and everything else lives in a bottom sheet you
+  drag between three heights. Safe-area aware, dynamic viewport heights so nothing jumps when the
+  browser chrome hides, 44px touch targets, and inputs sized so iOS never zooms on focus.
+- **Installable and full screen.** An Install button appears where the browser supports it (and
+  becomes an "Add to Home Screen" walkthrough on iOS Safari, which has no install prompt). A
+  full-screen toggle uses the Fullscreen API where it exists, and hides itself where it does not
+  rather than sitting there dead — on an iPhone, installing to the home screen *is* how you get
+  full screen.
 
 ## The data, and why there are no API keys
 
@@ -72,7 +80,8 @@ routecast/
     sampler.js              RC.sampler  — walks the route, emits checkpoints with ETAs
     weather.js              RC.weather  — Open-Meteo batching, hourly interpolation, WMO codes
     risk.js                 RC.risk     — vehicle-aware scoring, advice, departure planner
-    app.js                  the glue: map, form, and the render pipeline
+    app.js                  the glue: map, form, the render pipeline, the draggable sheet
+    pwa.js                  install prompt, iOS fallback, full-screen toggle
 ```
 
 Nothing is sent anywhere but those four services. Your last trip is remembered in
