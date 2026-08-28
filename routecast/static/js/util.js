@@ -116,7 +116,18 @@ var RC = (function () {
 
       return fetch(url, { signal: ctrl ? ctrl.signal : undefined, headers: { Accept: "application/json" } })
         .then(function (res) {
-          if (!res.ok) throw HttpError("Service returned " + res.status, "http", res.status);
+          if (!res.ok) {
+            // OSRM (and other JSON APIs we call) still send a JSON body on
+            // 4xx — e.g. {"code":"InvalidValue","message":"..."} — that
+            // callers may need to distinguish "this request/param isn't
+            // supported" from an unrelated failure. Attach it when present
+            // instead of only surfacing the bare status.
+            return res.json().catch(function () { return null; }).then(function (body) {
+              var err = HttpError("Service returned " + res.status, "http", res.status);
+              if (body) err.body = body;
+              throw err;
+            });
+          }
           return res.json();
         })
         .catch(function (err) {
