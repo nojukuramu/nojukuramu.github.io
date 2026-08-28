@@ -199,29 +199,41 @@ RC.router = (function () {
     // avoidance worked. A network/timeout/abort error (rejected promise,
     // no OSRM `code` at all) is never retried here — RC.jsonGet already
     // owns its own retry policy for those.
+    function handleFailure(useExclude, code, data) {
+      if (useExclude && EXCLUDE_RETRY_CODES.hasOwnProperty(code)) {
+        var reason = EXCLUDE_RETRY_CODES[code];
+        return attempt(false).then(function (routes) {
+          for (var i = 0; i < routes.length; i++) {
+            routes[i].motorwayAvoidanceFailed = true;
+            routes[i].motorwayAvoidanceReason = reason; // "unsupported" | "no-route"
+          }
+          return routes;
+        });
+      }
+      var msg = OSRM_ERROR_MESSAGES[code] || (data && data.message) || "Could not calculate a route.";
+      throw RC.error(msg, "route");
+    }
+
     function attempt(useExclude) {
       var url = baseUrl + (useExclude ? "&exclude=motorway" : "");
       return RC.jsonGet(url, { signal: opts.signal }).then(function (data) {
-        if (!data || data.code !== "Ok") {
-          var code = data && data.code;
-          if (useExclude && EXCLUDE_RETRY_CODES.hasOwnProperty(code)) {
-            var reason = EXCLUDE_RETRY_CODES[code];
-            return attempt(false).then(function (routes) {
-              for (var i = 0; i < routes.length; i++) {
-                routes[i].motorwayAvoidanceFailed = true;
-                routes[i].motorwayAvoidanceReason = reason; // "unsupported" | "no-route"
-              }
-              return routes;
-            });
-          }
-          var msg = OSRM_ERROR_MESSAGES[code] || (data && data.message) || "Could not calculate a route.";
-          throw RC.error(msg, "route");
-        }
+        // OSRM only ever resolves here with code "Ok" — any error code comes
+        // back as an HTTP 400 (see the .catch below) — but guard anyway in
+        // case a future response shape slips an error through as 200.
+        if (!data || data.code !== "Ok") return handleFailure(useExclude, data && data.code, data);
         var routes = (data.routes || []).map(function (r) { return parseRoute(r, vehicle.factor); });
         if (useExclude) {
           for (var j = 0; j < routes.length; j++) { routes[j].avoidedMotorways = true; }
         }
         return routes;
+      }, function (err) {
+        // OSRM's error responses (InvalidValue, NoRoute, NotImplemented, ...)
+        // arrive as HTTP 400 with a JSON body, not a resolved payload — see
+        // RC.jsonGet, which attaches that body as err.body.
+        if (err && err.status === 400 && err.body && err.body.code) {
+          return handleFailure(useExclude, err.body.code, err.body);
+        }
+        throw err;
       });
     }
 
