@@ -171,6 +171,15 @@ var RC = (function () {
     };
   };
 
+  /* Ask the browser not to evict our storage under disk pressure, and not
+   * to let Safari's ITP wipe it after ~7 days without a visit. Best-effort:
+   * a denial just leaves us evictable, nothing to handle either way. */
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persisted().then(function (already) {
+      if (!already) navigator.storage.persist();
+    }).catch(function () {});
+  }
+
   RC.clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
 
   RC.escapeHtml = function (s) {

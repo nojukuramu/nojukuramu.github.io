@@ -561,6 +561,12 @@ let portal=null, bossRef=null, bossBarrier=null, barrierFlash=0;
 let orbs=[], shrines=[], nodes=[], structures=[];
 let combo=0, comboT=0;
 let fogCtx=null, fogTex=null, fogMesh=null, fogAccum=0;
+/* Ask the browser to keep this origin's storage out of eviction — Chrome
+   under disk pressure, Safari's ~7-day ITP wipe of sites with no recent
+   visit — so the discovered spell list doesn't vanish after a few days. */
+if(navigator.storage&&navigator.storage.persist){
+  navigator.storage.persisted().then(already=>{if(!already)navigator.storage.persist();}).catch(()=>{});
+}
 let discovered=new Set();
 try{
   // only accept well-formed type keys (e.g. "EARTH NOVA") — localStorage is user-editable

@@ -54,6 +54,16 @@
   };
   var RESUME_WINDOW_MS = 12 * 60 * 60 * 1000;
 
+  /* Without this, the saved library and room state are "best-effort"
+   * storage: Chrome can clear them under disk pressure and Safari's ITP
+   * wipes script-writable storage after ~7 days with no visit. Best-effort
+   * request; a denial just leaves us evictable. */
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persisted().then(function (already) {
+      if (!already) navigator.storage.persist();
+    }).catch(function () {});
+  }
+
   function save(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* private mode */ }
   }

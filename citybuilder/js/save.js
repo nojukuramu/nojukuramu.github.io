@@ -21,6 +21,14 @@
 
     init: function () {
       var self = this;
+      /* Cities can be a lot of build time — ask the browser not to evict
+       * this origin's storage under disk pressure, and not to let Safari's
+       * ITP wipe it after ~7 days without a visit. Best-effort only. */
+      if (navigator.storage && navigator.storage.persist) {
+        navigator.storage.persisted().then(function (already) {
+          if (!already) navigator.storage.persist();
+        }).catch(function () {});
+      }
       return new Promise(function (resolve, reject) {
         var req = indexedDB.open(DB_NAME, 1);
         req.onupgradeneeded = function (e) {

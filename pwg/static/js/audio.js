@@ -9,6 +9,15 @@
  * pass with no melody at all), so it breathes instead of looping audibly.
  */
 
+/* Ask the browser to keep our storage out of eviction (Chrome disk
+ * pressure, Safari's ~7-day ITP wipe of unvisited sites) so saved
+ * progress doesn't vanish after a few quiet days. Best-effort only. */
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persisted().then(function (already) {
+    if (!already) navigator.storage.persist();
+  }).catch(function () {});
+}
+
 let ctx = null;
 let masterGain = null;
 let _muted = localStorage.getItem("pwg:muted") === "1";
