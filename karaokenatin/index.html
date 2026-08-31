@@ -287,6 +287,12 @@
           <span class="tap-sub">Your browser needs one tap before it will play sound</span>
         </button>
       </div>
+      <!-- Fullscreen hides the header and invite rail, so guests lose the
+           only copy of the join code/QR on screen. These are tiny,
+           corner stand-ins for it — shown only while the stage is
+           fullscreen — kept as two separate badges rather than one box. -->
+      <span id="room-code-4" class="fs-code"></span>
+      <canvas id="qr-fs" class="fs-qr" aria-label="QR code with the join link"></canvas>
       <button id="fs-btn" class="fs-btn" title="Fullscreen" aria-label="Toggle fullscreen">⛶</button>
     </div>
 

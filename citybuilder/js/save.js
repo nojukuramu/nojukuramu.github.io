@@ -21,6 +21,19 @@
 
     init: function () {
       var self = this;
+      /* Cities can be a lot of build time — ask the browser not to evict
+       * this origin's storage under disk pressure, and not to let Safari's
+       * ITP wipe it after ~7 days without a visit. It's a heuristic grant,
+       * not a promise, so log a denial — otherwise there's no way to tell
+       * "the browser said no" apart from "the save really did get wiped". */
+      if (navigator.storage && navigator.storage.persist) {
+        navigator.storage.persisted().then(function (already) {
+          if (already) return true;
+          return navigator.storage.persist();
+        }).then(function (granted) {
+          if (!granted) console.warn("[skyline] persistent storage was not granted; saved cities may be evicted by the browser");
+        }).catch(function () {});
+      }
       return new Promise(function (resolve, reject) {
         var req = indexedDB.open(DB_NAME, 1);
         req.onupgradeneeded = function (e) {

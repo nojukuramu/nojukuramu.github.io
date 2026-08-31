@@ -265,6 +265,35 @@ body.is-host .pill.host-only { display: inline-block; }
 .stage:fullscreen { border-radius: 0; }
 .stage:fullscreen .yt-mount { max-width: none; height: 100%; aspect-ratio: auto; }
 
+/* Small join-code/QR stand-ins for fullscreen — the header and invite rail
+   are gone from view once the stage takes over the whole screen, and on a
+   TV-sized display these are meant to stay legible without competing with
+   the video, so each stays deliberately tiny and out on its own corner. */
+.fs-code, .fs-qr {
+  display: none;
+  position: absolute;
+  top: 10px;
+  z-index: 3;
+  background: rgba(6, 6, 12, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.stage:fullscreen .fs-code, .stage:fullscreen .fs-qr { display: block; }
+.fs-code {
+  left: 10px;
+  padding: 6px 9px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+}
+.fs-qr { right: 10px; width: 40px; height: 40px; padding: 0; overflow: hidden; }
+
+/* The wide-screen invite rail duplicates the corner QR/code once the stage
+   is fullscreen — redundant, so it's hidden for as long as fullscreen holds. */
+body.stage-fullscreen .invite-rail { display: none !important; }
+
 .now { margin-bottom: 12px; }
 .now-card { display: flex; gap: 12px; align-items: center; }
 .now-thumb { width: 96px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; background: var(--bg-3); flex: none; }

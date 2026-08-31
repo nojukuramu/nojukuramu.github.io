@@ -8,6 +8,12 @@
 <meta name="theme-color" content="#07110f" />
 <meta name="color-scheme" content="dark" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 5c6 0 10 4 10 8H6c0-4 4-8 10-8z' fill='%237cffd8'/%3E%3Crect x='14' y='13' width='4' height='13' rx='2' fill='%23b0906a'/%3E%3C/svg%3E" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="assets/icons/apple-touch.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="VELL" />
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -178,5 +184,10 @@
 <script src="js/input.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/main.js"></script>
+<script>
+  if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    navigator.serviceWorker.register("sw.js").catch(function () {});
+  }
+</script>
 </body>
 </html>

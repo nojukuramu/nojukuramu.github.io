@@ -1,0 +1,22 @@
+{
+  "name": "VELL — 3D Tower Defense",
+  "short_name": "VELL",
+  "description": "A procedurally generated 3D tower defense on a drowned moor. Root the Bloom around a Heartspore, shape the route with towers, walls and walkable traps, and hold the line against the Rust.",
+  "id": "/3dtd/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#07110f",
+  "theme_color": "#07110f",
+  "categories": ["games"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    { "src": "assets/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

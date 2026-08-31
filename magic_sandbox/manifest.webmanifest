@@ -1,0 +1,22 @@
+{
+  "name": "Magic Sandbox — The Loom Tower",
+  "short_name": "Magic Sandbox",
+  "description": "A top-down spell-crafting roguelite. Weave runes into elemental circles in the Spellforge, then ascend the Loom Tower floor by floor.",
+  "id": "/magic_sandbox/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#101a26",
+  "theme_color": "#101a26",
+  "categories": ["games"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    { "src": "assets/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

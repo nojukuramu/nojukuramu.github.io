@@ -9,6 +9,20 @@
  * pass with no melody at all), so it breathes instead of looping audibly.
  */
 
+/* Ask the browser to keep our storage out of eviction (Chrome disk
+ * pressure, Safari's ~7-day ITP wipe of unvisited sites) so saved
+ * progress doesn't vanish after a few quiet days. It's a heuristic grant,
+ * not a promise, so log a denial — otherwise there's no way to tell "the
+ * browser said no" apart from "progress really did get wiped". */
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persisted().then(function (already) {
+    if (already) return true;
+    return navigator.storage.persist();
+  }).then(function (granted) {
+    if (!granted) console.warn("[pwg] persistent storage was not granted; saved progress may be evicted by the browser");
+  }).catch(function () {});
+}
+
 let ctx = null;
 let masterGain = null;
 let _muted = localStorage.getItem("pwg:muted") === "1";

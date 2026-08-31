@@ -7,6 +7,19 @@
 
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  /* Ask the browser to keep this origin's storage (theme, high score) out
+   * of eviction — Chrome under disk pressure, Safari's ~7-day ITP wipe of
+   * sites with no recent visit. It's a heuristic grant, not a promise, so
+   * log a denial rather than silently assuming it worked. */
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persisted().then(function (already) {
+      if (already) return true;
+      return navigator.storage.persist();
+    }).then(function (granted) {
+      if (!granted) console.warn("[home] persistent storage was not granted; saved preferences may be evicted by the browser");
+    }).catch(function () {});
+  }
+
   /* ---------- theme ---------- */
   function setTheme(theme) {
     document.documentElement.setAttribute("data-theme", theme);

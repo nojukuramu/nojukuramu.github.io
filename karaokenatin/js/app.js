@@ -54,6 +54,21 @@
   };
   var RESUME_WINDOW_MS = 12 * 60 * 60 * 1000;
 
+  /* Without this, the saved library and room state are "best-effort"
+   * storage: Chrome can clear them under disk pressure and Safari's ITP
+   * wipes script-writable storage after ~7 days with no visit. It's a
+   * heuristic grant, not a promise, so log a denial — otherwise there's no
+   * way to tell "the browser said no" apart from "the library really did
+   * get wiped" if someone reports it later. */
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persisted().then(function (already) {
+      if (already) return true;
+      return navigator.storage.persist();
+    }).then(function (granted) {
+      if (!granted) console.warn("[karaokenatin] persistent storage was not granted; the saved library may be evicted by the browser");
+    }).catch(function () {});
+  }
+
   function save(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* private mode */ }
   }
@@ -485,6 +500,7 @@
     $("#room-code").textContent = app.state.code;
     $("#room-code-2").textContent = app.state.code;
     $("#room-code-3").textContent = app.state.code;
+    $("#room-code-4").textContent = app.state.code;
     $("#name-input").value = app.name;
     renderShare();
     render();
@@ -499,7 +515,7 @@
     var url = joinUrl();
     var ok = true;
 
-    [["#qr", 260], ["#qr-rail", 180]].forEach(function (pair) {
+    [["#qr", 260], ["#qr-rail", 180], ["#qr-fs", 40]].forEach(function (pair) {
       var canvas = $(pair[0]);
       if (!canvas) return;
       try {
@@ -1177,6 +1193,13 @@
       var stage = $("#stage");
       if (document.fullscreenElement) document.exitFullscreen();
       else if (stage.requestFullscreen) stage.requestFullscreen().catch(function () { /* refused */ });
+    });
+
+    // The wide invite rail shows the same code/QR as the fullscreen corner
+    // badges — hide it whenever the stage actually goes fullscreen, however
+    // that was triggered (the button, Esc, browser chrome, F11…).
+    document.addEventListener("fullscreenchange", function () {
+      document.body.classList.toggle("stage-fullscreen", document.fullscreenElement === $("#stage"));
     });
 
     // search

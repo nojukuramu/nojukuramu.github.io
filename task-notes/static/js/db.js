@@ -12,6 +12,24 @@
   var DB_VERSION = 1;
   var _open = null;
 
+  /* Without this, browsers treat our storage as evictable: Chrome can clear
+   * it under disk pressure and Safari's ITP wipes script-writable storage
+   * after ~7 days with no visit. Ask once per tab; the browser can still
+   * say no (it's a heuristic grant, not a promise), so log the outcome —
+   * silently swallowing it would leave no way to tell "denied" apart from
+   * "storage actually got cleared" when someone reports data loss later.
+   * Page context only — this file is also imported by the service worker,
+   * which has no need to ask (and importScripts has no top-level
+   * `document`). */
+  if (typeof document !== 'undefined' && global.navigator && navigator.storage && navigator.storage.persist) {
+    navigator.storage.persisted().then(function (already) {
+      if (already) return true;
+      return navigator.storage.persist();
+    }).then(function (granted) {
+      if (!granted) console.warn('[task-notes] persistent storage was not granted; data may be evicted by the browser');
+    }).catch(function () {});
+  }
+
   function open() {
     if (_open) return _open;
     _open = new Promise(function (resolve, reject) {
