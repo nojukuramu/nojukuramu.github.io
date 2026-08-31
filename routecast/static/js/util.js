@@ -172,11 +172,16 @@ var RC = (function () {
   };
 
   /* Ask the browser not to evict our storage under disk pressure, and not
-   * to let Safari's ITP wipe it after ~7 days without a visit. Best-effort:
-   * a denial just leaves us evictable, nothing to handle either way. */
+   * to let Safari's ITP wipe it after ~7 days without a visit. It's a
+   * heuristic grant, not a promise, so log a denial — otherwise there's no
+   * way to tell "the browser said no" apart from "storage really did get
+   * cleared" if someone reports data loss later. */
   if (navigator.storage && navigator.storage.persist) {
     navigator.storage.persisted().then(function (already) {
-      if (!already) navigator.storage.persist();
+      if (already) return true;
+      return navigator.storage.persist();
+    }).then(function (granted) {
+      if (!granted) console.warn("[routecast] persistent storage was not granted; saved settings may be evicted by the browser");
     }).catch(function () {});
   }
 

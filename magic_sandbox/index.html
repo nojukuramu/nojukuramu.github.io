@@ -573,7 +573,10 @@ let fogCtx=null, fogTex=null, fogMesh=null, fogAccum=0;
    under disk pressure, Safari's ~7-day ITP wipe of sites with no recent
    visit — so the discovered spell list doesn't vanish after a few days. */
 if(navigator.storage&&navigator.storage.persist){
-  navigator.storage.persisted().then(already=>{if(!already)navigator.storage.persist();}).catch(()=>{});
+  navigator.storage.persisted()
+    .then(already=>already||navigator.storage.persist())
+    .then(granted=>{if(!granted)console.warn('[msandbox] persistent storage was not granted; discovered spells may be evicted by the browser');})
+    .catch(()=>{});
 }
 let discovered=new Set();
 try{

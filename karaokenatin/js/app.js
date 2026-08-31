@@ -56,11 +56,16 @@
 
   /* Without this, the saved library and room state are "best-effort"
    * storage: Chrome can clear them under disk pressure and Safari's ITP
-   * wipes script-writable storage after ~7 days with no visit. Best-effort
-   * request; a denial just leaves us evictable. */
+   * wipes script-writable storage after ~7 days with no visit. It's a
+   * heuristic grant, not a promise, so log a denial — otherwise there's no
+   * way to tell "the browser said no" apart from "the library really did
+   * get wiped" if someone reports it later. */
   if (navigator.storage && navigator.storage.persist) {
     navigator.storage.persisted().then(function (already) {
-      if (!already) navigator.storage.persist();
+      if (already) return true;
+      return navigator.storage.persist();
+    }).then(function (granted) {
+      if (!granted) console.warn("[karaokenatin] persistent storage was not granted; the saved library may be evicted by the browser");
     }).catch(function () {});
   }
 

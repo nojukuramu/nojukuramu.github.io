@@ -12,6 +12,7 @@ const SHELL = [
   "js/path.js",
   "js/water.js",
   "js/props.js",
+  "js/textures.js",
   "js/sky.js",
   "js/fx.js",
   "js/audio.js",
