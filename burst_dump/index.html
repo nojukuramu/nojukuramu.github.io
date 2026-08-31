@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BURST//DUMP — photo dump animator</title>
+<meta name="theme-color" content="#0b0c0e" />
+<meta name="color-scheme" content="dark" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='%23ff3b30' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M3 8h3.2L7.7 6h8.6L17.8 8H21v11H3z'/%3E%3Ccircle cx='12' cy='13' r='3.2' fill='none' stroke='%23ff3b30' stroke-width='1.6'/%3E%3C/svg%3E" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icons/apple-touch.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="BURST//DUMP" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -2751,6 +2760,10 @@ canvasSize();
 drawBg(ctx);
 refreshFmtLcd();
 requestAnimationFrame(t=>{player.lastFrame=t;tick(t);});
+
+if('serviceWorker' in navigator && location.protocol!=='file:'){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
 </script>
 </body>
 </html>
