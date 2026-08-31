@@ -226,7 +226,7 @@
       app.state.player.time = t;
       app.state.player.duration = d;
       renderProgress();
-      if (moved) broadcastState({ quiet: true });
+      if (moved) broadcastState({ quiet: true, progress: true });
     }, 1000);
   }
 
@@ -248,8 +248,11 @@
     // something that no longer makes sense — skip a song that already ended,
     // move one that's gone. ADD is order-independent and safe regardless of
     // staleness; everything else gets dropped and the sender resynced rather
-    // than applied against state it never actually saw.
-    if (data.type !== CMD.ADD && typeof data.rev === "number" && data.rev < s.rev) {
+    // than applied against state it never actually saw. rev 0 means the guest
+    // hasn't got its first snapshot yet — nothing to compare against, so let
+    // it through rather than bouncing a brand-new guest's very first tap.
+    if (data.type !== CMD.ADD && data.rev > 0 && data.rev < s.rev) {
+      link.send({ type: MSG.NOTICE, text: "That was out of date — refreshed.", kind: "warn" });
       sendStateTo(link);
       return;
     }
@@ -273,7 +276,7 @@
       case CMD.RESTART:
         return s.now ? null : "Nothing is playing.";
       case CMD.PAUSE:
-        return s.player.status === "playing" ? null : "Not playing.";
+        return s.player.status === "playing" || s.player.status === "loading" ? null : "Not playing.";
       case CMD.PLAY:
         return s.now && s.player.status === "playing" ? "Already playing." : null;
       case CMD.SEEK: {
@@ -335,7 +338,7 @@
         var result = R.apply(s, cmd, who);
         // The sender already gave themselves feedback locally; tell everyone else.
         if (result.notice) notice(result.notice, null, fromId);
-        if (!result.changed) { broadcastState({ quiet: true }); return; }
+        if (!result.changed) { broadcastState({ quiet: true, progress: true }); return; }
         // First song added to an idle room starts playing by itself.
         if (!s.now && s.queue.length && s.player.status === "idle") { nextSong(); return; }
         break;
@@ -368,7 +371,12 @@
   var broadcastPending = null;
   function broadcastState(opts) {
     if (app.role !== "host") return;
-    app.state.rev++;
+    // A guest stamps its requests with the rev it last saw, and the host uses
+    // that to tell a fresh request from a stale one. Playback progress ticks
+    // every second regardless of anything a guest could be acting on, so it
+    // must not count as a revision — otherwise a guest's view is "stale" the
+    // instant a song is playing and every real command gets bounced.
+    if (!(opts && opts.progress)) app.state.rev++;
     render();
     persistHost();
 
