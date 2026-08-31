@@ -288,12 +288,11 @@
         </button>
       </div>
       <!-- Fullscreen hides the header and invite rail, so guests lose the
-           only copy of the join code/QR on screen. This is a tiny, corner
-           stand-in for it — shown only while the stage is fullscreen. -->
-      <div id="fs-invite" class="fs-invite">
-        <canvas id="qr-fs" class="fs-invite-qr" aria-label="QR code with the join link"></canvas>
-        <span id="room-code-4" class="fs-invite-code"></span>
-      </div>
+           only copy of the join code/QR on screen. These are tiny,
+           corner stand-ins for it — shown only while the stage is
+           fullscreen — kept as two separate badges rather than one box. -->
+      <span id="room-code-4" class="fs-code"></span>
+      <canvas id="qr-fs" class="fs-qr" aria-label="QR code with the join link"></canvas>
       <button id="fs-btn" class="fs-btn" title="Fullscreen" aria-label="Toggle fullscreen">⛶</button>
     </div>
 

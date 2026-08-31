@@ -1195,6 +1195,13 @@
       else if (stage.requestFullscreen) stage.requestFullscreen().catch(function () { /* refused */ });
     });
 
+    // The wide invite rail shows the same code/QR as the fullscreen corner
+    // badges — hide it whenever the stage actually goes fullscreen, however
+    // that was triggered (the button, Esc, browser chrome, F11…).
+    document.addEventListener("fullscreenchange", function () {
+      document.body.classList.toggle("stage-fullscreen", document.fullscreenElement === $("#stage"));
+    });
+
     // search
     $("#search-form").addEventListener("submit", function (e) { e.preventDefault(); runSearch(); });
 
