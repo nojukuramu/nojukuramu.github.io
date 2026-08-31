@@ -500,6 +500,7 @@
     $("#room-code").textContent = app.state.code;
     $("#room-code-2").textContent = app.state.code;
     $("#room-code-3").textContent = app.state.code;
+    $("#room-code-4").textContent = app.state.code;
     $("#name-input").value = app.name;
     renderShare();
     render();
@@ -514,7 +515,7 @@
     var url = joinUrl();
     var ok = true;
 
-    [["#qr", 260], ["#qr-rail", 180]].forEach(function (pair) {
+    [["#qr", 260], ["#qr-rail", 180], ["#qr-fs", 40]].forEach(function (pair) {
       var canvas = $(pair[0]);
       if (!canvas) return;
       try {
