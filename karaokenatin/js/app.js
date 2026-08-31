@@ -122,6 +122,11 @@
     if (resumed && resumed.queue) {
       app.state.queue = resumed.queue;
       app.state.now = resumed.now || null;
+      // A guest that survived the reload is still holding whatever rev it
+      // last saw; restarting ours from 0 would make every fresh snapshot
+      // look "old" to it (data.rev < app.state.rev, app.js onHostMessage)
+      // and every one of its requests look "stale" to us forever after.
+      if (typeof resumed.rev === "number") app.state.rev = resumed.rev;
     }
 
     app.net = KN.net.host(code, {
@@ -138,14 +143,16 @@
         "guest-close": function (link) {
           delete app.guestNames[link.id];
           refreshGuestList();
-          broadcastState();
+          // Who's in the room isn't something a guest's queue/playback
+          // request could go stale against — don't bump rev over it.
+          broadcastState({ progress: true });
         },
         broker: function () { render(); },
         wake: function () {
           // Back from sleep: the guest list has just been re-proved, and any
           // guest that stayed is holding a snapshot from before the nap.
           refreshGuestList();
-          broadcastState();
+          broadcastState({ progress: true });
           render();
         },
         "code-taken": function () {
@@ -237,7 +244,7 @@
       var nm = String(data.name || "").slice(0, 24).trim() || "Guest";
       app.guestNames[link.id] = nm;
       refreshGuestList();
-      broadcastState();
+      broadcastState({ progress: true });
       return;
     }
     if (data.type === CMD.RESYNC) { sendStateTo(link); return; }
@@ -382,10 +389,13 @@
 
     // Progress ticks would otherwise flood the channel once a second per guest.
     var quiet = opts && opts.quiet;
+    var progress = opts && opts.progress;
     var now = Date.now();
     if (quiet && now - lastBroadcast < 2500) {
       clearTimeout(broadcastPending);
-      broadcastPending = setTimeout(function () { broadcastState({ quiet: true }); }, 2500);
+      broadcastPending = setTimeout(function () {
+        broadcastState({ quiet: true, progress: progress });
+      }, 2500);
       return;
     }
     clearTimeout(broadcastPending);
@@ -409,7 +419,8 @@
       code: app.state.code,
       token: app.hostToken,
       queue: app.state.queue,
-      now: app.state.now
+      now: app.state.now,
+      rev: app.state.rev
     });
   }
 
