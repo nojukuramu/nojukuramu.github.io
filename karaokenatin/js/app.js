@@ -1,9 +1,16 @@
 /* app.js — screens, wiring, and the two roles.
  *
  * One UI serves both roles. The host additionally owns the video player and the
- * authoritative state; a guest's identical-looking controls just send commands
+ * authoritative state; a guest's identical-looking controls just send requests
  * over the data channel. `dispatch()` is the seam: on the host it applies
  * locally, on a guest it goes down the wire.
+ *
+ * A guest request is a request, not an order: `onGuestCommand` checks it
+ * against the host's live state before `handle()` ever touches the player —
+ * rejecting anything built on a stale mirror (a queue position, an sid, a
+ * "now playing" that has since moved on) and anything that doesn't make sense
+ * against the current state (skipping when nothing plays, seeking past the
+ * end). A rejected guest gets a fresh snapshot instead of a state mutation.
  */
 (function (global) {
   "use strict";
@@ -235,7 +242,52 @@
     }
     if (data.type === CMD.RESYNC) { sendStateTo(link); return; }
 
+    var s = app.state;
+
+    // A request built on a mirror that has since moved on can ask for
+    // something that no longer makes sense — skip a song that already ended,
+    // move one that's gone. ADD is order-independent and safe regardless of
+    // staleness; everything else gets dropped and the sender resynced rather
+    // than applied against state it never actually saw.
+    if (data.type !== CMD.ADD && typeof data.rev === "number" && data.rev < s.rev) {
+      sendStateTo(link);
+      return;
+    }
+
+    var reason = illegalReason(data, s);
+    if (reason) {
+      link.send({ type: MSG.NOTICE, text: reason, kind: "warn" });
+      sendStateTo(link);
+      return;
+    }
+
     handle(data, app.guestNames[link.id] || "Guest", link.id);
+  }
+
+  /** Rejects a request that is well-formed but doesn't make sense against the
+   * host's current, authoritative state. Returns a reason to show the sender,
+   * or null if the request stands. */
+  function illegalReason(cmd, s) {
+    switch (cmd.type) {
+      case CMD.SKIP:
+      case CMD.RESTART:
+        return s.now ? null : "Nothing is playing.";
+      case CMD.PAUSE:
+        return s.player.status === "playing" ? null : "Not playing.";
+      case CMD.PLAY:
+        return s.now && s.player.status === "playing" ? "Already playing." : null;
+      case CMD.SEEK: {
+        if (!s.now) return "Nothing is playing.";
+        var t = Number(cmd.t);
+        if (!isFinite(t) || t < 0) return "Invalid seek position.";
+        if (s.player.duration && t > s.player.duration + 2) return "Invalid seek position.";
+        return null;
+      }
+      case CMD.PLAY_NOW:
+        return s.now && s.now.sid === cmd.sid ? "Already playing." : null;
+      default:
+        return null;
+    }
   }
 
   /** The one place a command changes anything, whoever sent it. */
@@ -406,10 +458,13 @@
 
   /* ================= shared ================= */
 
-  /** Host applies; guest asks. */
+  /** Host applies; guest asks. A guest stamps its request with the revision
+   * its own mirror is on, so the host can tell a fresh request from one built
+   * on a view that has since moved on. */
   function dispatch(cmd) {
     if (app.role === "host") handle(cmd, app.name || "Host");
     else if (app.net) {
+      cmd.rev = app.state ? app.state.rev : 0;
       app.net.send(cmd);
       if (!app.net.isOpen()) toast("Offline — queued until you reconnect.", "warn");
     }
