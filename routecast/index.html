@@ -68,7 +68,9 @@
     </header>
 
     <div class="rc-body">
-      <div id="map" class="rc-map"></div>
+      <div id="map-wrap" class="rc-map-wrap">
+        <div id="map" class="rc-map"></div>
+      </div>
 
       <div id="pick-root" class="rc-pick" hidden>
         <div id="pick-pin" class="rc-pick-pin" aria-hidden="true">
@@ -92,6 +94,9 @@
         </button>
         <button type="button" class="rc-mapbtn" id="ctl-nav" aria-label="Start navigation" title="Start navigation" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 19.5 19 12 15.3 4.5 19 12 2.5Z"/></svg>
+        </button>
+        <button type="button" class="rc-mapbtn rc-compassbtn" id="ctl-compass" aria-label="North is up — tap to follow your heading" title="North is up — tap to follow your heading" data-mode="north">
+          <svg class="rc-compass-needle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><path d="M12 5.2 15 12H9l3-6.8Z" fill="currentColor" stroke="none"/><path d="M9 12h6l-3 6.8L9 12Z" class="rc-compass-tail"/></svg>
         </button>
         <button type="button" class="rc-mapbtn" id="ctl-recenter" aria-label="Fit route" title="Fit route" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
@@ -280,6 +285,7 @@
   <script src="static/js/risk.js"></script>
   <script src="static/js/pick.js"></script>
   <script src="static/js/nav.js"></script>
+  <script src="static/js/compass.js"></script>
   <script src="static/js/app.js"></script>
   <script src="static/js/pwa.js"></script>
   <script>

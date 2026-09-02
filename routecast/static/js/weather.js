@@ -14,10 +14,15 @@
      particular) can re-evaluate arbitrary times against the same data with
      zero additional network requests.
 
-     opts: { signal, marginHours=6 }
+     opts: { signal, marginHours=6, maxAgeMs=0 }
        marginHours pads forecast_days so offsets a few hours later than the
        checkpoints' own ETAs (as used by the departure planner) still land
        inside the fetched range.
+       maxAgeMs>0 lets a checkpoint reuse an in-memory series fetched for a
+       point in the same ~5 km grid cell less than maxAgeMs ago, provided it
+       still covers the latest ETA asked for. 0 (the default, and what the
+       Plan button uses) always goes to the network. RC.weather.clearCache()
+       empties it.
 
      Series = {
        checkpoints: checkpoints,                 // the array passed in, unchanged
@@ -71,6 +76,52 @@
     "visibility", "is_day"
   ];
   var CHUNK = 20;
+
+  /* ---- in-memory forecast cache (live navigation) ---------------------
+     Live navigation re-reads the forecast for a moving set of checkpoints,
+     and a reroute usually keeps most of the corridor it already fetched.
+     Refetching every point every time would hammer Open-Meteo for data that
+     barely changed, so parsed hourly series are kept in memory, keyed by a
+     ~5 km grid cell (finer than Open-Meteo's own model grid, so two points
+     sharing a cell genuinely share a forecast) and reused while they are
+     younger than the caller's maxAgeMs *and* their hourly range still covers
+     the time being asked about. Nothing is written to disk: the service
+     worker still never caches a forecast, and a reload starts clean. */
+  var CACHE_GRID_DEG = 0.05;   // ~5.5 km at the equator
+  var CACHE_MAX = 400;         // entries; oldest quarter evicted when exceeded
+  var cache = {};              // gridKey -> { entry, fetchedAt }
+  var cacheCount = 0;
+
+  function gridKey(lat, lon) {
+    return Math.round(lat / CACHE_GRID_DEG) + "|" + Math.round(lon / CACHE_GRID_DEG);
+  }
+
+  function cacheGet(lat, lon, maxAgeMs, needEndMs) {
+    var hit = cache[gridKey(lat, lon)];
+    if (!hit) return null;
+    if (Date.now() - hit.fetchedAt > maxAgeMs) return null;
+    var times = hit.entry.times;
+    if (!times || !times.length) return null;
+    if (needEndMs && times[times.length - 1].getTime() < needEndMs) return null;
+    return hit.entry;
+  }
+
+  function cachePut(lat, lon, entry) {
+    var k = gridKey(lat, lon);
+    if (!cache[k]) {
+      cacheCount++;
+      if (cacheCount > CACHE_MAX) {
+        // Evict the oldest quarter in one pass rather than sorting on every put.
+        var keys = Object.keys(cache);
+        keys.sort(function (a, b) { return cache[a].fetchedAt - cache[b].fetchedAt; });
+        var drop = keys.length >> 2;
+        for (var i = 0; i < drop; i++) { delete cache[keys[i]]; cacheCount--; }
+      }
+    }
+    cache[k] = { entry: entry, fetchedAt: Date.now() };
+  }
+
+  function clearCache() { cache = {}; cacheCount = 0; }
 
   function round4(n) { return Math.round(n * 10000) / 10000; }
 
@@ -205,15 +256,28 @@
     var marginHours = opts.marginHours == null ? 6 : opts.marginHours;
     var forecastDays = computeForecastDays(checkpoints, marginHours);
 
+    // maxAgeMs 0 (the default, and what the Plan button uses) bypasses the
+    // cache entirely, so planning a trip always fetches fresh data. Live
+    // navigation passes a TTL and pays for the network only on a miss.
+    var maxAgeMs = opts.maxAgeMs == null ? 0 : opts.maxAgeMs;
+    var needEndMs = 0;
+    for (var e = 0; e < checkpoints.length; e++) {
+      var et = checkpoints[e].eta ? checkpoints[e].eta.getTime() : 0;
+      if (et > needEndMs) needEndMs = et;
+    }
+
     // de-duplicate identical rounded coordinates
     var uniqueByKey = {};
     var uniqueList = [];
+    var resultsByKey = {};
     for (var i = 0; i < checkpoints.length; i++) {
       var cp = checkpoints[i];
       var key = coordKey(cp.lat, cp.lon);
       if (!uniqueByKey[key]) {
         uniqueByKey[key] = true;
-        uniqueList.push({ key: key, lat: round4(cp.lat), lon: round4(cp.lon) });
+        var cached = maxAgeMs > 0 ? cacheGet(cp.lat, cp.lon, maxAgeMs, needEndMs) : null;
+        if (cached) resultsByKey[key] = cached;
+        else uniqueList.push({ key: key, lat: round4(cp.lat), lon: round4(cp.lon) });
       }
     }
 
@@ -223,13 +287,16 @@
       chunks.push(uniqueList.slice(c, c + CHUNK));
     }
 
-    var resultsByKey = {};
     var chain = Promise.resolve();
     chunks.forEach(function (chunk) {
       chain = chain.then(function () {
         return fetchChunk(chunk, forecastDays, signal);
       }).then(function (byKey) {
-        for (var k in byKey) { if (byKey.hasOwnProperty(k)) resultsByKey[k] = byKey[k]; }
+        for (var k in byKey) {
+          if (!byKey.hasOwnProperty(k)) continue;
+          resultsByKey[k] = byKey[k];
+          cachePut(byKey[k].lat, byKey[k].lon, byKey[k]);
+        }
       });
     });
 
@@ -308,6 +375,7 @@
 
   RC.weather = {
     forecastSeries: forecastSeries,
+    clearCache: clearCache,
     forecast: forecast,
     sampleSeries: sampleSeriesFn,
     describe: describe

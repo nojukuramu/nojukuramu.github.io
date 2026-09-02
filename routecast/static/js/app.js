@@ -27,7 +27,20 @@
   var map, tileLayer, routeLayers = [], dotLayer, chipLayer, endpointLayer, activeRequest = null;
 
   // Live navigation
-  var riderMarker = null, navFollowStarted = false, lastNavRenderTs = 0;
+  var riderMarker = null, riderArrow = null, navFollowStarted = false, lastNavRenderTs = 0;
+  // The places still to be reached, in order, with where each one falls along
+  // the CURRENT route. Rebuilt whenever the route is replaced; a reroute asks
+  // OSRM for a line from where the rider is now through whatever is left.
+  var navTargets = [];
+  var navRerouteToken = 0;
+
+  // Live weather refresh: a checkpoint that was refetched less than this ago
+  // is left alone. Open-Meteo publishes hourly, so anything shorter is spend
+  // for spend's sake.
+  var WX_REUSE_MS = 10 * 60 * 1000;
+  // How far ahead a live refresh bothers looking. A forecast eight hours out
+  // is a mood, not a fact; refetching it every quarter hour buys nothing.
+  var WX_REFRESH_MAX_POINTS = 24;
 
   // Centre-pin picker
   var pickPrevSheet = null, activePickTrigger = null;
@@ -54,7 +67,19 @@
     endpointLayer = L.layerGroup().addTo(map);
 
     // Re-declutter the weather chips whenever the screen-space layout changes.
-    map.on("zoomend moveend", redrawChips);
+    // While navigating, the map moves with every GPS fix and the chips are
+    // already redrawn on renderNavHud's 5-second throttle — re-declutterng 48
+    // markers once a second on top of that is pure waste.
+    map.on("zoomend", redrawChips);
+    map.on("moveend", function () { if (!RC.nav.isActive()) redrawChips(); });
+
+    RC.compass.init({
+      map: map,
+      mapEl: RC.el("map"),
+      wrapEl: RC.el("map-wrap"),
+      onModeChange: renderCompassBtn
+    });
+    renderCompassBtn(RC.compass.getMode());
 
     // Right-click / long-press to drop a destination.
     map.on("contextmenu", function (e) {
@@ -398,7 +423,10 @@
     return map[level] || map.clear;
   }
 
-  function drawRoute() {
+  // opts.fit === false keeps the current view — a live reroute redraws the
+  // line under a moving rider and must not yank the map back to a whole-route
+  // overview mid-ride.
+  function drawRoute(opts) {
     for (var i = 0; i < routeLayers.length; i++) map.removeLayer(routeLayers[i]);
     routeLayers = [];
     var route = state.routes[state.routeIndex];
@@ -432,7 +460,7 @@
         routeLayers.push(L.polyline(seg, { color: colorFor(worse), weight: 5, opacity: 0.95 }).addTo(map));
       }
     }
-    map.fitBounds(L.latLngBounds(route.coords).pad(0.12));
+    if (!opts || opts.fit !== false) map.fitBounds(L.latLngBounds(route.coords).pad(0.12));
   }
 
   // Every checkpoint gets a small dot exactly on its coordinate; a subset
@@ -898,6 +926,8 @@
   function recenterRoute() {
     var route = state.routes[state.routeIndex];
     if (!route) return;
+    // A whole-route overview is a north-up thing; leave course-up first.
+    if (RC.compass.isRotated()) RC.compass.setMode("north", { gesture: false });
     map.fitBounds(L.latLngBounds(route.coords).pad(0.12));
   }
 
@@ -987,6 +1017,34 @@
     navFollowStarted = false;
   }
 
+  /* Where each remaining waypoint falls along `route`, so we know which ones
+     the rider has already passed and which a reroute still has to include.
+     OSRM returns one leg per gap between waypoints, so the prefix sums of the
+     leg distances are exactly the waypoint boundaries. */
+  function rebuildNavTargets(route, places) {
+    if (places) {
+      navTargets = places.map(function (p) { return { lat: p.lat, lon: p.lon, name: p.name, atM: 0 }; });
+    }
+    var legs = (route && route.legs) || [];
+    var acc = 0;
+    for (var i = 0; i < navTargets.length; i++) {
+      acc += (legs[i] && legs[i].distance) || 0;
+      navTargets[i].atM = acc;
+    }
+    // The destination is the destination however the legs add up.
+    if (navTargets.length && route && route.distance) {
+      navTargets[navTargets.length - 1].atM = route.distance;
+    }
+  }
+
+  // Drop the waypoints already behind the rider. The last one is never
+  // dropped — arriving is what ends the ride, not a reroute.
+  function dropPassedTargets(distanceAlong) {
+    while (navTargets.length > 1 && navTargets[0].atM <= distanceAlong + 150) {
+      navTargets.shift();
+    }
+  }
+
   function startNav() {
     if (RC.nav.isActive()) { stopNav(); return; }
     var route = state.routes[state.routeIndex];
@@ -994,6 +1052,16 @@
       setStatus("Plan a route before navigating.", "error");
       return;
     }
+    var places = [];
+    for (var i = 1; i < state.endpoints.length; i++) {
+      if (state.endpoints[i].place) places.push(state.endpoints[i].place);
+    }
+    if (!places.length) {
+      setStatus("Plan a route before navigating.", "error");
+      return;
+    }
+    rebuildNavTargets(route, places);
+
     setStatus("Starting navigation…", "busy");
     RC.nav.start({
       map: map,
@@ -1012,7 +1080,109 @@
 
   function stopNav() {
     RC.nav.stop();
+    navTargets = [];
+    navRerouteToken++;
+    RC.compass.reset();
+    RC.compass.setMode("north", { gesture: false });
     exitNavUI();
+  }
+
+  /* ---------------------------------------------------------
+     Rerouting — fired by RC.nav only once the rider is convincingly on a
+     different road (see nav.js for the gate). One routing request, no
+     alternatives, from where they are through whatever waypoints are left,
+     started facing the way they are actually pointing. The forecast for the
+     new line reuses RC.weather's grid cache, so a detour that rejoins the
+     old corridor usually costs no weather request at all.
+     --------------------------------------------------------- */
+  function reroute(ns) {
+    var token = ++navRerouteToken;
+    dropPassedTargets(ns.distanceAlong);
+    if (!navTargets.length) return Promise.resolve();
+
+    var waypoints = [{ lat: ns.lat, lon: ns.lon }].concat(navTargets.map(function (t) {
+      return { lat: t.lat, lon: t.lon };
+    }));
+    var bearings = [];
+    bearings.push(ns.courseDeg == null ? null : { deg: ns.courseDeg, range: 75 });
+
+    setStatus("Off route — finding a new way…", "busy");
+
+    return RC.router.route(waypoints, {
+      vehicle: state.vehicle,
+      alternatives: false,
+      bearings: bearings
+    }).then(function (routes) {
+      if (token !== navRerouteToken || !RC.nav.isActive()) return;
+      var route = routes && routes[0];
+      if (!route) throw RC.error("Could not find a new route.", "route");
+
+      var sampleOpts = { departAt: new Date() };
+      if (state.interval !== "auto") sampleOpts.everyKm = parseInt(state.interval, 10);
+      var checkpoints = RC.sampler.sample(route, sampleOpts);
+
+      return RC.weather.forecastSeries(checkpoints, { maxAgeMs: WX_REUSE_MS }).then(function (series) {
+        if (token !== navRerouteToken || !RC.nav.isActive()) return;
+        for (var i = 0; i < checkpoints.length; i++) {
+          checkpoints[i].wx = RC.weather.sampleSeries(series, i, checkpoints[i].eta);
+        }
+        state.routes = [route];
+        state.routeIndex = 0;
+        state.checkpoints = checkpoints;
+        state.series = series;
+        state.trip = RC.risk.trip(checkpoints, state.vehicle);
+        state.selected = -1;
+        rebuildNavTargets(route, null);
+        labelCheckpoints();
+        checkpoints[0].label = "You are here";
+        RC.nav.setRoute(route, checkpoints, series);
+        drawRoute({ fit: false });
+        drawWeatherMarkers();
+        renderSummary();
+        renderAlternatives();
+        renderTimeline();
+        renderDetails();
+        renderPeekBar();
+        setStatus("", "");
+      });
+    }, function (err) {
+      if (token !== navRerouteToken) return;
+      // A failed reroute is not fatal: the old line is still on screen and
+      // nav.js will back off before trying again.
+      setStatus(err && err.message ? err.message : "Could not find a new route.", "error");
+    });
+  }
+
+  /* ---------------------------------------------------------
+     Live weather — the cheap half runs constantly inside nav.js (downstream
+     ETAs are re-sampled against the hourly series already in memory, once a
+     minute, for free). This is the expensive half: an actual refetch, only
+     for the checkpoints still ahead, capped at WX_REFRESH_MAX_POINTS, and
+     only for points whose data is older than WX_REUSE_MS.
+     --------------------------------------------------------- */
+  function refreshDownstreamWeather(ns) {
+    var cps = state.checkpoints;
+    var series = state.series;
+    if (!series || !cps.length) return Promise.resolve();
+
+    var from = 0;
+    while (from < cps.length && cps[from].distance <= ns.distanceAlong + 0.5) from++;
+    var ahead = cps.slice(from, from + WX_REFRESH_MAX_POINTS);
+    if (!ahead.length) return Promise.resolve();
+
+    return RC.weather.forecastSeries(ahead, { maxAgeMs: WX_REUSE_MS }).then(function (fresh) {
+      if (!RC.nav.isActive() || state.series !== series) return;
+      // Splice the refreshed entries back into the live series in place —
+      // nav.js holds a reference to it and re-times against it every minute.
+      for (var i = 0; i < ahead.length; i++) {
+        series.perCheckpoint[from + i] = fresh.perCheckpoint[i];
+        cps[from + i].wx = RC.weather.sampleSeries(series, from + i, cps[from + i].eta);
+      }
+      state.trip = RC.risk.trip(cps, state.vehicle);
+      drawWeatherMarkers();
+      renderTimeline();
+      renderDetails();
+    }, function () { /* a missed refresh just means the last forecast stands */ });
   }
 
   function renderNavTicks() {
@@ -1091,23 +1261,43 @@
     }
   }
 
+  function riderIconHtml() {
+    return '<span class="rc-rider"><svg viewBox="0 0 24 24" aria-hidden="true">' +
+      '<path d="M12 3.2 18.4 19 12 15.4 5.6 19 12 3.2Z" fill="currentColor"/></svg></span>';
+  }
+
   function updateRiderMarker(ns) {
     if (!map) return;
     var latlng = [ns.lat, ns.lon];
     if (!riderMarker) {
       var icon = L.divIcon({
         className: "",
-        html: '<span style="display:block;width:16px;height:16px;border-radius:50%;' +
-          "background:var(--clay,#C1613F);border:3px solid var(--surface,#fff);" +
-          'box-shadow:0 2px 6px rgba(0,0,0,.4);"></span>',
-        iconSize: [16, 16],
-        iconAnchor: [8, 8]
+        html: riderIconHtml(),
+        iconSize: [26, 26],
+        iconAnchor: [13, 13]
       });
       riderMarker = L.marker(latlng, { icon: icon, zIndexOffset: 1000, keyboard: false }).addTo(map);
+      riderArrow = null;
     } else {
       riderMarker.setLatLng(latlng);
     }
-    if (!navFollowStarted) {
+
+    // The arrow lives inside the (possibly rotated) map, so pointing it at
+    // the course in map space is all that's needed — course-up then shows it
+    // upright for free.
+    if (!riderArrow && riderMarker.getElement) {
+      var el = riderMarker.getElement();
+      riderArrow = el ? el.querySelector(".rc-rider") : null;
+    }
+    if (riderArrow && ns.courseDeg != null) {
+      riderArrow.style.transform = "rotate(" + Math.round(ns.courseDeg) + "deg)";
+    }
+
+    // Course-up rotates about the map centre, so the rider has to be at it.
+    if (RC.compass.isRotated()) {
+      map.setView(latlng, navFollowStarted ? map.getZoom() : Math.max(map.getZoom(), 16), { animate: false });
+      navFollowStarted = true;
+    } else if (!navFollowStarted) {
       navFollowStarted = true;
       map.setView(latlng, Math.max(map.getZoom(), 16));
     } else {
@@ -1115,7 +1305,12 @@
     }
   }
 
-  RC.nav.onUpdate = function (ns) { renderNavHud(ns); updateRiderMarker(ns); };
+  RC.nav.onUpdate = function (ns) {
+    RC.compass.setCourse(ns.headingDeg, ns.speedKmh, ns.courseDeg);
+    renderNavHud(ns);
+    updateRiderMarker(ns);
+    dropPassedTargets(ns.distanceAlong);
+  };
   RC.nav.onArrive = function () { setStatus("You've arrived.", ""); stopNav(); };
   RC.nav.onOffRoute = function (ns) {
     var alertEl = RC.el("nav-alert");
@@ -1126,6 +1321,22 @@
       alertEl.innerHTML = RC.icons.ui("alert") + "<span>You're off the planned route.</span>";
     }
   };
+  RC.nav.onReroute = reroute;
+  RC.nav.onWeatherRefresh = refreshDownstreamWeather;
+
+  /* ---------------------------------------------------------
+     Compass button
+     --------------------------------------------------------- */
+  function renderCompassBtn(mode) {
+    var btn = RC.el("ctl-compass");
+    if (!btn) return;
+    var label = mode === "course"
+      ? "Following your heading — tap for north up"
+      : "North is up — tap to follow your heading";
+    btn.setAttribute("data-mode", mode);
+    btn.setAttribute("aria-label", label);
+    btn.title = label;
+  }
 
   /* ---------------------------------------------------------
      --sheet-h / --rc-controls-h — kept current so the map controls and
@@ -1347,6 +1558,8 @@
     if (ctlLocate) ctlLocate.addEventListener("click", locateOnMap);
     var ctlNav = RC.el("ctl-nav");
     if (ctlNav) ctlNav.addEventListener("click", startNav);
+    var ctlCompass = RC.el("ctl-compass");
+    if (ctlCompass) ctlCompass.addEventListener("click", function () { RC.compass.cycle(); });
     var ctlRecenter = RC.el("ctl-recenter");
     if (ctlRecenter) ctlRecenter.addEventListener("click", recenterRoute);
     var navStop = RC.el("nav-stop");

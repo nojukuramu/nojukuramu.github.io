@@ -244,7 +244,10 @@ button { font: inherit; }
 /* ============================================================
    Map
    ============================================================ */
-.rc-map {
+/* The map lives inside a wrapper that owns the layout slot and the clip.
+   Course-up rotation grows #map past the wrapper's edges (see compass.js);
+   the wrapper's overflow:hidden is what keeps that off the rest of the UI. */
+.rc-map-wrap {
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
@@ -254,10 +257,40 @@ button { font: inherit; }
      bottom sheet invisible underneath the tiles while still swallowing every
      touch meant for the map. isolate keeps those panes contained. */
   position: relative;
+  overflow: hidden;
   z-index: 0;
   isolation: isolate;
 }
+.rc-map {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  background: var(--surface-2);
+}
 .rc-map .leaflet-tile-pane { filter: var(--map-filter); }
+
+/* ---- course-up rotation ------------------------------------------------
+   One transform on the map element: composited, no reflow, and Leaflet's
+   own projection never learns about it. Everything that carries text or
+   points at a place counter-rotates about its own anchor so it stays
+   upright and stays put. --rc-bearing is written by compass.js. */
+html[data-rotate="on"] .rc-map {
+  transform: rotate(var(--rc-bearing, 0deg));
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+html[data-rotate="on"] .rc-marker {
+  transform: rotate(calc(-1 * var(--rc-bearing, 0deg)));
+  transform-origin: 50% calc(100% + 7px); /* the stem tip, which sits on the coordinate */
+}
+/* Leaflet's own controls sit inside the map element, so under rotation they
+   are both tilted and pushed out past the visible area. Hide them; the app's
+   own map buttons live outside the rotated element, and pinch/scroll zoom
+   (anchored to the centre by compass.js) still works. */
+html[data-rotate="on"] .rc-map .leaflet-control-container { display: none; }
+html[data-rotate="on"] .rc-marker-pin {
+  transform: rotate(calc(-1 * var(--rc-bearing, 0deg))) rotate(-45deg);
+  transform-origin: 50% 28px;             /* the pin's point, matching iconAnchor */
+}
 
 /* ============================================================
    Panel (desktop sidebar / mobile bottom sheet)
@@ -997,6 +1030,23 @@ button { font: inherit; }
   border-color: var(--clay);
 }
 
+/* .rc-rider — you, on the map. The arrow points at your course in MAP space,
+   so course-up (which rotates the map by minus that course) shows it upright
+   without a second calculation. */
+.rc-rider {
+  display: block;
+  width: 26px; height: 26px;
+  color: var(--clay);
+  filter: drop-shadow(0 1px 2px rgba(20, 18, 15, .5));
+  transform-origin: 50% 50%;
+}
+.rc-rider svg {
+  width: 100%; height: 100%;
+  stroke: var(--surface);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+
 /* legacy pin-style start/end divIcon (kept for compatibility) */
 .rc-marker-pin {
   display: grid; place-items: center;
@@ -1045,6 +1095,17 @@ button { font: inherit; }
 .rc-mapbtn:active { transform: translateY(1px); }
 .rc-mapbtn svg { width: 19px; height: 19px; }
 .rc-mapbtn[hidden] { display: none; }
+/* The needle points at true north, so in course-up it swings with the map. */
+.rc-compass-needle { transform: rotate(var(--rc-bearing, 0deg)); }
+.rc-compass-tail { opacity: .45; }
+#ctl-compass[data-mode="course"] {
+  color: var(--clay);
+  border-color: var(--clay);
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-rotate="on"] .rc-map { transition: none; }
+}
+
 #ctl-nav { color: var(--clay-ink); background: var(--clay); border-color: var(--clay); }
 #ctl-nav:hover { background: var(--clay-hover); color: var(--clay-ink); }
 
@@ -1297,7 +1358,7 @@ html[data-nav="on"] .rc-peek-bar-primary { color: var(--clay); }
 
   .rc-body { flex-direction: column; }
 
-  .rc-map { position: absolute; inset: 0; height: 100%; }
+  .rc-map-wrap { position: absolute; inset: 0; height: 100%; }
 
   .rc-panel {
     position: absolute;
