@@ -38,7 +38,6 @@
   <!-- ══════════════ HOME ══════════════ -->
   <section id="view-home" class="view">
     <header class="home-head">
-      <a class="back" href="/">← the atelier</a>
       <button class="theme-btn" data-theme-toggle aria-label="Switch theme"><span class="theme-icon"></span></button>
     </header>
 
@@ -57,6 +56,17 @@
         <div class="install-actions">
           <button id="install-btn" class="btn btn-primary">Install</button>
           <button id="install-dismiss" class="btn btn-quiet btn-sm" aria-label="Dismiss install prompt">Not now</button>
+        </div>
+      </div>
+
+      <div id="update-bar" class="install-bar" hidden>
+        <div class="install-text">
+          <strong>A new version is ready</strong>
+          <span id="update-text">Reload to pick up the latest KaraokeNatin.</span>
+        </div>
+        <div class="install-actions">
+          <button id="update-apply" class="btn btn-primary">Reload now</button>
+          <button id="update-later" class="btn btn-quiet btn-sm">Later</button>
         </div>
       </div>
 
@@ -79,9 +89,11 @@
           <h2>Join</h2>
           <p>Scan the QR, or type the code.</p>
           <form id="join-form" class="join-form">
+            <input id="join-name" type="text" maxlength="24" placeholder="Your name"
+                   autocomplete="nickname" required aria-label="Your name" />
             <input id="join-code" type="text" inputmode="latin" autocapitalize="characters"
                    autocomplete="off" spellcheck="false" maxlength="6" placeholder="ABC123"
-                   aria-label="Room code" />
+                   required aria-label="Room code" />
             <button type="submit" class="btn btn-ghost">Join</button>
           </form>
         </div>
@@ -108,6 +120,10 @@
       <button class="linklike disclaimer-open">Disclaimer</button> ·
       <a href="https://github.com/nojukuramu/KaraokeNatin" rel="noopener">desktop original</a> ·
       <a href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">source</a>
+      <p class="version-line">
+        <span id="app-version"></span>
+        <button id="update-check" class="linklike" hidden>Check for updates</button>
+      </p>
     </footer>
   </section>
 
@@ -212,6 +228,20 @@
       <button id="lib-import" class="btn btn-quiet btn-sm">Import</button>
       <input id="lib-import-file" type="file" accept="application/json,.json" hidden />
       <button id="lib-clear" class="btn btn-quiet btn-sm">Clear all</button>
+    </div>
+  </div>
+
+  <!-- Name gate: a room is a shared queue, so every guest arrives with a name -->
+  <div id="name-gate" class="modal-backdrop" hidden>
+    <div class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="name-gate-title">
+      <h2 id="name-gate-title">What should we call you?</h2>
+      <p class="gate-sub">Your name rides along with every song you queue, so the room knows whose turn it is.</p>
+      <form id="name-gate-form" class="gate-form">
+        <input id="name-gate-input" type="text" maxlength="24" placeholder="Your name"
+               autocomplete="nickname" required aria-label="Your name" />
+        <button type="submit" class="btn btn-primary">Join <span id="name-gate-code" class="gate-code"></span></button>
+      </form>
+      <p class="gate-foot"><button type="button" id="name-gate-cancel" class="linklike">Not now — go back</button></p>
     </div>
   </div>
 

@@ -107,7 +107,8 @@
     openPlaylists: {},   // pid -> expanded in the library view
     pickerSong: null,
     railOpen: true,
-    hostWasListed: false   // host only: has any broker ever answered?
+    hostWasListed: false,  // host only: has any broker ever answered?
+    pendingJoin: null      // room code waiting behind the name gate
   };
 
   /* ================= HOST ================= */
@@ -540,6 +541,7 @@
     $("#view-library").hidden = true;
     document.body.classList.remove("in-room", "is-host");
     renderLibrary();
+    $("#join-name").value = app.name || loadName() || "";
 
     // Offer to pick up wherever this browser left off — hosting outranks
     // guesting, since a host walking away ends everyone else's night.
@@ -1080,7 +1082,7 @@
     var deferred = null;
 
     if ("serviceWorker" in navigator && location.protocol !== "file:") {
-      navigator.serviceWorker.register("sw.js").catch(function () {
+      navigator.serviceWorker.register("sw.js").then(setupUpdates, function () {
         // Offline support and installability are both nice-to-have; a browser
         // that refuses the worker still gets a fully working app.
       });
@@ -1132,6 +1134,119 @@
     setTimeout(function () { if (!deferred) show(); }, 2500);
   }
 
+  /* ---------------- updates ----------------
+   * Installed from the home screen, there is no address bar to reload from and
+   * no visible clue that a newer build exists — the cached shell will happily
+   * serve last month's app forever. So the page asks: on every load, when it
+   * comes back to the foreground, and on a button, with the answer offered
+   * rather than forced, because nobody wants a reload mid-song.
+   */
+
+  var APP_VERSION = "2.1.0";
+  var UPDATE_CHECK_MS = 30 * 60 * 1000;
+
+  var swReg = null;
+  var lastUpdateCheck = 0;
+  var updateReady = false;
+  var reloading = false;
+  var hadController = false;
+
+  function announceUpdate() {
+    if (updateReady) return;
+    updateReady = true;
+    $("#update-bar").hidden = false;
+    var check = $("#update-check");
+    check.hidden = false;
+    check.textContent = "Update ready";
+    // Mid-room, the bar is off-screen behind the room view; a toast is the
+    // only way the news reaches a host who never goes back home.
+    if (app.role) toast("A new version is ready — reload when the room is done.");
+  }
+
+  function watchWorker(worker) {
+    if (!worker) return;
+    worker.addEventListener("statechange", function () {
+      // A worker that reaches "installed" while another one is already in
+      // charge is by definition a newer build waiting its turn.
+      if (worker.state === "installed" && navigator.serviceWorker.controller) announceUpdate();
+    });
+  }
+
+  function setupUpdates(reg) {
+    if (!reg) return;
+    swReg = reg;
+    hadController = !!navigator.serviceWorker.controller;
+
+    if (reg.waiting && hadController) announceUpdate();
+    watchWorker(reg.installing);
+    reg.addEventListener("updatefound", function () { watchWorker(reg.installing); });
+
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      // The very first worker claiming an uncontrolled page is not an update.
+      if (!hadController || reloading) return;
+      reloading = true;
+      location.reload();
+    });
+
+    $("#update-check").hidden = false;
+    checkForUpdate(false);
+
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) return;
+      if (Date.now() - lastUpdateCheck < UPDATE_CHECK_MS) return;
+      checkForUpdate(false);
+    });
+    setInterval(function () { if (!document.hidden) checkForUpdate(false); }, UPDATE_CHECK_MS);
+  }
+
+  function checkForUpdate(manual) {
+    if (updateReady) { if (manual) announceUpdate(); return; }
+    if (!swReg) {
+      if (manual) toast("This browser cannot check for updates — reload the page instead.", "warn");
+      return;
+    }
+    lastUpdateCheck = Date.now();
+    if (manual) toast("Checking for updates…");
+
+    swReg.update().then(function () {
+      // update() resolves as soon as the new worker starts installing, so give
+      // the install a beat to land before calling it a day.
+      setTimeout(function () {
+        if (updateReady || swReg.waiting || swReg.installing) {
+          if (swReg.waiting) announceUpdate();
+          else if (manual && !updateReady) toast("A new version is downloading — hold on a moment.");
+          return;
+        }
+        if (manual) toast("You are on the latest version (" + APP_VERSION + ").");
+      }, 1500);
+    }, function () {
+      if (manual) toast("Could not check right now — try again when you are online.", "warn");
+    });
+  }
+
+  function applyUpdate() {
+    $("#update-bar").hidden = true;
+    if (swReg && swReg.waiting) {
+      // The waiting worker takes over, which fires controllerchange above and
+      // reloads us onto the new build.
+      swReg.waiting.postMessage("skip-waiting");
+      setTimeout(function () { if (!reloading) { reloading = true; location.reload(); } }, 2000);
+      return;
+    }
+    reloading = true;
+    location.reload();
+  }
+
+  function setupUpdateUI() {
+    $("#app-version").textContent = "v" + APP_VERSION;
+    $("#update-apply").addEventListener("click", applyUpdate);
+    $("#update-later").addEventListener("click", function () { $("#update-bar").hidden = true; });
+    $("#update-check").addEventListener("click", function () {
+      if (updateReady) { applyUpdate(); return; }
+      checkForUpdate(true);
+    });
+  }
+
   /* ---------------- theme ----------------
    * Light and dark, with "no choice yet" meaning "follow the system". The
    * stored choice is applied by a tiny inline script in the document head, so
@@ -1173,6 +1288,55 @@
     relabel();
   }
 
+  /* ---------------- the name gate ----------------
+   * A queue is a list of turns, and a turn belongs to somebody. Arriving as
+   * "Guest" makes the room unreadable the moment more than one phone is in it,
+   * so a name is the price of entry: typed on the home form, or asked for here
+   * when someone lands straight on a join link from a QR code.
+   */
+
+  function enterRoom(code) {
+    if (loadName()) { startGuest(code); return; }
+    openNameGate(code);
+  }
+
+  function openNameGate(code) {
+    app.pendingJoin = code;
+    $("#name-gate-code").textContent = code;
+    $("#name-gate-input").value = app.name || "";
+    $("#name-gate").hidden = false;
+    // Autofocus loses to the modal's own reveal on some mobile browsers.
+    setTimeout(function () { try { $("#name-gate-input").focus(); } catch (e) { /* ignore */ } }, 30);
+  }
+
+  function closeNameGate() {
+    app.pendingJoin = null;
+    $("#name-gate").hidden = true;
+  }
+
+  function setupNameGate() {
+    $("#name-gate-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var input = $("#name-gate-input");
+      var name = input.value.slice(0, 24).trim();
+      if (!name) {
+        toast("Type a name so the room knows whose turn it is.", "warn");
+        input.focus();
+        return;
+      }
+      var code = app.pendingJoin;
+      saveName(name);
+      closeNameGate();
+      if (code) startGuest(code);
+    });
+
+    $("#name-gate-cancel").addEventListener("click", function () {
+      closeNameGate();
+      location.hash = "#/";
+      showHome();
+    });
+  }
+
   /* ---------------- routing ---------------- */
 
   function route() {
@@ -1187,12 +1351,13 @@
         return;
       }
       if (app.role && app.state && app.state.code === code) return;
+      if (app.pendingJoin === code) return;   // the name gate is already up for it
       if (app.role) {
         if (app.net) app.net.stop();
         if (app.player) app.player.destroy();
         clearInterval(ticker);
       }
-      startGuest(code);
+      enterRoom(code);
       return;
     }
     if (hash.indexOf("#/library") === 0) {
@@ -1227,8 +1392,15 @@
 
     $("#join-form").addEventListener("submit", function (e) {
       e.preventDefault();
+      var name = $("#join-name").value.slice(0, 24).trim();
+      if (!name) {
+        toast("Enter a name before you join.", "warn");
+        $("#join-name").focus();
+        return;
+      }
       var code = KN.net.normalizeCode($("#join-code").value);
-      if (code.length !== 6) { toast("Room codes are 6 characters.", "warn"); return; }
+      if (code.length !== 6) { toast("Room codes are 6 characters.", "warn"); $("#join-code").focus(); return; }
+      saveName(name);
       location.hash = "#/r/" + code;
     });
 
@@ -1275,7 +1447,13 @@
     });
 
     $("#name-input").addEventListener("change", function () {
-      saveName(this.value.slice(0, 24).trim());
+      var name = this.value.slice(0, 24).trim();
+      if (!name) {
+        this.value = app.name;
+        toast("Your name cannot be empty.", "warn");
+        return;
+      }
+      saveName(name);
       toast("Name saved");
     });
 
@@ -1432,6 +1610,8 @@
     });
 
     setupTheme();
+    setupNameGate();
+    setupUpdateUI();
     switchTab("queue");
     startLocalClock();
     setupInstall();

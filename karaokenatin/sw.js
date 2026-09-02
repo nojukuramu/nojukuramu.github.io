@@ -16,7 +16,7 @@
  */
 "use strict";
 
-var VERSION = "kn-v2";
+var VERSION = "kn-v3";
 var SHELL = VERSION + "-shell";
 
 var SHELL_FILES = [
@@ -49,8 +49,11 @@ self.addEventListener("install", function (event) {
           })
         );
       })
-      .then(function () { return self.skipWaiting(); })
   );
+  // Deliberately no skipWaiting() here: a finished install parks this worker in
+  // "waiting", which is what the page watches for so it can offer the update
+  // rather than swapping the app out from under a room that is mid-song. The
+  // page sends "skip-waiting" below when the user accepts.
 });
 
 self.addEventListener("activate", function (event) {

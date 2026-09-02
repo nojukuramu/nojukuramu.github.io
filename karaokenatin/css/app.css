@@ -142,11 +142,9 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.01e
 .home-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 18px 0 0;
 }
-.back { color: var(--ink-3); text-decoration: none; font-size: 14px; transition: color var(--fast) var(--ease); }
-.back:hover { color: var(--ink); }
 
 #view-home:not([hidden]) {
   min-height: 100dvh;
@@ -219,7 +217,19 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.01e
 .choice h2 { margin: 0 0 4px; font-size: 21px; }
 .choice p { margin: 0 0 18px; color: var(--ink-2); font-size: 14px; }
 
-.join-form { display: flex; gap: 8px; }
+.join-form { display: flex; flex-wrap: wrap; gap: 8px; }
+#join-name {
+  flex: 1 1 100%;
+  min-width: 0;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0 14px;
+  height: var(--tap);
+  text-align: center;
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+#join-name:focus { border-color: var(--accent); outline: none; }
 #join-code {
   flex: 1;
   min-width: 0;
@@ -294,6 +304,25 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.01e
 .home-foot { text-align: center; color: var(--ink-3); font-size: 13px; padding-top: 36px; }
 .home-foot a { color: var(--ink-3); text-decoration: none; }
 .home-foot a:hover { color: var(--ink-2); text-decoration: underline; }
+.version-line { margin: 8px 0 0; display: flex; gap: 8px; justify-content: center; align-items: center; font-size: 12px; color: var(--ink-3); }
+.version-line [hidden] { display: none; }
+
+/* ─────────────── name gate ─────────────── */
+
+.gate-sub { color: var(--ink-2); font-size: 14px; margin: 0 0 16px; }
+.gate-form { display: flex; flex-direction: column; gap: 10px; }
+#name-gate-input {
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  height: var(--tap);
+  padding: 0 14px;
+  width: 100%;
+  transition: border-color var(--fast) var(--ease);
+}
+#name-gate-input:focus { border-color: var(--accent); outline: none; }
+.gate-code { font-family: var(--mono); letter-spacing: 0.18em; }
+.gate-foot { margin: 14px 0 0; text-align: center; font-size: 13px; color: var(--ink-3); }
 
 /* ─────────────── theme toggle ─────────────── */
 
