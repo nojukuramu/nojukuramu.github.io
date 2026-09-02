@@ -149,6 +149,7 @@ Invite tab inside a room, where it may be edited but not emptied.
 | `js/search.js` | Piped → Invidious fallback, link parsing |
 | `js/player.js` | YouTube IFrame API wrapper (host only) |
 | `js/qr.js` | QR encoder, written from scratch (byte mode, v1–12, ECC L/M) |
+| `js/icons.js` | The icon set — 24×24 line drawings on `currentColor`, no emoji |
 | `js/library.js` | Saved songs and playlists, stored in the browser |
 | `js/app.js` | Screens, wiring, and the host/guest seam |
 | `sw.js` · `manifest.webmanifest` · `icons/` | Makes it installable and offline-capable |

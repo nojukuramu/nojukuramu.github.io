@@ -648,9 +648,9 @@
     var s = app.state;
     $("#guest-count").textContent = String(s.guests.length);
     $("#vol").value = s.player.volume;
-    $("#mute-btn").textContent = s.player.muted ? "🔇" : "🔊";
+    KN.setIcon($("#mute-btn"), s.player.muted ? "volume-off" : "volume-on");
     $("#mute-btn").setAttribute("aria-pressed", String(s.player.muted));
-    $("#play-btn").textContent = s.player.status === "playing" ? "⏸" : "▶";
+    KN.setIcon($("#play-btn"), s.player.status === "playing" ? "pause" : "play");
     $("#play-btn").setAttribute("aria-label", s.player.status === "playing" ? "Pause" : "Play");
     if (app.role === "host") $("#broker-count").textContent = String(app.net ? app.net.onlineBrokers() : 0);
   }
@@ -712,25 +712,26 @@
           ]),
           el("span", { class: "row-time", text: song.duration ? R.fmtTime(song.duration) : "" }),
           el("div", { class: "row-actions" }, [
-            btn("⤒", "Play next", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "top" }); }),
-            btn("▲", "Move up", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "up" }); }, "opt"),
-            btn("▼", "Move down", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "down" }); }, "opt"),
-            btn("▶", "Play now", function () { dispatch({ type: CMD.PLAY_NOW, sid: song.sid }); }),
-            btn("✕", "Remove", function () { dispatch({ type: CMD.REMOVE, sid: song.sid }); })
+            btn("to-top", "Play next", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "top" }); }),
+            btn("chevron-up", "Move up", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "up" }); }, "opt"),
+            btn("chevron-down", "Move down", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "down" }); }, "opt"),
+            btn("play", "Play now", function () { dispatch({ type: CMD.PLAY_NOW, sid: song.sid }); }),
+            btn("close", "Remove", function () { dispatch({ type: CMD.REMOVE, sid: song.sid }); })
           ])
         ])
       );
     });
   }
 
-  function btn(label, title, onClick, cls) {
+  /** An icon button: `name` is an entry in the KN.icon set, `title` is both the
+   * tooltip and the accessible name, since the drawing carries neither. */
+  function btn(name, title, onClick, cls) {
     return el("button", {
       class: "icon-btn" + (cls ? " " + cls : ""),
       title: title,
       "aria-label": title,
-      onclick: onClick,
-      text: label
-    });
+      onclick: onClick
+    }, [KN.icon(name)]);
   }
 
   function thumb(cls, src) {
@@ -814,15 +815,16 @@
         class: "icon-btn star" + (LIB.hasSong(v.id) ? " on" : ""),
         title: "Save to your library",
         "aria-label": "Save to your library",
-        text: LIB.hasSong(v.id) ? "★" : "☆",
+        "aria-pressed": LIB.hasSong(v.id) ? "true" : "false",
         onclick: function () {
           var saved = LIB.toggleSong(v);
-          this.textContent = saved ? "★" : "☆";
+          KN.setIcon(this, saved ? "star-filled" : "star");
+          this.setAttribute("aria-pressed", String(saved));
           this.classList.toggle("on", saved);
           toast(saved ? "Saved “" + v.title + "”" : "Removed from saved");
           renderLibrary();
         }
-      });
+      }, [KN.icon(LIB.hasSong(v.id) ? "star-filled" : "star")]);
 
       box.appendChild(
         el("li", { class: "row row-result" }, [
@@ -834,7 +836,7 @@
           el("span", { class: "row-time", text: v.duration ? R.fmtTime(v.duration) : "" }),
           el("div", { class: "row-actions" }, [
             star,
-            btn("＋", "Add to a playlist", function () { openPicker(v); })
+            btn("plus", "Add to a playlist", function () { openPicker(v); })
           ]),
           app.role
             ? el("button", {
@@ -882,14 +884,14 @@
     if (!songs.length) {
       box.appendChild(el("li", {
         class: "empty",
-        text: "No saved songs yet. Tap ☆ on a search result to keep it here."
+        text: "No saved songs yet. Tap the star on a search result to keep it here."
       }));
     } else {
       songs.forEach(function (song) {
         box.appendChild(songRow(song, [
           queueButton(song),
-          btn("＋", "Add to a playlist", function () { openPicker(song); }),
-          btn("✕", "Remove from saved", function () {
+          btn("plus", "Add to a playlist", function () { openPicker(song); }),
+          btn("close", "Remove from saved", function () {
             LIB.removeSong(song.id);
             renderLibrary();
           })
@@ -911,19 +913,21 @@
           onclick: function () {
             app.openPlaylists[p.pid] = !open;
             renderLibrary();
-          },
-          text: (open ? "▾ " : "▸ ") + p.name
-        }),
+          }
+        }, [
+          KN.icon(open ? "chevron-down" : "chevron-right", "pl-caret"),
+          el("span", { text: p.name })
+        ]),
         el("span", { class: "pl-count", text: p.songs.length + (p.songs.length === 1 ? " song" : " songs") }),
         el("div", { class: "pl-actions" }, [
           app.role
-            ? btn("▶", "Queue this playlist", function () { queuePlaylist(p); })
+            ? btn("play", "Queue this playlist", function () { queuePlaylist(p); })
             : null,
-          btn("✎", "Rename playlist", function () {
+          btn("pencil", "Rename playlist", function () {
             var name = prompt("Rename playlist", p.name);
             if (name !== null) { LIB.renamePlaylist(p.pid, name); renderLibrary(); }
           }),
-          btn("✕", "Delete playlist", function () {
+          btn("close", "Delete playlist", function () {
             if (confirm("Delete “" + p.name + "”? The songs stay in Saved songs if you saved them there.")) {
               LIB.deletePlaylist(p.pid);
               renderLibrary();
@@ -940,9 +944,9 @@
         p.songs.forEach(function (song) {
           body.appendChild(songRow(song, [
             queueButton(song),
-            btn("▲", "Move up", function () { LIB.moveInPlaylist(p.pid, song.id, "up"); renderLibrary(); }),
-            btn("▼", "Move down", function () { LIB.moveInPlaylist(p.pid, song.id, "down"); renderLibrary(); }),
-            btn("✕", "Remove from playlist", function () { LIB.removeFromPlaylist(p.pid, song.id); renderLibrary(); })
+            btn("chevron-up", "Move up", function () { LIB.moveInPlaylist(p.pid, song.id, "up"); renderLibrary(); }),
+            btn("chevron-down", "Move down", function () { LIB.moveInPlaylist(p.pid, song.id, "down"); renderLibrary(); }),
+            btn("close", "Remove from playlist", function () { LIB.removeFromPlaylist(p.pid, song.id); renderLibrary(); })
           ]));
         });
       }
@@ -969,7 +973,7 @@
   /** Queueing is only meaningful inside a room; outside one the button is absent. */
   function queueButton(song) {
     if (!app.role) return null;
-    return btn("↗", "Add to the room queue", function () {
+    return btn("arrow-up-right", "Add to the room queue", function () {
       dispatch({ type: CMD.ADD, video: song });
       confirmAdded(song.title);
     });
@@ -1006,9 +1010,11 @@
                 closePicker();
                 renderLibrary();
               }
-            },
-            text: (already ? "✓ " : "") + p.name
-          })
+            }
+          }, [
+            already ? KN.icon("check", "picker-tick") : null,
+            el("span", { text: p.name })
+          ])
         ])
       );
     });
@@ -1142,7 +1148,7 @@
    * rather than forced, because nobody wants a reload mid-song.
    */
 
-  var APP_VERSION = "2.1.0";
+  var APP_VERSION = "2.2.0";
   var UPDATE_CHECK_MS = 30 * 60 * 1000;
 
   var swReg = null;

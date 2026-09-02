@@ -16,13 +16,14 @@
  */
 "use strict";
 
-var VERSION = "kn-v3";
+var VERSION = "kn-v4";
 var SHELL = VERSION + "-shell";
 
 var SHELL_FILES = [
   "./",
   "./index.html",
   "./css/app.css",
+  "./js/icons.js",
   "./js/qr.js",
   "./js/peer.js",
   "./js/search.js",

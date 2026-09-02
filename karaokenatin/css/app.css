@@ -268,7 +268,7 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.01e
 .library-cta:hover { background: var(--bg-2); border-color: var(--accent); }
 .library-cta-main { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
 .library-cta-title { font-family: var(--serif); font-size: 18px; font-weight: 600; }
-.library-cta-go { color: var(--ink-3); transition: transform var(--mid) var(--ease), color var(--mid) var(--ease); }
+.library-cta-go { display: inline-flex; color: var(--ink-3); transition: transform var(--mid) var(--ease), color var(--mid) var(--ease); }
 .library-cta:hover .library-cta-go { transform: translateX(4px); color: var(--accent); }
 
 /* The whole "how it works" story, in five words that people actually read. */
@@ -370,6 +370,29 @@ html[data-theme="dark"] .theme-icon::after { transform: scale(1); }
   html:not([data-theme="light"]) .theme-icon::after { transform: scale(1); }
 }
 
+/* ─────────────── icons ───────────────
+   Every icon is a 24×24 line drawing that inherits `currentColor`, so it picks
+   up hover, focus and dark mode from whatever it sits in. Size is set by the
+   host, never by the drawing. */
+
+.i {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  display: block;
+  overflow: visible;
+}
+
+.icon-btn .i { width: 17px; height: 17px; }
+.icon-btn.big .i { width: 19px; height: 19px; }
+.icon-btn.primary .i { width: 22px; height: 22px; }
+.modal-close .i { width: 16px; height: 16px; }
+.pill .i { width: 15px; height: 15px; color: var(--ink-3); }
+.fs-btn .i { width: 17px; height: 17px; }
+.library-cta-go .i { width: 20px; height: 20px; }
+.pl-caret { width: 15px; height: 15px; color: var(--ink-3); }
+.picker-tick { width: 16px; height: 16px; color: var(--accent); }
+
 /* ─────────────── buttons ─────────────── */
 
 .btn {
@@ -408,18 +431,18 @@ html[data-theme="dark"] .theme-icon::after { transform: scale(1); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
   transition: background var(--fast) var(--ease), color var(--fast) var(--ease),
               border-color var(--fast) var(--ease), transform var(--fast) var(--ease);
 }
 .icon-btn:hover { color: var(--accent); border-color: var(--accent); transform: translateY(-1px); }
-.icon-btn.big { min-width: var(--tap); height: var(--tap); font-size: 17px; }
+.icon-btn.big { min-width: var(--tap); height: var(--tap); }
 .icon-btn.primary {
   background: var(--accent);
   border-color: transparent;
   color: var(--accent-ink);
   min-width: 52px;
   height: 52px;
-  font-size: 19px;
   box-shadow: var(--shadow-sm);
 }
 .icon-btn.primary:hover { color: var(--accent-ink); filter: brightness(1.06); box-shadow: var(--shadow); }
@@ -467,6 +490,9 @@ body.in-room:not(.is-host) .room-head {
 }
 
 .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   color: var(--ink-2);
   background: var(--bg-2);
@@ -478,7 +504,7 @@ body.in-room:not(.is-host) .room-head {
 /* only the host renders the video and broker count */
 .host-only { display: none; }
 body.is-host .host-only { display: block; }
-body.is-host .pill.host-only { display: inline-block; }
+body.is-host .pill.host-only { display: inline-flex; }
 
 /* ─────────────── stage ─────────────── */
 
@@ -523,7 +549,6 @@ body.is-host .pill.host-only { display: inline-block; }
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 24px;
   color: #fff;
   background: var(--accent);
   margin-bottom: 8px;
@@ -549,6 +574,8 @@ body.is-host .pill.host-only { display: inline-block; }
   width: 34px;
   height: 34px;
   cursor: pointer;
+  display: grid;
+  place-items: center;
   opacity: 0;
   transform: translateY(4px);
   transition: opacity var(--mid) var(--ease), transform var(--mid) var(--ease);
@@ -856,11 +883,12 @@ input[type="range"]:disabled { opacity: 0.4; cursor: default; }
   background: transparent;
   border: 0;
   color: var(--ink-3);
-  font-size: 16px;
   cursor: pointer;
   width: 34px;
   height: 34px;
   border-radius: 9px;
+  display: grid;
+  place-items: center;
   transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
 }
 .modal-close:hover { color: var(--ink); background: var(--bg-3); }
@@ -922,6 +950,9 @@ input[type="range"]:disabled { opacity: 0.4; cursor: default; }
   font-size: 14px;
   cursor: pointer;
   text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex: 1;
   min-width: 0;
   padding: 6px 0;
@@ -953,6 +984,9 @@ input[type="range"]:disabled { opacity: 0.4; cursor: default; }
 .picker-item {
   width: 100%;
   text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: var(--bg-3);
   border: 1px solid var(--line);
   color: var(--ink);
