@@ -1148,7 +1148,9 @@
    * rather than forced, because nobody wants a reload mid-song.
    */
 
-  var APP_VERSION = "2.2.0";
+  /* Also the ?v= on every asset in index.html and in sw.js SHELL_FILES.
+   * tools/version-check.js fails the build if the three drift apart. */
+  var APP_VERSION = "2.2.1";
   var UPDATE_CHECK_MS = 30 * 60 * 1000;
 
   var swReg = null;

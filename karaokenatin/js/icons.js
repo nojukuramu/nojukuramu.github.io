@@ -16,10 +16,14 @@
   var KN = (global.KN = global.KN || {});
 
   /* Shared geometry, so a new icon cannot drift from the others by accident. */
+  /* width/height are intrinsic fallbacks, not the real size — the stylesheet
+   * sizes `.i` per host. Without them an <svg> with only a viewBox falls back
+   * to 300×150, so one stylesheet that fails to load (or arrives from a stale
+   * cache) would not just look plain, it would blow the layout apart. */
   var HEAD =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="i" aria-hidden="true" ' +
-    'focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" ' +
-    'stroke-linecap="round" stroke-linejoin="round">';
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" ' +
+    'class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">';
 
   var SHAPES = {
     play: '<path d="M8 5.2v13.6L19 12z" fill="currentColor" stroke-linejoin="round" />',

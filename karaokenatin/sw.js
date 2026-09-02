@@ -5,8 +5,14 @@
  *
  *   - Navigations are network-first, so a deployed change is picked up on the
  *     next load rather than being pinned to whatever was cached at install.
- *   - Same-origin assets are stale-while-revalidate: instant from cache, with
- *     a fresh copy fetched in the background for next time.
+ *   - The shell's own code — CSS and JS — is network-first too. It used to be
+ *     stale-while-revalidate, which quietly paired each deploy's fresh HTML
+ *     with the previous deploy's stylesheet for one load: markup the CSS had
+ *     never heard of, laid out with rules that no longer matched it. Belt and
+ *     braces, index.html also stamps a ?v= on every asset, so a mismatched
+ *     pair is not addressable in the first place.
+ *   - Other same-origin assets (icons, the manifest) stay
+ *     stale-while-revalidate: instant from cache, refreshed in the background.
  *   - Everything cross-origin is left completely alone — YouTube's player,
  *     the search mirrors and the signalling brokers must not be mediated by a
  *     cache, and WebSockets never reach a fetch handler anyway.
@@ -16,26 +22,35 @@
  */
 "use strict";
 
-var VERSION = "kn-v4";
+var VERSION = "kn-v5";
+
+/* Matches APP_VERSION in js/app.js and the ?v= in index.html. */
+var ASSET_V = "2.2.1";
 var SHELL = VERSION + "-shell";
 
 var SHELL_FILES = [
   "./",
   "./index.html",
-  "./css/app.css",
-  "./js/icons.js",
-  "./js/qr.js",
-  "./js/peer.js",
-  "./js/search.js",
-  "./js/library.js",
-  "./js/room.js",
-  "./js/player.js",
-  "./js/app.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/maskable-512.png"
-];
+].concat(
+  // Precached at the exact URLs index.html asks for, query string included,
+  // so an offline start finds them rather than fetching a bare path nobody
+  // references any more.
+  [
+    "./css/app.css",
+    "./js/icons.js",
+    "./js/qr.js",
+    "./js/peer.js",
+    "./js/search.js",
+    "./js/library.js",
+    "./js/room.js",
+    "./js/player.js",
+    "./js/app.js"
+  ].map(function (u) { return u + "?v=" + ASSET_V; })
+);
 
 self.addEventListener("install", function (event) {
   event.waitUntil(
@@ -104,17 +119,25 @@ self.addEventListener("fetch", function (event) {
     return;
   }
 
+  function keep(res) {
+    if (res && res.ok && res.type === "basic") {
+      var copy = res.clone();
+      caches.open(SHELL).then(function (c) { c.put(req, copy); });
+    }
+    return res;
+  }
+
+  // The shell's code goes with the HTML that asked for it, always.
+  if (/\.(?:css|js)$/.test(url.pathname)) {
+    event.respondWith(
+      fetch(req).then(keep).catch(function () { return caches.match(req); })
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(req).then(function (hit) {
-      var network = fetch(req)
-        .then(function (res) {
-          if (res && res.ok && res.type === "basic") {
-            var copy = res.clone();
-            caches.open(SHELL).then(function (c) { c.put(req, copy); });
-          }
-          return res;
-        })
-        .catch(function () { return hit; });
+      var network = fetch(req).then(keep).catch(function () { return hit; });
       return hit || network;
     })
   );
