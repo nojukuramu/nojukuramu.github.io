@@ -565,6 +565,42 @@
     box.hidden = !app.resume;
   }
 
+  /* ---------------- fullscreen ---------------- */
+
+  /** The element the browser considers fullscreen, whatever it calls it. */
+  function fsElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+
+  /** Fullscreen the video stage, or leave it if it is already there. */
+  function toggleFullscreen() {
+    var stage = $("#stage");
+    if (fsElement()) {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      return;
+    }
+    var req = stage.requestFullscreen || stage.webkitRequestFullscreen;
+    if (!req) {
+      toast("This browser will not let the page go fullscreen.");
+      return;
+    }
+    var out = req.call(stage);
+    if (out && out.catch) out.catch(function () { /* refused — nothing to undo */ });
+  }
+
+  /** Keeps the body flag and the button's icon honest about the current state. */
+  function syncFullscreen() {
+    var on = fsElement() === $("#stage");
+    document.body.classList.toggle("stage-fullscreen", on);
+    var btn = $("#fs-btn");
+    if (!btn) return;
+    KN.setIcon(btn, on ? "fullscreen-exit" : "fullscreen");
+    btn.title = on ? "Exit fullscreen" : "Fullscreen";
+    btn.setAttribute("aria-label", btn.title);
+    btn.setAttribute("aria-pressed", String(on));
+  }
+
   /* ---------------- screen: room ---------------- */
 
   function showRoom() {
@@ -591,7 +627,10 @@
     var url = joinUrl();
     var ok = true;
 
-    [["#qr", 260], ["#qr-rail", 180], ["#qr-fs", 40]].forEach(function (pair) {
+    // 120 lands on 3 device-independent pixels per module (a 117px square for
+    // the usual join link) — small enough to stay out of the video's way, big
+    // enough that a phone camera locks onto it from across the room.
+    [["#qr", 260], ["#qr-rail", 180], ["#qr-fs", 120]].forEach(function (pair) {
       var canvas = $(pair[0]);
       if (!canvas) return;
       try {
@@ -1150,7 +1189,7 @@
 
   /* Also the ?v= on every asset in index.html and in sw.js SHELL_FILES.
    * tools/version-check.js fails the build if the three drift apart. */
-  var APP_VERSION = "2.2.1";
+  var APP_VERSION = "2.2.2";
   var UPDATE_CHECK_MS = 30 * 60 * 1000;
 
   var swReg = null;
@@ -1490,18 +1529,14 @@
       if (app.player) app.player.play();
     });
 
-    $("#fs-btn").addEventListener("click", function () {
-      var stage = $("#stage");
-      if (document.fullscreenElement) document.exitFullscreen();
-      else if (stage.requestFullscreen) stage.requestFullscreen().catch(function () { /* refused */ });
-    });
+    $("#fs-btn").addEventListener("click", toggleFullscreen);
 
     // The wide invite rail shows the same code/QR as the fullscreen corner
     // badges — hide it whenever the stage actually goes fullscreen, however
     // that was triggered (the button, Esc, browser chrome, F11…).
-    document.addEventListener("fullscreenchange", function () {
-      document.body.classList.toggle("stage-fullscreen", document.fullscreenElement === $("#stage"));
-    });
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    document.addEventListener("webkitfullscreenchange", syncFullscreen);
+    syncFullscreen();
 
     // search
     $("#search-form").addEventListener("submit", function (e) { e.preventDefault(); runSearch(); });

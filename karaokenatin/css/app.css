@@ -567,49 +567,71 @@ body.is-host .pill.host-only { display: inline-flex; }
 .tap-text { font-size: 17px; font-weight: 600; font-family: var(--serif); }
 .tap-sub { font-size: 13px; color: #b2aea5; max-width: 34ch; }
 
+/* Always on screen, not on hover: the host screen is usually a TV or a tablet
+ * that never sends a hover, and a control you cannot point at is a control
+ * that is not there. It dims instead, and comes up to full on hover/focus. */
 .fs-btn {
   position: absolute;
   right: 12px;
   bottom: 12px;
   z-index: 3;
-  background: rgba(12, 11, 10, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 9px;
+  background: rgba(12, 11, 10, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
   color: #f5f4ee;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   cursor: pointer;
   display: grid;
   place-items: center;
-  opacity: 0;
-  transform: translateY(4px);
-  transition: opacity var(--mid) var(--ease), transform var(--mid) var(--ease);
+  opacity: 0.78;
+  transition: opacity var(--mid) var(--ease), background var(--mid) var(--ease);
 }
-.stage:hover .fs-btn, .fs-btn:focus-visible { opacity: 1; transform: none; }
+.stage:hover .fs-btn, .fs-btn:hover, .fs-btn:focus-visible {
+  opacity: 1;
+  background: rgba(12, 11, 10, 0.85);
+}
+.fs-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .stage:fullscreen { border-radius: 0; box-shadow: none; }
 .stage:fullscreen .yt-mount { max-width: none; width: 100%; height: 100%; aspect-ratio: auto; }
+.stage:-webkit-full-screen { border-radius: 0; box-shadow: none; }
+.stage:-webkit-full-screen .yt-mount { max-width: none; width: 100%; height: 100%; aspect-ratio: auto; }
 
-/* Corner stand-ins for the join code once fullscreen takes the header away. */
+/* Corner stand-ins for the join code once fullscreen takes the header away.
+ * `body.stage-fullscreen` is set from script, so these do not depend on a
+ * single engine spelling `:fullscreen` the way this browser happens to. */
 .fs-code, .fs-qr {
   display: none;
   position: absolute;
-  top: 12px;
-  z-index: 3;
-  background: rgba(12, 11, 10, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 9px;
+  top: 14px;
+  z-index: 4;
 }
-.stage:fullscreen .fs-code, .stage:fullscreen .fs-qr { display: block; }
+body.stage-fullscreen .fs-code,
+body.stage-fullscreen .fs-qr,
+.stage:fullscreen .fs-code,
+.stage:fullscreen .fs-qr { display: block; }
 .fs-code {
-  left: 12px;
-  padding: 6px 10px;
+  left: 14px;
+  padding: 8px 14px;
+  background: rgba(12, 11, 10, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
   font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   color: #f5f4ee;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
-.fs-qr { right: 12px; width: 44px; height: 44px; padding: 0; overflow: hidden; }
+/* No width/height here on purpose — QR.draw sizes the canvas to a whole number
+ * of pixels per module, and a CSS resize would smear the modules into an
+ * unscannable blur. It stays small; it just stays crisp. */
+.fs-qr {
+  right: 14px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
 
 body.stage-fullscreen .invite-rail { display: none !important; }
 
