@@ -51,6 +51,25 @@ RC.router = (function () {
     TooBig: "That route has too many points for the demo server."
   };
 
+  // OSRM `bearings=deg,range;...` — one entry per waypoint, empty for any
+  // waypoint we have no heading for. Used when rerouting mid-ride so the
+  // router starts you facing the way you are actually pointing instead of
+  // opening with a U-turn onto the carriageway you just left.
+  function buildBearingString(bearings, count) {
+    var parts = [];
+    var any = false;
+    for (var i = 0; i < count; i++) {
+      var b = bearings[i];
+      if (b && typeof b.deg === "number" && !isNaN(b.deg)) {
+        parts.push(Math.round(((b.deg % 360) + 360) % 360) + "," + Math.round(b.range == null ? 90 : b.range));
+        any = true;
+      } else {
+        parts.push("");
+      }
+    }
+    return any ? parts.join(";") : null;
+  }
+
   function buildCoordString(waypoints) {
     var parts = [];
     for (var i = 0; i < waypoints.length; i++) {
@@ -178,7 +197,7 @@ RC.router = (function () {
     };
   }
 
-  // RC.router.route(waypoints, {vehicle, alternatives, signal}) -> Promise<Route[]>
+  // RC.router.route(waypoints, {vehicle, alternatives, signal, bearings}) -> Promise<Route[]>
   function route(waypoints, opts) {
     opts = opts || {};
     if (!waypoints || waypoints.length < 2) {
@@ -191,6 +210,11 @@ RC.router = (function () {
     var baseUrl = BASE + "/route/v1/driving/" + buildCoordString(waypoints) +
       "?overview=full&geometries=geojson&steps=true&annotations=duration,distance" +
       "&alternatives=" + (alternatives ? "true" : "false");
+
+    if (opts.bearings) {
+      var bstr = buildBearingString(opts.bearings, waypoints.length);
+      if (bstr) baseUrl += "&bearings=" + bstr;
+    }
 
     // attempt(useExclude) fires one OSRM request, with or without
     // exclude=motorway. On a code that indicates the exclusion itself is

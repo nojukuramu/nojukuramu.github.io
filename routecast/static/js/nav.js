@@ -16,6 +16,25 @@
    fraction. Only when the windowed match is implausibly far away
    (bigger than FULL_SCAN_THRESHOLD_M) do we pay for a full-polyline
    scan — that only happens on a big GPS jump or the first fix.
+
+   Staying live without paying for it
+   ----------------------------------
+   Nothing here polls. Every live behaviour is driven by the geolocation
+   fixes the browser is already handing us, and each one that costs a
+   network request is gated:
+
+   * Re-timing (ETA drift) is FREE — it re-samples the hourly series already
+     in memory — so it runs on a one-minute timer.
+   * Re-forecasting costs a request, so it runs on a much longer timer
+     (WEATHER_REFRESH_MS), only for checkpoints still ahead of the rider,
+     only while the page is visible and online, and never twice at once.
+     RC.weather's grid cache absorbs most of what is left.
+   * Rerouting costs a request, so it fires only when the rider is properly
+     off the road — not merely off the line. A fix must be further away than
+     REROUTE_M *and* further than its own accuracy circle can explain, for
+     REROUTE_STREAK fixes in a row, and no sooner than the backoff allows.
+     Rejoining the route cancels a pending reroute and resets the backoff, so
+     a lane-width GPS wobble or a bridge underpass never costs a request.
    ============================================================ */
 RC.nav = (function () {
   "use strict";
@@ -28,6 +47,18 @@ RC.nav = (function () {
   var ARRIVE_EPS_M = 15;            // close enough to the final coordinate to call it arrival
   var RATIO_MIN = 0.6, RATIO_MAX = 2.0;
   var MIN_EXPECTED_S_FOR_RATIO = 5; // ignore ratio noise over a near-zero expected-time span
+
+  // Rerouting
+  var REROUTE_M = 90;               // perpendicular distance that means "another road", not "wobble"
+  var REROUTE_STREAK = 4;           // consecutive fixes that bad before we ask for a new route
+  var REROUTE_ACCURACY_FACTOR = 2;  // ignore an offset the fix's own error circle could explain
+  // Backoff between reroute attempts, indexed by how many we have already
+  // made without rejoining a route. A rider who keeps missing turns gets
+  // fewer and fewer requests; rejoining resets the ladder to the start.
+  var REROUTE_BACKOFF_MS = [15000, 30000, 60000, 120000, 300000];
+
+  // Re-forecasting
+  var WEATHER_REFRESH_MS = 15 * 60 * 1000; // downstream forecast refetch interval
 
   var st = null; // internal session state while navigating, null otherwise
 
@@ -83,6 +114,21 @@ RC.nav = (function () {
     var distanceAlong = cumDist[i] + t * (cumDist[i + 1] - cumDist[i]);
     var expectedS = cumDur[i] + t * (cumDur[i + 1] - cumDur[i]);
     return { index: i, t: t, offRouteM: best.d, distanceAlong: distanceAlong, expectedS: expectedS };
+  }
+
+  /* Compass bearing (deg clockwise from north) of the route at segment i —
+     the direction the rider is travelling when GPS gives no course of its
+     own (stopped, or a chipset that never reports heading). */
+  function segmentBearing(route, i) {
+    var coords = route.coords;
+    if (!coords || i < 0 || i + 1 >= coords.length) return null;
+    var toRad = Math.PI / 180;
+    var la1 = coords[i][0] * toRad, la2 = coords[i + 1][0] * toRad;
+    var dLon = (coords[i + 1][1] - coords[i][1]) * toRad;
+    var y = Math.sin(dLon) * Math.cos(la2);
+    var x = Math.cos(la1) * Math.sin(la2) - Math.sin(la1) * Math.cos(la2) * Math.cos(dLon);
+    var deg = Math.atan2(y, x) / toRad;
+    return (deg + 360) % 360;
   }
 
   /* ---------- wake lock ---------- */
@@ -163,6 +209,88 @@ RC.nav = (function () {
     }
   }
 
+  /* ---------- live updates ---------- */
+
+  function canGoOnline() {
+    try {
+      if (navigator.onLine === false) return false;
+      if (document.visibilityState === "hidden") return false;
+    } catch (e) {}
+    return true;
+  }
+
+  function rerouteBackoffMs() {
+    var i = Math.min(st.rerouteAttempts, REROUTE_BACKOFF_MS.length - 1);
+    return REROUTE_BACKOFF_MS[i];
+  }
+
+  /* True only for a fix that is genuinely on a different road: far enough
+     out that the reported accuracy cannot account for it, several fixes
+     running, and past the backoff since the last attempt. */
+  function shouldReroute(offRouteM, accuracy, nowMs) {
+    if (!st.rerouteEnabled || st.rerouteBusy) return false;
+    if (typeof RC.nav.onReroute !== "function") return false;
+    if (st.rerouteStreak < REROUTE_STREAK) return false;
+    if (nowMs - st.lastRerouteTs < rerouteBackoffMs()) return false;
+    if (!canGoOnline()) return false;
+    var floor = REROUTE_M;
+    if (typeof accuracy === "number" && accuracy > 0) {
+      floor = Math.max(floor, accuracy * REROUTE_ACCURACY_FACTOR);
+    }
+    return offRouteM > floor;
+  }
+
+  function requestReroute(state) {
+    st.rerouteBusy = true;
+    st.lastRerouteTs = Date.now();
+    st.rerouteAttempts++;
+    var session = st;
+    var done = function () { if (st === session) st.rerouteBusy = false; };
+    try {
+      Promise.resolve(RC.nav.onReroute(state)).then(done, done);
+    } catch (e) {
+      done();
+    }
+  }
+
+  function maybeRefreshWeather(state, nowMs) {
+    if (st.weatherBusy) return;
+    if (typeof RC.nav.onWeatherRefresh !== "function") return;
+    if (nowMs - st.lastWeatherRefreshTs < WEATHER_REFRESH_MS) return;
+    if (!canGoOnline()) return;
+    st.weatherBusy = true;
+    st.lastWeatherRefreshTs = nowMs;
+    var session = st;
+    var done = function () { if (st === session) st.weatherBusy = false; };
+    try {
+      Promise.resolve(RC.nav.onWeatherRefresh(state)).then(done, done);
+    } catch (e) {
+      done();
+    }
+  }
+
+  /* Swap in a freshly routed line mid-ride without ending the session.
+     The new route has its own cumDur origin, so the elapsed/expected ratio
+     is re-baselined from the next fix rather than carried across; the
+     checkpoint fired-set is rebuilt because indices no longer line up. */
+  function setRoute(route, checkpoints, series) {
+    if (!st || !st.active) return false;
+    if (!route || !route.coords || route.coords.length < 2) return false;
+    st.route = route;
+    st.checkpoints = checkpoints || [];
+    if (series !== undefined) st.series = series;
+    st.lastMatchIndex = 0;
+    st.fired = {};
+    st.arrived = false;
+    st.offRoute = false;
+    st.offRouteStreak = 0;
+    st.rerouteStreak = 0;
+    st.startTime = null;      // re-baseline the ratio against the new timings
+    st.startExpectedS = 0;
+    st.lastRetimeTs = 0;      // re-time the new checkpoints on the next fix
+    return true;
+  }
+
   function handlePosition(position) {
     if (!st || !st.active) return;
     try {
@@ -181,6 +309,16 @@ RC.nav = (function () {
       } else {
         st.offRouteStreak = 0;
         st.offRoute = false;
+      }
+
+      // A separate, stricter streak drives rerouting. Rejoining the line
+      // clears it and forgives the backoff, so a rider who wanders off once
+      // and comes straight back is treated as a first offence next time.
+      if (proj.offRouteM > REROUTE_M) {
+        st.rerouteStreak++;
+      } else {
+        st.rerouteStreak = 0;
+        if (proj.offRouteM <= OFFROUTE_M) st.rerouteAttempts = 0;
       }
 
       // first-fix baseline for the elapsed/expected ratio
@@ -222,6 +360,7 @@ RC.nav = (function () {
       var state = {
         lat: lat, lon: lon, accuracy: coords.accuracy == null ? null : coords.accuracy,
         headingDeg: headingDeg, speedKmh: speedKmh,
+        courseDeg: headingDeg == null ? segmentBearing(st.route, proj.index) : headingDeg,
         distanceAlong: proj.distanceAlong, remainingM: remainingM, remainingS: remainingS,
         etaDate: etaDate, progress: progress,
         nextCheckpoint: nextInfo ? nextInfo.checkpoint : null,
@@ -239,6 +378,12 @@ RC.nav = (function () {
       if (st.offRoute && typeof RC.nav.onOffRoute === "function") {
         try { RC.nav.onOffRoute(state); } catch (e) {}
       }
+
+      // The two things that cost a request, each behind its own gate.
+      if (shouldReroute(proj.offRouteM, coords.accuracy, fixNow.getTime())) {
+        requestReroute(state);
+      }
+      maybeRefreshWeather(state, fixNow.getTime());
 
       if (!st.arrived && (progress >= 0.999 || remainingM <= ARRIVE_EPS_M)) {
         st.arrived = true;
@@ -332,6 +477,15 @@ RC.nav = (function () {
         navStartWallClock: 0,
         ratio: 1,
         lastRetimeTs: 0,
+        rerouteEnabled: opts.reroute !== false,
+        rerouteStreak: 0,
+        rerouteAttempts: 0,
+        rerouteBusy: false,
+        lastRerouteTs: 0,
+        weatherBusy: false,
+        // Count the first refresh from the start of the ride: the forecast
+        // was fetched moments ago when the route was planned.
+        lastWeatherRefreshTs: Date.now(),
         fired: {},
         arrived: false,
         resolveStart: resolve,
@@ -372,11 +526,20 @@ RC.nav = (function () {
   var api = {
     start: start,
     stop: stop,
+    setRoute: setRoute,
     isActive: isActive,
     onUpdate: null,
     onArrive: null,
     onOffRoute: null,
-    onCheckpoint: null
+    onCheckpoint: null,
+    // onReroute(state) -> Promise — called once the rider is convincingly off
+    // the road. Resolve (or reject) when the new route is in place; no second
+    // call is made while one is outstanding.
+    onReroute: null,
+    // onWeatherRefresh(state) -> Promise — called at most every
+    // WEATHER_REFRESH_MS while visible and online, to refetch the forecast
+    // for the checkpoints still ahead.
+    onWeatherRefresh: null
   };
 
   return api;

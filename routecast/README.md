@@ -33,6 +33,19 @@ Live at <https://nojukuramu.github.io/routecast/>.
   slips when you do, a progress track marked with every weather checkpoint, and an alert when
   the next one turns caution or danger. Because the ETA is live, the forecasts are re-read for
   when you will *now* arrive — running an hour late can change the weather you meet.
+- **It reroutes when you actually leave the road, and not before.** Missing a turn gets you a new
+  route from where you are, through whatever stops are still ahead, pointed the way you are
+  facing. A lane-width GPS wobble, a flyover or a tunnel does not — see *Staying live without
+  polling* below for what has to be true before a request is spent.
+- **The forecast keeps up on its own.** ETAs are re-timed against the hourly data already in
+  memory every minute, for free; the data itself is refetched on a much longer clock, and only
+  for the checkpoints still ahead of you.
+- **Compass, with the map rotating to your heading.** Tap the compass to switch between north-up
+  and course-up. Course-up turns the map so the way you are pointing is up and keeps you at the
+  centre; the weather chips and pins counter-rotate so every label stays readable. The heading
+  comes from your GPS course while you are moving and from the phone's magnetometer when you are
+  stopped, which is what you want at a junction. Reaching for the map to look around drops you
+  back to north-up.
 - **Motorcycles avoid expressways.** Riders are barred from NLEX, SLEX, CAVITEX, Skyway and
   most Philippine expressways, so motorcycle routes ask the router to exclude motorways. If
   the routing server cannot honour that, the app says so rather than handing you an illegal
@@ -62,6 +75,28 @@ with no backend to hide a secret in.
 These are public, best-effort services. If one is busy the app says so rather than
 pretending. Please don't point a load test at them.
 
+## Staying live without polling
+
+Live is not the same as chatty. Everything that updates during a ride is driven by the
+geolocation fixes the browser is already handing us — nothing polls — and every behaviour that
+would cost a request has its own gate:
+
+| What | How often it costs a request | The gate |
+|------|------------------------------|----------|
+| Re-timing the ETA, and every downstream checkpoint's forecast with it | never | re-samples the hourly series already in memory, once a minute |
+| Refetching the forecast | every 15 minutes at most | only the checkpoints still ahead, capped at 24 of them; skipped while the page is hidden or offline, and skipped for any point already refetched in the last 10 minutes |
+| Rerouting | only when you are genuinely on another road | must be more than 90 m off the line, *and* further off than the fix's own accuracy circle can explain, for four fixes running, and past a backoff that widens 15s → 30s → 1m → 2m → 5m |
+
+Rejoining the route cancels a pending reroute and resets the backoff, so a rider who wanders off
+once and comes straight back is treated as a first offence next time. A reroute asks for one
+route with no alternatives, and the forecast for the new line is served from an in-memory cache
+keyed by a ~5 km grid — a detour that rejoins the corridor you were already on usually costs no
+weather request at all. Nothing is written to disk; the service worker still never caches a
+forecast, and a reload starts clean.
+
+Map rotation costs nothing at all: one CSS transform on the map element, eased along the shortest
+arc and written only when the angle has actually moved more than a degree and a half.
+
 ## Honest limitations
 
 - **OSRM has no motorcycle profile.** Motorcycle routes are the driving profile with
@@ -72,6 +107,16 @@ pretending. Please don't point a load test at them.
 - **A forecast is a forecast.** Ten hours out it is a strong hint; three days out it is a
   mood. The further along the route, the more the arrival-time forecast is guessing.
 - Points beyond the 16-day forecast horizon are shown as "no data" rather than invented.
+- **Course-up is a riding mode, not a browsing mode.** Leaflet has no rotation of its own, so the
+  map element is rotated with a CSS transform — which means Leaflet's pointer maths no longer
+  matches what you see. Rather than let dragging drift off-axis, dragging is disabled while
+  rotated (a drag drops you back to north-up instead), zoom is anchored to the map centre, and
+  Leaflet's own zoom buttons are hidden. A rotated rectangle also only covers its container if it
+  is grown to that container's diagonal, so course-up loads roughly 1.4x the tiles. That is the
+  price of the mode, and it is why north-up stays the default.
+- **A reroute is a new route, not a repair.** It drops the alternatives you were offered and
+  re-samples the checkpoints from where you are, so the departure planner's advice belongs to the
+  trip you originally planned.
 
 ## How it is built
 
@@ -93,7 +138,9 @@ routecast/
     weather.js              RC.weather  — Open-Meteo batching, hourly interpolation, WMO codes
     risk.js                 RC.risk     — vehicle-aware scoring, advice, departure planner
     pick.js                 RC.pick     — the centre-pin place picker
-    nav.js                  RC.nav      — live navigation: route projection, live ETA, wake lock
+    nav.js                  RC.nav      — live navigation: route projection, live ETA, wake lock,
+                                          reroute and forecast-refresh gating
+    compass.js              RC.compass  — heading sources, north-up / course-up map rotation
     app.js                  the glue: map, form, the render pipeline, the draggable sheet
     pwa.js                  install prompt, iOS fallback, full-screen toggle
 ```
