@@ -1132,6 +1132,47 @@
     setTimeout(function () { if (!deferred) show(); }, 2500);
   }
 
+  /* ---------------- theme ----------------
+   * Light and dark, with "no choice yet" meaning "follow the system". The
+   * stored choice is applied by a tiny inline script in the document head, so
+   * this only has to handle the flip and keep the button's label honest.
+   */
+
+  var THEME_KEY = "kn.theme";
+
+  function effectiveTheme() {
+    var set = document.documentElement.dataset.theme;
+    if (set === "light" || set === "dark") return set;
+    return global.matchMedia && global.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+
+  function setupTheme() {
+    var buttons = $$("[data-theme-toggle]");
+
+    function relabel() {
+      var next = effectiveTheme() === "dark" ? "light" : "dark";
+      buttons.forEach(function (b) {
+        b.setAttribute("aria-label", "Switch to the " + next + " theme");
+        b.title = "Switch to the " + next + " theme";
+      });
+    }
+
+    buttons.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var next = effectiveTheme() === "dark" ? "light" : "dark";
+        document.documentElement.dataset.theme = next;
+        try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* private mode */ }
+        relabel();
+      });
+    });
+
+    // Until someone picks a side, the system preference is the side.
+    var mq = global.matchMedia && global.matchMedia("(prefers-color-scheme: dark)");
+    if (mq && mq.addEventListener) mq.addEventListener("change", relabel);
+
+    relabel();
+  }
+
   /* ---------------- routing ---------------- */
 
   function route() {
@@ -1390,6 +1431,7 @@
       if (app.role === "host") persistHost();
     });
 
+    setupTheme();
     switchTab("queue");
     startLocalClock();
     setupInstall();

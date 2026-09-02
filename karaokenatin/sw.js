@@ -16,7 +16,7 @@
  */
 "use strict";
 
-var VERSION = "kn-v1";
+var VERSION = "kn-v2";
 var SHELL = VERSION + "-shell";
 
 var SHELL_FILES = [
