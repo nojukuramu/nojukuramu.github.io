@@ -38,7 +38,6 @@
   <!-- ══════════════ HOME ══════════════ -->
   <section id="view-home" class="view">
     <header class="home-head">
-      <a class="back" href="/">← the atelier</a>
       <button class="theme-btn" data-theme-toggle aria-label="Switch theme"><span class="theme-icon"></span></button>
     </header>
 
@@ -57,6 +56,17 @@
         <div class="install-actions">
           <button id="install-btn" class="btn btn-primary">Install</button>
           <button id="install-dismiss" class="btn btn-quiet btn-sm" aria-label="Dismiss install prompt">Not now</button>
+        </div>
+      </div>
+
+      <div id="update-bar" class="install-bar" hidden>
+        <div class="install-text">
+          <strong>A new version is ready</strong>
+          <span id="update-text">Reload to pick up the latest KaraokeNatin.</span>
+        </div>
+        <div class="install-actions">
+          <button id="update-apply" class="btn btn-primary">Reload now</button>
+          <button id="update-later" class="btn btn-quiet btn-sm">Later</button>
         </div>
       </div>
 
@@ -79,9 +89,11 @@
           <h2>Join</h2>
           <p>Scan the QR, or type the code.</p>
           <form id="join-form" class="join-form">
+            <input id="join-name" type="text" maxlength="24" placeholder="Your name"
+                   autocomplete="nickname" required aria-label="Your name" />
             <input id="join-code" type="text" inputmode="latin" autocapitalize="characters"
                    autocomplete="off" spellcheck="false" maxlength="6" placeholder="ABC123"
-                   aria-label="Room code" />
+                   required aria-label="Room code" />
             <button type="submit" class="btn btn-ghost">Join</button>
           </form>
         </div>
@@ -91,7 +103,7 @@
             <span class="library-cta-title">Library</span>
             <span id="library-stats" class="muted-inline"></span>
           </span>
-          <span class="library-cta-go" aria-hidden="true">→</span>
+          <span class="library-cta-go" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 12h14" /><path d="M13 6.4l5.6 5.6L13 17.6" /></svg></span>
         </button>
       </div>
 
@@ -108,6 +120,10 @@
       <button class="linklike disclaimer-open">Disclaimer</button> ·
       <a href="https://github.com/nojukuramu/KaraokeNatin" rel="noopener">desktop original</a> ·
       <a href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">source</a>
+      <p class="version-line">
+        <span id="app-version"></span>
+        <button id="update-check" class="linklike" hidden>Check for updates</button>
+      </p>
     </footer>
   </section>
 
@@ -140,7 +156,7 @@
   <!-- ══════════════ DISCLAIMER ══════════════ -->
   <div id="disclaimer" class="modal-backdrop" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="disclaimer-title">
-      <button class="modal-close disclaimer-close" aria-label="Close">✕</button>
+      <button class="modal-close disclaimer-close" aria-label="Close"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 6.2l11.6 11.6M17.8 6.2L6.2 17.8" /></svg></button>
       <h2 id="disclaimer-title">Disclaimer</h2>
 
       <h3>Video content</h3>
@@ -215,10 +231,24 @@
     </div>
   </div>
 
+  <!-- Name gate: a room is a shared queue, so every guest arrives with a name -->
+  <div id="name-gate" class="modal-backdrop" hidden>
+    <div class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="name-gate-title">
+      <h2 id="name-gate-title">What should we call you?</h2>
+      <p class="gate-sub">Your name rides along with every song you queue, so the room knows whose turn it is.</p>
+      <form id="name-gate-form" class="gate-form">
+        <input id="name-gate-input" type="text" maxlength="24" placeholder="Your name"
+               autocomplete="nickname" required aria-label="Your name" />
+        <button type="submit" class="btn btn-primary">Join <span id="name-gate-code" class="gate-code"></span></button>
+      </form>
+      <p class="gate-foot"><button type="button" id="name-gate-cancel" class="linklike">Not now — go back</button></p>
+    </div>
+  </div>
+
   <!-- Manual install instructions, for browsers with no install prompt API -->
   <div id="install-help" class="modal-backdrop" hidden>
     <div class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="install-help-title">
-      <button class="modal-close" id="install-help-close" aria-label="Close">✕</button>
+      <button class="modal-close" id="install-help-close" aria-label="Close"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 6.2l11.6 11.6M17.8 6.2L6.2 17.8" /></svg></button>
       <h2 id="install-help-title">Add to your home screen</h2>
       <p id="install-help-body"></p>
     </div>
@@ -227,7 +257,7 @@
   <!-- Add-to-playlist chooser -->
   <div id="picker" class="modal-backdrop" hidden>
     <div class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="picker-title">
-      <button class="modal-close" id="picker-close" aria-label="Close">✕</button>
+      <button class="modal-close" id="picker-close" aria-label="Close"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 6.2l11.6 11.6M17.8 6.2L6.2 17.8" /></svg></button>
       <h2 id="picker-title">Add to playlist</h2>
       <p id="picker-song" class="picker-song"></p>
       <ul id="picker-list" class="picker-list"></ul>
@@ -248,8 +278,8 @@
         <button id="retry-btn" class="btn btn-quiet btn-sm" hidden>Retry</button>
       </div>
       <div class="head-right">
-        <span class="pill" title="Connected guests">👥 <span id="guest-count">0</span></span>
-        <span class="pill host-only" title="Signalling brokers online">📡 <span id="broker-count">0</span></span>
+        <span class="pill" title="Connected guests"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9.3" cy="8.4" r="3.3" /><path d="M3.4 19.4a5.9 5.9 0 0 1 11.8 0" /><path d="M16.4 5.6a3.3 3.3 0 0 1 0 5.6" /><path d="M17.6 13.9a5.9 5.9 0 0 1 3 5.5" /></svg><span id="guest-count">0</span></span>
+        <span class="pill host-only" title="Signalling brokers online"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.9" fill="currentColor" stroke="none" /><path d="M8.5 15.5a5 5 0 0 1 0-7" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M5.8 18.2a8.8 8.8 0 0 1 0-12.4" /><path d="M18.2 5.8a8.8 8.8 0 0 1 0 12.4" /></svg><span id="broker-count">0</span></span>
         <button class="theme-btn" data-theme-toggle aria-label="Switch theme"><span class="theme-icon"></span></button>
         <button id="leave-btn" class="btn btn-quiet btn-sm">Leave</button>
       </div>
@@ -263,7 +293,7 @@
         <div id="stage" class="stage host-only">
           <div id="yt-mount" class="yt-mount">
             <button id="tap-to-play" class="tap-to-play" hidden>
-              <span class="tap-icon" aria-hidden="true">▶</span>
+              <span class="tap-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.2v13.6L19 12z" fill="currentColor" stroke-linejoin="round" /></svg></span>
               <span class="tap-text">Tap to start playing</span>
               <span class="tap-sub">One tap is needed before sound will play</span>
             </button>
@@ -273,7 +303,7 @@
                stand-ins for it, shown only while the stage is fullscreen. -->
           <span id="room-code-4" class="fs-code"></span>
           <canvas id="qr-fs" class="fs-qr" aria-label="QR code with the join link"></canvas>
-          <button id="fs-btn" class="fs-btn" title="Fullscreen" aria-label="Toggle fullscreen">⛶</button>
+          <button id="fs-btn" class="fs-btn" title="Fullscreen" aria-label="Toggle fullscreen"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5.6A1.6 1.6 0 0 1 5.6 4H9" /><path d="M15 4h3.4A1.6 1.6 0 0 1 20 5.6V9" /><path d="M20 15v3.4a1.6 1.6 0 0 1-1.6 1.6H15" /><path d="M9 20H5.6A1.6 1.6 0 0 1 4 18.4V15" /></svg></button>
         </div>
 
         <div id="now" class="now"></div>
@@ -285,10 +315,10 @@
             <span id="t-end" class="t">--:--</span>
           </div>
           <div class="buttons">
-            <button id="restart-btn" class="icon-btn big" title="Restart song" aria-label="Restart song">⟲</button>
-            <button id="play-btn" class="icon-btn big primary" title="Play / pause" aria-label="Play">▶</button>
-            <button id="skip-btn" class="icon-btn big" title="Skip song" aria-label="Skip song">⏭</button>
-            <button id="mute-btn" class="icon-btn big" title="Mute" aria-pressed="false" aria-label="Mute">🔊</button>
+            <button id="restart-btn" class="icon-btn big" title="Restart song" aria-label="Restart song"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.4-5.7" /><path d="M20.5 4.2v5h-5" /></svg></button>
+            <button id="play-btn" class="icon-btn big primary" title="Play / pause" aria-label="Play"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.2v13.6L19 12z" fill="currentColor" stroke-linejoin="round" /></svg></button>
+            <button id="skip-btn" class="icon-btn big" title="Skip song" aria-label="Skip song"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 5.2v13.6L15 12z" fill="currentColor" /><path d="M18.5 5v14" /></svg></button>
+            <button id="mute-btn" class="icon-btn big" title="Mute" aria-pressed="false" aria-label="Mute"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.3h3.3L12 5.4v13.2L7.3 14.7H4z" fill="currentColor" stroke-linejoin="round" /><path d="M15.8 9.4a3.9 3.9 0 0 1 0 5.2" /><path d="M18.4 6.7a7.6 7.6 0 0 1 0 10.6" /></svg></button>
             <input id="vol" type="range" min="0" max="100" value="80" aria-label="Volume" />
           </div>
         </div>
@@ -361,6 +391,7 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
+  <script src="js/icons.js"></script>
   <script src="js/qr.js"></script>
   <script src="js/peer.js"></script>
   <script src="js/search.js"></script>

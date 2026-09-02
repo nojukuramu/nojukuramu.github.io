@@ -121,6 +121,23 @@ network; playback still needs one.
 Icons are generated from the desktop app's icon by `tools/make-icons.py` and committed, so the
 site keeps its no-build-step promise.
 
+### Staying current
+
+Installed, there is no address bar to reload from, so a cached shell would otherwise serve last
+month's build forever. The page asks the service worker for a newer one on load, when it comes
+back to the foreground (at most every 30 minutes), and on **Check for updates** in the footer
+next to the running version. A new build parks itself in `waiting` rather than taking over
+mid-song: the app offers it, and a reload swaps it in only once you accept — or a toast says so
+if you are in a room at the time.
+
+## Names
+
+A queue is a list of turns and a turn belongs to somebody, so a room will not let an unnamed
+guest in. The home screen's Join form asks for a name alongside the code, and someone arriving
+straight from a QR link meets the same question before the connection is made. The name is
+remembered in this browser, so it is asked once and never again — and it can be changed from the
+Invite tab inside a room, where it may be edited but not emptied.
+
 ## Files
 
 | Path | What it is |
@@ -132,6 +149,7 @@ site keeps its no-build-step promise.
 | `js/search.js` | Piped → Invidious fallback, link parsing |
 | `js/player.js` | YouTube IFrame API wrapper (host only) |
 | `js/qr.js` | QR encoder, written from scratch (byte mode, v1–12, ECC L/M) |
+| `js/icons.js` | The icon set — 24×24 line drawings on `currentColor`, no emoji |
 | `js/library.js` | Saved songs and playlists, stored in the browser |
 | `js/app.js` | Screens, wiring, and the host/guest seam |
 | `sw.js` · `manifest.webmanifest` · `icons/` | Makes it installable and offline-capable |

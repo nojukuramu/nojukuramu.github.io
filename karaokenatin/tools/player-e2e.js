@@ -121,6 +121,20 @@ const FAKE_RESULTS = {
 };
 
 let failures = 0;
+
+/* Guests must name themselves before a room lets them in; a deep link puts the
+ * gate up on arrival, so every scripted guest types a name first. */
+async function passNameGate(page, name) {
+  try {
+    await page.waitForSelector("#name-gate:not([hidden])", { timeout: 5000 });
+  } catch (e) {
+    return; // already named in this profile
+  }
+  await page.fill("#name-gate-input", name);
+  await page.click("#name-gate-form button[type=submit]");
+  await page.waitForSelector("#name-gate", { state: "hidden" });
+}
+
 function check(name, ok, extra) {
   console.log((ok ? "  ok   " : "  FAIL ") + name + (ok || extra === undefined ? "" : "  → " + extra));
   if (!ok) failures++;
@@ -168,6 +182,7 @@ async function main() {
    * (A host that clicked "Add" itself has already granted the gesture.) */
   const guest = await newPage();
   await guest.goto(base + "#/r/" + code);
+  await passNameGate(guest, "Remote");
   await guest.waitForSelector("#conn.conn-ok", { timeout: 30000 });
   check("guest connects before the host has been touched", true);
 
