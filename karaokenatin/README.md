@@ -123,6 +123,14 @@ site keeps its no-build-step promise.
 
 ### Staying current
 
+Every stylesheet and script is requested with a `?v=<version>` matching `APP_VERSION`, and the
+worker serves CSS and JS network-first. Both exist for the same reason: a cache that answers
+for `css/app.css` regardless of the build once paired one deploy's fresh HTML with the previous
+deploy's stylesheet, and the home screen laid itself out about 40% wider than the phone showing
+it. A versioned URL a stale cache has never seen cannot be answered from it. Bump the number in
+`js/app.js`, `sw.js` (`ASSET_V`), and `index.html` together — `tools/version-check.js` fails if
+you don't.
+
 Installed, there is no address bar to reload from, so a cached shell would otherwise serve last
 month's build forever. The page asks the service worker for a newer one on load, when it comes
 back to the foreground (at most every 30 minutes), and on **Check for updates** in the footer
@@ -164,6 +172,7 @@ node tools/reconnect-e2e.js   # leaving the browser and coming back           (p
 node tools/player-e2e.js      # playback state machine against a mock player  (playwright)
 node tools/library-e2e.js     # library, playlists, export/import, karaoke bias (playwright)
 node tools/install-e2e.js     # manifest, service worker, install button      (playwright)
+node tools/version-check.js   # one build version across index.html, sw.js, app.js
 ```
 
 `tools/e2e.js` boots a static server and a local stand-in for the broker
@@ -188,6 +197,11 @@ asserts the karaoke bias reaches the wire and never the input box.
 a worker with a fetch handler) and then our behaviour around the prompt — deferring it, firing
 it on click, remembering a dismissal, and falling back to manual instructions when no prompt
 event ever arrives.
+
+`tools/version-check.js` is the cheap one, and it guards a bug that cost a release: every
+stylesheet and script in `index.html` carries a `?v=<version>`, and `sw.js` precaches those
+exact URLs. Miss a bump and a returning visitor gets new markup with the previous build's CSS.
+It fails if the three numbers disagree.
 
 `tools/player-e2e.js` covers playback by serving a stand-in for the IFrame API that behaves
 the way YouTube's really does in the two awkward cases: `loadVideoById` landing in `CUED`

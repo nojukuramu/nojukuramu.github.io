@@ -119,7 +119,12 @@ body {
 
 a { color: var(--accent); text-underline-offset: 2px; }
 
-button, input { font: inherit; color: inherit; }
+/* An input carries a default intrinsic width (about 20 characters, and not the
+   same 20 in every engine). Inside a flex row that default is a floor, so one
+   text field can push a card wider than the phone holding it — the difference
+   between a layout that adapts and one that overflows off the right edge. */
+button, input { font: inherit; color: inherit; min-width: 0; }
+img, svg { max-width: 100%; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 
 h1, h2, h3 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.01em; }
