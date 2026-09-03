@@ -1,8 +1,10 @@
-/* player.js — thin wrapper around the YouTube IFrame API (host only).
+/* player.js — thin wrapper around the YouTube IFrame API.
  *
- * The guests' phones never load this: only the host screen plays video, which
- * is the whole point of a karaoke room. Everything here is best-effort — if
- * YouTube's API script is blocked we surface that instead of hanging.
+ * Only the host screen creates a *playing* player, which is the whole point of
+ * a karaoke room. A guest's phone still loads the API, because embed.js probes
+ * search results through the same one — see there for why that is the only
+ * honest way to ask whether a video will play. Everything here is best-effort:
+ * if YouTube's API script is blocked we surface that instead of hanging.
  */
 (function (global) {
   "use strict";
@@ -183,5 +185,8 @@
     });
   }
 
-  KN.player = { create: create };
+  /* Exported so the embeddability probes in embed.js share this one script
+   * load and this one memoised promise — the API is a singleton on the page,
+   * and a second injection would race the first. */
+  KN.player = { create: create, loadApi: loadApi };
 })(typeof window !== "undefined" ? window : globalThis);

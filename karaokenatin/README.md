@@ -93,6 +93,37 @@ exhausted the app says search is unavailable rather than spinning — and **past
 link always works**, since that path needs no mirror at all (title lookup falls back through
 YouTube's own oembed, then Piped, then Invidious, then a bare playable entry).
 
+### Only what can actually play
+
+A mirror returns plenty of videos the host screen can never show: the owner
+disabled embedding, the upload is private, the video is gone. Those used to reach
+the queue and fail in front of everybody, on the one screen nobody wants to be
+fiddling with mid-party.
+
+There is no honest API for the question — oEmbed's 401 is a rumour rather than a
+contract, and neither mirror carries the flag — so `js/embed.js` asks it the only
+way that matches what the host will do: it hands each id to a real, muted,
+offscreen YouTube embed and calls `cueVideoById`. Cueing loads no video stream; it
+asks YouTube whether it *would*, which is exactly the question, and a refusal comes
+back as the same player error (101/150/100/5) the host would have hit.
+
+Two things keep the vetting from feeling like a wait:
+
+- **Verdicts stream.** Three probes run at once and every result is rendered the
+  moment it clears, so the first playable song is on screen in about the time one
+  probe takes rather than after the whole list. Answers arrive out of order; rows
+  are placed by their original rank, so the list fills in fast *and* stays in the
+  mirror's ranking.
+- **Verdicts are remembered.** Embeddability is a property of the video, not of
+  today, so it is cached in the browser — a repeat search probes nothing at all,
+  and the cache survives a reload.
+
+Uncertainty never hides anything. A probe that times out, an IFrame API that is
+blocked, a pool that could not be built — all count as "unknown", and unknown is
+shown. Hiding a song that would have played is a worse failure than showing one
+that turns out not to, which the room already handles by skipping. A pasted link
+goes through the same gate and is refused up front with a reason.
+
 Queries are quietly biased toward karaoke tracks: `anak` goes to the mirror as `anak karaoke`,
 because this is a karaoke app and the official music video is almost never what you want. The
 bias never appears in the search box — echoing back a query the user did not type reads as a
@@ -155,7 +186,8 @@ Invite tab inside a room, where it may be edited but not emptied.
 | `js/peer.js` | Broker protocol, WebRTC links, host/guest roles |
 | `js/room.js` | Room state and the rules for changing it |
 | `js/search.js` | Piped → Invidious fallback, link parsing |
-| `js/player.js` | YouTube IFrame API wrapper (host only) |
+| `js/player.js` | YouTube IFrame API wrapper (the host plays; everyone probes) |
+| `js/embed.js` | Vets search results against a real embed — only playable ones show |
 | `js/qr.js` | QR encoder, written from scratch (byte mode, v1–12, ECC L/M) |
 | `js/icons.js` | The icon set — 24×24 line drawings on `currentColor`, no emoji |
 | `js/library.js` | Saved songs and playlists, stored in the browser |
@@ -171,6 +203,7 @@ node tools/e2e.js             # two real browsers, one real WebRTC link (needs p
 node tools/reconnect-e2e.js   # leaving the browser and coming back           (playwright)
 node tools/player-e2e.js      # playback state machine against a mock player  (playwright)
 node tools/library-e2e.js     # library, playlists, export/import, karaoke bias (playwright)
+node tools/embed-e2e.js       # only embeddable results reach the screen      (playwright)
 node tools/install-e2e.js     # manifest, service worker, install button      (playwright)
 node tools/version-check.js   # one build version across index.html, sw.js, app.js
 ```
@@ -198,6 +231,15 @@ a worker with a fetch handler) and then our behaviour around the prompt — defe
 it on click, remembering a dismissal, and falling back to manual instructions when no prompt
 event ever arrives.
 
+`tools/embed-e2e.js` serves an IFrame API stand-in that refuses specific ids the way
+YouTube does, and does it faster than it accepts the others — so a result list built
+in the order answers arrived would come out visibly wrong. It checks that refused
+videos never appear and are counted, that a row is on screen while the sweep is
+still running, that the surviving rows sit in the mirror's ranking anyway, that a
+repeat search probes nothing and a reload does not lose that, that a pasted
+un-embeddable link is refused before it can be saved, and that a blocked IFrame API
+hides nothing at all.
+
 `tools/version-check.js` is the cheap one, and it guards a bug that cost a release: every
 stylesheet and script in `index.html` carries a `?v=<version>`, and `sw.js` precaches those
 exact URLs. Miss a bump and a returning visitor gets new markup with the previous build's CSS.
@@ -223,8 +265,10 @@ player.
   not a firewall that drops UDP and non-standard TCP alike.
 - **Public brokers and mirrors are other people's infrastructure.** They go down. The
   fallbacks are why there are several of each, but "all of them at once" is possible.
-- **Embedding is the video owner's choice.** A video that disallows embedding cannot play;
-  the room reports it and skips.
+- **Embedding is the video owner's choice.** A video that disallows embedding cannot play.
+  Search results are now vetted against a real embed before they are shown, so one should
+  not reach the queue in the first place — but a video whose permissions change between the
+  check and the turn still can, and the room reports it and skips.
 - **The room code is the only door.** Anyone who has it can join, and six characters from a
   32-symbol alphabet is guessable given enough tries against a public broker. That is fine
   for a party in a living room and not fine for anything you would mind a stranger seeing.

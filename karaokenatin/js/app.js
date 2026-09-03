@@ -103,6 +103,7 @@
     guestNames: {},    // host only: link.id -> display name
     searchBusy: false,
     lastResults: [],
+    searchSweep: null,   // in-flight playability sweep; cancelled by the next search
     tab: "queue",
     openPlaylists: {},   // pid -> expanded in the library view
     pickerSong: null,
@@ -783,7 +784,12 @@
     });
   }
 
-  /* ---------------- search ---------------- */
+  /* ---------------- search ----------------
+   * A mirror returns far more than anyone scrolls through, and every extra
+   * result costs a probe. Vetting the top of the list keeps the sweep short
+   * without ever showing a page the user could reach and find empty.
+   */
+  var SEARCH_CHECK_LIMIT = 24;
 
   function runSearch() {
     var input = $("#q");
@@ -793,6 +799,10 @@
     var results = $("#results");
     var status = $("#search-status");
 
+    // A new search abandons the previous sweep rather than making it queue
+    // behind results nobody is looking at any more.
+    if (app.searchSweep) { app.searchSweep.cancel(); app.searchSweep = null; }
+
     // A pasted link never needs a search mirror.
     if (KN.search.parseVideoId(q)) {
       status.textContent = "Reading link…";
@@ -800,6 +810,18 @@
       app.searchBusy = true;
       KN.search
         .resolve(q)
+        .then(function (video) {
+          // The same gate the search results go through: a link that cannot be
+          // embedded is a song that dies on the host screen, so say so here
+          // rather than in front of everybody three turns from now.
+          status.textContent = "Checking it can play here…";
+          return KN.embed.check(video.id).then(function (verdict) {
+            if (verdict === KN.embed.NO) {
+              throw new Error("That video cannot be played in an embed — the owner disallowed it, or it is private or gone.");
+            }
+            return video;
+          });
+        })
         .then(function (video) {
           input.value = "";
           status.textContent = "";
@@ -827,11 +849,39 @@
     KN.search
       .search(q)
       .then(function (out) {
-        app.lastResults = out.results;
-        status.textContent = out.results.length
-          ? out.results.length + " results · " + out.source
-          : "No results.";
-        renderResults(out.results);
+        app.lastResults = [];
+        results.innerHTML = "";
+        if (!out.results.length) { status.textContent = "No results."; return; }
+
+        /* The mirrors hand back plenty of videos the host could never play.
+         * Rather than making everyone wait for the whole list to be vetted,
+         * each result is rendered the moment it clears — so the first playable
+         * song lands in about the time one probe takes. */
+        status.textContent = "Checking which of these can play here…";
+        app.searchSweep = KN.embed.filter(out.results, {
+          limit: SEARCH_CHECK_LIMIT,
+          onAccept: function (video, rank) {
+            app.lastResults.push(video);
+            insertResult(video, rank);
+          },
+          onProgress: function (p) {
+            status.textContent = p.kept
+              ? p.kept + " playable so far · checking " + p.checked + "/" + p.total + "…"
+              : "Checking " + p.checked + "/" + p.total + "…";
+          },
+          onDone: function (p) {
+            app.searchSweep = null;
+            if (p.kept) {
+              status.textContent =
+                p.kept + " playable" +
+                (p.dropped ? " · " + p.dropped + " skipped (cannot be embedded)" : "") +
+                " · " + out.source;
+            } else {
+              status.textContent =
+                "None of these " + p.total + " results can be played in an embed. Try different words.";
+            }
+          }
+        });
       })
       .catch(function (e) {
         status.textContent = e.message;
@@ -846,50 +896,60 @@
     if (app.role !== "host") toast("Added “" + title + "”");
   }
 
-  function renderResults(results) {
+  /* Verdicts arrive out of order — POOL_SIZE probes run at once and a cached
+   * one returns instantly — but the mirror's ranking is the useful one, so
+   * each row is placed by its original rank rather than appended. The list
+   * stays in relevance order while still filling in as fast as answers come. */
+  function insertResult(v, rank) {
     var box = $("#results");
-    box.innerHTML = "";
-    results.forEach(function (v) {
-      var star = el("button", {
-        class: "icon-btn star" + (LIB.hasSong(v.id) ? " on" : ""),
-        title: "Save to your library",
-        "aria-label": "Save to your library",
-        "aria-pressed": LIB.hasSong(v.id) ? "true" : "false",
-        onclick: function () {
-          var saved = LIB.toggleSong(v);
-          KN.setIcon(this, saved ? "star-filled" : "star");
-          this.setAttribute("aria-pressed", String(saved));
-          this.classList.toggle("on", saved);
-          toast(saved ? "Saved “" + v.title + "”" : "Removed from saved");
-          renderLibrary();
-        }
-      }, [KN.icon(LIB.hasSong(v.id) ? "star-filled" : "star")]);
+    var row = resultRow(v);
+    row.setAttribute("data-rank", String(rank));
+    var before = null;
+    var rows = box.children;
+    for (var i = 0; i < rows.length; i++) {
+      if (Number(rows[i].getAttribute("data-rank")) > rank) { before = rows[i]; break; }
+    }
+    box.insertBefore(row, before);
+  }
 
-      box.appendChild(
-        el("li", { class: "row row-result" }, [
-          thumb("row-thumb", v.thumb),
-          el("div", { class: "row-meta" }, [
-            el("div", { class: "row-title", text: v.title }),
-            el("div", { class: "row-sub", text: v.author || "" })
-          ]),
-          el("span", { class: "row-time", text: v.duration ? R.fmtTime(v.duration) : "" }),
-          el("div", { class: "row-actions" }, [
-            star,
-            btn("plus", "Add to a playlist", function () { openPicker(v); })
-          ]),
-          app.role
-            ? el("button", {
-                class: "add-btn",
-                text: "Add",
-                onclick: function () {
-                  dispatch({ type: CMD.ADD, video: v });
-                  confirmAdded(v.title);
-                }
-              })
-            : null
-        ])
-      );
-    });
+  function resultRow(v) {
+    var star = el("button", {
+      class: "icon-btn star" + (LIB.hasSong(v.id) ? " on" : ""),
+      title: "Save to your library",
+      "aria-label": "Save to your library",
+      "aria-pressed": LIB.hasSong(v.id) ? "true" : "false",
+      onclick: function () {
+        var saved = LIB.toggleSong(v);
+        KN.setIcon(this, saved ? "star-filled" : "star");
+        this.setAttribute("aria-pressed", String(saved));
+        this.classList.toggle("on", saved);
+        toast(saved ? "Saved “" + v.title + "”" : "Removed from saved");
+        renderLibrary();
+      }
+    }, [KN.icon(LIB.hasSong(v.id) ? "star-filled" : "star")]);
+
+    return el("li", { class: "row row-result" }, [
+      thumb("row-thumb", v.thumb),
+      el("div", { class: "row-meta" }, [
+        el("div", { class: "row-title", text: v.title }),
+        el("div", { class: "row-sub", text: v.author || "" })
+      ]),
+      el("span", { class: "row-time", text: v.duration ? R.fmtTime(v.duration) : "" }),
+      el("div", { class: "row-actions" }, [
+        star,
+        btn("plus", "Add to a playlist", function () { openPicker(v); })
+      ]),
+      app.role
+        ? el("button", {
+            class: "add-btn",
+            text: "Add",
+            onclick: function () {
+              dispatch({ type: CMD.ADD, video: v });
+              confirmAdded(v.title);
+            }
+          })
+        : null
+    ]);
   }
 
   /* ---------------- library ----------------
@@ -1189,7 +1249,7 @@
 
   /* Also the ?v= on every asset in index.html and in sw.js SHELL_FILES.
    * tools/version-check.js fails the build if the three drift apart. */
-  var APP_VERSION = "2.2.2";
+  var APP_VERSION = "2.3.0";
   var UPDATE_CHECK_MS = 30 * 60 * 1000;
 
   var swReg = null;
