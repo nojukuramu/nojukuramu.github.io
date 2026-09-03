@@ -194,8 +194,20 @@
           });
         };
 
-        // A player that never reports ready is a player that never will.
-        setTimeout(function () { if (!started) reject(new Error("probe player did not start")); }, 15000);
+        /* A player that never reports ready is a player that never will —
+         * but only foreground seconds count towards saying so. A backgrounded
+         * iOS page is frozen, not broken, and a wall-clock timer condemned
+         * every probe that was in flight when the phone was pocketed. */
+        var idled = 0;
+        var watch = setInterval(function () {
+          if (started) { clearInterval(watch); return; }
+          if (document.hidden) return;
+          idled += 500;
+          if (idled >= 15000) {
+            clearInterval(watch);
+            reject(new Error("probe player did not start"));
+          }
+        }, 500);
       });
     });
   }
@@ -270,6 +282,13 @@
     var onProgress = opts.onProgress || function () {};
     var onDone = opts.onDone || function () {};
     var list = (videos || []).slice(0, opts.limit || (videos || []).length);
+
+    /* A broken pool is a snapshot, not a diagnosis. It latches when the API
+     * cannot be reached, and used to stay latched for the life of the page —
+     * so a blocker switched off, or wifi that came back, still left every
+     * later search reporting its results "unchecked". A new sweep gets a new
+     * chance; if the API is still gone it re-breaks on the first acquire. */
+    if (poolBroken && !slots.length) poolBroken = false;
 
     var next = 0, active = 0;
     var stats = { total: list.length, checked: 0, kept: 0, dropped: 0, unsure: 0 };

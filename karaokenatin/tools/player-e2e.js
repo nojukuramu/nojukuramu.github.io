@@ -285,6 +285,37 @@ async function main() {
   await host.waitForFunction(() => window.__player.isMuted() === true, null, { timeout: 10000 });
   check("mute reaches the player", true);
 
+  /* ── the API load is recoverable ──────────────────────────────────────
+   * A blocker switched off, or a lift left, used to change nothing: the
+   * rejected load was memoised, so the host stared at "could not load" until
+   * it reloaded the page and lost the room. Fail once, fix the cause, retry
+   * in place — the player must come up. */
+  const flaky = await browser.newContext();
+  await flaky.addInitScript(
+    ([p]) => { window.KN_BROKERS = [{ host: "127.0.0.1", port: p, path: "/", key: "peerjs" }]; },
+    [brokerPort]
+  );
+  let apiBlocked = true;
+  await flaky.route(/youtube\.com\/iframe_api/, (route) =>
+    apiBlocked
+      ? route.abort()
+      : route.fulfill({ status: 200, contentType: "text/javascript", body: MOCK_API })
+  );
+  await flaky.route(/ytimg\.com/, (route) => route.abort());
+  const retryHost = await flaky.newPage();
+  await retryHost.goto(base + "#/host");
+  await retryHost.waitForSelector(".player-error", { timeout: 20000 });
+  check("a refused API script surfaces without waiting out the whole budget", true);
+
+  apiBlocked = false;
+  await retryHost.click(".player-error button");
+  await retryHost.waitForFunction(() => !!window.__player, null, { timeout: 20000 });
+  check("retrying after the block is lifted brings the player up", true);
+  check(
+    "the error clears once the retry succeeds",
+    (await retryHost.locator(".player-error").count()) === 0
+  );
+
   await browser.close();
   site.close();
   process.exit(failures ? 1 : 0);
