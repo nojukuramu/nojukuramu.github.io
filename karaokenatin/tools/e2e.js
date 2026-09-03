@@ -182,8 +182,21 @@ async function main() {
   check("guest can remove a song from the host's queue", true);
 
   // ── the player really is unavailable here, and says so ───────────────────
-  const playerMsg = await host.textContent(".player-error").catch(() => null);
+  const playerMsg = await host.textContent(".player-error-text").catch(() => null);
   check("blocked YouTube API degrades to a visible message", !!playerMsg, playerMsg || "no message");
+  /* The two hops fail differently and must not be described with one shrug:
+   * here it is the API script itself that was refused, so say that. */
+  check(
+    "the message names the refused script, not the connection",
+    !!playerMsg && /iframe_api/.test(playerMsg),
+    playerMsg || "no message"
+  );
+  /* Blockers get switched off and lifts get left — the failure has to offer a
+   * way back that is not "reload and lose the room". */
+  check(
+    "a failed player load offers a retry",
+    await host.locator(".player-error button").isVisible().catch(() => false)
+  );
 
   // ── reconnection ─────────────────────────────────────────────────────────
   // Sever the guest's peer connection the way a dropped network would, and

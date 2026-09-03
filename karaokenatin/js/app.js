@@ -220,7 +220,20 @@
         startTicker();
       })
       .catch(function (err) {
-        $("#yt-mount").appendChild(el("p", { class: "player-error", text: err.message }));
+        /* Not the end of the road: the API load is retryable now, and the
+         * usual fixes for this (turn the blocker off, leave the lift, come
+         * back onto wifi) are all things the user does and then wants to try
+         * again — without losing the room by reloading the page. */
+        $("#yt-mount").appendChild(
+          el("div", { class: "player-error" }, [
+            el("p", { class: "player-error-text", text: err.message }),
+            el("button", {
+              class: "btn btn-primary btn-sm",
+              type: "button",
+              onclick: function () { setupPlayer(); }
+            }, ["Try again"])
+          ])
+        );
       });
   }
 
@@ -1265,7 +1278,7 @@
 
   /* Also the ?v= on every asset in index.html and in sw.js SHELL_FILES.
    * tools/version-check.js fails the build if the three drift apart. */
-  var APP_VERSION = "2.3.1";
+  var APP_VERSION = "2.3.2";
   var UPDATE_CHECK_MS = 30 * 60 * 1000;
 
   var swReg = null;

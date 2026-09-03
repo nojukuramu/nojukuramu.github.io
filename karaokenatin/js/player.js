@@ -4,39 +4,112 @@
  * a karaoke room. A guest's phone still loads the API, because embed.js probes
  * search results through the same one — see there for why that is the only
  * honest way to ask whether a video will play. Everything here is best-effort:
- * if YouTube's API script is blocked we surface that instead of hanging.
+ * if YouTube's API cannot be reached we say which hop failed, and we stay
+ * retryable, instead of hanging or condemning the page for the rest of its
+ * life on one bad moment.
  */
 (function (global) {
   "use strict";
 
   var KN = (global.KN = global.KN || {});
 
+  /* The API arrives in two hops: this script, and the widget bundle it then
+   * pulls from s.ytimg.com. Either can be stopped independently — a content
+   * blocker, a VPN or DNS filter, a captive portal — and the two failures need
+   * different words, because "blocked or offline" sent everyone to look at
+   * their wifi when the answer was an extension.
+   *
+   * The budget is spent in foreground time only. iOS suspends a backgrounded
+   * page wholesale: locking the phone or switching apps to send someone the
+   * join link froze the load and left a wall-clock timer running against it,
+   * so a perfectly healthy player came back declared dead. Time in a pocket is
+   * not time the network had.
+   */
+  var LOAD_BUDGET_MS = 20000;
+  var TICK_MS = 500;
+
   var apiPromise = null;
+  var script = null;      // the one injection; reused across retries
+  var scriptState = "none"; // none | pending | loaded | error
 
+  function apiReady() {
+    return !!(global.YT && typeof global.YT.Player === "function");
+  }
+
+  function inject() {
+    if (script && scriptState !== "error") return;
+    scriptState = "pending";
+    script = document.createElement("script");
+    script.src = "https://www.youtube.com/iframe_api";
+    script.async = true;
+    script.onload = function () { if (scriptState === "pending") scriptState = "loaded"; };
+    script.onerror = function () { scriptState = "error"; };
+    document.head.appendChild(script);
+  }
+
+  /* Why we gave up, in the words of whichever hop actually failed. */
+  function reason() {
+    if (scriptState === "error") {
+      return "YouTube's player script was refused (https://www.youtube.com/iframe_api). " +
+             "A content blocker, VPN or filtered network is the usual cause.";
+    }
+    if (scriptState === "loaded") {
+      return "YouTube's player script loaded but never finished starting up — " +
+             "something is blocking its second file from s.ytimg.com. " +
+             "Turn off content blockers for this site and reload.";
+    }
+    return "YouTube's player did not load in time. Check the connection and try again.";
+  }
+
+  /**
+   * loadApi() -> Promise<YT>
+   *
+   * Memoised while it is pending or resolved, and deliberately *not* memoised
+   * once it has failed: the old version cached the rejection, so one bad
+   * moment on mobile data disabled playback and the embeddability probes for
+   * the life of the page, with a reload the only cure.
+   */
   function loadApi() {
+    if (apiReady()) return Promise.resolve(global.YT);
     if (apiPromise) return apiPromise;
+
     apiPromise = new Promise(function (resolve, reject) {
-      if (global.YT && global.YT.Player) return resolve(global.YT);
+      var waited = 0;
+      var tick = null;
+      var settled = false;
 
-      var timer = setTimeout(function () {
-        reject(new Error("YouTube player could not load (blocked or offline)."));
-      }, 15000);
+      function stop() { settled = true; clearInterval(tick); }
 
+      /* YouTube calls this once, globally. Anything already installed keeps
+       * working: the API is a singleton and we may not be its only caller. */
       var prev = global.onYouTubeIframeAPIReady;
       global.onYouTubeIframeAPIReady = function () {
-        clearTimeout(timer);
-        if (typeof prev === "function") prev();
+        if (typeof prev === "function") { try { prev(); } catch (e) { console.error("[kn] yt ready hook", e); } }
+        if (settled) return;
+        stop();
         resolve(global.YT);
       };
 
-      var s = document.createElement("script");
-      s.src = "https://www.youtube.com/iframe_api";
-      s.async = true;
-      s.onerror = function () {
-        clearTimeout(timer);
-        reject(new Error("YouTube player could not load (blocked or offline)."));
-      };
-      document.head.appendChild(s);
+      /* One timer does both jobs. The poll matters as much as the budget: if
+       * the API is already on the page — a second injection, a callback that
+       * fired before we hooked it — no callback is coming, and waiting for one
+       * is a hang with a 20-second fuse. */
+      tick = setInterval(function () {
+        if (settled) return;
+        if (apiReady()) { stop(); resolve(global.YT); return; }
+        if (document.hidden) return;
+        waited += TICK_MS;
+        if (scriptState === "error" || waited >= LOAD_BUDGET_MS) {
+          stop();
+          apiPromise = null;
+          var err = new Error(reason());
+          err.stage = scriptState;
+          console.warn("[kn] youtube api unavailable:", scriptState, err.message);
+          reject(err);
+        }
+      }, TICK_MS);
+
+      inject();
     });
     return apiPromise;
   }
