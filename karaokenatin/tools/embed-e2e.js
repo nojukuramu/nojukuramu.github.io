@@ -47,10 +47,15 @@ function serve() {
   return new Promise((r) => server.listen(0, "127.0.0.1", () => r(server)));
 }
 
-/* Six results; the three whose id starts with "no" are refused, the way a
- * video with embedding turned off is. Ranks 0 and 5 pass, so a list that only
- * appends in verdict order cannot come out right by luck. */
-const IDS = ["ok000000001", "no000000001", "ok000000002", "no000000002", "no000000003", "ok000000003"];
+/* Seven results; the four that are not "ok" are refused. Two shapes of
+ * refusal, because YouTube uses both: "no…" errors outright, while "cue…"
+ * cues first and only then says no — the shape that used to sail through,
+ * since a cue was taken for a verdict. Ranks 0 and 6 pass, so a list that
+ * only appends in verdict order cannot come out right by luck. */
+const IDS = [
+  "ok000000001", "no000000001", "ok000000002",
+  "cue00000001", "no000000002", "cue00000002", "ok000000003"
+];
 const FAKE_RESULTS = {
   items: IDS.map((id, i) => ({
     url: "/watch?v=" + id,
@@ -85,13 +90,17 @@ const MOCK_API = `
     this.videoId = id;
     window.__cued.push(id);
     var self = this;
+    function cued() { self._state = 5; self._opts.events.onStateChange({ data: 5, target: self }); }
+    function refuse() { self._opts.events.onError({ data: 150, target: self }); }
     // Refusals come back faster than passes, so a result list built in the
     // order answers arrive would be visibly wrong.
-    var refused = id.indexOf("no") === 0;
-    setTimeout(function () {
-      if (refused) self._opts.events.onError({ data: 150, target: self });
-      else { self._state = 5; self._opts.events.onStateChange({ data: 5, target: self }); }
-    }, refused ? 60 : 220);
+    if (id.indexOf("no") === 0) setTimeout(refuse, 60);
+    else if (id.indexOf("cue") === 0) {
+      // The real player's shape for a video it will not embed: the id is
+      // accepted and cued, and the refusal follows a beat later.
+      setTimeout(cued, 60);
+      setTimeout(refuse, 260);
+    } else setTimeout(cued, 220);
   };
   Player.prototype.loadVideoById = Player.prototype.cueVideoById;
   Player.prototype.playVideo = function () {};
@@ -173,15 +182,21 @@ async function main() {
   check("only the embeddable results are shown", shown.length === 3, String(shown.length));
   check(
     "they are the right three, in the mirror's order",
-    JSON.stringify(shown) === JSON.stringify(["Song 1", "Song 3", "Song 6"]),
+    JSON.stringify(shown) === JSON.stringify(["Song 1", "Song 3", "Song 7"]),
+    JSON.stringify(shown)
+  );
+  check(
+    "a video that cues and only then refuses is still dropped",
+    !shown.includes("Song 4") && !shown.includes("Song 6"),
     JSON.stringify(shown)
   );
 
   const status = (await page.textContent("#search-status")).trim();
-  check("the status says how many were skipped", /3 skipped/.test(status), JSON.stringify(status));
+  check("the status says how many were skipped", /4 skipped/.test(status), JSON.stringify(status));
+  check("and claims no unchecked results when every probe answered", !/unchecked/.test(status), JSON.stringify(status));
 
   const probed = await page.evaluate(() => window.__cued.slice());
-  check("every result was probed exactly once", probed.length === 6, String(probed.length));
+  check("every result was probed exactly once", probed.length === 7, String(probed.length));
 
   // ── the cache ─────────────────────────────────────────────────────────────
   await page.fill("#q", "opm");
@@ -194,7 +209,7 @@ async function main() {
   const again = await titles(page);
   check("a repeat search shows the same three", JSON.stringify(again) === JSON.stringify(shown), JSON.stringify(again));
   const probedAgain = await page.evaluate(() => window.__cued.length);
-  check("a repeat search probes nothing — verdicts are remembered", probedAgain === 6, String(probedAgain));
+  check("a repeat search probes nothing — verdicts are remembered", probedAgain === 7, String(probedAgain));
 
   // Remembered across a reload, not just in this page's memory.
   await page.reload();
@@ -215,7 +230,7 @@ async function main() {
 
   // ── a pasted link that cannot be embedded ────────────────────────────────
   await page.evaluate(() => window.KN.embed._forget());
-  await page.fill("#q", "https://www.youtube.com/watch?v=no000000001");
+  await page.fill("#q", "https://www.youtube.com/watch?v=cue00000001");
   await page.click("#search-form button[type=submit]");
   await page.waitForFunction(
     () => /cannot be played in an embed/.test(document.querySelector("#search-status").textContent),
@@ -251,8 +266,16 @@ async function main() {
   const blindShown = await titles(blind);
   check(
     "an unreachable player API hides nothing",
-    blindShown.length === 6,
+    blindShown.length === 7,
     String(blindShown.length)
+  );
+  // …but it does not pass them off as vetted, either.
+  const blindStatus = (await blind.textContent("#search-status")).trim();
+  check("and says so — 0 playable, 7 unchecked", /0 playable · 7 unchecked/.test(blindStatus), JSON.stringify(blindStatus));
+  check(
+    "every unchecked row is flagged as such",
+    (await blind.locator("#results .row-flag").count()) === 7,
+    String(await blind.locator("#results .row-flag").count())
   );
 
   await browser.close();

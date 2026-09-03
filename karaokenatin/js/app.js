@@ -860,9 +860,9 @@
         status.textContent = "Checking which of these can play here…";
         app.searchSweep = KN.embed.filter(out.results, {
           limit: SEARCH_CHECK_LIMIT,
-          onAccept: function (video, rank) {
+          onAccept: function (video, rank, verdict) {
             app.lastResults.push(video);
-            insertResult(video, rank);
+            insertResult(video, rank, verdict === KN.embed.UNKNOWN);
           },
           onProgress: function (p) {
             status.textContent = p.kept
@@ -872,8 +872,13 @@
           onDone: function (p) {
             app.searchSweep = null;
             if (p.kept) {
+              /* An unsure verdict is our failure, not the video's, and the
+               * result is shown anyway — but silently calling it playable is
+               * how a filter that has stopped working looks exactly like one
+               * that is working. Say how many were never actually answered. */
               status.textContent =
-                p.kept + " playable" +
+                (p.kept - p.unsure) + " playable" +
+                (p.unsure ? " · " + p.unsure + " unchecked" : "") +
                 (p.dropped ? " · " + p.dropped + " skipped (cannot be embedded)" : "") +
                 " · " + out.source;
             } else {
@@ -900,9 +905,9 @@
    * one returns instantly — but the mirror's ranking is the useful one, so
    * each row is placed by its original rank rather than appended. The list
    * stays in relevance order while still filling in as fast as answers come. */
-  function insertResult(v, rank) {
+  function insertResult(v, rank, unchecked) {
     var box = $("#results");
-    var row = resultRow(v);
+    var row = resultRow(v, unchecked);
     row.setAttribute("data-rank", String(rank));
     var before = null;
     var rows = box.children;
@@ -912,7 +917,7 @@
     box.insertBefore(row, before);
   }
 
-  function resultRow(v) {
+  function resultRow(v, unchecked) {
     var star = el("button", {
       class: "icon-btn star" + (LIB.hasSong(v.id) ? " on" : ""),
       title: "Save to your library",
@@ -932,7 +937,18 @@
       thumb("row-thumb", v.thumb),
       el("div", { class: "row-meta" }, [
         el("div", { class: "row-title", text: v.title }),
-        el("div", { class: "row-sub", text: v.author || "" })
+        el("div", { class: "row-sub" }, [
+          document.createTextNode(v.author || ""),
+          /* The probe could not get an answer for this one, so it is here on
+           * benefit of the doubt rather than on a verdict. Saying so is the
+           * difference between "we checked" and "we could not". */
+          unchecked
+            ? el("span", {
+                class: "row-flag",
+                title: "We could not confirm this one plays in an embed — it may fail on the host screen."
+              }, [document.createTextNode("unchecked")])
+            : null
+        ])
       ]),
       el("span", { class: "row-time", text: v.duration ? R.fmtTime(v.duration) : "" }),
       el("div", { class: "row-actions" }, [
@@ -1249,7 +1265,7 @@
 
   /* Also the ?v= on every asset in index.html and in sw.js SHELL_FILES.
    * tools/version-check.js fails the build if the three drift apart. */
-  var APP_VERSION = "2.3.0";
+  var APP_VERSION = "2.3.1";
   var UPDATE_CHECK_MS = 30 * 60 * 1000;
 
   var swReg = null;
