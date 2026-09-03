@@ -35,7 +35,18 @@
 
   var POOL_SIZE = 3;          // concurrent probes; also the render fan-out
   var PROBE_MS = 6500;        // a silent player is an answer we won't get
-  var CACHE_KEY = "kn:embeddable";
+  /* CUED is not the end of the story. YouTube accepts the id, moves the
+   * player to "video cued", and only then decides it will not serve it here —
+   * the 101/150 refusal lands a beat after the state change, not instead of
+   * it. Settling on CUED therefore passed almost everything, and cached the
+   * wrong answer forever. A positive state now only starts the clock. */
+  var GRACE_MS = 1400;        // how long a refusal is given to contradict a cue
+  /* Versioned: every verdict cached before the fix above was reached by
+   * trusting a cue, so a returning user's stored "playable" is exactly the
+   * wrong answer we are here to stop showing. The old key is dropped rather
+   * than migrated. */
+  var CACHE_KEY = "kn:embeddable:2";
+  var LEGACY_CACHE_KEYS = ["kn:embeddable"];
   var CACHE_MAX = 800;
 
   var YES = "yes", NO = "no", UNKNOWN = "unknown";
@@ -45,8 +56,10 @@
    * "unknown" is our failure, not the video's, and must not be cached as one.
    */
   var cache = (function () {
-    try { return JSON.parse(localStorage.getItem(CACHE_KEY)) || {}; }
-    catch (e) { return {}; }
+    try {
+      LEGACY_CACHE_KEYS.forEach(function (k) { localStorage.removeItem(k); });
+      return JSON.parse(localStorage.getItem(CACHE_KEY)) || {};
+    } catch (e) { return {}; }
   })();
 
   function remember(id, ok) {
@@ -92,27 +105,43 @@
         var slot = { id: mount.id };
         var settle = null;      // resolver of the probe in flight
         var expect = null;      // the id that probe asked about
+        var previous = null;    // the id before it — the only source of stale events
         var timer = null;
+        var grace = null;
         var started = false;
 
         function done(verdict) {
           clearTimeout(timer);
+          clearTimeout(grace);
+          grace = null;
           var fn = settle;
           settle = null;
+          previous = expect;
           expect = null;
           if (fn) fn(verdict);
+        }
+
+        function reportedId(player) {
+          try {
+            var d = player.getVideoData && player.getVideoData();
+            return d && d.video_id ? d.video_id : null;
+          } catch (e) { return null; }
         }
 
         /* A verdict must belong to the video we asked about. The player keeps
          * emitting about the previous one for a moment after a new cue, and a
          * stale "cued" landing on the next probe would wave through a video
-         * nobody checked. */
+         * nobody checked.
+         *
+         * Only the slot's previous id is stale, though. A refused video often
+         * reports no video data at all, and rejecting every event the player
+         * cannot name threw away the refusals we are here to collect — the
+         * probe then timed out as "unknown", and unknown is shown. */
         function mine(player) {
           if (!expect) return false;
-          try {
-            var d = player.getVideoData && player.getVideoData();
-            return !d || !d.video_id || d.video_id === expect;
-          } catch (e) { return true; }
+          var id = reportedId(player);
+          if (!id || id === expect) return true;
+          return id !== previous;
         }
 
         var player = new YT.Player(mount.id, {
@@ -135,9 +164,13 @@
               resolve(slot);
             },
             onStateChange: function (e) {
-              // CUED is the pass. PLAYING/BUFFERING would also mean YouTube
-              // agreed, and are accepted in case a cue ever runs long.
-              if ((e.data === 5 || e.data === 1 || e.data === 3) && mine(player)) done(YES);
+              // CUED is the candidate pass; PLAYING/BUFFERING mean the same in
+              // case a cue ever runs long. None of them is final: a refusal
+              // arrives just after the cue, so a pass has to outlive it.
+              if ((e.data === 5 || e.data === 1 || e.data === 3) && mine(player)) {
+                if (!settle || grace) return;
+                grace = setTimeout(function () { done(YES); }, GRACE_MS);
+              }
             },
             onError: function (e) {
               // 2 bad id · 5 html5 · 100 gone · 101/150 embedding refused.
@@ -153,6 +186,8 @@
           return new Promise(function (res) {
             settle = res;
             expect = videoId;
+            clearTimeout(grace);
+            grace = null;
             timer = setTimeout(function () { done(UNKNOWN); }, PROBE_MS);
             try { player.cueVideoById({ videoId: videoId }); }
             catch (err) { done(UNKNOWN); }
@@ -217,9 +252,12 @@
    * filter(videos, opts) — probe a result list, POOL_SIZE at a time, calling
    * back as each verdict lands instead of at the end.
    *
-   *   onAccept(video, rank)  playable (or undecidable); rank is its position
+   *   onAccept(video, rank, verdict)
+   *                          playable (or undecidable); rank is its position
    *                          in the original list, so a caller rendering out
-   *                          of order can still put it back in order
+   *                          of order can still put it back in order, and
+   *                          verdict says which of the two it was, so an
+   *                          unchecked result can be shown as unchecked
    *   onProgress(stats)      after every verdict
    *   onDone(stats)          the sweep finished, or was cancelled
    *
@@ -258,7 +296,7 @@
             } else {
               stats.kept++;
               if (verdict === UNKNOWN) stats.unsure++;
-              onAccept(video, rank);
+              onAccept(video, rank, verdict);
             }
             onProgress(stats);
             pump();
