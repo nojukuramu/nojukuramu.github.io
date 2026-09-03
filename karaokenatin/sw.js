@@ -25,7 +25,7 @@
 var VERSION = "kn-v5";
 
 /* Matches APP_VERSION in js/app.js and the ?v= in index.html. */
-var ASSET_V = "2.2.2";
+var ASSET_V = "2.3.0";
 var SHELL = VERSION + "-shell";
 
 var SHELL_FILES = [
@@ -48,6 +48,7 @@ var SHELL_FILES = [
     "./js/library.js",
     "./js/room.js",
     "./js/player.js",
+    "./js/embed.js",
     "./js/app.js"
   ].map(function (u) { return u + "?v=" + ASSET_V; })
 );

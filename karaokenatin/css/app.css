@@ -817,6 +817,21 @@ input[type="range"]:disabled { opacity: 0.4; cursor: default; }
 #q:focus { border-color: var(--accent); }
 .status { color: var(--ink-3); font-size: 13px; min-height: 20px; margin: 0 0 10px; }
 
+/* embed.js's probe players. Parked offscreen rather than display:none or
+ * visibility:hidden — a browser is entitled to skip work for a player it
+ * believes nobody can see, and the whole point of a probe is to get the same
+ * answer the visible host player would. Kept out of the tab order and out of
+ * the accessibility tree instead. */
+.embed-probes {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 320px;
+  height: 180px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 /* ─────────────── invite panel ─────────────── */
 
 .share { text-align: center; padding: 8px 0 24px; }

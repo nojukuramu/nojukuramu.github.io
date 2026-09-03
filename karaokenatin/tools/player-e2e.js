@@ -59,7 +59,10 @@ const MOCK_API = `
     this._volume = 100;
     this._muted = false;
     this.videoId = null;
-    window.__player = this;
+    // embed.js builds offscreen players of its own to vet search results;
+    // those must not stand in for the room's real one in any assertion here.
+    this._probe = node.id.indexOf("kn-probe") === 0;
+    if (!this._probe) window.__player = this;
 
     var self = this;
     setTimeout(function () { opts.events.onReady({ target: self }); }, 10);
@@ -67,7 +70,7 @@ const MOCK_API = `
 
   Player.prototype._set = function (s) {
     this._state = s;
-    (window.__states = window.__states || []).push(s);
+    if (!this._probe) (window.__states = window.__states || []).push(s);
     if (this._opts.events.onStateChange) this._opts.events.onStateChange({ data: s, target: this });
   };
 
@@ -78,6 +81,14 @@ const MOCK_API = `
     this._time = (arg && arg.startSeconds) || 0;
     var self = this;
     setTimeout(function () { self._set(5); }, 20);
+  };
+
+  // What embed.js probes with: asks whether the video would play without
+  // playing it. This mock never refuses, so every result passes vetting.
+  Player.prototype.cueVideoById = function (arg) {
+    this.videoId = (arg && arg.videoId) || arg;
+    var self = this;
+    setTimeout(function () { self._set(5); }, 10);
   };
 
   Player.prototype.playVideo = function () {
@@ -212,8 +223,11 @@ async function main() {
   await host.waitForSelector("#tap-to-play", { state: "hidden", timeout: 10000 });
   check("prompt clears once playback starts", true);
 
-  const btn = await host.textContent("#play-btn");
-  check("transport shows the pause affordance while playing", btn.trim() === "⏸", btn);
+  /* The transport is drawn with icons, not glyphs, so the label is the only
+   * thing that carries the state in text. (This used to read textContent for a
+   * "⏸" and had been failing silently since the icon set landed.) */
+  const btn = await host.getAttribute("#play-btn", "aria-label");
+  check("transport shows the pause affordance while playing", btn === "Pause", String(btn));
 
   // Player-reported metadata should reach the room.
   await host.waitForFunction(
@@ -227,7 +241,8 @@ async function main() {
   await guest.waitForFunction(
     () => {
       const t = document.querySelector("#now .now-title");
-      return t && t.textContent.trim() === "Anak" && document.querySelector("#play-btn").textContent.trim() === "⏸";
+      return t && t.textContent.trim() === "Anak" &&
+        document.querySelector("#play-btn").getAttribute("aria-label") === "Pause";
     },
     null,
     { timeout: 20000 }
