@@ -37,9 +37,9 @@ function serve() {
 
 const FAKE_RESULTS = {
   items: [
-    { url: "/watch?v=aaaaaaaaaaa", type: "stream", title: "Anak", uploaderName: "Freddie Aguilar", duration: 260 },
-    { url: "/watch?v=bbbbbbbbbbb", type: "stream", title: "Harana", uploaderName: "Parokya ni Edgar", duration: 232 },
-    { url: "/watch?v=ccccccccccc", type: "stream", title: "Tadhana", uploaderName: "Up Dharma Down", duration: 301 }
+    { url: "/watch?v=aaaaaaaaaaa", type: "stream", title: "Anak (Karaoke Version)", uploaderName: "Freddie Aguilar", duration: 260 },
+    { url: "/watch?v=bbbbbbbbbbb", type: "stream", title: "Harana Karaoke Version", uploaderName: "Parokya ni Edgar", duration: 232 },
+    { url: "/watch?v=ccccccccccc", type: "stream", title: "Tadhana - Minus One", uploaderName: "Up Dharma Down", duration: 301 }
   ]
 };
 
@@ -55,6 +55,22 @@ let failures = 0;
 
 /* Guests must name themselves before a room lets them in; a deep link puts the
  * gate up on arrival, so every scripted guest types a name first. */
+/* Rooms ask for approval before letting anyone in — see `joinApproval` in
+ * js/room.js. A scripted guest therefore arrives in a lobby and is not a guest
+ * at all until the host says so, which is exactly the point of the setting, so
+ * every test drives the real door rather than switching it off. */
+async function admit(host, name) {
+  await host.click('.tab[data-tab="singers"]');
+  const row = host.locator("#pending .row", { hasText: name });
+  await row.first().waitFor({ timeout: 25000 });
+  await row.first().locator(".row-actions button").first().click();
+  await host.waitForFunction(
+    (n) => (window.KN.app.state.guests || []).some((g) => g.name === n),
+    name,
+    { timeout: 20000 }
+  );
+}
+
 async function passNameGate(page, name) {
   try {
     await page.waitForSelector("#name-gate:not([hidden])", { timeout: 5000 });
@@ -110,8 +126,17 @@ async function main() {
   check("no add-to-queue button when there is no room", noQueueButton);
 
   /* ── the karaoke bias ──────────────────────────────────────────────────── */
-  const sent = decodeURIComponent(searched[searched.length - 1] || "");
+  /* The *first* query, not the last: a thin list is now topped up by asking
+   * again in different words, so the later rounds deliberately say something
+   * else. The first one is the one the bias is about. */
+  const sent = decodeURIComponent(searched[0] || "");
   check("query sent to the mirror is biased to karaoke", /anak karaoke/i.test(sent), sent.slice(0, 120));
+  const laterRounds = searched.slice(1).map((u) => decodeURIComponent(u));
+  check(
+    "a short list is asked for again in different words",
+    laterRounds.length > 0 && laterRounds.every((u) => u !== sent),
+    JSON.stringify(laterRounds.map((u) => u.split("q=")[1] || "").slice(0, 3))
+  );
   const shown = await page.inputValue("#q");
   check("the bias never appears in the search box", shown === "anak", JSON.stringify(shown));
 
@@ -295,6 +320,8 @@ async function main() {
   await page.goto(base + "#/r/" + code);
   await passNameGate(page, "Librarian");
   await page.waitForSelector("#conn.conn-ok", { timeout: 30000 });
+  await admit(host, "Librarian");
+  await page.waitForSelector("#lobby-wait", { state: "hidden", timeout: 20000 });
   await page.click('.tab[data-tab="library"]');
   await page.waitForSelector("#library-root:not([hidden])");
   check("library is reachable from inside a room", true);

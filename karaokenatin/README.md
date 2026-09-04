@@ -118,11 +118,43 @@ Two things keep the vetting from feeling like a wait:
   today, so it is cached in the browser — a repeat search probes nothing at all,
   and the cache survives a reload.
 
-Uncertainty never hides anything. A probe that times out, an IFrame API that is
-blocked, a pool that could not be built — all count as "unknown", and unknown is
-shown. Hiding a song that would have played is a worse failure than showing one
-that turns out not to, which the room already handles by skipping. A pasted link
-goes through the same gate and is refused up front with a reason.
+Uncertainty used to be shown on the same reasoning — that hiding a playable song is
+worse than showing one that turns out not to be. Rooms disagreed. An "unchecked" row
+is usually an unembeddable video whose refusal landed after the probe gave up, and it
+fails on the big screen in front of everybody. So they are held back now, with one
+exception that matters: if a sweep ends with **nothing** to show, the whole held set is
+released, because that is the shape of a blocked IFrame API and not of thirty bad videos.
+A pasted link goes through the same gate and is refused up front with a reason.
+
+### Is it actually karaoke?
+
+Asking the mirror for karaoke does not make the mirror deliver it. A search comes back
+with the official video, three live performances, a reaction, and — somewhere in there —
+the track people can actually sing over. `karaokeScore` in [`js/search.js`](js/search.js)
+reads the title and the uploader and returns a confidence, used at two thresholds:
+
+- **Above 0.9** the row is badged **Karaoke**, with a border that shifts through purple,
+  pink and orange. In a list of twenty this is the row the room came for, and it has to be
+  findable without reading a word. Badging on a hunch would make the badge worthless by
+  the third search, so only the ones where the title *and* the uploader agree get one.
+- **Below 0.45** the row is not shown at all. A room looking for something to sing has no
+  use for a reaction video, and a list where four results in five cannot be sung is a list
+  nobody scrolls to the bottom of.
+
+Terms are matched in the languages this app is actually used in — "videoke" and "minus
+one" are what a Filipino room searches for, and dropping their results for want of the
+word "karaoke" would be a bug that only ever shows up somewhere else. **A pasted link
+bypasses all of it**: someone who pastes a URL has already decided, and second-guessing
+an explicit instruction is the app arguing with its user.
+
+### When the list comes back thin
+
+Between the embeddability sweep and the karaoke filter, a search that started with twenty
+results can end with four on screen, and four is a dead end rather than a choice. So the
+same song is asked for again in different words — "… karaoke version with lyrics", "…
+videoke minus one" — and the answers are merged. Different words, not the same words
+twice: a mirror is deterministic, so re-running one query is a guaranteed way to get the
+identical page back. It stops at ten results or three rounds, whichever comes first.
 
 Queries are quietly biased toward karaoke tracks: `anak` goes to the mirror as `anak karaoke`,
 because this is a karaoke app and the official music video is almost never what you want. The
@@ -143,9 +175,53 @@ are rare enough to be worth a reaction, and **101** exists so that once a night 
 the machine. **A skipped song is never scored** — half a chorus is not a performance, and
 scoring it would make every number in the room worthless within about four songs.
 
+The number does not simply appear. It **counts up** under a drumroll, easing out so it
+races through the seventies and then agonises over the last three, which is where a room
+actually makes noise. Then the leaderboard slides in underneath and *moves* the singer to
+their new place rather than arriving already sorted — "you went up two" is worth watching
+happen. Both the drumroll and the roulette's ticking are synthesised in
+[`js/sound.js`](js/sound.js) from an oscillator and a buffer of noise: a few hundred bytes
+of code instead of a few hundred KB of WAV, and nothing to 404 on a bad connection
+mid-spin. A browser with no Web Audio gets the animation in silence, which is the correct
+failure.
+
 Scores stack up in a session leaderboard (best score, then average) under **Scores**. Both the
 scoring and the leaderboard are on by default and can be switched off by the host under
-**Setup**; turning the leaderboard off clears the night's table rather than hiding it.
+**Setup**; turning the leaderboard off clears the night's table rather than hiding it. The
+sounds have their own switch beside them.
+
+## Games
+
+A tab built for more than it currently holds: a game is a small pool of state on the room
+plus a queue entry that means "run me", and nothing about the queue, the player or the
+scoreboard knows which game it is looking at.
+
+### Song Roulette
+
+Everyone drops songs into a pot from Search (the ＋ on a result offers the roulette
+alongside your playlists). Once there are three, the host or a co-host can drop the pot
+into the queue as a single entry — and when that entry reaches the stage the room spins
+twice, on the big screen where everyone is already looking: first for **who sings**, then
+for **what**. The picked song plays credited to the picked singer and is scored like any
+other, and then there is a three-second window to go round again on the spot.
+
+Four rules are worth stating because they are the ones people argue about:
+
+- **A picked song leaves the pot.** A pot of five is five rounds, not an unbounded supply
+  with the same song coming up twice. Anyone can top it back up mid-game.
+- **The host can be excluded.** Whoever is running the night is usually not one of the
+  people playing, and a wheel that keeps landing on the person holding the laptop stops
+  being a game. If excluding them would leave nobody at all, they are back in — a
+  roulette with no candidates is a dead end, not a rule being enforced.
+- **Nobody gets two rounds running** where anyone else is available. Twice is a
+  coincidence the first time and a broken wheel the second.
+- **Starting and continuing are different bars.** Three songs to start a roulette, one to
+  carry on with the one already running: refusing the second round of a three-song pot
+  because the pot is now "too small" would end the game two thirds of the way through it.
+
+The offer to spin again is one element with two homes — inside the stage on the host, where
+it survives fullscreen, and in the room body on a phone, because a co-host is usually
+holding one and the offer is explicitly theirs to take too.
 
 ## The 10pm rule
 
@@ -172,6 +248,26 @@ does not enforce is not a permission, it is a suggestion.
 Removing someone is two things, and doing only the first is why "removed" guests reappear a
 second later: the channel is dropped, *and* the reconnect their own retry loop is already
 dialling is refused for as long as the room lives.
+
+### The door
+
+**Join approval** is on by default, and it is the one default in Setup that is not about
+taste. A room code is six characters from a 32-symbol alphabet against a public broker:
+guessable given enough tries. Approval is what turns "anyone who guesses the code is in"
+into "anyone who guesses the code is in a lobby".
+
+Someone waiting there can do exactly two things: say who they are, and ask for a fresh
+snapshot. Every other command is refused where it arrives rather than filtered out of a UI
+they are under no obligation to be running. They are not sent the room either — no queue,
+no guest list, no scores, no roulette pot — because refusing a stranger's commands while
+handing them the whole room to read is a lock on a door with the window left open. Refusing
+someone drops the channel *and* bans the reconnect, the same treatment a kick gets, so a
+refused arrival cannot sit there retrying all night.
+
+Who has been let in survives a host reload with the queue and the room code. Without that, a
+host refreshing the page would silently eject the entire room back into the lobby and have to
+admit everybody a second time, which is worse than not asking at all. Switching the setting
+off opens the door rather than stranding whoever is behind it.
 
 **Max 2 in a row** (under Setup) keeps one person from holding the microphone all night. The
 queue is walked once and the first song by a different singer is pulled forward whenever a run
@@ -214,6 +310,70 @@ is standing there:
 Sharing hands over the same library, not a rearranged one: a song that only ever lived in a
 playlist travels with it but does not arrive as a *saved* song.
 
+## Adverts
+
+YouTube serves them inside its own player, and no page may skip, click, or hide one: doing
+it breaches their terms and takes the embed down with it. This app plays entirely through
+that player by design, so there is nothing honest to be done about an advert except say
+that one is running — which at least stops a room staring at an unfamiliar video for twenty
+seconds and concluding the app has hung.
+
+There is no flag to read for that, so it is inferred: an advert makes the player's reported
+duration disagree wildly with the duration the search mirror gave for the song. It is a
+heuristic and it is used for exactly one thing, a label. Nothing skips, scores or advances
+on the strength of it, so being wrong costs a caption rather than somebody's turn. The
+Setup tab says all of this in as many words, and points at the only two things that
+actually remove adverts — a browser-level blocker or a Premium account on the host screen,
+both of which are the host's own choice to make.
+
+## Statistics
+
+Outside a room, the home screen offers a page about you: average and best score, songs
+sung, time at the microphone, sessions joined and hosted, time in rooms, your best night
+by average, and a winrate per game. It is built from three append-mostly tables in
+[`js/stats.js`](js/stats.js) — a row per session, a row per song, a tally per game — and
+everything on the page is derived at read time, so a statistic added later is a new
+derivation rather than a migration.
+
+Only *your* songs go in it. Other people's come down the same wire and are none of this
+file's business; the score entry carries the singer's client id as well as their name,
+because names collide and two Jos on one leaderboard should not become one row in anybody's
+history. A round of Song Roulette is won by taking the night's top roulette score, judged
+once by the host and written onto the score entry so every phone reads the same verdict
+rather than racing the crown it can see.
+
+It lives in this browser's local storage and goes nowhere else — there is no account to
+attach it to and no server to send it to. That is not a policy that could change; it is the
+shape of the app. The page says so above the first number, because a page full of personal
+history that does not say where it lives is a page people are right to distrust, and there
+is a button at the bottom that erases the lot.
+
+## The small things
+
+- **Up next.** Three-quarters of the way through a song (77%), a small card in the corner of
+  the stage names what is coming and who queued it, then goes away after a few seconds. It
+  exists so the next singer stands up, not so the room stops watching the one still going —
+  and it never runs while an advert is playing, since an advert's clock is not the song's.
+- **Fullscreen join badge.** The QR and the room code used to sit in opposite corners, which
+  spent two corners of a television saying one thing twice. Stacked into one badge in the top
+  right, the code reads as the caption to the thing you point a camera at, and anyone who
+  cannot resolve the modules from across the room can still type it.
+- **Dragging the queue.** Every row has a grab rail. Everyone tries to drag a queue, and one
+  that does not move reads as broken rather than as a list with buttons. It is pointer
+  events rather than HTML5 drag-and-drop, because the queue that most needs reordering is
+  the one on a phone and the drag API has never worked with touch. The drop sends the index
+  it landed on, not a swap of two rows: the queue is live, somebody else's song can arrive
+  mid-gesture, and the nearest slot is a better answer than refusing the drop.
+- **Icon tabs.** Eight labels never fitted a phone or the host's side column, and the row
+  that scrolled to hold them hid half of itself behind a fade. A drawing is the same width in
+  every language; the selected tab is captioned underneath, which is what a bare icon row
+  otherwise makes you guess at.
+- **The theme button** shows the theme you are *in* — a line-drawn sun in light, a filled
+  crescent in lamp-yellow in dark. Drawing the destination instead reads as a state
+  indicator that is lying about the state.
+- **Motion.** Every duration is roughly half as fast again as it was. A karaoke night is not
+  an admin panel, and a panel that snaps into place pulls the eye off the person singing.
+
 ## Install
 
 The app is a PWA — installable on a phone, a desktop, or an Android TV, where it opens
@@ -246,9 +406,14 @@ if you are in a room at the time.
 
 A queue is a list of turns and a turn belongs to somebody, so a room will not let an unnamed
 guest in. The home screen's Join form asks for a name alongside the code, and someone arriving
-straight from a QR link meets the same question before the connection is made. The name is
-remembered in this browser, so it is asked once and never again — and it can be changed from the
-Invite tab inside a room, where it may be edited but not emptied.
+straight from a QR link meets the same question before the connection is made.
+
+Remembering the name and asking the question are two separate things, and conflating them was
+a bug: the gate used to be skipped entirely when a name was stored, so someone who lent their
+phone to a friend — or *was* the friend — joined silently as whoever used it last and found out
+when the queue said so. The gate always opens now, with the remembered name already typed into
+it and selected, so accepting it is one tap and replacing it is one tap. It can also be changed
+from the Invite tab inside a room, where it may be edited but not emptied.
 
 ## Files
 
@@ -262,6 +427,9 @@ Invite tab inside a room, where it may be edited but not emptied.
 | `js/player.js` | YouTube IFrame API wrapper (the host plays; everyone probes) |
 | `js/embed.js` | Vets search results against a real embed — only playable ones show |
 | `js/qr.js` | QR encoder, written from scratch (byte mode, v1–25, ECC L/M) |
+| `js/sound.js` | The ticks, the drumroll and the chime — synthesised, no assets |
+| `js/games.js` | Song Roulette's rules; the seam any future game plugs into |
+| `js/stats.js` | What this phone remembers about its own karaoke nights |
 | `js/icons.js` | The icon set — 24×24 line drawings on `currentColor`, no emoji |
 | `js/library.js` | Saved songs and playlists, stored in the browser |
 | `js/app.js` | Screens, wiring, and the host/guest seam |
@@ -279,6 +447,7 @@ node tools/library-e2e.js     # library, playlists, export/import, karaoke bias 
 node tools/room-e2e.js        # co-hosts, kicking, setup, turn order, 10pm      (playwright)
 node tools/embed-e2e.js       # only embeddable results reach the screen      (playwright)
 node tools/install-e2e.js     # manifest, service worker, install button      (playwright)
+node tools/games-e2e.js       # the roulette, dragging the queue, statistics  (playwright)
 node tools/version-check.js   # one build version across index.html, sw.js, app.js
 ```
 
@@ -303,9 +472,25 @@ asserts the karaoke bias reaches the wire and never the input box.
 `tools/room-e2e.js` is about authority, so its checks come in pairs: the host or a co-host can
 do the thing, *and* a plain guest asking for the same thing straight down the wire is refused
 rather than merely lacking a button. It also drives the turn cap, and removes a guest and then
-waits out their reconnect loop to prove they stay removed. The 10pm rule is tested by moving
+waits out their reconnect loop to prove they stay removed. Join approval gets the same
+treatment: an arrival is held in the lobby, and a command sent straight down the wire from
+there — past whatever the UI is or is not showing — is refused rather than applied. The 10pm rule is tested by moving
 the clock rather than waiting for it: the page is told it is ten, and asked to prove it does
 the whole thing exactly once however many times it looks.
+
+`tools/games-e2e.js` covers the three features that are about state passing through more
+than one pair of hands. It fills a roulette pot from two phones and checks the "added by"
+survives the wire and that the same song cannot go in twice; queues a round and watches the
+wheel land, credit the singer it picked, and take that song out of the pot; ends the song
+and checks the score counts *up* to its number rather than appearing at it, that the
+leaderboard follows it onto the stage, and that the offer to spin again reaches a co-host's
+phone and not only the host screen. It then drags a queue row past two others with real
+pointer events and checks the reorder reaches every device. Finally it drives the statistics
+page: empty first, then with history, and asserts the arithmetic — an average, a winrate, a
+best — before erasing the lot and checking the store is really empty. The search assertions
+are in the same file because they are the same question from the other end: the official
+music video must never reach the list, the four karaoke tracks must all be badged, and a
+list that comes back short must provoke a second, differently-worded search.
 
 `tools/install-e2e.js` checks the static installability contract (manifest fields, icon sizes,
 a worker with a fetch handler) and then our behaviour around the prompt — deferring it, firing
@@ -350,10 +535,12 @@ player.
   Search results are now vetted against a real embed before they are shown, so one should
   not reach the queue in the first place — but a video whose permissions change between the
   check and the turn still can, and the room reports it and skips.
-- **The room code is the only door.** Anyone who has it can join, and six characters from a
-  32-symbol alphabet is guessable given enough tries against a public broker. That is fine
-  for a party in a living room and not fine for anything you would mind a stranger seeing.
-  Close the room when you are done.
+- **The room code is the first door, not the only one any more.** Six characters from a
+  32-symbol alphabet is guessable given enough tries against a public broker, which is why
+  join approval is on by default — a stranger who guesses a code reaches a lobby and can do
+  nothing from it. Turn it off and the code is once again the only door. Either way, close
+  the room when you are done.
+- **Adverts cannot be skipped from here**, and will not be. See *Adverts* above.
 
 ## Differences from the desktop app
 
@@ -364,5 +551,7 @@ player.
 | State | Rust `RwLock<RoomState>` | Host JS, snapshot-broadcast |
 | Search | `rusty_ytdl` in-process | Piped / Invidious mirrors |
 | Playlists | Yes | Yes |
-| Scoring | Yes | Yes, with a session leaderboard |
+| Scoring | Yes | Yes, with a session leaderboard and a count-up reveal |
+| Games | No | Song Roulette |
+| Statistics | No | Per-device, local-only |
 | Mic coverage | Yes | No — a browser cannot mix a microphone into the room |

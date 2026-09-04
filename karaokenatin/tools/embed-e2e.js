@@ -60,7 +60,7 @@ const FAKE_RESULTS = {
   items: IDS.map((id, i) => ({
     url: "/watch?v=" + id,
     type: "stream",
-    title: "Song " + (i + 1),
+    title: "Song " + (i + 1) + " (Karaoke Version)",
     uploaderName: "Artist " + (i + 1),
     duration: 200 + i
   }))
@@ -126,6 +126,17 @@ const MOCK_API = `
 `;
 
 let failures = 0;
+
+/* A search is several rounds now — it tops itself up in different words when
+ * the first pass comes back thin — so "the status line changed" is no longer
+ * the end of it. `searchBusy` is, whatever the status happens to say. */
+async function settled(page, timeout) {
+  await page.waitForFunction(
+    () => window.KN && window.KN.app && window.KN.app.searchBusy === false,
+    null,
+    { timeout: timeout || 25000 }
+  );
+}
 function check(name, ok, extra) {
   console.log((ok ? "  ok   " : "  FAIL ") + name + (ok || extra === undefined ? "" : "  → " + extra));
   if (!ok) failures++;
@@ -172,27 +183,23 @@ async function main() {
   const midway = (await page.textContent("#search-status")).trim();
   check("a result is rendered before the sweep finishes", /checking/i.test(midway), JSON.stringify(midway));
 
-  await page.waitForFunction(
-    () => /playable ·/.test(document.querySelector("#search-status").textContent),
-    null,
-    { timeout: 20000 }
-  );
+  await settled(page);
 
   const shown = await titles(page);
   check("only the embeddable results are shown", shown.length === 3, String(shown.length));
   check(
     "they are the right three, in the mirror's order",
-    JSON.stringify(shown) === JSON.stringify(["Song 1", "Song 3", "Song 7"]),
+    JSON.stringify(shown) === JSON.stringify(["Song 1 (Karaoke Version)", "Song 3 (Karaoke Version)", "Song 7 (Karaoke Version)"]),
     JSON.stringify(shown)
   );
   check(
     "a video that cues and only then refuses is still dropped",
-    !shown.includes("Song 4") && !shown.includes("Song 6"),
+    !shown.some((t) => /^Song [46] /.test(t)),
     JSON.stringify(shown)
   );
 
   const status = (await page.textContent("#search-status")).trim();
-  check("the status says how many were skipped", /4 skipped/.test(status), JSON.stringify(status));
+  check("the status says how many were skipped", /4 cannot be embedded/.test(status), JSON.stringify(status));
   check("and claims no unchecked results when every probe answered", !/unchecked/.test(status), JSON.stringify(status));
 
   const probed = await page.evaluate(() => window.__cued.slice());
@@ -201,11 +208,7 @@ async function main() {
   // ── the cache ─────────────────────────────────────────────────────────────
   await page.fill("#q", "opm");
   await page.click("#search-form button[type=submit]");
-  await page.waitForFunction(
-    () => /playable ·/.test(document.querySelector("#search-status").textContent),
-    null,
-    { timeout: 20000 }
-  );
+  await settled(page);
   const again = await titles(page);
   check("a repeat search shows the same three", JSON.stringify(again) === JSON.stringify(shown), JSON.stringify(again));
   const probedAgain = await page.evaluate(() => window.__cued.length);
@@ -216,11 +219,7 @@ async function main() {
   await page.waitForSelector("#view-library:not([hidden])");
   await page.fill("#q", "opm");
   await page.click("#search-form button[type=submit]");
-  await page.waitForFunction(
-    () => /playable ·/.test(document.querySelector("#search-status").textContent),
-    null,
-    { timeout: 20000 }
-  );
+  await settled(page);
   // __cued only exists once the API script loads — a sweep answered
   // entirely from cache never asks for it, which is the strongest form of
   // the claim.
@@ -258,11 +257,7 @@ async function main() {
   await blind.fill("#q", "opm");
   await blind.click("#search-form button[type=submit]");
   await blind.waitForSelector("#results .row", { timeout: 20000 });
-  await blind.waitForFunction(
-    () => /playable ·/.test(document.querySelector("#search-status").textContent),
-    null,
-    { timeout: 25000 }
-  );
+  await settled(blind, 30000);
   const blindShown = await titles(blind);
   check(
     "an unreachable player API hides nothing",

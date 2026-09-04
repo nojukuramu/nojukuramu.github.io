@@ -36,9 +36,9 @@ function serve() {
 
 const FAKE_RESULTS = {
   items: [
-    { url: "/watch?v=aaaaaaaaaaa", type: "stream", title: "Anak", uploaderName: "Freddie Aguilar", duration: 260, thumbnail: "" },
-    { url: "/watch?v=bbbbbbbbbbb", type: "stream", title: "Kahit Maputi Na Ang Buhok Ko", uploaderName: "Noel Cabangon", duration: 245, thumbnail: "" },
-    { url: "/watch?v=ccccccccccc", type: "stream", title: "Harana", uploaderName: "Parokya ni Edgar", duration: 232, thumbnail: "" }
+    { url: "/watch?v=aaaaaaaaaaa", type: "stream", title: "Anak (Karaoke Version)", uploaderName: "Freddie Aguilar", duration: 260, thumbnail: "" },
+    { url: "/watch?v=bbbbbbbbbbb", type: "stream", title: "Kahit Maputi Na Ang Buhok Ko — Karaoke", uploaderName: "Noel Cabangon", duration: 245, thumbnail: "" },
+    { url: "/watch?v=ccccccccccc", type: "stream", title: "Harana Karaoke Version", uploaderName: "Parokya ni Edgar", duration: 232, thumbnail: "" }
   ]
 };
 
@@ -46,6 +46,22 @@ let failures = 0;
 
 /* Guests must name themselves before a room lets them in; a deep link puts the
  * gate up on arrival, so every scripted guest types a name first. */
+/* Rooms ask for approval before letting anyone in — see `joinApproval` in
+ * js/room.js. A scripted guest therefore arrives in a lobby and is not a guest
+ * at all until the host says so, which is exactly the point of the setting, so
+ * every test drives the real door rather than switching it off. */
+async function admit(host, name) {
+  await host.click('.tab[data-tab="singers"]');
+  const row = host.locator("#pending .row", { hasText: name });
+  await row.first().waitFor({ timeout: 25000 });
+  await row.first().locator(".row-actions button").first().click();
+  await host.waitForFunction(
+    (n) => (window.KN.app.state.guests || []).some((g) => g.name === n),
+    name,
+    { timeout: 20000 }
+  );
+}
+
 async function passNameGate(page, name) {
   try {
     await page.waitForSelector("#name-gate:not([hidden])", { timeout: 5000 });
@@ -132,6 +148,13 @@ async function main() {
   await guest.waitForSelector("#conn.conn-ok", { timeout: 30000 });
   check("guest connects to the host over WebRTC", true);
 
+  // Connected is not the same as admitted any more.
+  const lobbyShown = await guest.locator("#lobby-wait").isVisible();
+  check("an unapproved guest is held in the lobby", lobbyShown);
+  await admit(host, "Guest One");
+  await guest.waitForSelector("#lobby-wait", { state: "hidden", timeout: 20000 });
+  check("approving the guest lets them into the room", true);
+
   await host.waitForFunction(() => document.querySelector("#guest-count").textContent === "1", null, { timeout: 15000 });
   check("host sees one connected guest", true);
 
@@ -152,13 +175,13 @@ async function main() {
   // The first song auto-starts, so one of the two lands in `now`.
   await host.waitForFunction(() => document.querySelector("#now .now-title") !== null, null, { timeout: 15000 });
   const nowTitle = (await host.textContent("#now .now-title")).trim();
-  check("first added song becomes now-playing on the host", nowTitle === "Anak", nowTitle);
+  check("first added song becomes now-playing on the host", /^Anak/.test(nowTitle), nowTitle);
   check("second song waits in the host queue", (await hostTitles()).length === 1);
 
   // Guest mirror agrees.
   await guest.waitForFunction(() => {
     const n = document.querySelector("#now .now-title");
-    return n && n.textContent.trim() === "Anak";
+    return n && /^Anak/.test(n.textContent.trim());
   }, null, { timeout: 15000 });
   check("guest mirror shows the same now-playing", true);
 

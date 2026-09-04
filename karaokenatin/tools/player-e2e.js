@@ -126,8 +126,8 @@ const MOCK_API = `
 
 const FAKE_RESULTS = {
   items: [
-    { url: "/watch?v=aaaaaaaaaaa", type: "stream", title: "Anak", uploaderName: "Freddie Aguilar", duration: 260 },
-    { url: "/watch?v=bbbbbbbbbbb", type: "stream", title: "Harana", uploaderName: "Parokya ni Edgar", duration: 232 }
+    { url: "/watch?v=aaaaaaaaaaa", type: "stream", title: "Anak (Karaoke Version)", uploaderName: "Freddie Aguilar", duration: 260 },
+    { url: "/watch?v=bbbbbbbbbbb", type: "stream", title: "Harana Karaoke Version", uploaderName: "Parokya ni Edgar", duration: 232 }
   ]
 };
 
@@ -135,6 +135,22 @@ let failures = 0;
 
 /* Guests must name themselves before a room lets them in; a deep link puts the
  * gate up on arrival, so every scripted guest types a name first. */
+/* Rooms ask for approval before letting anyone in — see `joinApproval` in
+ * js/room.js. A scripted guest therefore arrives in a lobby and is not a guest
+ * at all until the host says so, which is exactly the point of the setting, so
+ * every test drives the real door rather than switching it off. */
+async function admit(host, name) {
+  await host.click('.tab[data-tab="singers"]');
+  const row = host.locator("#pending .row", { hasText: name });
+  await row.first().waitFor({ timeout: 25000 });
+  await row.first().locator(".row-actions button").first().click();
+  await host.waitForFunction(
+    (n) => (window.KN.app.state.guests || []).some((g) => g.name === n),
+    name,
+    { timeout: 20000 }
+  );
+}
+
 async function passNameGate(page, name) {
   try {
     await page.waitForSelector("#name-gate:not([hidden])", { timeout: 5000 });
@@ -191,6 +207,15 @@ async function main() {
    * an untouched TV screen is precisely the case where autoplay is refused,
    * and it is the normal way a karaoke room runs — the phones do the driving.
    * (A host that clicked "Add" itself has already granted the gesture.) */
+  /* This suite is the one place the door has to be propped open rather than
+   * driven: letting a guest in means clicking on the host, and a click on the
+   * host is exactly the user gesture whose absence this file exists to test.
+   * `evaluate` changes the setting without ever being a gesture. */
+  await host.evaluate(() => {
+    window.KN.app.state.config.joinApproval = false;
+    window.KN.refresh();
+  });
+
   const guest = await newPage();
   await guest.goto(base + "#/r/" + code);
   await passNameGate(guest, "Remote");
@@ -241,7 +266,7 @@ async function main() {
   await guest.waitForFunction(
     () => {
       const t = document.querySelector("#now .now-title");
-      return t && t.textContent.trim() === "Anak" &&
+      return t && /^Anak/.test(t.textContent.trim()) &&
         document.querySelector("#play-btn").getAttribute("aria-label") === "Pause";
     },
     null,
@@ -264,10 +289,26 @@ async function main() {
   /* A song that reaches the end gets scored, on the stage rather than in a
    * panel — the one place that survives the jump to fullscreen. */
   await host.waitForSelector("#score-card:not([hidden])", { timeout: 10000 });
+
+  /* The number counts up rather than appearing, so reading it the instant the
+   * card shows gets whatever it happened to be passing through. `.revealed`
+   * is set when the count lands, which is the only moment the digits mean
+   * anything. */
+  const climbing = await host.evaluate(() => Number(document.getElementById("score-value").textContent));
+  await host.waitForSelector("#score-card.revealed", { timeout: 15000 });
   const scored = await host.evaluate(() => Number(document.getElementById("score-value").textContent));
   check("a finished song is scored on the stage", scored >= 65 && scored <= 101, String(scored));
+  check("the score counts up to it rather than appearing", climbing < scored, climbing + " → " + scored);
   const scoreLine = await host.textContent("#score-line");
   check("the score comes with something to say", scoreLine.trim().length > 0, scoreLine);
+
+  // And the table underneath says where that number puts them.
+  await host.waitForFunction(
+    () => document.querySelectorAll("#score-board .sb-row").length > 0,
+    null,
+    { timeout: 15000 }
+  );
+  check("the leaderboard follows the score onto the stage", true);
 
   await host.waitForFunction(() => window.__player.videoId === "bbbbbbbbbbb", null, { timeout: 15000 });
   check("a finished song advances to the next in the queue", true);
@@ -279,7 +320,7 @@ async function main() {
   await host.waitForFunction(
     () => {
       const t = document.querySelector("#now .now-title");
-      return t && t.textContent.trim() === "Harana";
+      return t && /^Harana/.test(t.textContent.trim());
     },
     null,
     { timeout: 10000 }

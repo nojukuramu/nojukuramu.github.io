@@ -44,7 +44,7 @@ function serve() {
 
 const FAKE_RESULTS = {
   items: [
-    { url: "/watch?v=aaaaaaaaaaa", type: "stream", title: "Anak", uploaderName: "Freddie Aguilar", duration: 260, thumbnail: "" }
+    { url: "/watch?v=aaaaaaaaaaa", type: "stream", title: "Anak (Karaoke Version)", uploaderName: "Freddie Aguilar", duration: 260, thumbnail: "" }
   ]
 };
 
@@ -52,6 +52,22 @@ let failures = 0;
 
 /* Guests must name themselves before a room lets them in; a deep link puts the
  * gate up on arrival, so every scripted guest types a name first. */
+/* Rooms ask for approval before letting anyone in — see `joinApproval` in
+ * js/room.js. A scripted guest therefore arrives in a lobby and is not a guest
+ * at all until the host says so, which is exactly the point of the setting, so
+ * every test drives the real door rather than switching it off. */
+async function admit(host, name) {
+  await host.click('.tab[data-tab="singers"]');
+  const row = host.locator("#pending .row", { hasText: name });
+  await row.first().waitFor({ timeout: 25000 });
+  await row.first().locator(".row-actions button").first().click();
+  await host.waitForFunction(
+    (n) => (window.KN.app.state.guests || []).some((g) => g.name === n),
+    name,
+    { timeout: 20000 }
+  );
+}
+
 async function passNameGate(page, name) {
   try {
     await page.waitForSelector("#name-gate:not([hidden])", { timeout: 5000 });
@@ -141,6 +157,7 @@ async function main() {
   await guest.goto(base + "#/r/" + code);
   await passNameGate(guest, "Wanderer");
   await guest.waitForSelector("#conn.conn-ok", { timeout: 30000 });
+  await admit(host, "Wanderer");
   await host.waitForFunction(() => document.querySelector("#guest-count").textContent === "1", null, { timeout: 15000 });
   check("a guest joins the room to begin with", true);
 

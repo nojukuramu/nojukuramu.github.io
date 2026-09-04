@@ -40,6 +40,16 @@
     return node;
   }
 
+  /** Fills every `[data-icon]` under `root` with the icon it names. Markup
+   *  stays declarative and the icon set stays the one source of drawings. */
+  function paintIcons(root) {
+    $$("[data-icon]", root || document).forEach(function (node) {
+      if (node.firstChild) return;               // already painted
+      try { KN.setIcon(node, node.getAttribute("data-icon")); }
+      catch (e) { /* an icon name that does not exist is a typo, not a crash */ }
+    });
+  }
+
   function toast(text, kind) {
     var stack = $("#toasts");
     var t = el("div", { class: "toast" + (kind ? " toast-" + kind : ""), text: text });
@@ -105,6 +115,8 @@
     playerError: false,    // host only: the stage is showing a load failure
     lastResults: [],
     searchSweep: null,   // in-flight playability sweep; cancelled by the next search
+    searchRun: null,     // the multi-round search it belongs to
+    waiting: false,      // guest only: still in the lobby
     tab: "queue",
     openPlaylists: {},   // pid -> expanded in the library view
     pickerSong: null,
@@ -113,6 +125,10 @@
     pendingJoin: null,     // room code waiting behind the name gate
     cohosts: {},           // host only: guest id -> true
     lastScoreAt: 0,        // guest only: the score already announced here
+    upNextFor: null,       // host only: the song whose "up next" has been shown
+    approved: {},          // host only: guest id -> let in
+    dragSid: null,         // the queue row currently being dragged
+    offerSeenAt: 0,        // when this device first saw a "spin again" offer
     curfewDone: false      // this page has already had its 10pm moment
   };
 
@@ -124,6 +140,7 @@
     app.name = app.name || loadName() || "Host";
     app.hostToken = (resumed && resumed.token) || null;
     app.hostWasListed = false;
+    app.approved = {};
 
     if (resumed && resumed.queue) {
       app.state.queue = resumed.queue;
@@ -135,9 +152,16 @@
       if (typeof resumed.rev === "number") app.state.rev = resumed.rev;
       if (resumed.config) app.state.config = R.sanitizeConfig(resumed.config);
       if (Array.isArray(resumed.scores)) app.state.scores = resumed.scores;
+      if (resumed.roulette) app.state.roulette = KN.games.sanitizeRoulette(resumed.roulette);
+      /* Who has already been let in survives the reload with everything else.
+       * Without this a host refreshing the page — or recovering from a crash —
+       * silently ejects the whole room back into the lobby and has to admit
+       * everybody a second time, which is worse than not asking at all. */
+      if (resumed.approved && typeof resumed.approved === "object") app.approved = resumed.approved;
     }
     app.state.hostName = app.name;
     app.cohosts = {};
+    app.approved = app.approved || {};
 
     app.net = KN.net.host(code, {
       token: app.hostToken,
@@ -178,6 +202,8 @@
     app.hostToken = app.net.token;
 
     app.connection = "hosting";
+    if (KN.sound) KN.sound.setEnabled(app.state.config.sounds !== false);
+    if (KN.stats) KN.stats.startSession({ code: code, role: "host" });
     persistHost();
     showRoom();
     setupPlayer();
@@ -212,7 +238,7 @@
           $("#tap-to-play").hidden = true;
           app.state.player.status = "playing";
           var m = p.meta();
-          if (m && app.state.now) {
+          if (m && app.state.now && !adPlaying()) {
             if (m.duration) app.state.now.duration = m.duration;
             if (m.title && app.state.now.title === "YouTube video") app.state.now.title = m.title;
             if (m.author && !app.state.now.author) app.state.now.author = m.author;
@@ -256,6 +282,62 @@
       });
   }
 
+  /* ---------------- adverts ----------------
+   * YouTube serves adverts inside its own player and there is no API to ask
+   * about one, let alone to skip it. Nor should there be from here: clicking
+   * "Skip ad" from a page, hiding one, or stripping it out is a breach of
+   * YouTube's terms that gets embeds killed, and this app plays entirely
+   * through their player by design. So the honest move is the only one — say
+   * what is happening, so a room staring at an unfamiliar video for twenty
+   * seconds knows the app has not hung, and let the advert finish.
+   *
+   * There is no flag to read, so this is inferred: an advert makes the
+   * player's reported duration disagree wildly with the duration the search
+   * mirror gave for the song. It is a heuristic, and it is used for exactly
+   * one thing — a label. Nothing skips, scores or advances on the strength of
+   * it, so being wrong costs a caption and not a turn.
+   */
+  function adPlaying() {
+    var s = app.state;
+    if (!s || !s.now || s.now.kind === "game") return false;
+    var known = s.now.duration || 0;
+    var live = app.player ? app.player.duration() : 0;
+    if (!known || !live) return false;
+    var slack = Math.max(15, known * 0.2);
+    return Math.abs(live - known) > slack;
+  }
+
+  /* ---------------- up next ----------------
+   * Three-quarters of the way through is when the next singer needs to start
+   * moving, and the end of the song is far too late to say so. Small, in a
+   * corner, and gone again in a few seconds: the point is that one person gets
+   * up, not that the room stops watching the person still singing.
+   */
+  var UP_NEXT_AT = 0.77;
+  var UP_NEXT_MS = 7000;
+  var upNextTimer = null;
+
+  function showUpNext() {
+    var s = app.state;
+    var next = s.queue[0];
+    var box = $("#up-next");
+    if (!box || !next) return;
+    $("#up-next-title").textContent = KN.games.isGameCard(next) ? "Song Roulette" : next.title;
+    $("#up-next-who").textContent = KN.games.isGameCard(next) ? "the wheel decides" : next.addedBy;
+    box.hidden = false;
+    box.classList.remove("in");
+    void box.offsetWidth;
+    box.classList.add("in");
+    clearTimeout(upNextTimer);
+    upNextTimer = setTimeout(hideUpNext, UP_NEXT_MS);
+  }
+
+  function hideUpNext() {
+    clearTimeout(upNextTimer);
+    var box = $("#up-next");
+    if (box) { box.hidden = true; box.classList.remove("in"); }
+  }
+
   var ticker = null;
   function startTicker() {
     clearInterval(ticker);
@@ -266,6 +348,21 @@
       var moved = Math.abs(t - app.state.player.time) > 0.4 || Math.abs(d - app.state.player.duration) > 0.5;
       app.state.player.time = t;
       app.state.player.duration = d;
+
+      var ad = adPlaying();
+      var note = $("#ad-note");
+      if (note) note.hidden = !ad;
+
+      /* An advert's clock is not the song's, so nothing timed off the song
+       * may run while one is playing — least of all a card announcing that we
+       * are three-quarters through something that has not started. */
+      if (!ad && d && app.state.now && app.state.queue.length && app.upNextFor !== app.state.now.sid) {
+        if (t / d >= UP_NEXT_AT) {
+          app.upNextFor = app.state.now.sid;
+          showUpNext();
+        }
+      }
+
       renderProgress();
       if (moved) broadcastState({ quiet: true, progress: true });
     }, 1000);
@@ -276,12 +373,39 @@
 
     if (data.type === CMD.HELLO || data.type === CMD.NAME) {
       var nm = String(data.name || "").slice(0, 24).trim() || "Guest";
+      var renaming = app.guestNames[link.id] && app.guestNames[link.id] !== nm;
       app.guestNames[link.id] = nm;
       refreshGuestList();
+      /* A guest still in the lobby is told so on arrival and on every
+       * reconnect — otherwise a phone that reconnects mid-evening sits
+       * looking at a room it silently cannot touch. */
+      if (waiting(link.id)) {
+        link.send({ type: MSG.WAIT });
+        if (!renaming) toast(nm + " is asking to join.", "warn");
+        render();
+      }
       broadcastState({ progress: true });
       return;
     }
     if (data.type === CMD.RESYNC) { sendStateTo(link); return; }
+
+    /* ── the door ──
+     * With approval on, a guest that has not been let in can do exactly two
+     * things: say who they are, and ask for a fresh snapshot. Every other
+     * command is refused where it arrives rather than filtered out of a UI
+     * they are not obliged to be running. This is the whole point: the room
+     * code is six guessable characters against a public broker, and a
+     * stranger who guesses one should reach a lobby, not a queue.
+     */
+    if (waiting(link.id)) {
+      link.send({ type: MSG.WAIT });
+      link.send({
+        type: MSG.NOTICE,
+        text: "The host has not let you into the room yet.",
+        kind: "warn"
+      });
+      return;
+    }
 
     var s = app.state;
 
@@ -292,7 +416,9 @@
       link.send({ type: MSG.NOTICE, text: "Only the host can change roles.", kind: "warn" });
       return;
     }
-    if ((data.type === CMD.CONFIG || data.type === CMD.KICK || data.type === CMD.CLEAR) && !app.cohosts[link.id]) {
+    if ((data.type === CMD.CONFIG || data.type === CMD.KICK || data.type === CMD.CLEAR ||
+         data.type === CMD.APPROVE || data.type === CMD.GAME_CONFIG ||
+         data.type === CMD.GAME_QUEUE || data.type === CMD.GAME_AGAIN) && !app.cohosts[link.id]) {
       link.send({ type: MSG.NOTICE, text: "Only the host and co-hosts can do that.", kind: "warn" });
       return;
     }
@@ -321,6 +447,13 @@
     }
 
     handle(data, app.guestNames[link.id] || "Guest", link.id);
+  }
+
+  /** Is this guest still outside the door? Only ever true while the room asks
+   *  for approval — turning the setting off lets in everyone already waiting. */
+  function waiting(id) {
+    var c = app.state && app.state.config;
+    return !!(app.role === "host" && c && c.joinApproval && !app.approved[id]);
   }
 
   /** Rejects a request that is well-formed but doesn't make sense against the
@@ -386,6 +519,13 @@
         // is already there, not just on whatever is added next.
         if (s.config.maxRun && !was.maxRun) R.rebalance(s);
         if (!s.config.leaderboard && was.leaderboard) s.scores = [];
+        // Switching the door off opens it, rather than leaving a lobby full
+        // of people the room no longer has any way of admitting.
+        if (!s.config.joinApproval && was.joinApproval) {
+          (s.pending || []).forEach(function (g) { app.approved[g.id] = true; });
+          refreshGuestList();
+        }
+        if (KN.sound) KN.sound.setEnabled(s.config.sounds !== false);
         break;
       }
       case CMD.KICK: {
@@ -411,6 +551,55 @@
         notice(g.name + (cmd.cohost ? " is now a co-host." : " is no longer a co-host."));
         break;
       }
+      case CMD.APPROVE: {
+        var arrival = app.guestNames[cmd.id] || "Someone";
+        var theirLink = app.net && app.net.guests().find(function (l) { return l.id === cmd.id; });
+        if (cmd.ok) {
+          app.approved[cmd.id] = true;
+          if (theirLink) theirLink.send({ type: MSG.NOTICE, text: "You are in. Welcome to the room.", kind: "ok" });
+          notice(arrival + " was let into the room.");
+        } else {
+          // Refused rather than merely ignored: the same treatment a kick
+          // gets, so a refused arrival cannot sit there retrying all night.
+          if (theirLink) theirLink.send({ type: MSG.BYE, reason: "refused" });
+          setTimeout(function () { if (app.net) app.net.kick(cmd.id); }, 150);
+          delete app.guestNames[cmd.id];
+          delete app.approved[cmd.id];
+          notice(arrival + " was not let in.", "warn");
+        }
+        refreshGuestList();
+        break;
+      }
+
+      case CMD.GAME_ADD: {
+        var out = KN.games.addToPool(s.roulette, cmd.video, who, cmd.byId || fromId);
+        if (!out.added) { toast(out.reason, "warn"); broadcastState({ quiet: true, progress: true }); return; }
+        notice(who + " put “" + out.entry.title + "” in the roulette", null, fromId);
+        break;
+      }
+      case CMD.GAME_REMOVE:
+        if (!KN.games.removeFromPool(s.roulette, cmd.rid)) return;
+        break;
+      case CMD.GAME_CONFIG:
+        s.roulette.includeHost = !!cmd.includeHost;
+        break;
+      case CMD.GAME_QUEUE: {
+        if (!KN.games.canSpin(s.roulette)) {
+          toast("A roulette round needs at least " + KN.games.MIN_POOL + " songs in the pot.", "warn");
+          return;
+        }
+        if (s.queue.length >= R.QUEUE_LIMIT) { toast("The queue is full.", "warn"); return; }
+        s.queue.push(KN.games.queueCard("roulette", who, cmd.byId || fromId));
+        notice(who + " queued a round of Song Roulette");
+        if (!s.now && s.player.status === "idle") { nextSong(); return; }
+        break;
+      }
+      case CMD.GAME_AGAIN:
+        // Only meaningful inside the few seconds the offer is up.
+        if (!s.spinOffer) return;
+        spinAgain();
+        return;
+
       case CMD.PLAY_NOW: {
         var i = R.indexOfSid(s.queue, cmd.sid);
         if (i < 0) break;
@@ -440,44 +629,255 @@
    * itself — which means it survives fullscreen, where every other panel in
    * the app is off-screen. A skipped song never gets one: half a chorus is not
    * a performance, and scoring it would make the number worthless.
+   *
+   * It is not simply printed any more. A number that appears is information;
+   * a number that climbs, under a drumroll, in front of the person who just
+   * sang, is the moment the whole app exists for. The count-up eases out, so
+   * it races through the seventies and then agonises over the last three —
+   * which is where the room actually makes noise. The leaderboard slides in
+   * underneath afterwards and physically moves the singer to their new place,
+   * because "you went up two" is worth watching happen.
    */
-  var SCORE_MS = 6800;
+  var SCORE_COUNT_MS = 2800;      // the climb to the number
+  var SCORE_BOARD_MS = 1100;      // the pause before the table reshuffles
+  var SCORE_HOLD_MS = 5200;       // and how long the whole thing stays up
+  var SCORE_MS = SCORE_COUNT_MS + SCORE_BOARD_MS + SCORE_HOLD_MS;
+  var SPIN_OFFER_MS = 3000;       // the window to go round again
+
   var scoreTimer = null;
+  var scoreAnim = null;
+
+  function reducedMotion() {
+    return !!(global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }
+
+  function sfxOn() {
+    var c = app.state && app.state.config;
+    return !c || c.sounds !== false;
+  }
 
   function songFinished() {
     var s = app.state;
     var song = s.now;
     if (!song || !s.config || !s.config.scoring) { nextSong(); return; }
 
+    // The table as it stood before this song, so the card can show the move
+    // rather than the destination.
+    var before = R.standings(s);
     var entry = R.recordScore(s, song);
-    showScore(entry);
-    speak(entry.line);
+    var after = R.standings(s);
+    judgeRoulette(entry, song);
+
+    noteMyScore(entry, song);
+    showScore(entry, before, after);
     broadcastState();
 
     clearTimeout(scoreTimer);
     scoreTimer = setTimeout(function () {
       s.lastScore = null;
+      // A roulette round earns the room a few seconds to go again on the spot.
+      if (song.viaGame === "roulette" && KN.games.hasSongs(s.roulette) && app.role === "host") {
+        offerSpinAgain();
+        return;
+      }
       nextSong();
     }, SCORE_MS);
   }
 
-  function showScore(entry) {
+  /* Only this phone's own songs go into this phone's own statistics. On the
+   * host, "mine" is the host; on a guest it is whatever client id the host
+   * gave it. Names are not good enough — two Jos are two singers. */
+  function noteMyScore(entry, song) {
+    if (!KN.stats) return;
+    var me = app.role === "host" ? "host" : app.clientId;
+    if (!me || entry.by !== me) return;
+    KN.stats.recordSong({
+      title: entry.title,
+      score: entry.score,
+      seconds: (song && song.duration) || entry.seconds || 0
+    });
+    if (entry.game === "roulette") noteRouletteRound(entry);
+  }
+
+  /**
+   * A roulette round is won by taking the top roulette score of the night —
+   * the crown changes hands or it does not. The first round of an evening has
+   * nothing to beat, so it takes the crown and counts as neither: a win handed
+   * out for being first would make every winrate meaningless.
+   *
+   * The host decides this once and writes the answer onto the score entry.
+   * Every phone then reads the same verdict off the same snapshot, rather than
+   * each racing the crown it can see against the score that just changed it.
+   */
+  function judgeRoulette(entry, song) {
+    if (!song || song.viaGame !== "roulette") return;
+    var rl = app.state.roulette;
+    if (!rl) return;
+    var crown = rl.crown;
+    entry.gameResult = !crown ? null : entry.score > crown.score ? "win" : "loss";
+    if (!crown || entry.score > crown.score) {
+      rl.crown = { name: entry.name, by: entry.by, score: entry.score, at: entry.at };
+    }
+  }
+
+  function noteRouletteRound(entry) {
+    if (entry.gameResult) KN.stats.recordGame("roulette", entry.gameResult);
+  }
+
+  function showScore(entry, before, after) {
     var card = $("#score-card");
     if (!card) return;
+    var value = $("#score-value");
+    var line = $("#score-line");
     $("#score-who").textContent = entry.name;
-    $("#score-value").textContent = String(entry.score);
-    $("#score-line").textContent = entry.line;
+    line.textContent = entry.line;
     card.dataset.band = entry.band;
     card.hidden = false;
+    card.classList.remove("revealed");
     // Restart the entrance animation even when two songs end back to back.
     card.classList.remove("in");
     void card.offsetWidth;
     card.classList.add("in");
+
+    var board = $("#score-board");
+    if (board) { board.hidden = true; board.innerHTML = ""; }
+
+    countUp(value, entry.score, function () {
+      card.classList.add("revealed");
+      if (sfxOn() && entry.score >= 95) KN.sound.fanfare();
+      speak(entry.line);
+      setTimeout(function () { revealBoard(before, after, entry); }, SCORE_BOARD_MS);
+    });
+  }
+
+  /**
+   * Counts `node` from zero to `target`, easing out, and ticks as it goes.
+   * The ticks are paced off the same curve as the number, so they thin out as
+   * it settles — which is what makes it read as a wheel slowing down rather
+   * than as a progress bar filling.
+   */
+  function countUp(node, target, done) {
+    if (scoreAnim) { cancelAnimationFrame(scoreAnim.frame); if (scoreAnim.roll) scoreAnim.roll.stop(); }
+    if (reducedMotion()) { node.textContent = String(target); done(); return; }
+
+    var roll = sfxOn() ? KN.sound.drumroll(SCORE_COUNT_MS / 1000) : null;
+    var began = 0;
+    var lastTick = 0;
+    var state = { frame: 0, roll: roll };
+    scoreAnim = state;
+
+    function step(now) {
+      if (scoreAnim !== state) return;
+      if (!began) began = now;
+      var p = Math.min(1, (now - began) / SCORE_COUNT_MS);
+      var eased = 1 - Math.pow(1 - p, 3);
+      node.textContent = String(Math.round(target * eased));
+
+      // 40ms between ticks at the start, a third of a second by the end.
+      var gap = 40 + 300 * p * p;
+      if (sfxOn() && now - lastTick >= gap) {
+        lastTick = now;
+        KN.sound.tick(1 - 0.5 * p);
+      }
+
+      if (p < 1) { state.frame = requestAnimationFrame(step); return; }
+      node.textContent = String(target);
+      if (roll) roll.crest();
+      scoreAnim = null;
+      done();
+    }
+    state.frame = requestAnimationFrame(step);
+  }
+
+  /** The table, drawn where it was and then moved to where it is now. */
+  function revealBoard(before, after, entry) {
+    var board = $("#score-board");
+    if (!board || !after.length || !(app.state.config && app.state.config.leaderboard)) return;
+    var top = after.slice(0, 5);
+    var wasRank = {};
+    before.forEach(function (r, i) { wasRank[r.name] = i; });
+
+    /* Painted in the *old* order first — including the singer at their old
+     * place — so the move that follows is the animation rather than the
+     * table simply appearing already sorted. */
+    var opening = top.slice().sort(function (a, b) {
+      var ai = wasRank[a.name], bi = wasRank[b.name];
+      if (ai === undefined) return 1;
+      if (bi === undefined) return -1;
+      return ai - bi;
+    });
+
+    board.innerHTML = "";
+    opening.forEach(function (row) { board.appendChild(stageBoardRow(row, top.indexOf(row) + 1)); });
+    board.hidden = false;
+
+    if (reducedMotion()) { paintStageBoard(board, top, entry); return; }
+    requestAnimationFrame(function () {
+      withClimb(board, function () { paintStageBoard(board, top, entry); });
+    });
+  }
+
+  function paintStageBoard(board, top, entry) {
+    board.innerHTML = "";
+    top.forEach(function (row, i) {
+      var node = stageBoardRow(row, i + 1);
+      if (entry && row.name === entry.name) node.classList.add("sb-you");
+      board.appendChild(node);
+    });
+  }
+
+  function stageBoardRow(row, rank) {
+    var node = el("li", { class: "sb-row" }, [
+      el("span", { class: "sb-rank", text: String(rank) }),
+      el("span", { class: "sb-name", text: row.name }),
+      el("span", { class: "sb-score", text: String(row.best) })
+    ]);
+    node.setAttribute("data-key", row.name);
+    return node;
+  }
+
+  /**
+   * Re-render `container`, then slide every row that moved from where it was
+   * to where it now is. The rows are keyed by `data-key`, so this works on any
+   * list that labels them — the stage card and the Scores tab both use it.
+   *
+   * Measured against the viewport rather than the offset parent: the stage
+   * card is inside a fullscreen element whose offset parent changes underneath
+   * it, and a delta measured against a moving origin animates rows to places
+   * they were never in.
+   */
+  function withClimb(container, render) {
+    var before = {};
+    $$("[data-key]", container).forEach(function (n) {
+      before[n.getAttribute("data-key")] = n.getBoundingClientRect().top;
+    });
+    render();
+    if (reducedMotion()) return;
+    $$("[data-key]", container).forEach(function (n) {
+      var key = n.getAttribute("data-key");
+      if (!(key in before)) { n.classList.add("row-enter"); return; }
+      var delta = before[key] - n.getBoundingClientRect().top;
+      if (!delta) return;
+      n.style.transition = "none";
+      n.style.transform = "translateY(" + delta + "px)";
+      // Moving up the table is the thing worth celebrating; moving down
+      // happens to you and does not need a highlight.
+      if (delta > 0) n.classList.add("row-climb");
+      requestAnimationFrame(function () {
+        n.style.transition = "";
+        n.style.transform = "";
+      });
+    });
   }
 
   function hideScore() {
     var card = $("#score-card");
-    if (card) { card.hidden = true; card.classList.remove("in"); }
+    if (card) { card.hidden = true; card.classList.remove("in", "revealed"); }
+    if (scoreAnim) {
+      cancelAnimationFrame(scoreAnim.frame);
+      if (scoreAnim.roll) scoreAnim.roll.stop();
+      scoreAnim = null;
+    }
   }
 
   /* Speech synthesis is the one text-to-speech every browser already has: no
@@ -497,12 +897,232 @@
     } catch (e) { /* a voice list that never loaded — not worth reporting */ }
   }
 
+  /* ---------------- Song Roulette ----------------
+   * A game card reaching the front of the queue is the room stopping to spin.
+   * Both wheels run on the host screen, because that is the screen everybody
+   * is already looking at — the same reasoning that puts the score there. A
+   * guest sees the state change and is told the outcome; a phone in a pocket
+   * showing its own private wheel would be a second thing to watch during the
+   * one moment the room is watching together.
+   */
+  var SPIN_STEP_MS = 3400;
+  var spinTimers = [];
+
+  /* The countdown is an interval and everything else is a timeout, and the two
+   * id spaces are only the same one by convention — so cancel both ways rather
+   * than leaving a ticking clock behind on an engine that keeps them apart. */
+  function clearSpinTimers() {
+    spinTimers.forEach(function (id) { clearTimeout(id); clearInterval(id); });
+    spinTimers = [];
+  }
+  function later(fn, ms) {
+    var id = setTimeout(fn, ms);
+    spinTimers.push(id);
+    return id;
+  }
+
+  function runRoulette() {
+    var s = app.state;
+    var G = KN.games;
+    clearSpinTimers();
+
+    if (!G.hasSongs(s.roulette)) {
+      notice("The roulette ran out of songs — skipping the round.", "warn");
+      s.spin = null;
+      nextSong();
+      return;
+    }
+    var people = G.candidates(s);
+    var singer = G.spinSinger(s);
+    if (!singer) { s.spin = null; nextSong(); return; }
+
+    spinPhase("singer", "Who is singing?",
+      G.reel(people.map(function (p) { return p.name; }), singer.name),
+      singer.name,
+      function () {
+        var song = G.spinSong(s.roulette);
+        if (!song) { s.spin = null; nextSong(); return; }
+        spinPhase("song", singer.name + " is singing…",
+          G.reel(s.roulette.pool.concat([song]).map(function (e) { return e.title; }), song.title),
+          song.title,
+          function () { startRouletteSong(singer, song); });
+      });
+  }
+
+  function spinPhase(phase, label, names, landing, done) {
+    var s = app.state;
+    s.spin = { phase: phase, label: label, landing: landing, at: Date.now() };
+    broadcastState();
+    animateReel(label, names, landing, function () {
+      later(done, 900);
+    });
+  }
+
+  /**
+   * The wheel itself: names flashing past, slowing to a stop. The interval
+   * lengthens on the same curve the score's count-up uses, so a spin and a
+   * score feel like the same machine, and every step ticks.
+   */
+  function animateReel(label, names, landing, done) {
+    var card = $("#spin-card");
+    var reel = $("#spin-reel");
+    if (!card || !reel) { done(); return; }
+    hideScore();
+    hideUpNext();
+    $("#spin-label").textContent = label;
+    $("#spin-sub").textContent = "";
+    card.hidden = false;
+    card.classList.remove("landed");
+
+    if (reducedMotion() || !names.length) {
+      reel.textContent = landing;
+      card.classList.add("landed");
+      if (sfxOn()) KN.sound.chime();
+      later(done, 700);
+      return;
+    }
+
+    var i = 0;
+    var began = Date.now();
+    function step() {
+      var p = Math.min(1, (Date.now() - began) / SPIN_STEP_MS);
+      reel.textContent = names[i % names.length];
+      reel.classList.remove("flip");
+      void reel.offsetWidth;
+      reel.classList.add("flip");
+      if (sfxOn()) KN.sound.tick(1 - 0.4 * p);
+      i++;
+      if (p >= 1) {
+        reel.textContent = landing;
+        card.classList.add("landed");
+        if (sfxOn()) KN.sound.chime();
+        later(done, 700);
+        return;
+      }
+      later(step, 55 + 340 * p * p);
+    }
+    step();
+  }
+
+  function startRouletteSong(singer, pick) {
+    var s = app.state;
+    var song = R.toSong(pick, singer.name, singer.id);
+    song.viaGame = "roulette";
+    s.roulette.lastSingerId = singer.id;
+    s.roulette.rounds++;
+    s.now = song;
+    s.player.time = 0;
+    s.player.duration = song.duration || 0;
+    s.player.status = "loading";
+    s.spin = null;
+
+    $("#spin-card").hidden = true;
+    notice("Song Roulette: " + singer.name + " sings “" + song.title + "”");
+    if (app.player) { app.player.load(song.id); app.player.play(); }
+    broadcastState();
+  }
+
+  function offerSpinAgain() {
+    var s = app.state;
+    s.spinOffer = { at: Date.now(), ms: SPIN_OFFER_MS };
+    broadcastState();
+
+    var box = $("#spin-again");
+    var count = $("#spin-again-count");
+    if (box) {
+      mountOffer("stage");
+      box.hidden = false;
+      var left = Math.round(SPIN_OFFER_MS / 1000);
+      if (count) count.textContent = String(left);
+      var beat = setInterval(function () {
+        left--;
+        if (count) count.textContent = String(Math.max(0, left));
+        if (left <= 0) clearInterval(beat);
+      }, 1000);
+      spinTimers.push(beat);
+    }
+    later(function () {
+      if (!app.state || !app.state.spinOffer) return;
+      clearSpinOffer();
+      nextSong();
+    }, SPIN_OFFER_MS);
+  }
+
+  function clearSpinOffer() {
+    clearSpinTimers();
+    var box = $("#spin-again");
+    if (box) box.hidden = true;
+    app.offerSeenAt = 0;
+    if (app.state) app.state.spinOffer = null;
+  }
+
+  /** The offer is one element with two homes: inside the stage on the host,
+   *  where it survives fullscreen, and in the room body on a phone. */
+  function mountOffer(slotId) {
+    var box = $("#spin-again");
+    var slot = $("#" + slotId);
+    if (box && slot && box.parentNode !== slot) slot.appendChild(box);
+  }
+
+  /**
+   * A co-host is usually holding a phone, not the host screen, and the offer
+   * is explicitly theirs to take too — so it has to exist somewhere they can
+   * reach it. The countdown is measured from when *this* device first saw the
+   * offer rather than from the host's timestamp: two phones at a party do not
+   * agree about the time to the second, and a countdown that starts at -2 is
+   * worse than one that is a beat late.
+   */
+  function renderSpinOffer() {
+    if (app.role === "host") return;          // the host runs its own countdown
+    var box = $("#spin-again");
+    if (!box) return;
+    var offer = app.state && app.state.spinOffer;
+    if (!offer || !canManage()) {
+      box.hidden = true;
+      app.offerSeenAt = 0;
+      return;
+    }
+    if (!app.offerSeenAt) app.offerSeenAt = Date.now();
+    mountOffer("spin-slot-guest");
+    box.hidden = false;
+    var left = Math.ceil((offer.ms - (Date.now() - app.offerSeenAt)) / 1000);
+    $("#spin-again-count").textContent = String(Math.max(0, Math.min(Math.round(offer.ms / 1000), left)));
+  }
+
+  /** "Spin again" — from the host's own button or a co-host's phone. */
+  function spinAgain() {
+    if (app.role !== "host") return;
+    var s = app.state;
+    clearSpinOffer();
+    hideScore();
+    s.lastScore = null;
+    if (!KN.games.hasSongs(s.roulette)) {
+      notice("The roulette pot is empty — add some songs first.", "warn");
+      nextSong();
+      return;
+    }
+    broadcastState();
+    runRoulette();
+  }
+
   function nextSong() {
     var s = app.state;
     clearTimeout(scoreTimer);
+    clearSpinOffer();
     s.lastScore = null;
+    s.spin = null;
     hideScore();
+    hideUpNext();
+    var spin = $("#spin-card");
+    if (spin) spin.hidden = true;
     var next = R.advance(s);
+
+    // A roulette card is not a video: it is the room stopping to spin one up.
+    if (next && KN.games.isGameCard(next)) {
+      broadcastState();
+      runRoulette();
+      return;
+    }
     if (app.player) {
       if (next) { app.player.load(next.id); app.player.play(); }
       else app.player.stop();
@@ -511,15 +1131,54 @@
   }
 
   function refreshGuestList() {
-    app.state.guests = app.net.guests().map(function (l) {
-      return { id: l.id, name: app.guestNames[l.id] || "Guest", cohost: !!app.cohosts[l.id] };
-    });
+    var links = app.net.guests();
+    /* Someone in the lobby is connected but is not in the room: they are not
+     * a singer, they cannot be picked by the roulette, and they do not count
+     * towards the guest tally on the header. */
+    app.state.guests = links
+      .filter(function (l) { return !waiting(l.id); })
+      .map(function (l) {
+        return { id: l.id, name: app.guestNames[l.id] || "Guest", cohost: !!app.cohosts[l.id] };
+      });
+    app.state.pending = links
+      .filter(function (l) { return waiting(l.id); })
+      .map(function (l) { return { id: l.id, name: app.guestNames[l.id] || "Guest", at: Date.now() }; });
     app.state.cohosts = app.cohosts;
     app.state.hostName = app.name || "Host";
   }
 
+  /**
+   * What a given link is allowed to see. Someone still in the lobby gets the
+   * shape of a room and nothing that is in it: no queue, no guest list, no
+   * scores, no roulette pot. Refusing their commands but handing them the
+   * whole room to read would be a lock on a door with the window open.
+   */
+  function snapshotFor(link) {
+    var s = app.state;
+    if (!waiting(link.id)) return s;
+    return {
+      code: s.code,
+      rev: s.rev,
+      now: null,
+      queue: [],
+      guests: [],
+      pending: [],
+      cohosts: {},
+      hostName: s.hostName,
+      player: { status: "idle", time: 0, duration: 0, volume: s.player.volume, muted: s.player.muted },
+      config: s.config,
+      scores: [],
+      lastScore: null,
+      roulette: KN.games.createRoulette(),
+      spin: null,
+      spinOffer: null,
+      lobby: true,
+      startedAt: s.startedAt
+    };
+  }
+
   function sendStateTo(link) {
-    link.send({ type: MSG.STATE, rev: app.state.rev, state: app.state });
+    link.send({ type: MSG.STATE, rev: app.state.rev, state: snapshotFor(link) });
   }
 
   var lastBroadcast = 0;
@@ -548,7 +1207,11 @@
     }
     clearTimeout(broadcastPending);
     lastBroadcast = now;
-    app.net.broadcast({ type: MSG.STATE, rev: app.state.rev, state: app.state });
+    /* One snapshot per link rather than one for the room: what a guest in the
+     * lobby may see is different from what a guest in the room may see, and
+     * `broadcast` cannot tell them apart. When nobody is waiting this is the
+     * same message sent the same number of times. */
+    app.net.guests().forEach(function (link) { sendStateTo(link); });
   }
 
   function notice(text, kind, exceptId) {
@@ -570,7 +1233,9 @@
       now: app.state.now,
       rev: app.state.rev,
       config: app.state.config,
-      scores: app.state.scores
+      scores: app.state.scores,
+      roulette: app.state.roulette,
+      approved: app.approved
     });
   }
 
@@ -600,6 +1265,7 @@
     });
 
     save(STORE.guest, { at: Date.now(), code: code });
+    if (KN.stats) KN.stats.startSession({ code: code, role: "guest" });
     showRoom();
   }
 
@@ -613,12 +1279,17 @@
         // Snapshots are authoritative; an out-of-order straggler is dropped.
         if (app.state && data.rev < app.state.rev) return;
         app.state = data.state;
+        app.waiting = !!app.state.lobby;
+        if (KN.sound) KN.sound.setEnabled(!app.state.config || app.state.config.sounds !== false);
         // A guest has no stage to put the score on, so it arrives as a toast —
         // once, on the snapshot that first carried it.
         var sc = app.state.lastScore;
         if (sc && sc.at !== app.lastScoreAt) {
           app.lastScoreAt = sc.at;
           toast(sc.name + " scored " + sc.score + " — " + sc.line, sc.score >= 95 ? "ok" : null);
+          // The host is the one that scored it; this phone still keeps its own
+          // half of the record when the song was this phone's.
+          noteMyScore(sc, null);
         }
         render();
         break;
@@ -626,10 +1297,19 @@
       case MSG.NOTICE:
         toast(data.text, data.kind);
         break;
-      case MSG.BYE:
-        toast(data.reason === "kicked" ? "You were removed from the room." : "The host closed the room.", "warn");
+      case MSG.WAIT:
+        app.waiting = true;
+        renderLobby();
+        break;
+      case MSG.BYE: {
+        var why = {
+          kicked: "You were removed from the room.",
+          refused: "The host did not let you into the room."
+        };
+        toast(why[data.reason] || "The host closed the room.", "warn");
         leave();
         break;
+      }
     }
   }
 
@@ -681,7 +1361,10 @@
     if (app.player) app.player.destroy();
     clearInterval(ticker);
     clearTimeout(scoreTimer);
+    clearSpinOffer();
     hideScore();
+    hideUpNext();
+    if (KN.stats) KN.stats.endSession();
     forget(STORE.guest);
     app.role = null;
     app.net = null;
@@ -689,6 +1372,9 @@
     app.state = null;
     app.guestNames = {};
     app.cohosts = {};
+    app.approved = {};
+    app.waiting = false;
+    app.upNextFor = null;
     app.lastScoreAt = 0;
     document.body.classList.remove("can-manage");
     location.hash = "#/";
@@ -700,18 +1386,161 @@
   function showLibrary() {
     $("#view-home").hidden = true;
     $("#view-room").hidden = true;
+    $("#view-stats").hidden = true;
     $("#view-library").hidden = false;
     document.body.classList.remove("in-room", "is-host");
     mountInto("search-root", "search-slot-library");
     mountLibrary("library-slot-standalone");
   }
 
+  /* ---------------- screen: statistics ----------------
+   * A page about you, made only of things this browser already knew. It is
+   * worth being handsome — a wall of numbers nobody looks at twice is a wall
+   * of numbers that may as well not be collected — and worth being honest
+   * about where it lives, which the banner at the top does in plain words.
+   */
+
+  function showStats() {
+    $("#view-home").hidden = true;
+    $("#view-room").hidden = true;
+    $("#view-library").hidden = true;
+    $("#view-stats").hidden = false;
+    document.body.classList.remove("in-room", "is-host");
+    renderStats();
+  }
+
+  function fmtSpan(ms) {
+    var mins = Math.round(ms / 60000);
+    if (!mins) return "—";
+    if (mins < 60) return mins + "m";
+    var hours = Math.floor(mins / 60);
+    var rest = mins % 60;
+    return rest ? hours + "h " + rest + "m" : hours + "h";
+  }
+
+  function fmtDate(at) {
+    if (!at) return "";
+    try { return new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
+    catch (e) { return ""; }
+  }
+
+  function statCard(label, value, sub, tone) {
+    return el("div", { class: "stat" + (tone ? " stat-" + tone : "") }, [
+      el("div", { class: "stat-value", text: value }),
+      el("div", { class: "stat-label", text: label }),
+      sub ? el("div", { class: "stat-sub", text: sub }) : null
+    ]);
+  }
+
+  function renderStats() {
+    if (!KN.stats) return;
+    var empty = KN.stats.isEmpty();
+    $("#stats-empty").hidden = !empty;
+    $("#stats-body").hidden = empty;
+    $("#stats-clear").hidden = empty;
+    if (empty) return;
+
+    var sum = KN.stats.summary();
+    var cards = $("#stats-cards");
+    cards.innerHTML = "";
+    [
+      statCard("Average score", String(sum.average || "—"), sum.songs + (sum.songs === 1 ? " song" : " songs"), "hero"),
+      statCard("Best score", String(sum.best || "—"), sum.best > 100 ? "you broke the machine" : ""),
+      statCard("Songs sung", String(sum.songs), sum.worst ? "lowest " + sum.worst : ""),
+      statCard("Time at the microphone", fmtSpan(sum.singMs), ""),
+      statCard("Karaoke sessions", String(sum.sessions), sum.hosted ? sum.hosted + " hosted" : "none hosted"),
+      statCard("Time in rooms", fmtSpan(sum.roomMs), sum.firstAt ? "since " + fmtDate(sum.firstAt) : "")
+    ].forEach(function (c) { cards.appendChild(c); });
+
+    if (sum.bestSession) {
+      cards.appendChild(statCard(
+        "Best night",
+        String(sum.bestSession.average),
+        "room " + (sum.bestSession.code || "—") + " · " + sum.bestSession.songs + " songs · " + fmtDate(sum.bestSession.at)
+      ));
+    }
+
+    var games = $("#stats-games");
+    games.innerHTML = "";
+    if (!sum.games.length) {
+      games.appendChild(el("p", { class: "empty", text: "No games played yet. Try Song Roulette in a room." }));
+    }
+    var NAMES = { roulette: "Song Roulette" };
+    sum.games.forEach(function (g) {
+      games.appendChild(
+        el("div", { class: "game-stat" }, [
+          el("div", { class: "game-stat-head" }, [
+            el("span", { class: "game-stat-ico" }, [KN.icon("dice")]),
+            el("strong", { text: NAMES[g.game] || g.game })
+          ]),
+          el("div", { class: "game-stat-bar" }, [
+            el("span", {
+              class: "game-stat-fill",
+              style: "width:" + (g.winrate === null ? 0 : g.winrate) + "%"
+            })
+          ]),
+          el("div", { class: "game-stat-nums", text:
+            (g.winrate === null ? "no decided rounds yet" : g.winrate + "% winrate") +
+            " · " + g.played + " played · " + g.wins + "W " + g.losses + "L" })
+        ])
+      );
+    });
+    games.appendChild(el("p", {
+      class: "side-note",
+      text: "A round of Song Roulette is won by taking the night's top roulette score. The first round of an evening has nothing to beat, so it counts as neither."
+    }));
+
+    var list = $("#stats-sessions");
+    list.innerHTML = "";
+    KN.stats.sessions().slice(0, 20).forEach(function (n) {
+      list.appendChild(
+        el("li", { class: "row" }, [
+          el("span", { class: "score-pill", text: String(n.average || "—") }),
+          el("div", { class: "row-meta" }, [
+            el("div", { class: "row-title", text: "Room " + (n.code || "—") + (n.role === "host" ? " · hosted" : "") }),
+            el("div", { class: "row-sub", text:
+              fmtDate(n.startedAt) + " · " + n.songs + (n.songs === 1 ? " song" : " songs") +
+              " · " + fmtSpan(n.ms) + (n.best ? " · best " + n.best : "") })
+          ]),
+          n.open ? el("span", { class: "row-flag", text: "open" }) : null
+        ])
+      );
+    });
+
+    var songs = $("#stats-songs");
+    songs.innerHTML = "";
+    KN.stats.songs().slice(0, 25).forEach(function (row) {
+      songs.appendChild(
+        el("li", { class: "row" }, [
+          el("span", { class: "score-pill", "data-band": R.scoreBand(row.score), text: String(row.score) }),
+          el("div", { class: "row-meta" }, [
+            el("div", { class: "row-title", text: row.title || "A song" }),
+            el("div", { class: "row-sub", text: fmtDate(row.at) + (row.ms ? " · " + fmtSpan(row.ms) : "") })
+          ])
+        ])
+      );
+    });
+  }
+
+  function renderStatsTeaser() {
+    var line = $("#stats-teaser");
+    if (!line || !KN.stats) return;
+    if (KN.stats.isEmpty()) { line.textContent = "Your scores, once you have some"; return; }
+    var sum = KN.stats.summary();
+    line.textContent =
+      sum.songs + (sum.songs === 1 ? " song" : " songs") +
+      " · avg " + sum.average +
+      " · " + sum.sessions + (sum.sessions === 1 ? " session" : " sessions");
+  }
+
   function showHome() {
     $("#view-home").hidden = false;
     $("#view-room").hidden = true;
     $("#view-library").hidden = true;
+    $("#view-stats").hidden = true;
     document.body.classList.remove("in-room", "is-host");
     renderLibrary();
+    renderStatsTeaser();
     $("#join-name").value = app.name || loadName() || "";
 
     // Offer to pick up wherever this browser left off — hosting outranks
@@ -777,6 +1606,7 @@
   function showRoom() {
     $("#view-home").hidden = true;
     $("#view-library").hidden = true;
+    $("#view-stats").hidden = true;
     $("#view-room").hidden = false;
     document.body.classList.add("in-room");
     document.body.classList.toggle("is-host", app.role === "host");
@@ -872,11 +1702,14 @@
     document.body.classList.toggle("can-manage", manage);
 
     renderConnection();
+    renderLobby();
+    renderSpinOffer();
     renderNow();
     renderQueue();
     renderProgress();
     renderSingers();
     renderScores();
+    renderGames();
     renderConfig();
 
     var s = app.state;
@@ -903,6 +1736,23 @@
     }
 
     var song = s.now;
+
+    /* A roulette card sitting in `now` is the room stopping to spin, not a
+     * song: there is nothing to save to a library and nothing to file into a
+     * playlist, and offering both would be two buttons that do nothing. */
+    if (KN.games.isGameCard(song)) {
+      box.appendChild(
+        el("div", { class: "now-card" }, [
+          el("span", { class: "row-gameicon now-gameicon" }, [KN.icon("dice")]),
+          el("div", { class: "now-meta" }, [
+            el("div", { class: "now-title", text: "Song Roulette" }),
+            el("div", { class: "now-artist", text: "spinning for a singer and a song" })
+          ])
+        ])
+      );
+      return;
+    }
+
     /* The song you are listening to is exactly when you decide you want to
      * keep it, and until now that meant finding it in search again. */
     var saved = LIB.hasSong(song.id);
@@ -933,6 +1783,112 @@
         ])
       ])
     );
+  }
+
+  /* ---------------- the lobby ----------------
+   * On a guest: am I still outside? On the host: who is knocking? */
+
+  function renderLobby() {
+    var s = app.state;
+    var stuck = app.role === "guest" && !!(app.waiting || (s && s.lobby));
+    var banner = $("#lobby-wait");
+    if (banner) banner.hidden = !stuck;
+    document.body.classList.toggle("in-lobby", stuck);
+
+    var pending = (s && s.pending) || [];
+    var badge = $("#pending-count");
+    if (badge) {
+      badge.hidden = !pending.length || !canManage();
+      badge.textContent = String(pending.length);
+    }
+
+    var box = $("#lobby");
+    var list = $("#pending");
+    if (!box || !list) return;
+    box.hidden = !pending.length || !canManage();
+    list.innerHTML = "";
+    pending.forEach(function (g) {
+      list.appendChild(
+        el("li", { class: "row row-pending" }, [
+          el("span", { class: "singer-dot singer-dot-wait" }),
+          el("div", { class: "row-meta" }, [
+            el("div", { class: "row-title", text: g.name }),
+            el("div", { class: "row-sub", text: "asking to join" })
+          ]),
+          el("div", { class: "row-actions" }, [
+            btn("check", "Let " + g.name + " in", function () {
+              dispatch({ type: CMD.APPROVE, id: g.id, ok: true });
+            }, "on"),
+            btn("close", "Refuse " + g.name, function () {
+              dispatch({ type: CMD.APPROVE, id: g.id, ok: false });
+            })
+          ])
+        ])
+      );
+    });
+  }
+
+  /* ---------------- games ---------------- */
+
+  function renderGames() {
+    var s = app.state;
+    if (!s) return;
+    var G = KN.games;
+    var rl = s.roulette || G.createRoulette();
+    var pool = rl.pool || [];
+
+    var count = $("#games-count");
+    if (count) {
+      count.hidden = !pool.length;
+      count.textContent = String(pool.length);
+    }
+
+    var box = $("#cfg-roulette-host");
+    if (box) {
+      box.checked = rl.includeHost !== false;
+      box.disabled = !canManage();
+    }
+
+    var list = $("#roulette-pool");
+    if (!list) return;
+    list.innerHTML = "";
+    if (!pool.length) {
+      list.appendChild(el("li", { class: "empty", text: "The pot is empty. Add songs from Search — the ＋ on a result offers the roulette." }));
+    }
+    pool.forEach(function (e) {
+      list.appendChild(
+        el("li", { class: "row" }, [
+          thumb("row-thumb", e.thumb),
+          el("div", { class: "row-meta" }, [
+            el("div", { class: "row-title", text: e.title }),
+            el("div", { class: "row-sub", text: "added by " + e.addedBy })
+          ]),
+          el("div", { class: "row-actions" }, [
+            btn("close", "Take it out of the pot", function () {
+              dispatch({ type: CMD.GAME_REMOVE, rid: e.rid });
+            })
+          ])
+        ])
+      );
+    });
+
+    var short = Math.max(0, G.MIN_POOL - pool.length);
+    var hint = $("#roulette-hint");
+    if (hint) {
+      hint.textContent = short
+        ? short + " more " + (short === 1 ? "song" : "songs") + " and this can go in the queue."
+        : pool.length + " in the pot · " + pool.length + " " + (pool.length === 1 ? "round" : "rounds") +
+          " before it runs dry" + (rl.rounds ? " · " + rl.rounds + " played" : "");
+    }
+    var go = $("#roulette-queue");
+    if (go) {
+      go.disabled = !G.canSpin(rl) || !canManage();
+      go.title = canManage()
+        ? (G.canSpin(rl) ? "" : "Needs at least " + G.MIN_POOL + " songs")
+        : "Only the host and co-hosts can start a round";
+    }
+    var wipe = $("#roulette-clear");
+    if (wipe) wipe.hidden = !canManage() || !pool.length;
   }
 
   /* ---------------- singers ---------------- */
@@ -982,6 +1938,12 @@
   /* ---------------- scores ---------------- */
 
   function renderScores() {
+    var board = $("#board");
+    if (!board) { paintScores(); return; }
+    withClimb(board, paintScores);
+  }
+
+  function paintScores() {
     var s = app.state;
     var on = !!(s.config && s.config.leaderboard);
     var tab = $(".tab-scores");
@@ -1001,16 +1963,17 @@
       board.appendChild(el("li", { class: "empty", text: "No scores yet. Finish a song to get one." }));
     }
     table.forEach(function (row, i) {
-      board.appendChild(
-        el("li", { class: "board-row" + (i === 0 ? " board-lead" : "") }, [
-          el("span", { class: "board-rank", text: String(i + 1) }),
-          el("div", { class: "board-meta" }, [
-            el("div", { class: "board-name", text: row.name }),
-            el("div", { class: "board-sub", text: row.songs + (row.songs === 1 ? " song" : " songs") + " · avg " + row.average })
-          ]),
-          el("span", { class: "board-score", text: String(row.best) })
-        ])
-      );
+      var node = el("li", { class: "board-row" + (i === 0 ? " board-lead" : "") }, [
+        el("span", { class: "board-rank", text: String(i + 1) }),
+        el("div", { class: "board-meta" }, [
+          el("div", { class: "board-name", text: row.name }),
+          el("div", { class: "board-sub", text: row.songs + (row.songs === 1 ? " song" : " songs") + " · avg " + row.average })
+        ]),
+        el("span", { class: "board-score", text: String(row.best) })
+      ]);
+      // Keyed so the same climb animation that runs on the stage runs here.
+      node.setAttribute("data-key", row.name);
+      board.appendChild(node);
     });
 
     (s.scores || []).slice(0, 12).forEach(function (e) {
@@ -1028,7 +1991,13 @@
 
   /* ---------------- configuration ---------------- */
 
-  var CFG_FIELDS = { "cfg-scoring": "scoring", "cfg-leaderboard": "leaderboard", "cfg-maxrun": "maxRun" };
+  var CFG_FIELDS = {
+    "cfg-scoring": "scoring",
+    "cfg-leaderboard": "leaderboard",
+    "cfg-maxrun": "maxRun",
+    "cfg-approval": "joinApproval",
+    "cfg-sounds": "sounds"
+  };
 
   function renderConfig() {
     var c = (app.state && app.state.config) || R.defaultConfig();
@@ -1080,24 +2049,118 @@
     }
 
     s.queue.forEach(function (song, i) {
-      list.appendChild(
-        el("li", { class: "row" }, [
-          el("span", { class: "row-num", text: String(i + 1) }),
-          thumb("row-thumb", song.thumb),
-          el("div", { class: "row-meta" }, [
-            el("div", { class: "row-title", text: song.title }),
-            el("div", { class: "row-sub", text: (song.author || "—") + " · " + song.addedBy })
-          ]),
-          el("span", { class: "row-time", text: song.duration ? R.fmtTime(song.duration) : "" }),
-          el("div", { class: "row-actions" }, [
-            btn("to-top", "Play next", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "top" }); }),
-            btn("chevron-up", "Move up", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "up" }); }, "opt"),
-            btn("chevron-down", "Move down", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "down" }); }, "opt"),
-            btn("play", "Play now", function () { dispatch({ type: CMD.PLAY_NOW, sid: song.sid }); }),
-            btn("close", "Remove", function () { dispatch({ type: CMD.REMOVE, sid: song.sid }); })
-          ])
+      var game = KN.games.isGameCard(song);
+
+      /* The handle exists to say the row can be picked up. Arrows alone never
+       * did: everyone tries to drag a queue, and a list that does not move
+       * reads as broken rather than as a list with buttons. */
+      var handle = el("button", {
+        class: "row-grip",
+        type: "button",
+        title: "Drag to reorder",
+        "aria-label": "Drag “" + song.title + "” to reorder"
+      }, [KN.icon("grip")]);
+
+      var row = el("li", { class: "row" + (game ? " row-game" : "") }, [
+        handle,
+        el("span", { class: "row-num", text: String(i + 1) }),
+        game
+          ? el("span", { class: "row-gameicon" }, [KN.icon("dice")])
+          : thumb("row-thumb", song.thumb),
+        el("div", { class: "row-meta" }, [
+          el("div", { class: "row-title", text: song.title }),
+          el("div", { class: "row-sub", text: game
+            ? "the wheel picks the singer and the song · queued by " + song.addedBy
+            : (song.author || "—") + " · " + song.addedBy })
+        ]),
+        el("span", { class: "row-time", text: song.duration ? R.fmtTime(song.duration) : "" }),
+        el("div", { class: "row-actions" }, [
+          btn("to-top", "Play next", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "top" }); }),
+          btn("chevron-up", "Move up", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "up" }); }, "opt"),
+          btn("chevron-down", "Move down", function () { dispatch({ type: CMD.MOVE, sid: song.sid, dir: "down" }); }, "opt"),
+          btn("play", "Play now", function () { dispatch({ type: CMD.PLAY_NOW, sid: song.sid }); }),
+          btn("close", "Remove", function () { dispatch({ type: CMD.REMOVE, sid: song.sid }); })
         ])
-      );
+      ]);
+      row.setAttribute("data-sid", song.sid);
+      armDrag(row, handle, song.sid);
+      list.appendChild(row);
+    });
+  }
+
+  /* ---------------- dragging a queue row ----------------
+   * Pointer events rather than HTML5 drag-and-drop, because the queue that
+   * most needs reordering is the one on a phone and the drag API has never
+   * worked with touch. One code path serves mouse, pen and finger.
+   *
+   * Rows are measured once when the drag starts and moved with transforms
+   * afterwards, so nothing re-lays-out mid-gesture. The queue is shared and
+   * live: somebody else's song can arrive while a finger is down, which is why
+   * the drop sends the index it landed on rather than a swap of two rows the
+   * host may no longer agree about.
+   */
+  function armDrag(row, handle, sid) {
+    handle.addEventListener("pointerdown", function (down) {
+      if (down.button) return;            // a right-click is not a drag
+      down.preventDefault();
+
+      var list = $("#queue");
+      var rows = $$(".row", list);
+      var from = rows.indexOf(row);
+      if (from < 0) return;
+      var rects = rows.map(function (r) { return r.getBoundingClientRect(); });
+      var to = from;
+      var startY = down.clientY;
+      var moved = false;
+
+      list.classList.add("list-dragging");
+      row.classList.add("row-dragging");
+      try { handle.setPointerCapture(down.pointerId); } catch (e) { /* older engines */ }
+
+      function place(next) {
+        to = next;
+        var order = rows.slice();
+        order.splice(from, 1);
+        order.splice(to, 0, row);
+        order.forEach(function (r, index) {
+          if (r === row) return;
+          var was = rows.indexOf(r);
+          var shift = rects[index].top - rects[was].top;
+          r.style.transform = shift ? "translateY(" + shift + "px)" : "";
+        });
+      }
+
+      function onMove(ev) {
+        var dy = ev.clientY - startY;
+        if (!moved && Math.abs(dy) < 4) return;
+        moved = true;
+        row.style.transform = "translateY(" + dy + "px)";
+        var mid = rects[from].top + rects[from].height / 2 + dy;
+        var next = from;
+        for (var i = 0; i < rects.length; i++) {
+          if (i === from) continue;
+          var centre = rects[i].top + rects[i].height / 2;
+          if (i < from && mid < centre) next = Math.min(next, i);
+          if (i > from && mid > centre) next = Math.max(next, i);
+        }
+        if (next !== to) place(next);
+      }
+
+      function onUp() {
+        handle.removeEventListener("pointermove", onMove);
+        handle.removeEventListener("pointerup", onUp);
+        handle.removeEventListener("pointercancel", onUp);
+        try { handle.releasePointerCapture(down.pointerId); } catch (e) { /* already gone */ }
+        list.classList.remove("list-dragging");
+        row.classList.remove("row-dragging");
+        rows.forEach(function (r) { r.style.transform = ""; });
+        if (moved && to !== from) dispatch({ type: CMD.MOVE, sid: sid, dir: "to", to: to });
+        else render();
+      }
+
+      handle.addEventListener("pointermove", onMove);
+      handle.addEventListener("pointerup", onUp);
+      handle.addEventListener("pointercancel", onUp);
     });
   }
 
@@ -1128,6 +2191,12 @@
    * without ever showing a page the user could reach and find empty.
    */
   var SEARCH_CHECK_LIMIT = 24;
+  /* Under this many rows a result list is a dead end rather than a choice, so
+   * the same song gets asked for again in different words. Three rounds and
+   * then it stops: a fourth costs another several seconds of probing for the
+   * long tail of a query that has already given what it has. */
+  var SEARCH_TARGET = 10;
+  var SEARCH_ROUNDS = 3;
 
   function runSearch() {
     var input = $("#q");
@@ -1141,7 +2210,10 @@
     // behind results nobody is looking at any more.
     if (app.searchSweep) { app.searchSweep.cancel(); app.searchSweep = null; }
 
-    // A pasted link never needs a search mirror.
+    /* A pasted link never needs a search mirror — and never goes through the
+     * karaoke filter either. Someone who pastes a URL has already decided
+     * what they want, and second-guessing that is the app arguing with an
+     * explicit instruction. */
     if (KN.search.parseVideoId(q)) {
       status.textContent = "Reading link…";
       results.innerHTML = "";
@@ -1183,54 +2255,109 @@
     app.searchBusy = true;
     status.textContent = "Searching…";
     results.innerHTML = "";
+    app.lastResults = [];
 
-    KN.search
-      .search(q)
-      .then(function (out) {
-        app.lastResults = [];
-        results.innerHTML = "";
-        if (!out.results.length) { status.textContent = "No results."; return; }
+    /* One search is now potentially several. Everything a round needs to know
+     * about the rounds before it lives here: what has already been shown, what
+     * has already been asked about, and where the next round's rows sort. */
+    var run = {
+      token: {},
+      seen: {},
+      shown: 0,
+      dropped: 0,     // refused by the embed probe
+      unsure: 0,      // shown, but the probe never actually answered
+      notKaraoke: 0,  // almost certainly not something anyone can sing to
+      round: 0,
+      source: null
+    };
+    app.searchRun = run;
 
-        /* The mirrors hand back plenty of videos the host could never play.
-         * Rather than making everyone wait for the whole list to be vetted,
-         * each result is rendered the moment it clears — so the first playable
-         * song lands in about the time one probe takes. */
-        status.textContent = "Checking which of these can play here…";
-        app.searchSweep = KN.embed.filter(out.results, {
-          limit: SEARCH_CHECK_LIMIT,
-          onAccept: function (video, rank, verdict) {
-            app.lastResults.push(video);
-            insertResult(video, rank, verdict === KN.embed.UNKNOWN);
-          },
-          onProgress: function (p) {
-            status.textContent = p.kept
-              ? p.kept + " playable so far · checking " + p.checked + "/" + p.total + "…"
-              : "Checking " + p.checked + "/" + p.total + "…";
-          },
-          onDone: function (p) {
-            app.searchSweep = null;
-            if (p.kept) {
-              /* An unsure verdict is our failure, not the video's, and the
-               * result is shown anyway — but silently calling it playable is
-               * how a filter that has stopped working looks exactly like one
-               * that is working. Say how many were never actually answered. */
-              status.textContent =
-                (p.kept - p.unsure) + " playable" +
-                (p.unsure ? " · " + p.unsure + " unchecked" : "") +
-                (p.dropped ? " · " + p.dropped + " skipped (cannot be embedded)" : "") +
-                " · " + out.source;
-            } else {
-              status.textContent =
-                "None of these " + p.total + " results can be played in an embed. Try different words.";
+    function stopped() { return app.searchRun !== run; }
+
+    function finish() {
+      if (stopped()) return;
+      app.searchBusy = false;
+      app.searchSweep = null;
+      if (!run.shown) {
+        status.textContent =
+          "Nothing here can be sung to. " +
+          (run.notKaraoke ? run.notKaraoke + " result" + (run.notKaraoke === 1 ? " was" : "s were") + " music videos or clips rather than karaoke tracks. " : "") +
+          "Try the song title with the artist, or paste a YouTube link.";
+        return;
+      }
+      status.textContent =
+        (run.shown - run.unsure) + " playable" +
+        (run.unsure ? " · " + run.unsure + " unchecked" : "") +
+        (run.dropped ? " · " + run.dropped + " cannot be embedded" : "") +
+        (run.notKaraoke ? " · " + run.notKaraoke + " not karaoke" : "") +
+        (run.source ? " · " + run.source : "");
+    }
+
+    function round() {
+      if (stopped()) return;
+      run.round++;
+      KN.search
+        .search(q, run.round - 1)
+        .then(function (out) {
+          if (stopped()) return;
+          run.source = out.source;
+
+          /* Two filters, cheapest first. Reading a title costs nothing and
+           * throws out the music videos and reaction clips before we spend a
+           * real YouTube embed asking whether each one would play. */
+          var fresh = [];
+          out.results.forEach(function (v) {
+            if (run.seen[v.id]) return;
+            run.seen[v.id] = true;
+            if (KN.search.karaokeVerdict(v) === "no") { run.notKaraoke++; return; }
+            fresh.push(v);
+          });
+
+          if (!fresh.length) { nextRound(); return; }
+
+          status.textContent = "Checking which of these can play here…";
+          var base = (run.round - 1) * 1000;   // later rounds sort after earlier ones
+          app.searchSweep = KN.embed.filter(fresh, {
+            limit: SEARCH_CHECK_LIMIT,
+            onAccept: function (video, rank, verdict) {
+              if (stopped()) return;
+              app.lastResults.push(video);
+              run.shown++;
+              insertResult(video, base + rank, verdict === KN.embed.UNKNOWN);
+            },
+            onProgress: function (p) {
+              if (stopped()) return;
+              status.textContent = run.shown
+                ? run.shown + " playable so far · checking " + p.checked + "/" + p.total + "…"
+                : "Checking " + p.checked + "/" + p.total + "…";
+            },
+            onDone: function (p) {
+              if (stopped()) return;
+              app.searchSweep = null;
+              run.dropped += p.dropped;
+              run.unsure += p.unsure;
+              nextRound();
             }
-          }
+          });
+        })
+        .catch(function (e) {
+          if (stopped()) return;
+          // A later round failing is not worth losing the rows we already have.
+          if (run.shown) { finish(); return; }
+          app.searchBusy = false;
+          status.textContent = e.message;
+          results.innerHTML = "";
         });
-      })
-      .catch(function (e) {
-        status.textContent = e.message;
-        results.innerHTML = "";
-      })
-      .finally(function () { app.searchBusy = false; });
+    }
+
+    function nextRound() {
+      if (stopped()) return;
+      if (run.shown >= SEARCH_TARGET || run.round >= SEARCH_ROUNDS) { finish(); return; }
+      status.textContent = "Only " + run.shown + " so far — looking a bit harder…";
+      round();
+    }
+
+    round();
   }
 
   /* The host already hears about its own additions through notice(); only a
@@ -1271,7 +2398,13 @@
       }
     }, [KN.icon(LIB.hasSong(v.id) ? "star-filled" : "star")]);
 
-    return el("li", { class: "row row-result" }, [
+    /* Nine times in ten this is what the room came for, and it should be
+     * findable at a glance in a list of twenty. The badge is only put on the
+     * ones the title and the uploader both agree about — a badge handed out
+     * on a hunch stops meaning anything by the third search. */
+    var sure = KN.search.karaokeVerdict(v) === "sure";
+
+    var row = el("li", { class: "row row-result" + (sure ? " row-karaoke" : "") }, [
       thumb("row-thumb", v.thumb),
       el("div", { class: "row-meta" }, [
         el("div", { class: "row-title", text: v.title }),
@@ -1291,7 +2424,7 @@
       el("span", { class: "row-time", text: v.duration ? R.fmtTime(v.duration) : "" }),
       el("div", { class: "row-actions" }, [
         star,
-        btn("plus", "Add to a playlist", function () { openPicker(v); })
+        btn("plus", app.role ? "Add to a playlist or the roulette" : "Add to a playlist", function () { openPicker(v); })
       ]),
       app.role
         ? el("button", {
@@ -1304,6 +2437,8 @@
           })
         : null
     ]);
+    if (sure) row.appendChild(el("span", { class: "karaoke-badge", text: "Karaoke" }));
+    return row;
   }
 
   /* ---------------- library ----------------
@@ -1697,6 +2832,8 @@
         ])
       );
     });
+    var toPot = $("#picker-roulette");
+    if (toPot) toPot.hidden = !app.role;
     $("#picker").hidden = false;
     $("#picker-new-name").value = "";
   }
@@ -1720,16 +2857,20 @@
     /* Six tabs outgrow a narrow side column. The row scrolls, so the tab that
      * was just chosen has to be brought into view — and the edge fade is only
      * honest while there is actually something past it. */
+    var caption = $("#tab-caption");
+    var active = $(".tab[data-tab='" + name + "']");
+    if (caption) caption.textContent = (active && active.getAttribute("aria-label")) || "";
+
     var strip = $(".tabs");
     if (strip) {
       strip.classList.toggle("tabs-overflow", strip.scrollWidth > strip.clientWidth + 1);
-      var active = $(".tab[data-tab='" + name + "']");
       if (active && active.scrollIntoView) {
         active.scrollIntoView({ block: "nearest", inline: "nearest" });
       }
     }
     if (name === "search") mountInto("search-root", "search-slot-room");
     if (name === "library") mountLibrary("library-slot-room");
+    if (name === "games") renderGames();
   }
 
   /* ---------------- the 10pm rule ----------------
@@ -1906,7 +3047,7 @@
 
   /* Also the ?v= on every asset in index.html and in sw.js SHELL_FILES.
    * tools/version-check.js fails the build if the three drift apart. */
-  var APP_VERSION = "2.4.0";
+  var APP_VERSION = "2.5.0";
   var UPDATE_CHECK_MS = 30 * 60 * 1000;
 
   var swReg = null;
@@ -2028,11 +3169,19 @@
   function setupTheme() {
     var buttons = $$("[data-theme-toggle]");
 
+    /* The button shows the theme you are *in*, not the one you would get: a
+     * moon while it is dark, a sun while it is light. Showing the destination
+     * reads as a state indicator that is lying about the state. The moon is
+     * the warm yellow of a light left on, which is the whole idea. */
     function relabel() {
-      var next = effectiveTheme() === "dark" ? "light" : "dark";
+      var now = effectiveTheme();
+      var next = now === "dark" ? "light" : "dark";
       buttons.forEach(function (b) {
         b.setAttribute("aria-label", "Switch to the " + next + " theme");
         b.title = "Switch to the " + next + " theme";
+        b.classList.toggle("theme-btn-dark", now === "dark");
+        var slot = $("[data-theme-icon]", b);
+        if (slot) KN.setIcon(slot, now === "dark" ? "moon" : "sun");
       });
     }
 
@@ -2059,18 +3208,32 @@
    * when someone lands straight on a join link from a QR code.
    */
 
+  /* The name is remembered, and the question is still asked. Those are two
+   * separate things and conflating them was the bug: someone who lent their
+   * phone to a friend, or is the friend, joined the room silently as whoever
+   * used it last, and only found out when the queue said so. Arriving at a
+   * room is exactly the moment to confirm — so the gate always opens, with
+   * the remembered name already typed into it and one tap to accept. */
   function enterRoom(code) {
-    if (loadName()) { startGuest(code); return; }
     openNameGate(code);
   }
 
   function openNameGate(code) {
     app.pendingJoin = code;
     $("#name-gate-code").textContent = code;
-    $("#name-gate-input").value = app.name || "";
+    var remembered = app.name || loadName() || "";
+    var box = $("#name-gate-input");
+    box.value = remembered;
     $("#name-gate").hidden = false;
     // Autofocus loses to the modal's own reveal on some mobile browsers.
-    setTimeout(function () { try { $("#name-gate-input").focus(); } catch (e) { /* ignore */ } }, 30);
+    setTimeout(function () {
+      try {
+        box.focus();
+        // Filled in, so the fast path is one tap — but selected, so replacing
+        // it is also one tap rather than a fight with a text cursor.
+        if (remembered) box.select();
+      } catch (e) { /* ignore */ }
+    }, 30);
   }
 
   function closeNameGate() {
@@ -2122,6 +3285,12 @@
         clearInterval(ticker);
       }
       enterRoom(code);
+      return;
+    }
+    if (hash.indexOf("#/stats") === 0) {
+      // Statistics are about nights you have had, not the one you are in.
+      if (app.role) { location.hash = app.role === "host" ? "#/host" : "#/r/" + app.state.code; return; }
+      showStats();
       return;
     }
     if (hash.indexOf("#/library") === 0) {
@@ -2285,6 +3454,45 @@
     $("#library-btn").addEventListener("click", function () { location.hash = "#/library"; });
     $("#lib-back").addEventListener("click", function () { location.hash = "#/"; });
 
+    /* ---- statistics ---- */
+    $("#stats-btn").addEventListener("click", function () { location.hash = "#/stats"; });
+    $("#stats-back").addEventListener("click", function () { location.hash = "#/"; });
+    $("#stats-clear").addEventListener("click", function () {
+      if (!confirm("Erase every statistic stored on this device? This cannot be undone.")) return;
+      KN.stats.clear();
+      renderStats();
+      renderStatsTeaser();
+      toast("Your statistics were erased.");
+    });
+
+    /* ---- games ---- */
+    $("#roulette-queue").addEventListener("click", function () {
+      dispatch({ type: CMD.GAME_QUEUE });
+    });
+    $("#roulette-clear").addEventListener("click", function () {
+      var pool = (app.state.roulette && app.state.roulette.pool) || [];
+      if (!pool.length || !confirm("Empty the roulette pot?")) return;
+      pool.slice().forEach(function (e) { dispatch({ type: CMD.GAME_REMOVE, rid: e.rid }); });
+    });
+    $("#cfg-roulette-host").addEventListener("change", function () {
+      dispatch({ type: CMD.GAME_CONFIG, includeHost: this.checked });
+    });
+    $("#spin-again-yes").addEventListener("click", function () {
+      if (app.role === "host") spinAgain();
+      else dispatch({ type: CMD.GAME_AGAIN });
+    });
+    $("#spin-again-no").addEventListener("click", function () {
+      if (app.role !== "host") return;
+      clearSpinOffer();
+      nextSong();
+    });
+    $("#picker-roulette").addEventListener("click", function () {
+      if (!app.pickerSong) return;
+      dispatch({ type: CMD.GAME_ADD, video: app.pickerSong });
+      if (app.role !== "host") toast("Sent “" + app.pickerSong.title + "” to the roulette");
+      closePicker();
+    });
+
     $$(".lib-tab").forEach(function (b) {
       b.addEventListener("click", function () {
         $$(".lib-tab").forEach(function (o) {
@@ -2416,8 +3624,13 @@
     global.addEventListener("hashchange", route);
     global.addEventListener("beforeunload", function () {
       if (app.role === "host") persistHost();
+      // A room that ends because the tab did still had a length; record it
+      // rather than leaving an open session growing forever.
+      if (app.role && KN.stats) KN.stats.touchSession();
     });
 
+    paintIcons();
+    if (KN.sound) KN.sound.arm();
     setupTheme();
     setupNameGate();
     setupUpdateUI();
@@ -2434,6 +3647,7 @@
   function startLocalClock() {
     setInterval(function () {
       if (app.role !== "guest" || !app.state) return;
+      if (app.state.spinOffer) renderSpinOffer();
       if (app.state.player.status !== "playing") return;
       var d = app.state.player.duration || 0;
       app.state.player.time = d ? Math.min(d, app.state.player.time + 1) : app.state.player.time + 1;

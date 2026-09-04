@@ -200,14 +200,105 @@
     return /\bkaraoke\b/i.test(q) ? q : q + " karaoke";
   }
 
+  /* ---------------- is this actually a karaoke track? ----------------
+   * The bias above asks the mirror for karaoke; it does not make the mirror
+   * deliver it. A search for a song comes back with the official video, three
+   * live performances, a reaction and — somewhere in there — the track people
+   * can actually sing over. Reading the title and the uploader is a heuristic,
+   * but it is the only evidence there is: no mirror carries a "this is a
+   * karaoke track" flag, and neither does YouTube.
+   *
+   * The number is a confidence, not a verdict, and it is used at two
+   * thresholds. Above SURE the row is badged, because being wrong there costs
+   * a badge. Below MAYBE the row is dropped, because a room searching for
+   * something to sing has no use for a reaction video, and a list where four
+   * results in five cannot be sung is a list nobody scrolls.
+   *
+   * Terms are matched in the several languages this app is actually used in —
+   * "videoke" and "minus one" are what a Filipino room searches for, and
+   * dropping their results because the word "karaoke" was absent would be a
+   * bug that only shows up somewhere else.
+   */
+  var SURE = 0.9;      // badge it
+  var MAYBE = 0.45;    // below this it is not shown at all
+
+  var STRONG = /\b(?:karaoke|videoke|kar(?:a)?oke|minus\s*one|minusone|sing\s*-?\s*along|singalong|off\s*vocal|karafun)\b/i;
+  var BACKING = /\b(?:backing\s*track|instrumental(?:\s*version)?|no\s*vocals?|without\s*vocals?|acompa(?:n|ñ)amiento)\b/i;
+  var LYRICS = /\b(?:lyrics?|lyric\s*video|with\s*lyrics)\b/i;
+  /* Things a karaoke track is definitely not, however the title is worded. */
+  var AGAINST = /\b(?:official\s*(?:music\s*)?video|official\s*mv|\bm\/?v\b|reaction|review|behind\s*the\s*scenes|interview|tutorial|how\s*to\s*(?:sing|play)|guitar\s*lesson|full\s*album|compilation|mix\s*\d|top\s*\d+)\b/i;
+  var LIVE = /\b(?:live(?:\s*(?:at|in|from|performance|session))?|concert|tour|acoustic\s*session)\b/i;
+
+  /**
+   * karaokeScore(video) -> 0..1
+   *
+   * Title and uploader both count, and the uploader counts for a lot: a
+   * channel whose name is "Sing King Karaoke" uploads exactly one kind of
+   * thing, which is far better evidence than any single word in a title.
+   */
+  function karaokeScore(video) {
+    var title = String((video && video.title) || "");
+    var author = String((video && video.author) || "");
+    var both = title + " " + author;
+
+    var score = 0.3;                                  // an unremarkable result
+    if (STRONG.test(title)) score = 0.92;
+    else if (STRONG.test(author)) score = 0.86;
+    else if (BACKING.test(title) && LYRICS.test(title)) score = 0.9;
+    else if (BACKING.test(title)) score = 0.6;
+    else if (LYRICS.test(title)) score = 0.4;
+
+    // A karaoke channel putting out a karaoke title is as sure as this gets.
+    if (STRONG.test(title) && STRONG.test(author)) score = 0.97;
+    // "karaoke ... with lyrics" is the canonical shape of the real thing.
+    if (STRONG.test(title) && LYRICS.test(title)) score = Math.max(score, 0.95);
+
+    if (LIVE.test(both)) score = Math.min(score, 0.35);
+    // The one exception: a "live karaoke" upload is still a karaoke track.
+    if (LIVE.test(both) && STRONG.test(title)) score = Math.max(score, 0.88);
+    if (AGAINST.test(both)) score = Math.min(score, 0.12);
+
+    return Math.max(0, Math.min(1, score));
+  }
+
+  /** A row's verdict: "sure" (badge it), "maybe" (show it), "no" (drop it). */
+  function karaokeVerdict(video) {
+    var score = karaokeScore(video);
+    if (score >= SURE) return "sure";
+    if (score >= MAYBE) return "maybe";
+    return "no";
+  }
+
+  /* ---------------- topping the list back up ----------------
+   * Between the embeddability sweep and the karaoke filter, a search that
+   * started with twenty results can end with four on screen — and four is a
+   * dead end rather than a list. So the same song is asked for again in
+   * different words, and the answers are merged.
+   *
+   * Different words, not the same words twice: every mirror is deterministic,
+   * so re-running one query is a guaranteed way to get the identical page
+   * back. These are the phrasings that actually turn up different uploads.
+   */
+  var VARIANTS = [
+    function (q) { return biasToKaraoke(q); },
+    function (q) { return q.replace(/\s*karaoke\s*/ig, " ").trim() + " karaoke version with lyrics"; },
+    function (q) { return q.replace(/\s*karaoke\s*/ig, " ").trim() + " videoke minus one"; },
+    function (q) { return q.replace(/\s*karaoke\s*/ig, " ").trim() + " instrumental karaoke sing along"; }
+  ];
+
+  function variantQuery(raw, attempt) {
+    var fn = VARIANTS[Math.min(attempt, VARIANTS.length - 1)];
+    return fn(String(raw || "").trim());
+  }
+
   /**
    * Search both tiers. Resolves with { results, source } or rejects with an
    * Error whose message is safe to show the user.
    */
-  function search(query) {
+  function search(query, attempt) {
     var raw = String(query || "").trim();
     if (!raw) return Promise.resolve({ results: [], source: null });
-    var q = biasToKaraoke(raw);
+    var q = variantQuery(raw, attempt || 0);
 
     return hedge(ordered(PIPED, "piped"), function (base) {
       return getJSON(base + "/search?q=" + encodeURIComponent(q) + "&filter=videos").then(function (data) {
@@ -284,6 +375,12 @@
     looksLikeUrl: looksLikeUrl,
     thumbFor: thumbFor,
     biasToKaraoke: biasToKaraoke,
+    variantQuery: variantQuery,
+    karaokeScore: karaokeScore,
+    karaokeVerdict: karaokeVerdict,
+    SURE: SURE,
+    MAYBE: MAYBE,
+    VARIANTS: VARIANTS.length,
     PIPED: PIPED,
     INVIDIOUS: INVIDIOUS
   };
