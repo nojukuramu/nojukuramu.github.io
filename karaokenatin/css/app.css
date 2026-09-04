@@ -511,6 +511,15 @@ body.in-room:not(.is-host) .room-head {
 body.is-host .host-only { display: block; }
 body.is-host .pill.host-only { display: inline-flex; }
 
+/* Read by screen readers, invisible to everyone else. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* ─────────────── stage ─────────────── */
 
 .stage {
@@ -538,6 +547,9 @@ body.is-host .pill.host-only { display: inline-flex; }
   margin: 0;
 }
 .player-error-text { margin: 0; }
+/* Above the idle overlay: an unreadable, unpressable error is not an error
+ * message, it is a dead screen. */
+.player-error { position: relative; z-index: 6; }
 
 /* Autoplay prompt — sits over the video until the browser is satisfied. */
 .tap-to-play {
@@ -614,21 +626,23 @@ body.is-host .pill.host-only { display: inline-flex; }
 .fs-code, .fs-qr {
   display: none;
   position: absolute;
-  top: 14px;
+  top: clamp(8px, 1vw, 18px);
   z-index: 4;
 }
 body.stage-fullscreen .fs-code,
 body.stage-fullscreen .fs-qr,
 .stage:fullscreen .fs-code,
 .stage:fullscreen .fs-qr { display: block; }
+/* Same idea as the QR beside it: the smallest badge that can still be read
+   from wherever this screen is likely to be watched from. */
 .fs-code {
-  left: 14px;
-  padding: 8px 14px;
+  left: clamp(8px, 1vw, 18px);
+  padding: clamp(4px, 0.5vw, 9px) clamp(8px, 1vw, 16px);
   background: rgba(12, 11, 10, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 10px;
   font-family: var(--mono);
-  font-size: 18px;
+  font-size: clamp(12px, 1.15vw, 22px);
   font-weight: 700;
   letter-spacing: 0.14em;
   color: #f5f4ee;
@@ -638,12 +652,144 @@ body.stage-fullscreen .fs-qr,
  * of pixels per module, and a CSS resize would smear the modules into an
  * unscannable blur. It stays small; it just stays crisp. */
 .fs-qr {
-  right: 14px;
+  right: clamp(8px, 1vw, 18px);
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
 }
 
 body.stage-fullscreen .invite-rail { display: none !important; }
+
+/* ── idle stage ──
+   An empty queue on the host screen is the moment somebody has to type
+   something, so the stage asks for it directly instead of being a void. */
+.stage-idle {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  color: #f5f4ee;
+  background: radial-gradient(120% 120% at 50% 0%, rgba(40, 37, 34, 0.96), rgba(10, 10, 9, 0.98));
+}
+.stage-idle[hidden] { display: none; }
+.stage-idle-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(18px, 2.4vw, 30px);
+  font-weight: 600;
+}
+.stage-search { display: flex; gap: 8px; width: min(520px, 100%); }
+.stage-search input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-sm);
+  color: #f5f4ee;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 15px;
+}
+.stage-search input::placeholder { color: #a49f96; }
+.stage-search input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.stage-idle-hint { margin: 0; color: #a49f96; font-size: 13px; }
+/* Fullscreen has no keyboard in front of it — the phones do. */
+.stage-idle-fs { display: none; margin: 0; color: #cfcabf; font-size: clamp(14px, 1.8vw, 22px); }
+body.stage-fullscreen .stage-idle-fs, .stage:fullscreen .stage-idle-fs { display: block; }
+body.stage-fullscreen .stage-search,
+body.stage-fullscreen .stage-idle-hint,
+.stage:fullscreen .stage-search,
+.stage:fullscreen .stage-idle-hint { display: none; }
+
+/* ── the score ──
+   Sized in viewport units so the same card reads from a phone in the hand and
+   a television at the end of a room. */
+.score-card {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  padding: 20px;
+  color: #fff;
+  background: radial-gradient(120% 120% at 50% 40%, rgba(28, 22, 18, 0.86), rgba(8, 8, 7, 0.95));
+}
+.score-card[hidden] { display: none; }
+.score-card.in { animation: score-in 520ms var(--ease) both; }
+@keyframes score-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.score-who {
+  margin: 0;
+  font-size: clamp(13px, 1.6vw, 20px);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #d8d2c6;
+}
+.score-value {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: clamp(72px, 18vw, 220px);
+  line-height: 1;
+  color: var(--accent);
+  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.5);
+}
+.score-line {
+  margin: 4px 0 0;
+  font-family: var(--serif);
+  font-size: clamp(16px, 2.6vw, 34px);
+  max-width: 24ch;
+}
+.score-card[data-band="great"] .score-value { color: #f0c23c; }
+.score-card[data-band="poor"] .score-value { color: #9b958a; }
+.score-card[data-band="impossible"] .score-value {
+  color: #f0c23c;
+  animation: score-throb 700ms var(--ease) infinite alternate;
+}
+@keyframes score-throb {
+  from { transform: scale(1); }
+  to   { transform: scale(1.06); }
+}
+
+/* ── the 10pm notice ──
+   One pass, right to left, and then it is gone for the night. */
+.curfew {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8%;
+  z-index: 6;
+  overflow: hidden;
+  pointer-events: none;
+  background: rgba(12, 11, 10, 0.72);
+  padding: 10px 0;
+}
+.curfew[hidden] { display: none; }
+.curfew-text {
+  display: inline-block;
+  white-space: nowrap;
+  padding-left: 100%;
+  color: #ffd76e;
+  font-weight: 650;
+  font-size: clamp(15px, 2.2vw, 28px);
+  letter-spacing: 0.02em;
+}
+.curfew.run .curfew-text { animation: curfew-slide 20s linear 1; }
+@keyframes curfew-slide {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-100%); }
+}
 
 /* ─────────────── now playing ─────────────── */
 
@@ -668,7 +814,7 @@ body.stage-fullscreen .invite-rail { display: none !important; }
 }
 img.thumb-missing { background: var(--bg-3); content-visibility: hidden; }
 
-.now-meta { min-width: 0; }
+.now-meta { min-width: 0; flex: 1; }
 .now-title {
   font-family: var(--serif);
   font-weight: 600;
@@ -677,6 +823,7 @@ img.thumb-missing { background: var(--bg-3); content-visibility: hidden; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.now-actions { margin-left: auto; display: flex; gap: 4px; flex: none; }
 .now-artist { color: var(--ink-2); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .now-by { color: var(--ink-3); font-size: 12px; }
 
@@ -696,6 +843,28 @@ img.thumb-missing { background: var(--bg-3); content-visibility: hidden; }
 .t { font-variant-numeric: tabular-nums; color: var(--ink-3); font-size: 12px; min-width: 42px; font-family: var(--mono); }
 .t:last-child { text-align: right; }
 .buttons { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+
+/* The mute toggle is the volume slider's own icon, not a separate control
+   floating beside it — one object, and one less rounded box in the row. */
+.volgroup { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 90px; }
+.vol-icon {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: color var(--fast) var(--ease);
+}
+.vol-icon:hover { color: var(--ink); }
+.vol-icon[aria-pressed="true"] { color: var(--warn); }
+.vol-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.vol-icon .i { width: 20px; height: 20px; }
 #vol { flex: 1; min-width: 60px; }
 
 input[type="range"] {
@@ -723,15 +892,129 @@ input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.2); }
 input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: 0; }
 input[type="range"]:disabled { opacity: 0.4; cursor: default; }
 
+/* ─────────────── singers, scores, setup ─────────────── */
+
+.side-h {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 20px 0 8px;
+}
+.side-note { color: var(--ink-3); font-size: 12px; margin: 14px 2px 0; }
+
+.singer-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--bg-4);
+  flex: none;
+  margin-left: 4px;
+}
+.singer-dot-lead { background: var(--accent); }
+.icon-btn.on { color: var(--accent); }
+
+.board { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.board-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+}
+.board-lead { border-color: var(--accent); background: var(--accent-soft); }
+.board-rank {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink-3);
+  min-width: 18px;
+  flex: none;
+}
+.board-meta { min-width: 0; flex: 1; }
+.board-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-sub { color: var(--ink-3); font-size: 12px; }
+.board-score {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.score-pill {
+  flex: none;
+  min-width: 42px;
+  text-align: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+.score-pill[data-band="great"], .score-pill[data-band="impossible"] { background: var(--accent-soft); color: var(--accent); }
+
+.config { display: flex; flex-direction: column; gap: 4px; }
+.cfg {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.cfg:last-of-type { border-bottom: 0; }
+.cfg input { margin-top: 3px; width: 17px; height: 17px; accent-color: var(--accent); flex: none; cursor: pointer; }
+.cfg input:disabled { cursor: default; }
+.cfg input:disabled ~ .cfg-text { opacity: 0.55; }
+.cfg-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cfg-text strong { font-size: 15px; font-weight: 600; }
+.cfg-text em { font-style: normal; color: var(--ink-3); font-size: 13px; }
+
+/* ─────────────── library sharing ─────────────── */
+
+.ls-menu { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.ls-phase[data-ls="show"] { text-align: center; }
+#ls-canvas { display: block; margin: 18px auto 0; }
+.ls-step { font-family: var(--mono); font-size: 13px; color: var(--ink-2); margin: 12px 0 0; text-align: center; }
+.ls-nav { display: flex; gap: 8px; justify-content: center; margin-top: 14px; }
+.ls-video {
+  width: 100%;
+  max-height: 320px;
+  border-radius: var(--radius-sm);
+  background: #000;
+  object-fit: cover;
+  margin-top: 12px;
+}
+.dupes-actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+.dupes-actions .btn { flex: 1; }
+
 /* ─────────────── tabs ─────────────── */
 
+/* Six tabs do not fit a phone, and only just fit a host's side column. They
+   scroll rather than squeeze: a flex item that is allowed to shrink keeps its
+   `nowrap` text at full width and spills it over its neighbour, which reads as
+   a rendering fault rather than as a list that continues. */
 .tabs {
   display: flex;
   gap: 4px;
   border-bottom: 1px solid var(--line);
   margin-bottom: 14px;
   flex: none;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.tabs::-webkit-scrollbar { display: none; }
+/* A hard cut at the edge reads as the end of the list. The fade says the row
+   continues, which is the difference between six tabs and four. */
+.tabs {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+}
+.tabs:not(.tabs-overflow) { -webkit-mask-image: none; mask-image: none; }
 .tab {
   background: none;
   border: 0;
@@ -739,6 +1022,7 @@ input[type="range"]:disabled { opacity: 0.4; cursor: default; }
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex: none;
   white-space: nowrap;
   padding: 10px 14px;
   color: var(--ink-3);
@@ -746,6 +1030,13 @@ input[type="range"]:disabled { opacity: 0.4; cursor: default; }
   cursor: pointer;
   transition: color var(--fast) var(--ease), border-color var(--mid) var(--ease);
 }
+/* `.tab` sets a display of its own, so anything that hides a tab has to
+   out-specify it — a bare `[hidden]`, or a class declared earlier in the file,
+   quietly loses and the tab stays on screen. */
+.tab[hidden] { display: none; }
+/* Setup belongs to whoever can actually change the room. */
+.tab.host-tab { display: none; }
+body.can-manage .tab.host-tab { display: inline-flex; }
 .tab:hover { color: var(--ink-2); }
 .tab.on { color: var(--ink); border-bottom-color: var(--accent); }
 .badge {
@@ -1119,7 +1410,7 @@ input[type="range"]:disabled { opacity: 0.4; cursor: default; }
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(340px, 28vw, 430px);
+    grid-template-columns: minmax(0, 1fr) clamp(340px, 30vw, 440px);
     gap: 20px;
     overflow: hidden;
   }
@@ -1134,7 +1425,10 @@ input[type="range"]:disabled { opacity: 0.4; cursor: default; }
   body.is-host .yt-mount { height: 100%; width: auto; max-width: 100%; aspect-ratio: 16 / 9; }
   body.is-host .side-col { min-height: 0; overflow: hidden; }
   body.is-host .panels { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
-  body.is-host .panel[data-panel="queue"] { display: flex; flex-direction: column; }
+  /* `:not([hidden])` is load-bearing: a bare `.panel[data-panel="queue"]`
+     out-specifies the [hidden] attribute and leaves the queue showing
+     underneath whichever tab is actually selected. */
+  body.is-host .panel[data-panel="queue"]:not([hidden]) { display: flex; flex-direction: column; }
   /* Same trade as the phone: the reorder arrows have "play next" as another
      route, so they are what gives way to the song title in a narrow column. */
   body.is-host .side-col .row-actions .opt,
@@ -1179,6 +1473,12 @@ input[type="range"]:disabled { opacity: 0.4; cursor: default; }
     transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
   }
   .rail-toggle:hover { color: var(--accent); background: var(--bg-3); }
+  /* The rail already shows the QR and the header already shows the code, so
+     the Invite tab would be a third copy of the same thing. */
+  body.is-host .tab-invite { display: none; }
+  /* The side column is a fixed slice of the screen and now carries six tabs;
+     they are tightened just enough to all be on screen at once. */
+  body.is-host .tab { padding: 10px 7px; font-size: 13px; letter-spacing: -0.01em; }
   body.is-host .invite-rail.collapsed .rail-body { display: none; }
   body.is-host .invite-rail.collapsed .rail-toggle { border-top: 0; }
 }
@@ -1209,12 +1509,14 @@ input[type="range"]:disabled { opacity: 0.4; cursor: default; }
   .now-title { font-size: 16px; }
 
   .transport { padding: 10px 12px 12px; }
-  .buttons { flex-wrap: wrap; row-gap: 10px; }
-  .buttons #vol { order: 5; flex-basis: 100%; }
+  /* Narrow enough that the row cannot sit left-aligned and still look
+     deliberate: the transport centres, and the volume takes its own line. */
+  .buttons { flex-wrap: wrap; row-gap: 10px; justify-content: center; }
+  .buttons .volgroup { order: 5; flex-basis: 100%; }
+  .now-actions { margin-left: 0; }
 
-  .tabs { gap: 0; overflow-x: auto; scrollbar-width: none; }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tab { padding: 10px 11px; font-size: 14px; white-space: nowrap; }
+  .tabs { gap: 0; }
+  .tab { padding: 10px 11px; font-size: 14px; }
 
   .row { padding: 7px 8px; gap: 8px; }
   .row-thumb { width: 54px; }

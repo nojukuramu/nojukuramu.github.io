@@ -31,7 +31,7 @@
       } catch (e) { /* private mode — fall back to the system preference */ }
     })();
   </script>
-  <link rel="stylesheet" href="css/app.css?v=2.3.2" />
+  <link rel="stylesheet" href="css/app.css?v=2.4.0" />
 </head>
 
 <body>
@@ -227,7 +227,7 @@
       <button id="lib-export" class="btn btn-quiet btn-sm">Export</button>
       <button id="lib-import" class="btn btn-quiet btn-sm">Import</button>
       <input id="lib-import-file" type="file" accept="application/json,.json" hidden />
-      <button id="lib-clear" class="btn btn-quiet btn-sm">Clear all</button>
+      <button id="lib-share" class="btn btn-quiet btn-sm">Share…</button>
     </div>
   </div>
 
@@ -251,6 +251,57 @@
       <button class="modal-close" id="install-help-close" aria-label="Close"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 6.2l11.6 11.6M17.8 6.2L6.2 17.8" /></svg></button>
       <h2 id="install-help-title">Add to your home screen</h2>
       <p id="install-help-body"></p>
+    </div>
+  </div>
+
+  <!-- Import collision check: an import that silently skips or silently
+       duplicates is the same surprise either way, so ask first. -->
+  <div id="dupes" class="modal-backdrop" hidden>
+    <div class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="dupes-title">
+      <button class="modal-close" id="dupes-close" aria-label="Close"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 6.2l11.6 11.6M17.8 6.2L6.2 17.8" /></svg></button>
+      <h2 id="dupes-title">Some of this is already here</h2>
+      <p id="dupes-body" class="gate-sub"></p>
+      <div class="dupes-actions">
+        <button id="dupes-skip" class="btn btn-primary">Skip the duplicates</button>
+        <button id="dupes-again" class="btn btn-ghost">Import them again</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Library sharing over QR: too much for one code, so it becomes a short
+       slideshow of them, and the other phone scans until it has the set. -->
+  <div id="libshare" class="modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="libshare-title">
+      <button class="modal-close" id="libshare-close" aria-label="Close"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 6.2l11.6 11.6M17.8 6.2L6.2 17.8" /></svg></button>
+      <h2 id="libshare-title">Share your library</h2>
+
+      <div class="ls-phase" data-ls="menu">
+        <p class="gate-sub">Send the whole thing — saved songs and playlists — to another device.</p>
+        <div class="ls-menu">
+          <button id="ls-send" class="btn btn-primary">Send as a file…</button>
+          <button id="ls-qr" class="btn btn-ghost">Show as QR codes</button>
+          <button id="ls-scan" class="btn btn-ghost">Scan a shared library</button>
+        </div>
+      </div>
+
+      <div class="ls-phase" data-ls="show" hidden>
+        <canvas id="ls-canvas" class="qr" aria-label="One part of the shared library"></canvas>
+        <p id="ls-step" class="ls-step"></p>
+        <p class="gate-sub">Scan every code with the other phone. It does not matter what order they arrive in.</p>
+        <div class="ls-nav">
+          <button id="ls-prev" class="btn btn-quiet btn-sm">Back</button>
+          <button id="ls-auto" class="btn btn-ghost btn-sm">Auto-play</button>
+          <button id="ls-next" class="btn btn-quiet btn-sm">Next</button>
+        </div>
+      </div>
+
+      <div class="ls-phase" data-ls="scan" hidden>
+        <video id="ls-video" class="ls-video" playsinline muted></video>
+        <p id="ls-scan-status" class="status" aria-live="polite"></p>
+        <div class="ls-nav">
+          <button id="ls-scan-stop" class="btn btn-quiet btn-sm">Stop</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -298,6 +349,29 @@
               <span class="tap-sub">One tap is needed before sound will play</span>
             </button>
           </div>
+          <!-- Nothing queued: the stage itself becomes the search box, so the
+               host screen is never a black rectangle with no way forward. -->
+          <div id="stage-idle" class="stage-idle" hidden>
+            <p class="stage-idle-title">Nothing playing</p>
+            <form id="stage-search" class="stage-search">
+              <input id="stage-q" type="search" placeholder="Search a song to start the night…"
+                     autocomplete="off" aria-label="Search for a song" />
+              <button type="submit" class="btn btn-primary">Search</button>
+            </form>
+            <p class="stage-idle-hint">Or add one from any phone in the room.</p>
+            <p class="stage-idle-fs">Search from your phone — scan the code in the corner to join.</p>
+          </div>
+
+          <!-- The score, and the once-a-night 10pm warning. Both live inside
+               the stage so they survive the jump to fullscreen. -->
+          <div id="score-card" class="score-card" hidden aria-live="polite">
+            <p id="score-who" class="score-who"></p>
+            <p id="score-value" class="score-value">0</p>
+            <p id="score-line" class="score-line"></p>
+          </div>
+
+          <div id="curfew" class="curfew" hidden><span id="curfew-text" class="curfew-text"></span></div>
+
           <!-- Fullscreen hides the header and invite rail, so guests lose the
                only copy of the join code/QR on screen. These are tiny, corner
                stand-ins for it, shown only while the stage is fullscreen. -->
@@ -318,8 +392,10 @@
             <button id="restart-btn" class="icon-btn big" title="Restart song" aria-label="Restart song"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.4-5.7" /><path d="M20.5 4.2v5h-5" /></svg></button>
             <button id="play-btn" class="icon-btn big primary" title="Play / pause" aria-label="Play"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.2v13.6L19 12z" fill="currentColor" stroke-linejoin="round" /></svg></button>
             <button id="skip-btn" class="icon-btn big" title="Skip song" aria-label="Skip song"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 5.2v13.6L15 12z" fill="currentColor" /><path d="M18.5 5v14" /></svg></button>
-            <button id="mute-btn" class="icon-btn big" title="Mute" aria-pressed="false" aria-label="Mute"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.3h3.3L12 5.4v13.2L7.3 14.7H4z" fill="currentColor" stroke-linejoin="round" /><path d="M15.8 9.4a3.9 3.9 0 0 1 0 5.2" /><path d="M18.4 6.7a7.6 7.6 0 0 1 0 10.6" /></svg></button>
-            <input id="vol" type="range" min="0" max="100" value="80" aria-label="Volume" />
+            <div class="volgroup">
+              <button id="mute-btn" class="vol-icon" title="Mute" aria-pressed="false" aria-label="Mute"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.3h3.3L12 5.4v13.2L7.3 14.7H4z" fill="currentColor" stroke-linejoin="round" /><path d="M15.8 9.4a3.9 3.9 0 0 1 0 5.2" /><path d="M18.4 6.7a7.6 7.6 0 0 1 0 10.6" /></svg></button>
+              <input id="vol" type="range" min="0" max="100" value="80" aria-label="Volume" />
+            </div>
           </div>
         </div>
       </div>
@@ -330,8 +406,7 @@
           <div id="rail-body" class="rail-body">
             <canvas id="qr-rail" class="qr" aria-label="QR code with the join link"></canvas>
             <div class="rail-meta">
-              <p class="rail-code"><span id="room-code-3"></span></p>
-              <p class="rail-hint">Point a phone camera here</p>
+              <p class="rail-hint">Point a phone camera here to join <span id="room-code-3" class="sr-only"></span></p>
             </div>
           </div>
           <button id="rail-toggle" class="rail-toggle" aria-expanded="true" aria-controls="rail-body">
@@ -343,7 +418,10 @@
           <button class="tab on" data-tab="queue" role="tab" aria-selected="true">Queue <span id="queue-count" class="badge">0</span></button>
           <button class="tab" data-tab="search" role="tab" aria-selected="false">Search</button>
           <button class="tab" data-tab="library" role="tab" aria-selected="false">Library</button>
-          <button class="tab" data-tab="share" role="tab" aria-selected="false">Invite</button>
+          <button class="tab tab-scores" data-tab="scores" role="tab" aria-selected="false">Scores</button>
+          <button class="tab" data-tab="singers" role="tab" aria-selected="false">Singers</button>
+          <button class="tab host-tab" data-tab="config" role="tab" aria-selected="false">Setup</button>
+          <button class="tab tab-invite" data-tab="share" role="tab" aria-selected="false">Invite</button>
         </nav>
 
         <div class="panels">
@@ -361,6 +439,47 @@
           <!-- library -->
           <div class="panel" data-panel="library" hidden>
             <div id="library-slot-room"></div>
+          </div>
+
+          <!-- scores -->
+          <div class="panel" data-panel="scores" hidden>
+            <ol id="board" class="board"></ol>
+            <h3 class="side-h">Recent</h3>
+            <ul id="score-log" class="list"></ul>
+          </div>
+
+          <!-- singers -->
+          <div class="panel" data-panel="singers" hidden>
+            <ul id="singers" class="list"></ul>
+            <p class="side-note">Co-hosts can skip, clear the queue and change the setup.</p>
+          </div>
+
+          <!-- configuration (host and co-hosts) -->
+          <div class="panel" data-panel="config" hidden>
+            <div class="config">
+              <label class="cfg">
+                <input type="checkbox" id="cfg-scoring" />
+                <span class="cfg-text">
+                  <strong>Scoring</strong>
+                  <em>Score every song when it finishes. Skipped songs are not scored.</em>
+                </span>
+              </label>
+              <label class="cfg">
+                <input type="checkbox" id="cfg-leaderboard" />
+                <span class="cfg-text">
+                  <strong>Session leaderboard</strong>
+                  <em>Keep the night's scores in the Scores tab.</em>
+                </span>
+              </label>
+              <label class="cfg">
+                <input type="checkbox" id="cfg-maxrun" />
+                <span class="cfg-text">
+                  <strong>Max 2 in a row</strong>
+                  <em>Auto-arrange the queue so nobody sings a third song back to back.</em>
+                </span>
+              </label>
+              <p class="side-note">Only the host and co-hosts can change these.</p>
+            </div>
           </div>
 
           <!-- invite -->
@@ -391,14 +510,14 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="js/icons.js?v=2.3.2"></script>
-  <script src="js/qr.js?v=2.3.2"></script>
-  <script src="js/peer.js?v=2.3.2"></script>
-  <script src="js/search.js?v=2.3.2"></script>
-  <script src="js/library.js?v=2.3.2"></script>
-  <script src="js/room.js?v=2.3.2"></script>
-  <script src="js/player.js?v=2.3.2"></script>
-  <script src="js/embed.js?v=2.3.2"></script>
-  <script src="js/app.js?v=2.3.2"></script>
+  <script src="js/icons.js?v=2.4.0"></script>
+  <script src="js/qr.js?v=2.4.0"></script>
+  <script src="js/peer.js?v=2.4.0"></script>
+  <script src="js/search.js?v=2.4.0"></script>
+  <script src="js/library.js?v=2.4.0"></script>
+  <script src="js/room.js?v=2.4.0"></script>
+  <script src="js/player.js?v=2.4.0"></script>
+  <script src="js/embed.js?v=2.4.0"></script>
+  <script src="js/app.js?v=2.4.0"></script>
 </body>
 </html>

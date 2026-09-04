@@ -108,15 +108,21 @@ async function main() {
   const code = (await host.textContent("#room-code")).trim();
   check("host opens a room with a 6-character code", /^[A-Z0-9]{6}$/.test(code), code);
 
-  // The QR canvas should have been drawn with the join link.
-  await host.click('.tab[data-tab="share"]');
+  /* On a host-sized window the Invite tab is gone — the rail above the tabs
+   * already carries the QR and the header carries the code, and a third copy
+   * of the same join link is just noise. So the rail is what gets checked. */
+  const inviteTabShown = await host.evaluate(
+    () => document.querySelector('.tab[data-tab="share"]').offsetParent !== null
+  );
+  check("the Invite tab is folded away on a host screen", !inviteTabShown);
+
   const qrDrawn = await host.evaluate(() => {
-    const c = document.getElementById("qr");
+    const c = document.getElementById("qr-rail");
     return !c.hidden && c.width > 0 && c.height > 0;
   });
   check("QR code renders for the join link", qrDrawn);
 
-  const shareUrl = (await host.textContent("#share-url")).trim();
+  const shareUrl = await host.evaluate(() => document.getElementById("share-url").textContent.trim());
   check("share link carries the room code", shareUrl.endsWith("#/r/" + code), shareUrl);
 
   // ── guest joins ───────────────────────────────────────────────────────────

@@ -102,6 +102,7 @@
     connection: "offline",
     guestNames: {},    // host only: link.id -> display name
     searchBusy: false,
+    playerError: false,    // host only: the stage is showing a load failure
     lastResults: [],
     searchSweep: null,   // in-flight playability sweep; cancelled by the next search
     tab: "queue",
@@ -109,7 +110,10 @@
     pickerSong: null,
     railOpen: true,
     hostWasListed: false,  // host only: has any broker ever answered?
-    pendingJoin: null      // room code waiting behind the name gate
+    pendingJoin: null,     // room code waiting behind the name gate
+    cohosts: {},           // host only: guest id -> true
+    lastScoreAt: 0,        // guest only: the score already announced here
+    curfewDone: false      // this page has already had its 10pm moment
   };
 
   /* ================= HOST ================= */
@@ -129,7 +133,11 @@
       // look "old" to it (data.rev < app.state.rev, app.js onHostMessage)
       // and every one of its requests look "stale" to us forever after.
       if (typeof resumed.rev === "number") app.state.rev = resumed.rev;
+      if (resumed.config) app.state.config = R.sanitizeConfig(resumed.config);
+      if (Array.isArray(resumed.scores)) app.state.scores = resumed.scores;
     }
+    app.state.hostName = app.name;
+    app.cohosts = {};
 
     app.net = KN.net.host(code, {
       token: app.hostToken,
@@ -174,6 +182,10 @@
     showRoom();
     setupPlayer();
     keepAwake();
+    // The watch is armed at boot, before there is a room to be late in — so a
+    // host opening one at half past ten is asked the question right away
+    // rather than up to a poll later.
+    checkCurfew();
   }
 
   function setupPlayer() {
@@ -184,6 +196,7 @@
     if (stale) stale.remove();
     var err = $(".player-error");
     if (err) err.remove();
+    app.playerError = false;
     mount.insertBefore(el("div", { id: "yt-frame" }), mount.firstChild);
 
     KN.player
@@ -193,7 +206,7 @@
         p.volume(app.state.player.volume);
         p.mute(app.state.player.muted);
 
-        p.on("ended", function () { nextSong(); });
+        p.on("ended", function () { songFinished(); });
         p.on("blocked", function () { $("#tap-to-play").hidden = false; });
         p.on("playing", function () {
           $("#tap-to-play").hidden = true;
@@ -220,6 +233,12 @@
         startTicker();
       })
       .catch(function (err) {
+        /* A stage that cannot play anything has nothing to say about an empty
+         * queue: the error is the only thing worth reading, and worth being
+         * able to press. */
+        app.playerError = true;
+        renderNow();
+
         /* Not the end of the road: the API load is retryable now, and the
          * usual fixes for this (turn the blocker off, leave the lift, come
          * back onto wifi) are all things the user does and then wants to try
@@ -265,6 +284,21 @@
     if (data.type === CMD.RESYNC) { sendStateTo(link); return; }
 
     var s = app.state;
+
+    /* Room administration is not something a guest can simply ask for. ROLE is
+     * the host's alone — a co-host that could appoint co-hosts is a room with
+     * no owner — while everything else here is open to co-hosts too. */
+    if (data.type === CMD.ROLE) {
+      link.send({ type: MSG.NOTICE, text: "Only the host can change roles.", kind: "warn" });
+      return;
+    }
+    if ((data.type === CMD.CONFIG || data.type === CMD.KICK || data.type === CMD.CLEAR) && !app.cohosts[link.id]) {
+      link.send({ type: MSG.NOTICE, text: "Only the host and co-hosts can do that.", kind: "warn" });
+      return;
+    }
+    // Whoever the sender claims to be, a song is credited to the link it came
+    // in on. Nothing else would survive one guest typing another's client id.
+    if (data.type === CMD.ADD) data.byId = link.id;
 
     // A request built on a mirror that has since moved on can ask for
     // something that no longer makes sense — skip a song that already ended,
@@ -345,6 +379,38 @@
         s.player.muted = !!cmd.on;
         if (app.player) app.player.mute(s.player.muted);
         break;
+      case CMD.CONFIG: {
+        var was = s.config;
+        s.config = R.sanitizeConfig(cmd.config);
+        // Turning the cap on is only meaningful if it acts on the queue that
+        // is already there, not just on whatever is added next.
+        if (s.config.maxRun && !was.maxRun) R.rebalance(s);
+        if (!s.config.leaderboard && was.leaderboard) s.scores = [];
+        break;
+      }
+      case CMD.KICK: {
+        var target = (s.guests || []).find(function (g) { return g.id === cmd.id; });
+        if (!target || !app.net) break;
+        delete app.cohosts[cmd.id];
+        // Say why before the channel goes: a guest whose link simply vanishes
+        // spends the next minute watching its own reconnect loop.
+        var gone = app.net.guests().find(function (l) { return l.id === cmd.id; });
+        if (gone) gone.send({ type: MSG.BYE, reason: "kicked" });
+        setTimeout(function () { if (app.net) app.net.kick(cmd.id); }, 150);
+        delete app.guestNames[cmd.id];
+        refreshGuestList();
+        notice(target.name + " was removed from the room.", "warn");
+        break;
+      }
+      case CMD.ROLE: {
+        var g = (s.guests || []).find(function (x) { return x.id === cmd.id; });
+        if (!g) break;
+        if (cmd.cohost) app.cohosts[cmd.id] = true;
+        else delete app.cohosts[cmd.id];
+        refreshGuestList();
+        notice(g.name + (cmd.cohost ? " is now a co-host." : " is no longer a co-host."));
+        break;
+      }
       case CMD.PLAY_NOW: {
         var i = R.indexOfSid(s.queue, cmd.sid);
         if (i < 0) break;
@@ -369,8 +435,73 @@
     broadcastState();
   }
 
+  /* ---------------- scoring ----------------
+   * The score is the punchline of a karaoke song, so it lands on the stage
+   * itself — which means it survives fullscreen, where every other panel in
+   * the app is off-screen. A skipped song never gets one: half a chorus is not
+   * a performance, and scoring it would make the number worthless.
+   */
+  var SCORE_MS = 6800;
+  var scoreTimer = null;
+
+  function songFinished() {
+    var s = app.state;
+    var song = s.now;
+    if (!song || !s.config || !s.config.scoring) { nextSong(); return; }
+
+    var entry = R.recordScore(s, song);
+    showScore(entry);
+    speak(entry.line);
+    broadcastState();
+
+    clearTimeout(scoreTimer);
+    scoreTimer = setTimeout(function () {
+      s.lastScore = null;
+      nextSong();
+    }, SCORE_MS);
+  }
+
+  function showScore(entry) {
+    var card = $("#score-card");
+    if (!card) return;
+    $("#score-who").textContent = entry.name;
+    $("#score-value").textContent = String(entry.score);
+    $("#score-line").textContent = entry.line;
+    card.dataset.band = entry.band;
+    card.hidden = false;
+    // Restart the entrance animation even when two songs end back to back.
+    card.classList.remove("in");
+    void card.offsetWidth;
+    card.classList.add("in");
+  }
+
+  function hideScore() {
+    var card = $("#score-card");
+    if (card) { card.hidden = true; card.classList.remove("in"); }
+  }
+
+  /* Speech synthesis is the one text-to-speech every browser already has: no
+   * key, no network, no library. Voices differ wildly, so the line has to read
+   * well flat — and a browser with the API missing or muted simply gets the
+   * card without the shouting. */
+  function speak(text) {
+    var synth = global.speechSynthesis;
+    if (!synth || typeof global.SpeechSynthesisUtterance !== "function") return;
+    try {
+      synth.cancel();
+      var u = new global.SpeechSynthesisUtterance(text);
+      u.rate = 0.98;
+      u.pitch = 1.15;
+      u.volume = 1;
+      synth.speak(u);
+    } catch (e) { /* a voice list that never loaded — not worth reporting */ }
+  }
+
   function nextSong() {
     var s = app.state;
+    clearTimeout(scoreTimer);
+    s.lastScore = null;
+    hideScore();
     var next = R.advance(s);
     if (app.player) {
       if (next) { app.player.load(next.id); app.player.play(); }
@@ -381,8 +512,10 @@
 
   function refreshGuestList() {
     app.state.guests = app.net.guests().map(function (l) {
-      return { id: l.id, name: app.guestNames[l.id] || "Guest" };
+      return { id: l.id, name: app.guestNames[l.id] || "Guest", cohost: !!app.cohosts[l.id] };
     });
+    app.state.cohosts = app.cohosts;
+    app.state.hostName = app.name || "Host";
   }
 
   function sendStateTo(link) {
@@ -435,7 +568,9 @@
       token: app.hostToken,
       queue: app.state.queue,
       now: app.state.now,
-      rev: app.state.rev
+      rev: app.state.rev,
+      config: app.state.config,
+      scores: app.state.scores
     });
   }
 
@@ -474,17 +609,25 @@
       case MSG.WELCOME:
         app.clientId = data.clientId;
         break;
-      case MSG.STATE:
+      case MSG.STATE: {
         // Snapshots are authoritative; an out-of-order straggler is dropped.
         if (app.state && data.rev < app.state.rev) return;
         app.state = data.state;
+        // A guest has no stage to put the score on, so it arrives as a toast —
+        // once, on the snapshot that first carried it.
+        var sc = app.state.lastScore;
+        if (sc && sc.at !== app.lastScoreAt) {
+          app.lastScoreAt = sc.at;
+          toast(sc.name + " scored " + sc.score + " — " + sc.line, sc.score >= 95 ? "ok" : null);
+        }
         render();
         break;
+      }
       case MSG.NOTICE:
         toast(data.text, data.kind);
         break;
       case MSG.BYE:
-        toast("The host closed the room.", "warn");
+        toast(data.reason === "kicked" ? "You were removed from the room." : "The host closed the room.", "warn");
         leave();
         break;
     }
@@ -496,12 +639,20 @@
    * its own mirror is on, so the host can tell a fresh request from one built
    * on a view that has since moved on. */
   function dispatch(cmd) {
+    if (cmd.type === CMD.ADD && !cmd.byId) cmd.byId = app.role === "host" ? "host" : app.clientId;
     if (app.role === "host") handle(cmd, app.name || "Host");
     else if (app.net) {
       cmd.rev = app.state ? app.state.rev : 0;
       app.net.send(cmd);
       if (!app.net.isOpen()) toast("Offline — queued until you reconnect.", "warn");
     }
+  }
+
+  /** The host, and anyone it has made a co-host, can run the room. */
+  function canManage() {
+    if (app.role === "host") return true;
+    var s = app.state;
+    return !!(s && s.cohosts && app.clientId && s.cohosts[app.clientId]);
   }
 
   function displayName() {
@@ -515,6 +666,7 @@
     app.name = n;
     try { localStorage.setItem(STORE.name, n); } catch (e) { /* ignore */ }
     if (app.role === "guest" && app.net) app.net.send({ type: CMD.NAME, name: n });
+    else if (app.role === "host") { app.state.hostName = n; broadcastState({ progress: true }); }
     else render();
   }
 
@@ -528,12 +680,17 @@
     } else if (net) net.stop();
     if (app.player) app.player.destroy();
     clearInterval(ticker);
+    clearTimeout(scoreTimer);
+    hideScore();
     forget(STORE.guest);
     app.role = null;
     app.net = null;
     app.player = null;
     app.state = null;
     app.guestNames = {};
+    app.cohosts = {};
+    app.lastScoreAt = 0;
+    document.body.classList.remove("can-manage");
     location.hash = "#/";
     showHome();
   }
@@ -641,14 +798,23 @@
     var url = joinUrl();
     var ok = true;
 
-    // 120 lands on 3 device-independent pixels per module (a 117px square for
-    // the usual join link) — small enough to stay out of the video's way, big
-    // enough that a phone camera locks onto it from across the room.
-    [["#qr", 260], ["#qr-rail", 180], ["#qr-fs", 120]].forEach(function (pair) {
+    /* The corner code on a fullscreen stage should be the smallest thing a
+     * camera can still lock onto, and "smallest" depends entirely on how far
+     * away the screen is — which the page can only guess at from its width. A
+     * phone held at arm's length reads 2 pixels per module happily; a TV
+     * across a living room needs the extra ones. */
+    var opts = [
+      ["#qr", { px: 260 }],
+      ["#qr-rail", { px: 180 }],
+      ["#qr-fs", { scale: fsModuleScale() }]
+    ];
+    opts.forEach(function (pair) {
       var canvas = $(pair[0]);
       if (!canvas) return;
       try {
-        QR.draw(canvas, url, { ecc: "M", px: pair[1], dark: "#0b0b12", light: "#ffffff", quiet: 3 });
+        var o = { ecc: "M", dark: "#0b0b12", light: "#ffffff", quiet: 3 };
+        Object.keys(pair[1]).forEach(function (k) { o[k] = pair[1][k]; });
+        QR.draw(canvas, url, o);
         canvas.hidden = false;
       } catch (e) {
         canvas.hidden = true;
@@ -662,6 +828,15 @@
     rail.hidden = app.role !== "host";
     rail.classList.toggle("collapsed", !app.railOpen);
     $("#rail-toggle").setAttribute("aria-expanded", String(app.railOpen));
+  }
+
+  /** Device-independent pixels per QR module for the fullscreen corner code. */
+  function fsModuleScale() {
+    var w = global.innerWidth || 1280;
+    if (w < 760) return 2;    // a phone, held at arm's length
+    if (w < 1400) return 3;   // a laptop across a table
+    if (w < 2000) return 4;   // a monitor or a small television
+    return 5;                 // a big screen, read from the far sofa
   }
 
   function renderConnection(detail) {
@@ -693,10 +868,16 @@
 
   function render() {
     if (!app.state) return;
+    var manage = canManage();
+    document.body.classList.toggle("can-manage", manage);
+
     renderConnection();
     renderNow();
     renderQueue();
     renderProgress();
+    renderSingers();
+    renderScores();
+    renderConfig();
 
     var s = app.state;
     $("#guest-count").textContent = String(s.guests.length);
@@ -711,21 +892,163 @@
   function renderNow() {
     var s = app.state;
     var box = $("#now");
+    var idle = $("#stage-idle");
     box.innerHTML = "";
+
+    if (idle) idle.hidden = !(app.role === "host" && !s.now && !app.playerError);
+
     if (!s.now) {
       box.appendChild(el("p", { class: "empty", text: "Nothing playing. Add a song to start." }));
       return;
     }
+
+    var song = s.now;
+    /* The song you are listening to is exactly when you decide you want to
+     * keep it, and until now that meant finding it in search again. */
+    var saved = LIB.hasSong(song.id);
+    var star = el("button", {
+      class: "icon-btn star" + (saved ? " on" : ""),
+      title: saved ? "Saved to your library" : "Save to your library",
+      "aria-label": "Save to your library",
+      "aria-pressed": saved ? "true" : "false",
+      onclick: function () {
+        var on = LIB.toggleSong(song);
+        toast(on ? "Saved “" + song.title + "”" : "Removed from saved");
+        renderLibrary();
+        renderNow();
+      }
+    }, [KN.icon(saved ? "star-filled" : "star")]);
+
     box.appendChild(
       el("div", { class: "now-card" }, [
-        thumb("now-thumb", s.now.thumb),
+        thumb("now-thumb", song.thumb),
         el("div", { class: "now-meta" }, [
-          el("div", { class: "now-title", text: s.now.title }),
-          el("div", { class: "now-artist", text: s.now.author || "—" }),
-          el("div", { class: "now-by", text: "queued by " + s.now.addedBy })
+          el("div", { class: "now-title", text: song.title }),
+          el("div", { class: "now-artist", text: song.author || "—" }),
+          el("div", { class: "now-by", text: "queued by " + song.addedBy })
+        ]),
+        el("div", { class: "now-actions" }, [
+          star,
+          btn("plus", "Add to a playlist", function () { openPicker(song); })
         ])
       ])
     );
+  }
+
+  /* ---------------- singers ---------------- */
+
+  function renderSingers() {
+    var s = app.state;
+    var list = $("#singers");
+    if (!list) return;
+    list.innerHTML = "";
+
+    var me = app.role === "host" ? "host" : app.clientId;
+    var rows = [{ id: "host", name: s.hostName || "Host", role: "host" }].concat(
+      (s.guests || []).map(function (g) {
+        return { id: g.id, name: g.name, role: g.cohost ? "cohost" : "guest" };
+      })
+    );
+
+    rows.forEach(function (g) {
+      var actions = [];
+      // The room's owner is not a role anyone can hand back — there would be
+      // nobody left holding the player.
+      if (app.role === "host" && g.role !== "host") {
+        actions.push(btn(g.role === "cohost" ? "star-filled" : "star",
+          g.role === "cohost" ? "Remove co-host" : "Make co-host",
+          function () { dispatch({ type: CMD.ROLE, id: g.id, cohost: g.role !== "cohost" }); },
+          g.role === "cohost" ? "on" : null));
+      }
+      if (canManage() && g.role !== "host" && g.id !== me) {
+        actions.push(btn("close", "Remove from the room", function () {
+          if (confirm("Remove " + g.name + " from the room?")) dispatch({ type: CMD.KICK, id: g.id });
+        }));
+      }
+
+      list.appendChild(
+        el("li", { class: "row singer" }, [
+          el("span", { class: "singer-dot" + (g.role === "guest" ? "" : " singer-dot-lead") }),
+          el("div", { class: "row-meta" }, [
+            el("div", { class: "row-title", text: g.name + (g.id === me ? " (you)" : "") }),
+            el("div", { class: "row-sub", text: g.role === "host" ? "Host" : g.role === "cohost" ? "Co-host" : "Singer" })
+          ]),
+          el("div", { class: "row-actions" }, actions)
+        ])
+      );
+    });
+  }
+
+  /* ---------------- scores ---------------- */
+
+  function renderScores() {
+    var s = app.state;
+    var on = !!(s.config && s.config.leaderboard);
+    var tab = $(".tab-scores");
+    if (tab) tab.hidden = !on;
+    if (!on && app.tab === "scores") switchTab("queue");
+
+    var board = $("#board");
+    var log = $("#score-log");
+    if (!board || !log) return;
+
+    board.innerHTML = "";
+    log.innerHTML = "";
+    if (!on) return;
+
+    var table = R.standings(s);
+    if (!table.length) {
+      board.appendChild(el("li", { class: "empty", text: "No scores yet. Finish a song to get one." }));
+    }
+    table.forEach(function (row, i) {
+      board.appendChild(
+        el("li", { class: "board-row" + (i === 0 ? " board-lead" : "") }, [
+          el("span", { class: "board-rank", text: String(i + 1) }),
+          el("div", { class: "board-meta" }, [
+            el("div", { class: "board-name", text: row.name }),
+            el("div", { class: "board-sub", text: row.songs + (row.songs === 1 ? " song" : " songs") + " · avg " + row.average })
+          ]),
+          el("span", { class: "board-score", text: String(row.best) })
+        ])
+      );
+    });
+
+    (s.scores || []).slice(0, 12).forEach(function (e) {
+      log.appendChild(
+        el("li", { class: "row score-row" }, [
+          el("span", { class: "score-pill", "data-band": e.band, text: String(e.score) }),
+          el("div", { class: "row-meta" }, [
+            el("div", { class: "row-title", text: e.name }),
+            el("div", { class: "row-sub", text: e.title })
+          ])
+        ])
+      );
+    });
+  }
+
+  /* ---------------- configuration ---------------- */
+
+  var CFG_FIELDS = { "cfg-scoring": "scoring", "cfg-leaderboard": "leaderboard", "cfg-maxrun": "maxRun" };
+
+  function renderConfig() {
+    var c = (app.state && app.state.config) || R.defaultConfig();
+    var manage = canManage();
+    Object.keys(CFG_FIELDS).forEach(function (id) {
+      var box = $("#" + id);
+      if (!box) return;
+      box.checked = !!c[CFG_FIELDS[id]];
+      box.disabled = !manage;
+    });
+    if (!manage && app.tab === "config") switchTab("queue");
+  }
+
+  function pushConfig() {
+    var c = {};
+    Object.keys(CFG_FIELDS).forEach(function (id) {
+      var box = $("#" + id);
+      c[CFG_FIELDS[id]] = !!(box && box.checked);
+    });
+    dispatch({ type: CMD.CONFIG, config: c });
   }
 
   function renderProgress() {
@@ -748,6 +1071,8 @@
     var list = $("#queue");
     list.innerHTML = "";
     $("#queue-count").textContent = String(s.queue.length);
+    // Emptying somebody else's night out is a host's call, not a guest's.
+    $("#clear-btn").hidden = !canManage();
 
     if (!s.queue.length) {
       list.appendChild(el("li", { class: "empty", text: "Queue is empty — search for a song." }));
@@ -1082,6 +1407,11 @@
       lp.appendChild(el("div", { class: "pl" }, [head, open ? body : null]));
     });
 
+    // Handing your library to someone else is a between-parties thing; inside
+    // a room the useful gesture is queueing a song, not exporting the lot.
+    var shareBtn = $("#lib-share");
+    if (shareBtn) shareBtn.hidden = !!app.role;
+
     $("#library-stats").textContent =
       songs.length || lists.length ? "· " + songs.length + " songs, " + lists.length + " playlists" : "";
   }
@@ -1112,6 +1442,227 @@
     p.songs.forEach(function (song) { dispatch({ type: CMD.ADD, video: song }); });
     toast("Queued " + p.songs.length + " from “" + p.name + "”");
     switchTab("queue");
+  }
+
+  /* ---------------- sharing a library ----------------
+   * Three routes out, because the useful one depends entirely on who is in the
+   * room: the share sheet (messages, mail, AirDrop) when the two phones can
+   * talk to each other at all, and a run of QR codes when they cannot — no
+   * account, no network, no cable, just one screen pointed at another camera.
+   */
+
+  var libShare = { parts: [], at: 0, auto: null, scan: null };
+
+  function libraryFile() {
+    return new File([LIB.exportAll()], "karaokenatin-library.json", { type: "application/json" });
+  }
+
+  function openLibShare() {
+    lsPhase("menu");
+    $("#libshare").hidden = false;
+  }
+
+  function closeLibShare() {
+    stopAuto();
+    stopScan();
+    $("#libshare").hidden = true;
+  }
+
+  function lsPhase(name) {
+    $$("#libshare .ls-phase").forEach(function (p) { p.hidden = p.dataset.ls !== name; });
+  }
+
+  function sendLibraryFile() {
+    var stats = LIB.stats();
+    if (!stats.songs && !stats.playlists) { toast("Your library is empty.", "warn"); return; }
+
+    var file = null;
+    try { file = libraryFile(); } catch (e) { /* no File constructor — fall through */ }
+    if (file && navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+      navigator.share({ files: [file], title: "My KaraokeNatin library" }).catch(function () { /* dismissed */ });
+      closeLibShare();
+      return;
+    }
+    // No share sheet for files here — a download is the same file by another
+    // road, and every mail and messaging app takes an attachment.
+    $("#lib-export").click();
+    toast("Saved the file — send it however you like.");
+    closeLibShare();
+  }
+
+  /* One code cannot hold a library, so it becomes a short slideshow of them.
+   * Order does not matter on the other end, which is what makes a hand-held
+   * scan of six codes survivable. */
+  function showLibQr() {
+    var stats = LIB.stats();
+    if (!stats.songs && !stats.playlists) { toast("Your library is empty.", "warn"); return; }
+    try {
+      // Leave room for the "KNL1:i:n:" header at the front of every part.
+      libShare.parts = LIB.shareParts(QR.capacity("L") - 16);
+    } catch (e) {
+      toast("Could not prepare the codes.", "warn");
+      return;
+    }
+    libShare.at = 0;
+    lsPhase("show");
+    drawSharePart();
+  }
+
+  function drawSharePart() {
+    var n = libShare.parts.length;
+    $("#ls-step").textContent = "Code " + (libShare.at + 1) + " of " + n;
+    $("#ls-prev").disabled = n < 2;
+    $("#ls-next").disabled = n < 2;
+    /* A library code is a dense one, so it gets every pixel the dialog can
+     * spare — and QR.draw rounds down to a whole number of pixels per module,
+     * which is the difference between a big code and a scannable one. Never
+     * resize the canvas in CSS afterwards: that smears the modules. */
+    var modal = $("#libshare .modal");
+    var room = Math.max(220, Math.min(420, (modal ? modal.clientWidth : 340) - 48));
+    try {
+      QR.draw($("#ls-canvas"), libShare.parts[libShare.at], {
+        ecc: "L", px: room, dark: "#0b0b12", light: "#ffffff", quiet: 3
+      });
+    } catch (e) {
+      toast("That library is too large to share by QR — send the file instead.", "warn");
+      lsPhase("menu");
+    }
+  }
+
+  function stepShare(by) {
+    var n = libShare.parts.length;
+    if (!n) return;
+    libShare.at = (libShare.at + by + n) % n;
+    drawSharePart();
+  }
+
+  function stopAuto() {
+    clearInterval(libShare.auto);
+    libShare.auto = null;
+    var b = $("#ls-auto");
+    if (b) b.textContent = "Auto-play";
+  }
+
+  function toggleAuto() {
+    if (libShare.auto) { stopAuto(); return; }
+    libShare.auto = setInterval(function () { stepShare(1); }, 2600);
+    $("#ls-auto").textContent = "Stop";
+  }
+
+  /* Scanning leans on the browser's own barcode reader. Where it is missing
+   * (Safari and Firefox at the time of writing) there is no honest fallback
+   * short of shipping a decoder, so say which road is still open rather than
+   * showing a camera that will never find anything. */
+  function startScan() {
+    if (typeof global.BarcodeDetector !== "function") {
+      toast("This browser cannot scan QR codes — import the file instead.", "warn");
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast("No camera available in this browser.", "warn");
+      return;
+    }
+
+    lsPhase("scan");
+    var status = $("#ls-scan-status");
+    status.textContent = "Starting the camera…";
+
+    var video = $("#ls-video");
+    var detector = new global.BarcodeDetector({ formats: ["qr_code"] });
+    var got = {};
+    var expect = 0;
+
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "environment" } })
+      .then(function (stream) {
+        libShare.scan = { stream: stream, timer: null };
+        video.srcObject = stream;
+        return video.play();
+      })
+      .then(function () {
+        status.textContent = "Point the camera at each code.";
+        libShare.scan.timer = setInterval(function () {
+          detector.detect(video).then(function (codes) {
+            codes.forEach(function (c) { onScanned(c.rawValue); });
+          }, function () { /* a frame the detector could not use */ });
+        }, 400);
+      })
+      .catch(function () {
+        status.textContent = "The camera could not be opened.";
+      });
+
+    function onScanned(text) {
+      var part = LIB.readPart(text);
+      if (!part) return;
+      if (expect && part.count !== expect) return;   // a different share
+      expect = part.count;
+      if (got[part.index]) return;
+      got[part.index] = part.chunk;
+
+      var have = Object.keys(got).length;
+      status.textContent = "Got " + have + " of " + expect + " codes.";
+      if (have < expect) return;
+
+      var chunks = [];
+      for (var i = 1; i <= expect; i++) chunks.push(got[i]);
+      stopScan();
+      try {
+        finishImport(LIB.joinParts(chunks));
+      } catch (e) {
+        toast(e.message, "warn");
+      }
+    }
+  }
+
+  function stopScan() {
+    if (!libShare.scan) return;
+    clearInterval(libShare.scan.timer);
+    libShare.scan.stream.getTracks().forEach(function (t) { t.stop(); });
+    var video = $("#ls-video");
+    if (video) video.srcObject = null;
+    libShare.scan = null;
+  }
+
+  /* ---------------- importing ----------------
+   * The same landing point for a file and for a scan: check what it collides
+   * with first, and only ask when there is actually something to ask about.
+   */
+
+  var pendingImport = null;
+
+  function finishImport(text) {
+    var found;
+    try { found = LIB.inspectImport(text); } catch (e) { toast(e.message, "warn"); return; }
+
+    if (!found.dupSongs && !found.dupPlaylists) { runImport(text, "skip"); return; }
+
+    pendingImport = text;
+    $("#dupes-body").textContent =
+      describe(found.dupSongs, "song", "songs") +
+      (found.dupSongs && found.dupPlaylists ? " and " : "") +
+      describe(found.dupPlaylists, "playlist", "playlists") +
+      " already in your library. " +
+      (found.songs || found.playlists
+        ? "The other " + (found.songs + found.playlists) + " will be added either way."
+        : "Everything in this file is already here.");
+    $("#dupes").hidden = false;
+  }
+
+  function describe(n, one, many) {
+    return n ? n + " " + (n === 1 ? one : many) : "";
+  }
+
+  function runImport(text, duplicates) {
+    try {
+      var added = LIB.importAll(text, { duplicates: duplicates });
+      renderLibrary();
+      closeLibShare();
+      toast(added.songs || added.playlists
+        ? "Imported " + added.songs + " songs and " + added.playlists + " playlists"
+        : "Nothing new to import.");
+    } catch (err) {
+      toast(err.message, "warn");
+    }
   }
 
   /* ---------------- add-to-playlist picker ---------------- */
@@ -1165,8 +1716,85 @@
       b.setAttribute("aria-selected", String(on));
     });
     $$(".panel").forEach(function (p) { p.hidden = p.dataset.panel !== name; });
+
+    /* Six tabs outgrow a narrow side column. The row scrolls, so the tab that
+     * was just chosen has to be brought into view — and the edge fade is only
+     * honest while there is actually something past it. */
+    var strip = $(".tabs");
+    if (strip) {
+      strip.classList.toggle("tabs-overflow", strip.scrollWidth > strip.clientWidth + 1);
+      var active = $(".tab[data-tab='" + name + "']");
+      if (active && active.scrollIntoView) {
+        active.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+    }
     if (name === "search") mountInto("search-root", "search-slot-room");
     if (name === "library") mountLibrary("library-slot-room");
+  }
+
+  /* ---------------- the 10pm rule ----------------
+   * Somewhere around here every karaoke night stops being the singers' problem
+   * and starts being the neighbours'. Once, at 10pm, the room says so and
+   * takes the volume down to half — and then leaves it alone. Turning it back
+   * up is allowed: this is a nudge, not a curfew, and a nudge that fights you
+   * is just a broken volume knob.
+   */
+  var CURFEW_KEY = "kn:curfew";
+  var CURFEW_HOUR = 22;
+  var CURFEW_TEXT =
+    "ITS 10:00PM. NEIGHBORS ARE ALREADY SLEEPING. YOU KNOW WHAT TO DO 👀. Turning volume to 50%";
+
+  function curfewStamp(d) {
+    return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+  }
+
+  function startCurfewWatch() {
+    checkCurfew();
+    setInterval(checkCurfew, 30000);
+  }
+
+  function checkCurfew() {
+    if (app.role !== "host" || app.curfewDone) return;
+    var d = new Date();
+    if (d.getHours() !== CURFEW_HOUR) return;
+    var stamp = curfewStamp(d);
+    var seen = null;
+    try { seen = localStorage.getItem(CURFEW_KEY); } catch (e) { /* private mode */ }
+    if (seen === stamp) { app.curfewDone = true; return; }
+    app.curfewDone = true;
+    try { localStorage.setItem(CURFEW_KEY, stamp); } catch (e) { /* private mode */ }
+    runCurfew();
+  }
+
+  function runCurfew() {
+    var bar = $("#curfew");
+    if (bar) {
+      $("#curfew-text").textContent = CURFEW_TEXT;
+      bar.hidden = false;
+      bar.classList.remove("run");
+      void bar.offsetWidth;
+      bar.classList.add("run");
+      setTimeout(function () { bar.hidden = true; bar.classList.remove("run"); }, 22000);
+    }
+    speak("It is ten p m. The neighbours are already sleeping. Turning the volume down to fifty percent.");
+    notice("10:00PM — volume easing down to 50%.", "warn");
+    fadeVolume(50);
+  }
+
+  /** Walk the volume to `target` over a few seconds, through the same command
+   *  path a slider drag uses, so every phone in the room sees it move. */
+  function fadeVolume(target) {
+    if (!app.state) return;
+    var from = app.state.player.volume;
+    if (from <= target) return;
+    var steps = 20;
+    var step = 0;
+    var timer = setInterval(function () {
+      step++;
+      var v = Math.round(from + (target - from) * (step / steps));
+      dispatch({ type: CMD.VOLUME, v: v });
+      if (step >= steps) clearInterval(timer);
+    }, 180);
   }
 
   /* ---------------- wake lock ---------------- */
@@ -1278,7 +1906,7 @@
 
   /* Also the ?v= on every asset in index.html and in sw.js SHELL_FILES.
    * tools/version-check.js fails the build if the three drift apart. */
-  var APP_VERSION = "2.3.2";
+  var APP_VERSION = "2.4.0";
   var UPDATE_CHECK_MS = 30 * 60 * 1000;
 
   var swReg = null;
@@ -1620,6 +2248,29 @@
 
     $("#fs-btn").addEventListener("click", toggleFullscreen);
 
+    /* ---- room setup ---- */
+    Object.keys(CFG_FIELDS).forEach(function (id) {
+      $("#" + id).addEventListener("change", pushConfig);
+    });
+
+    /* ---- the idle stage doubles as a search box ----
+     * A host screen with an empty queue used to be a black rectangle with the
+     * search two tabs away. Typing here is the same search; the results panel
+     * comes forward on the first keystroke so the answer is never hidden
+     * behind the thing that asked for it. */
+    var stageQ = $("#stage-q");
+    stageQ.addEventListener("input", function () {
+      $("#q").value = this.value;
+      if (this.value && app.tab !== "search") switchTab("search");
+    });
+    $("#stage-search").addEventListener("submit", function (e) {
+      e.preventDefault();
+      $("#q").value = stageQ.value;
+      switchTab("search");
+      runSearch();
+      stageQ.value = "";
+    });
+
     // The wide invite rail shows the same code/QR as the fullscreen corner
     // badges — hide it whenever the stage actually goes fullscreen, however
     // that was triggered (the button, Esc, browser chrome, F11…).
@@ -1671,26 +2322,34 @@
       this.value = "";
       if (!file) return;
       file.text().then(
-        function (text) {
-          try {
-            var added = LIB.importAll(text);
-            renderLibrary();
-            toast("Imported " + added.songs + " songs and " + added.playlists + " playlists");
-          } catch (err) {
-            toast(err.message, "warn");
-          }
-        },
+        function (text) { finishImport(text); },
         function () { toast("Could not read that file.", "warn"); }
       );
     });
 
-    $("#lib-clear").addEventListener("click", function () {
-      if (confirm("Delete every saved song and playlist on this device? This cannot be undone.")) {
-        LIB.clearAll();
-        app.openPlaylists = {};
-        renderLibrary();
-        toast("Library cleared");
-      }
+    /* ---- sharing a library ---- */
+    $("#lib-share").addEventListener("click", openLibShare);
+    $("#libshare-close").addEventListener("click", closeLibShare);
+    $("#libshare").addEventListener("click", function (e) { if (e.target === this) closeLibShare(); });
+    $("#ls-send").addEventListener("click", sendLibraryFile);
+    $("#ls-qr").addEventListener("click", showLibQr);
+    $("#ls-scan").addEventListener("click", startScan);
+    $("#ls-scan-stop").addEventListener("click", function () { stopScan(); lsPhase("menu"); });
+    $("#ls-prev").addEventListener("click", function () { stopAuto(); stepShare(-1); });
+    $("#ls-next").addEventListener("click", function () { stopAuto(); stepShare(1); });
+    $("#ls-auto").addEventListener("click", toggleAuto);
+
+    $("#dupes-close").addEventListener("click", function () { $("#dupes").hidden = true; pendingImport = null; });
+    $("#dupes").addEventListener("click", function (e) { if (e.target === this) { this.hidden = true; pendingImport = null; } });
+    $("#dupes-skip").addEventListener("click", function () {
+      $("#dupes").hidden = true;
+      if (pendingImport) runImport(pendingImport, "skip");
+      pendingImport = null;
+    });
+    $("#dupes-again").addEventListener("click", function () {
+      $("#dupes").hidden = true;
+      if (pendingImport) runImport(pendingImport, "again");
+      pendingImport = null;
     });
 
     LIB.onChange(function (kind, detail) {
@@ -1730,10 +2389,28 @@
     document.addEventListener("keydown", function (e) {
       if (e.key !== "Escape") return;
       if (!$("#picker").hidden) closePicker();
+      else if (!$("#dupes").hidden) { $("#dupes").hidden = true; pendingImport = null; }
+      else if (!$("#libshare").hidden) closeLibShare();
       else if (!$("#disclaimer").hidden) $("#disclaimer").hidden = true;
     });
     $$(".tab").forEach(function (b) {
       b.addEventListener("click", function () { switchTab(b.dataset.tab); });
+    });
+
+    /* The fullscreen corner code is sized off the viewport, and the Invite tab
+     * disappears at the width where the invite rail takes over — so both have
+     * to be revisited when the window changes shape. */
+    var resizeTimer = null;
+    global.addEventListener("resize", function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () {
+        if (!app.state) return;
+        renderShare();
+        var tab = $(".tab[data-tab='" + app.tab + "']");
+        // A resize can both reveal the whole tab row and hide the tab that was
+        // selected — switchTab settles the fade and the scroll either way.
+        switchTab(tab && tab.offsetParent === null ? "queue" : app.tab);
+      }, 200);
     });
 
     global.addEventListener("hashchange", route);
@@ -1746,6 +2423,7 @@
     setupUpdateUI();
     switchTab("queue");
     startLocalClock();
+    startCurfewWatch();
     setupInstall();
     route();
   }
@@ -1762,6 +2440,13 @@
       renderProgress();
     }, 1000);
   }
+
+  /* The live room, for the end-to-end suites and for anyone poking at a room
+   * from the browser console. Nothing here is a secret the page does not
+   * already show — a room's only secret is its code, and that is printed on
+   * the wall. */
+  KN.app = app;
+  KN.refresh = render;
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();

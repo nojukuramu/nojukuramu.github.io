@@ -130,6 +130,55 @@ bias never appears in the search box — echoing back a query the user did not t
 bug — and is skipped when they already said "karaoke" themselves. See `biasToKaraoke` in
 `js/search.js`.
 
+## Scores
+
+A song that plays to the end gets a score on the stage — big, over the video, so it survives
+fullscreen where every panel in the app is off-screen — read aloud through the browser's own
+speech synthesis. No key, no network, no library: `speechSynthesis` is the one text-to-speech
+every browser already has, and a browser without it simply gets the card without the shouting.
+
+The number is weighted rather than uniform. A flat 65–100 hands out a 97 every third song and
+the score stops meaning anything, so the middle is where almost everyone lands, both extremes
+are rare enough to be worth a reaction, and **101** exists so that once a night somebody breaks
+the machine. **A skipped song is never scored** — half a chorus is not a performance, and
+scoring it would make every number in the room worthless within about four songs.
+
+Scores stack up in a session leaderboard (best score, then average) under **Scores**. Both the
+scoring and the leaderboard are on by default and can be switched off by the host under
+**Setup**; turning the leaderboard off clears the night's table rather than hiding it.
+
+## The 10pm rule
+
+Somewhere around ten, a karaoke night stops being the singers' problem and starts being the
+neighbours'. Once — at 10pm, once per browser per night — a message slides across the stage and
+the volume eases down to half.
+
+Turning it straight back up is allowed and sticks. This is a nudge, not a curfew, and a nudge
+that fights you is just a broken volume knob.
+
+## Who can run the room
+
+The host owns the player and the state. Under **Singers** it can also hand out **co-host** to
+anyone in the room: a co-host can skip, clear the queue, change the setup, and remove a guest.
+Two things stay with the host alone — appointing co-hosts (a co-host that could mint co-hosts
+leaves the room with no owner) and being the host at all, which is not a role anyone can hand
+back.
+
+Every one of those checks is enforced by the host on the way in, not by hiding a button. A
+guest that sends a `CONFIG`, `KICK`, or `CLEAR` down the wire without the standing for it is
+refused and told why; `ROLE` is refused for everyone but the host. A UI that hides a control it
+does not enforce is not a permission, it is a suggestion.
+
+Removing someone is two things, and doing only the first is why "removed" guests reappear a
+second later: the channel is dropped, *and* the reconnect their own retry loop is already
+dialling is refused for as long as the room lives.
+
+**Max 2 in a row** (under Setup) keeps one person from holding the microphone all night. The
+queue is walked once and the first song by a different singer is pulled forward whenever a run
+would otherwise reach three — so it reads as "you got bumped one slot", not as a reshuffle. The
+song playing right now counts towards the run, because it is the turn people in the room can
+actually see.
+
 ## Library
 
 Saved songs and playlists live in this browser and nowhere else. Tap ☆ on any search result to
@@ -140,6 +189,30 @@ cleared cache away from gone, so it has to be something you can carry out.
 
 The relationship with a room is one-way: a room borrows from your library, never the reverse.
 Nothing another guest does can reach into it.
+
+Importing checks for collisions **before** it writes anything, and asks: skip what is already
+here, or import it again. Re-importing the file you just exported is the common case and it is
+genuinely ambiguous — silently skipping and silently duplicating are the same surprise from
+opposite directions.
+
+### Sharing one
+
+Outside a room, **Share…** offers three roads, because the useful one depends entirely on who
+is standing there:
+
+- **As a file** through the system share sheet (messages, mail, AirDrop), falling back to a
+  download — every mail and messaging app takes an attachment.
+- **As QR codes**, for two phones that cannot reach each other at all. A library does not fit
+  in one code, so it becomes a short slideshow of them: the payload is squeezed first (short
+  keys, thumbnails dropped since they follow from the video id, playlists holding indices
+  rather than whole songs again) and then cut into parts that are scanned **in any order** and
+  reassembled at the far end. A 40-song library with a playlist is three codes.
+- **Scanning** one, using the browser's own `BarcodeDetector`. Where that is missing (Safari
+  and Firefox at the time of writing) the app says so and points at the file, rather than
+  showing a camera that will never find anything.
+
+Sharing hands over the same library, not a rearranged one: a song that only ever lived in a
+playlist travels with it but does not arrive as a *saved* song.
 
 ## Install
 
@@ -188,7 +261,7 @@ Invite tab inside a room, where it may be edited but not emptied.
 | `js/search.js` | Piped → Invidious fallback, link parsing |
 | `js/player.js` | YouTube IFrame API wrapper (the host plays; everyone probes) |
 | `js/embed.js` | Vets search results against a real embed — only playable ones show |
-| `js/qr.js` | QR encoder, written from scratch (byte mode, v1–12, ECC L/M) |
+| `js/qr.js` | QR encoder, written from scratch (byte mode, v1–25, ECC L/M) |
 | `js/icons.js` | The icon set — 24×24 line drawings on `currentColor`, no emoji |
 | `js/library.js` | Saved songs and playlists, stored in the browser |
 | `js/app.js` | Screens, wiring, and the host/guest seam |
@@ -203,6 +276,7 @@ node tools/e2e.js             # two real browsers, one real WebRTC link (needs p
 node tools/reconnect-e2e.js   # leaving the browser and coming back           (playwright)
 node tools/player-e2e.js      # playback state machine against a mock player  (playwright)
 node tools/library-e2e.js     # library, playlists, export/import, karaoke bias (playwright)
+node tools/room-e2e.js        # co-hosts, kicking, setup, turn order, 10pm      (playwright)
 node tools/embed-e2e.js       # only embeddable results reach the screen      (playwright)
 node tools/install-e2e.js     # manifest, service worker, install button      (playwright)
 node tools/version-check.js   # one build version across index.html, sw.js, app.js
@@ -225,6 +299,13 @@ connection code.
 `tools/library-e2e.js` builds a library with no room at all, checks it survives a reload and a
 round-trip through export/import, and then joins a room to queue a playlist into it. It also
 asserts the karaoke bias reaches the wire and never the input box.
+
+`tools/room-e2e.js` is about authority, so its checks come in pairs: the host or a co-host can
+do the thing, *and* a plain guest asking for the same thing straight down the wire is refused
+rather than merely lacking a button. It also drives the turn cap, and removes a guest and then
+waits out their reconnect loop to prove they stay removed. The 10pm rule is tested by moving
+the clock rather than waiting for it: the page is told it is ten, and asked to prove it does
+the whole thing exactly once however many times it looks.
 
 `tools/install-e2e.js` checks the static installability contract (manifest fields, icon sizes,
 a worker with a fetch handler) and then our behaviour around the prompt — deferring it, firing
@@ -282,4 +363,6 @@ player.
 | Guest UI | Served over LAN HTTP by the host | Same static page, `#/r/<code>` |
 | State | Rust `RwLock<RoomState>` | Host JS, snapshot-broadcast |
 | Search | `rusty_ytdl` in-process | Piped / Invidious mirrors |
-| Playlists, scoring, mic coverage | Yes | Not in this MVP |
+| Playlists | Yes | Yes |
+| Scoring | Yes | Yes, with a session leaderboard |
+| Mic coverage | Yes | No — a browser cannot mix a microphone into the room |

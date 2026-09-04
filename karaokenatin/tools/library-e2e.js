@@ -188,11 +188,80 @@ async function main() {
     JSON.stringify({ s: exported.songs.length, p: exported.playlists.length })
   );
 
+  /* Re-importing the file you just exported is the common case, and it is
+   * ambiguous: the answer might be "I already have this" or "yes, again". So
+   * the import stops and asks rather than picking one silently. */
   await page.setInputFiles("#lib-import-file", file);
+  await page.waitForSelector("#dupes:not([hidden])", { timeout: 10000 });
+  check("a colliding import asks before it writes anything", true);
+  const dupeText = await page.textContent("#dupes-body");
+  check("the question names what already exists", /1 song/.test(dupeText) && /1 playlist/.test(dupeText), dupeText);
+
+  await page.click("#dupes-skip");
+  await page.waitForTimeout(400);
+  const afterSkip = await page.textContent("#lib-list-count");
+  check("skipping the duplicates leaves the library alone", afterSkip === "1", afterSkip);
+
+  await page.setInputFiles("#lib-import-file", file);
+  await page.waitForSelector("#dupes:not([hidden])", { timeout: 10000 });
+  await page.click("#dupes-again");
   await page.waitForFunction(() => document.querySelector("#lib-list-count").textContent === "2", null, { timeout: 10000 });
-  check("importing merges rather than replaces", true);
+  check("importing again merges rather than replaces", true);
   const names = await page.locator(".pl-toggle").allTextContents();
   check("an imported playlist with a clashing name is marked", names.some((n) => /imported/.test(n)), names.join(" | "));
+
+  /* Sharing is a between-parties thing; in a room the useful gesture is
+   * queueing a song, so the button is not there. */
+  check("the share button is offered outside a room", await page.locator("#lib-share").isVisible());
+
+  /* ── sharing over QR ───────────────────────────────────────────────────
+   * The camera half of this cannot be driven from here, but the part that can
+   * actually lose data can: split the library into codes, hand the pieces back
+   * in the wrong order (which is how they really arrive), and see the same
+   * library come out. Each part is also encoded for real, because a chunk that
+   * does not fit in a QR is a share that fails on the last code. */
+  const trip = await page.evaluate(() => {
+    const L = window.KN.library;
+    const parts = L.shareParts(window.QR.capacity("L") - 16);
+    const encodable = parts.every((p) => {
+      try { window.QR.encode(p, { ecc: "L" }); return true; } catch (e) { return false; }
+    });
+    const shuffled = parts.slice().reverse();
+    const seen = {};
+    let count = 0;
+    shuffled.forEach((raw) => {
+      const part = L.readPart(raw);
+      if (!part) return;
+      count = part.count;
+      seen[part.index] = part.chunk;
+    });
+    const ordered = [];
+    for (let i = 1; i <= count; i++) ordered.push(seen[i]);
+    return { parts: parts.length, encodable, json: L.joinParts(ordered), junk: L.readPart("not a library") };
+  });
+  check("a library splits into at least one code", trip.parts >= 1, String(trip.parts));
+  check("every part actually fits in a QR code", trip.encodable);
+  check("anything that is not one of our codes is ignored", trip.junk === null);
+
+  const rebuilt = JSON.parse(trip.json);
+  check(
+    "codes scanned out of order rebuild the same library",
+    rebuilt.songs.length === 1 && rebuilt.playlists.length === 2 && rebuilt.playlists[0].songs.length === 2,
+    JSON.stringify({ s: rebuilt.songs.length, p: rebuilt.playlists.length })
+  );
+  /* A song that only ever lived in a playlist has to cross with it, but it
+   * must not arrive on the other side as a saved song — sharing a library
+   * should hand over the same library, not a rearranged one. */
+  check(
+    "a playlist-only song does not come back as a saved song",
+    !rebuilt.songs.some((x) => !rebuilt.songs.slice(0, 1).includes(x)) && rebuilt.songs.length === 1,
+    JSON.stringify(rebuilt.songs.map((x) => x.title))
+  );
+  check(
+    "and the songs come back with their titles, not just their ids",
+    rebuilt.playlists[0].songs.every((x) => x.title && x.id),
+    JSON.stringify(rebuilt.playlists[0].songs.map((x) => x.title))
+  );
 
   /* ── into a room ───────────────────────────────────────────────────────── */
   const hostCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -213,7 +282,12 @@ async function main() {
   const railVisible = await host.locator("#invite-rail").isVisible();
   check("wide host screen shows the invite rail", railVisible);
   const railCode = (await host.textContent("#room-code-3")).trim();
-  check("the rail shows the room code", railCode === code, railCode);
+  check("the rail names the room code for screen readers", railCode === code, railCode);
+  // …but not in ink: the header already shows it, a hand's width away.
+  const railCodeShown = await host.evaluate(
+    () => document.getElementById("room-code-3").getBoundingClientRect().width > 4
+  );
+  check("the rail does not print a second copy of the code", !railCodeShown);
   await host.click("#rail-toggle");
   const collapsed = await host.locator("#invite-rail.collapsed").count();
   check("the invite rail collapses", collapsed === 1);
@@ -224,6 +298,7 @@ async function main() {
   await page.click('.tab[data-tab="library"]');
   await page.waitForSelector("#library-root:not([hidden])");
   check("library is reachable from inside a room", true);
+  check("the share button is withdrawn inside a room", !(await page.locator("#lib-share").isVisible()));
 
   await page.click('.lib-tab[data-libtab="playlists"]');
   await page.locator('.pl-actions button[title="Queue this playlist"]').first().click();
