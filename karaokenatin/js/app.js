@@ -416,9 +416,12 @@
       link.send({ type: MSG.NOTICE, text: "Only the host can change roles.", kind: "warn" });
       return;
     }
+    /* GAME_AGAIN is deliberately not on this list: another round is the whole
+     * room's decision, and a vote only the host and co-hosts may cast is not a
+     * vote. Everything else here still is theirs. */
     if ((data.type === CMD.CONFIG || data.type === CMD.KICK || data.type === CMD.CLEAR ||
          data.type === CMD.APPROVE || data.type === CMD.GAME_CONFIG ||
-         data.type === CMD.GAME_QUEUE || data.type === CMD.GAME_AGAIN) && !app.cohosts[link.id]) {
+         data.type === CMD.GAME_QUEUE) && !app.cohosts[link.id]) {
       link.send({ type: MSG.NOTICE, text: "Only the host and co-hosts can do that.", kind: "warn" });
       return;
     }
@@ -581,7 +584,8 @@
         if (!KN.games.removeFromPool(s.roulette, cmd.rid)) return;
         break;
       case CMD.GAME_CONFIG:
-        s.roulette.includeHost = !!cmd.includeHost;
+        if (typeof cmd.includeHost === "boolean") s.roulette.includeHost = cmd.includeHost;
+        if (typeof cmd.keepPicked === "boolean") s.roulette.keepPicked = cmd.keepPicked;
         break;
       case CMD.GAME_QUEUE: {
         if (!KN.games.canSpin(s.roulette)) {
@@ -594,11 +598,18 @@
         if (!s.now && s.player.status === "idle") { nextSong(); return; }
         break;
       }
-      case CMD.GAME_AGAIN:
-        // Only meaningful inside the few seconds the offer is up.
+      case CMD.GAME_AGAIN: {
+        // Only meaningful inside the window the offer is up, and it records a
+        // hand rather than acting: the count is read when the window closes.
         if (!s.spinOffer) return;
-        spinAgain();
+        var voter = fromId || "host";
+        if (!s.spinOffer.votes) s.spinOffer.votes = {};
+        s.spinOffer.votes[voter] = cmd.vote === "no" ? "no" : "yes";
+        // A vote changes nothing a stale command could collide with, so it
+        // must not bump the revision and make everyone's next tap look old.
+        broadcastState({ progress: true });
         return;
+      }
 
       case CMD.PLAY_NOW: {
         var i = R.indexOfSid(s.queue, cmd.sid);
@@ -642,7 +653,10 @@
   var SCORE_BOARD_MS = 1100;      // the pause before the table reshuffles
   var SCORE_HOLD_MS = 5200;       // and how long the whole thing stays up
   var SCORE_MS = SCORE_COUNT_MS + SCORE_BOARD_MS + SCORE_HOLD_MS;
-  var SPIN_OFFER_MS = 3000;       // the window to go round again
+  /* Long enough for a room to notice, read it, and actually decide. Three
+   * seconds was the length of a mistake: by the time anyone looked up from the
+   * score it had already gone. */
+  var SPIN_OFFER_MS = 10000;
 
   var scoreTimer = null;
   var scoreAnim = null;
@@ -942,8 +956,14 @@
       function () {
         var song = G.spinSong(s.roulette);
         if (!song) { s.spin = null; nextSong(); return; }
+        /* The reel shows what was in the running. The draw may or may not have
+         * taken the winner out of the pot depending on `keepPicked`, so put it
+         * back in the list only when it is no longer there — otherwise it
+         * flashes past twice and the wheel looks rigged in its favour. */
+        var running = s.roulette.pool.slice();
+        if (!running.some(function (e) { return e.rid === song.rid; })) running.push(song);
         spinPhase("song", singer.name + " is singing…",
-          G.reel(s.roulette.pool.concat([song]).map(function (e) { return e.title; }), song.title),
+          G.reel(running.map(function (e) { return e.title; }), song.title),
           song.title,
           function () { startRouletteSong(singer, song); });
       });
@@ -1022,30 +1042,54 @@
     broadcastState();
   }
 
+  /* ---------------- another round? ----------------
+   * Everyone in the room gets a say, not just whoever is holding the laptop.
+   * It is a show of hands rather than a race to a button: the first person to
+   * tap would otherwise decide for everybody, which is the same problem as
+   * only the host deciding, with the added indignity of being arbitrary.
+   *
+   * The window runs its full length and the majority wins. A tie goes to
+   * spinning again — the offer exists to keep a game going, so the tie-break
+   * should too — and nobody voting at all means the queue carries on, because
+   * silence is not a mandate to hijack it.
+   */
   function offerSpinAgain() {
     var s = app.state;
-    s.spinOffer = { at: Date.now(), ms: SPIN_OFFER_MS };
+    s.spinOffer = { at: Date.now(), ms: SPIN_OFFER_MS, votes: {} };
+    app.offerSeenAt = Date.now();
     broadcastState();
+    renderSpinOffer();
 
-    var box = $("#spin-again");
-    var count = $("#spin-again-count");
-    if (box) {
-      mountOffer("stage");
-      box.hidden = false;
-      var left = Math.round(SPIN_OFFER_MS / 1000);
-      if (count) count.textContent = String(left);
-      var beat = setInterval(function () {
-        left--;
-        if (count) count.textContent = String(Math.max(0, left));
-        if (left <= 0) clearInterval(beat);
-      }, 1000);
-      spinTimers.push(beat);
-    }
-    later(function () {
-      if (!app.state || !app.state.spinOffer) return;
-      clearSpinOffer();
-      nextSong();
-    }, SPIN_OFFER_MS);
+    var beat = setInterval(renderSpinOffer, 500);
+    spinTimers.push(beat);
+    later(resolveSpinOffer, SPIN_OFFER_MS);
+  }
+
+  /** Count the hands and act on them. Host only — it owns the queue. */
+  function resolveSpinOffer() {
+    var s = app.state;
+    if (!s || !s.spinOffer) return;
+    var votes = s.spinOffer.votes || {};
+    var yes = 0, no = 0;
+    Object.keys(votes).forEach(function (k) { if (votes[k] === "yes") yes++; else no++; });
+    clearSpinOffer();
+    if (yes && yes >= no) { spinAgain(); return; }
+    nextSong();
+  }
+
+  /** One person's hand, from the host's own buttons or from a phone. */
+  function castSpinVote(vote) {
+    if (!app.state || !app.state.spinOffer) return;
+    if (app.role === "host") handle({ type: CMD.GAME_AGAIN, vote: vote }, app.name || "Host", "host");
+    else dispatch({ type: CMD.GAME_AGAIN, vote: vote });
+    renderSpinOffer();
+  }
+
+  /** How this device voted, if it has. */
+  function myVote() {
+    var offer = app.state && app.state.spinOffer;
+    if (!offer || !offer.votes) return null;
+    return offer.votes[app.role === "host" ? "host" : app.clientId] || null;
   }
 
   function clearSpinOffer() {
@@ -1065,31 +1109,44 @@
   }
 
   /**
-   * A co-host is usually holding a phone, not the host screen, and the offer
-   * is explicitly theirs to take too — so it has to exist somewhere they can
-   * reach it. The countdown is measured from when *this* device first saw the
-   * offer rather than from the host's timestamp: two phones at a party do not
-   * agree about the time to the second, and a countdown that starts at -2 is
-   * worse than one that is a beat late.
+   * The offer, wherever this device is looking at it. The countdown is
+   * measured from when *this* device first saw it rather than from the host's
+   * timestamp: two phones at a party do not agree about the time to the
+   * second, and a countdown that starts at -2 is worse than one a beat late.
    */
   function renderSpinOffer() {
-    if (app.role === "host") return;          // the host runs its own countdown
     var box = $("#spin-again");
     if (!box) return;
     var offer = app.state && app.state.spinOffer;
-    if (!offer || !canManage()) {
+    if (!offer) {
       box.hidden = true;
       app.offerSeenAt = 0;
       return;
     }
     if (!app.offerSeenAt) app.offerSeenAt = Date.now();
-    mountOffer("spin-slot-guest");
+    mountOffer(app.role === "host" ? "stage" : "spin-slot-guest");
     box.hidden = false;
+
     var left = Math.ceil((offer.ms - (Date.now() - app.offerSeenAt)) / 1000);
-    $("#spin-again-count").textContent = String(Math.max(0, Math.min(Math.round(offer.ms / 1000), left)));
+    $("#spin-again-count").textContent =
+      String(Math.max(0, Math.min(Math.round(offer.ms / 1000), left)));
+
+    var votes = offer.votes || {};
+    var yes = 0, no = 0;
+    Object.keys(votes).forEach(function (k) { if (votes[k] === "yes") yes++; else no++; });
+    var mine = myVote();
+
+    var go = $("#spin-again-yes");
+    var stop = $("#spin-again-no");
+    go.textContent = "Spin again" + (yes ? " · " + yes : "");
+    stop.textContent = "Move on" + (no ? " · " + no : "");
+    go.classList.toggle("voted", mine === "yes");
+    stop.classList.toggle("voted", mine === "no");
+    go.setAttribute("aria-pressed", String(mine === "yes"));
+    stop.setAttribute("aria-pressed", String(mine === "no"));
   }
 
-  /** "Spin again" — from the host's own button or a co-host's phone. */
+  /** The room voted to go again. Host only; it owns the queue. */
   function spinAgain() {
     if (app.role !== "host") return;
     var s = app.state;
@@ -1830,6 +1887,50 @@
 
   /* ---------------- games ---------------- */
 
+  /* ---------------- Song Roulette, in the Games tab ----------------
+   * The tab is a menu of compact tiles, so it stays readable however many
+   * games end up in it. The roulette itself opens from its tile, and *where*
+   * it opens is the whole point: an overlay on a phone, where a sheet is the
+   * native shape for "this now, please", and inline in the side column on a
+   * wide screen, where the panel sits beside the player rather than over it.
+   * A modal on a host screen would black out the one thing the room is
+   * watching to ask whether it should queue a game.
+   */
+  var PHONE = "(max-width: 720px)";
+
+  function onPhone() {
+    return !!(global.matchMedia && global.matchMedia(PHONE).matches);
+  }
+
+  function rouletteOpen() {
+    return !$("#roulette-root").hidden;
+  }
+
+  function openRoulette() {
+    var root = $("#roulette-root");
+    if (onPhone()) {
+      mountInto("roulette-root", "roulette-slot-modal");
+      $("#roulette-modal").hidden = false;
+    } else {
+      mountInto("roulette-root", "roulette-slot-inline");
+      $("#roulette-modal").hidden = true;
+    }
+    root.hidden = false;
+    $("#roulette-open").setAttribute("aria-expanded", "true");
+    renderGames();
+  }
+
+  function closeRoulette() {
+    $("#roulette-modal").hidden = true;
+    $("#roulette-root").hidden = true;
+    $("#roulette-open").setAttribute("aria-expanded", "false");
+  }
+
+  function toggleRoulette() {
+    if (rouletteOpen() && (!onPhone() || !$("#roulette-modal").hidden)) closeRoulette();
+    else openRoulette();
+  }
+
   function renderGames() {
     var s = app.state;
     if (!s) return;
@@ -1837,17 +1938,37 @@
     var rl = s.roulette || G.createRoulette();
     var pool = rl.pool || [];
 
-    var count = $("#games-count");
-    if (count) {
-      count.hidden = !pool.length;
-      count.textContent = String(pool.length);
+    /* Two counts, one number: the tab badge is for someone looking at another
+     * tab, the tile's is for someone already here. */
+    [$("#games-count"), $("#roulette-tile-count")].forEach(function (badge) {
+      if (!badge) return;
+      badge.hidden = !pool.length;
+      badge.textContent = String(pool.length);
+    });
+
+    var short = Math.max(0, G.MIN_POOL - pool.length);
+    var sub = $("#roulette-tile-sub");
+    if (sub) {
+      sub.textContent = !pool.length
+        ? "The wheel picks who sings and what"
+        : short
+          ? pool.length + " in the pot · " + short + " more to go"
+          : pool.length + " in the pot · ready to spin";
     }
 
-    var box = $("#cfg-roulette-host");
-    if (box) {
-      box.checked = rl.includeHost !== false;
-      box.disabled = !canManage();
+    var host = $("#cfg-roulette-host");
+    if (host) {
+      host.checked = rl.includeHost !== false;
+      host.disabled = !canManage();
     }
+    var keep = $("#cfg-roulette-keep");
+    if (keep) {
+      keep.checked = !!rl.keepPicked;
+      keep.disabled = !canManage();
+    }
+
+    // Nothing below this point is on screen unless the roulette is open.
+    if (!rouletteOpen()) return;
 
     var list = $("#roulette-pool");
     if (!list) return;
@@ -1872,14 +1993,17 @@
       );
     });
 
-    var short = Math.max(0, G.MIN_POOL - pool.length);
     var hint = $("#roulette-hint");
     if (hint) {
       hint.textContent = short
         ? short + " more " + (short === 1 ? "song" : "songs") + " and this can go in the queue."
-        : pool.length + " in the pot · " + pool.length + " " + (pool.length === 1 ? "round" : "rounds") +
-          " before it runs dry" + (rl.rounds ? " · " + rl.rounds + " played" : "");
+        : pool.length + " in the pot · " +
+          (rl.keepPicked
+            ? "songs stay in, so it runs until you stop it"
+            : pool.length + " " + (pool.length === 1 ? "round" : "rounds") + " before it runs dry") +
+          (rl.rounds ? " · " + rl.rounds + " played" : "");
     }
+
     var go = $("#roulette-queue");
     if (go) {
       go.disabled = !G.canSpin(rl) || !canManage();
@@ -2871,6 +2995,9 @@
     if (name === "search") mountInto("search-root", "search-slot-room");
     if (name === "library") mountLibrary("library-slot-room");
     if (name === "games") renderGames();
+    // A roulette left open behind another tab is a sheet over a page nobody
+    // is looking at, or a panel hidden inside a hidden one.
+    else if (rouletteOpen()) closeRoulette();
   }
 
   /* ---------------- the 10pm rule ----------------
@@ -3047,7 +3174,7 @@
 
   /* Also the ?v= on every asset in index.html and in sw.js SHELL_FILES.
    * tools/version-check.js fails the build if the three drift apart. */
-  var APP_VERSION = "2.5.0";
+  var APP_VERSION = "2.5.1";
   var UPDATE_CHECK_MS = 30 * 60 * 1000;
 
   var swReg = null;
@@ -3477,15 +3604,15 @@
     $("#cfg-roulette-host").addEventListener("change", function () {
       dispatch({ type: CMD.GAME_CONFIG, includeHost: this.checked });
     });
-    $("#spin-again-yes").addEventListener("click", function () {
-      if (app.role === "host") spinAgain();
-      else dispatch({ type: CMD.GAME_AGAIN });
+    $("#cfg-roulette-keep").addEventListener("change", function () {
+      dispatch({ type: CMD.GAME_CONFIG, keepPicked: this.checked });
     });
-    $("#spin-again-no").addEventListener("click", function () {
-      if (app.role !== "host") return;
-      clearSpinOffer();
-      nextSong();
-    });
+    $("#spin-again-yes").addEventListener("click", function () { castSpinVote("yes"); });
+    $("#spin-again-no").addEventListener("click", function () { castSpinVote("no"); });
+
+    $("#roulette-open").addEventListener("click", function () { toggleRoulette(); });
+    $("#roulette-close").addEventListener("click", closeRoulette);
+    $("#roulette-modal").addEventListener("click", function (e) { if (e.target === this) closeRoulette(); });
     $("#picker-roulette").addEventListener("click", function () {
       if (!app.pickerSong) return;
       dispatch({ type: CMD.GAME_ADD, video: app.pickerSong });
@@ -3597,6 +3724,7 @@
     document.addEventListener("keydown", function (e) {
       if (e.key !== "Escape") return;
       if (!$("#picker").hidden) closePicker();
+      else if (!$("#roulette-modal").hidden) closeRoulette();
       else if (!$("#dupes").hidden) { $("#dupes").hidden = true; pendingImport = null; }
       else if (!$("#libshare").hidden) closeLibShare();
       else if (!$("#disclaimer").hidden) $("#disclaimer").hidden = true;
@@ -3614,6 +3742,10 @@
       resizeTimer = setTimeout(function () {
         if (!app.state) return;
         renderShare();
+        // A window dragged across the phone breakpoint has to re-home the
+        // roulette, or it stays a sheet on a desktop or an inline panel on a
+        // phone — whichever it was when it opened.
+        if (rouletteOpen()) openRoulette();
         var tab = $(".tab[data-tab='" + app.tab + "']");
         // A resize can both reveal the whole tab row and hide the tab that was
         // selected — switchTab settles the fade and the scroll either way.
