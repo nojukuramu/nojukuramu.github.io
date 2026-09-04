@@ -1,0 +1,3 @@
+# Playwright, installed locally to run tools/*-e2e.js. The app itself has no
+# dependencies and no build step — see the README.
+node_modules/

@@ -23,10 +23,13 @@
  *     of today, so a hit in the cache costs nothing and a second search for
  *     the same song is instant.
  *
- * Uncertainty never hides a result. A probe that times out, a pool that could
- * not be built, an API that is blocked — all resolve to "unknown", and unknown
- * is shown. Hiding a playable song is a worse failure than showing one that
- * turns out not to be, which the room already handles by skipping.
+ * Uncertainty used to be shown, on the reasoning that hiding a playable song
+ * is worse than showing one that turns out not to be. Rooms disagreed: an
+ * "unchecked" row is very often an unembeddable video whose refusal arrived
+ * after the probe gave up, and it fails on the big screen in front of
+ * everybody. So `filter` holds them back by default — and releases the whole
+ * held set if the sweep ends with nothing else at all, which is what a blocked
+ * IFrame API looks like and must not be mistaken for thirty bad videos.
  */
 (function (global) {
   "use strict";
@@ -272,6 +275,17 @@
    *                          unchecked result can be shown as unchecked
    *   onProgress(stats)      after every verdict
    *   onDone(stats)          the sweep finished, or was cancelled
+   *   hideUnknown            hold back the ones we could not get an answer
+   *                          for. In practice an unchecked video is very
+   *                          often an unembeddable one whose refusal arrived
+   *                          too late or not at all, and a row that fails on
+   *                          the host screen mid-party costs the room more
+   *                          than a row nobody saw. They are held rather than
+   *                          discarded: if the sweep ends with nothing at all
+   *                          to show, they are released, because that is the
+   *                          shape of a blocked IFrame API rather than of
+   *                          thirty genuinely refused videos, and hiding
+   *                          everything would be the filter breaking silently.
    *
    * Returns { cancel() } — a new search abandons the previous sweep rather
    * than making it queue behind results nobody is looking at any more.
@@ -290,14 +304,27 @@
      * chance; if the API is still gone it re-breaks on the first acquire. */
     if (poolBroken && !slots.length) poolBroken = false;
 
+    var hideUnknown = opts.hideUnknown !== false;
     var next = 0, active = 0;
-    var stats = { total: list.length, checked: 0, kept: 0, dropped: 0, unsure: 0 };
+    var stats = { total: list.length, checked: 0, kept: 0, dropped: 0, unsure: 0, held: 0 };
+    var held = [];
     var cancelled = false;
     var finished = false;
 
     function finish() {
       if (finished) return;
       finished = true;
+      /* Nothing survived and the only reason was uncertainty: that is the
+       * probe failing, not the results. Show them, flagged as unchecked. */
+      if (!stats.kept && held.length) {
+        held.forEach(function (h) {
+          stats.kept++;
+          stats.unsure++;
+          stats.held--;
+          onAccept(h.video, h.rank, UNKNOWN);
+        });
+        held = [];
+      }
       onDone(stats);
     }
 
@@ -312,6 +339,9 @@
             stats.checked++;
             if (verdict === NO) {
               stats.dropped++;
+            } else if (verdict === UNKNOWN && hideUnknown) {
+              stats.held++;
+              held.push({ video: video, rank: rank });
             } else {
               stats.kept++;
               if (verdict === UNKNOWN) stats.unsure++;

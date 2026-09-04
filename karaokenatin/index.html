@@ -31,14 +31,14 @@
       } catch (e) { /* private mode — fall back to the system preference */ }
     })();
   </script>
-  <link rel="stylesheet" href="css/app.css?v=2.4.0" />
+  <link rel="stylesheet" href="css/app.css?v=2.5.0" />
 </head>
 
 <body>
   <!-- ══════════════ HOME ══════════════ -->
   <section id="view-home" class="view">
     <header class="home-head">
-      <button class="theme-btn" data-theme-toggle aria-label="Switch theme"><span class="theme-icon"></span></button>
+      <button class="theme-btn" data-theme-toggle aria-label="Switch theme"><span class="theme-icon" data-theme-icon></span></button>
     </header>
 
     <div class="hero">
@@ -105,6 +105,14 @@
           </span>
           <span class="library-cta-go" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 12h14" /><path d="M13 6.4l5.6 5.6L13 17.6" /></svg></span>
         </button>
+
+        <button id="stats-btn" class="library-cta">
+          <span class="library-cta-main">
+            <span class="library-cta-title">Statistics</span>
+            <span id="stats-teaser" class="muted-inline"></span>
+          </span>
+          <span class="library-cta-go" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 12h14" /><path d="M13 6.4l5.6 5.6L13 17.6" /></svg></span>
+        </button>
       </div>
 
       <ul class="trust">
@@ -134,12 +142,57 @@
         <strong class="code code-plain">Library</strong>
       </div>
       <div class="head-right">
-        <button class="theme-btn" data-theme-toggle aria-label="Switch theme"><span class="theme-icon"></span></button>
+        <button class="theme-btn" data-theme-toggle aria-label="Switch theme"><span class="theme-icon" data-theme-icon></span></button>
         <button id="lib-back" class="btn btn-quiet btn-sm">Back</button>
       </div>
     </header>
     <div id="search-slot-library"></div>
     <div id="library-slot-standalone"></div>
+  </section>
+
+  <!-- ══════════════ STATISTICS (standalone) ══════════════ -->
+  <section id="view-stats" class="view" hidden>
+    <header class="room-head">
+      <div class="head-left">
+        <strong class="code code-plain">Statistics</strong>
+      </div>
+      <div class="head-right">
+        <button class="theme-btn" data-theme-toggle aria-label="Switch theme"><span class="theme-icon" data-theme-icon></span></button>
+        <button id="stats-back" class="btn btn-quiet btn-sm">Back</button>
+      </div>
+    </header>
+
+    <p class="stats-privacy">
+      <span class="stats-privacy-ico" data-icon="shield" aria-hidden="true"></span>
+      <span>
+        <strong>Everything here is stored on this device only.</strong>
+        It is written to this browser's local storage as you sing and is never uploaded,
+        shared, or seen by us — there is no account and no server to send it to. Clearing
+        your browser data clears this page with it.
+      </span>
+    </p>
+
+    <div id="stats-empty" class="stats-empty" hidden>
+      <p class="stats-empty-title">Nothing to show yet</p>
+      <p class="stats-empty-sub">Join a room and finish a song. Your scores will start collecting here.</p>
+    </div>
+
+    <div id="stats-body">
+      <div id="stats-cards" class="stat-grid"></div>
+
+      <h3 class="side-h">Games</h3>
+      <div id="stats-games" class="stat-games"></div>
+
+      <h3 class="side-h">Your sessions</h3>
+      <ul id="stats-sessions" class="list"></ul>
+
+      <h3 class="side-h">Recent songs</h3>
+      <ul id="stats-songs" class="list"></ul>
+    </div>
+
+    <div class="stats-foot">
+      <button id="stats-clear" class="btn btn-quiet btn-sm">Erase my statistics</button>
+    </div>
   </section>
 
   <!-- Search block, moved between the room's Search tab and the library view. -->
@@ -311,6 +364,13 @@
       <button class="modal-close" id="picker-close" aria-label="Close"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 6.2l11.6 11.6M17.8 6.2L6.2 17.8" /></svg></button>
       <h2 id="picker-title">Add to playlist</h2>
       <p id="picker-song" class="picker-song"></p>
+      <button id="picker-roulette" class="picker-roulette" hidden>
+        <span class="picker-roulette-ico" data-icon="dice" aria-hidden="true"></span>
+        <span>
+          <strong>Song Roulette</strong>
+          <em>Into the pot for this room's next round</em>
+        </span>
+      </button>
       <ul id="picker-list" class="picker-list"></ul>
       <form id="picker-new" class="new-playlist">
         <input id="picker-new-name" type="text" maxlength="60" placeholder="New playlist…" autocomplete="off" aria-label="New playlist name" />
@@ -331,10 +391,26 @@
       <div class="head-right">
         <span class="pill" title="Connected guests"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9.3" cy="8.4" r="3.3" /><path d="M3.4 19.4a5.9 5.9 0 0 1 11.8 0" /><path d="M16.4 5.6a3.3 3.3 0 0 1 0 5.6" /><path d="M17.6 13.9a5.9 5.9 0 0 1 3 5.5" /></svg><span id="guest-count">0</span></span>
         <span class="pill host-only" title="Signalling brokers online"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.9" fill="currentColor" stroke="none" /><path d="M8.5 15.5a5 5 0 0 1 0-7" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M5.8 18.2a8.8 8.8 0 0 1 0-12.4" /><path d="M18.2 5.8a8.8 8.8 0 0 1 0 12.4" /></svg><span id="broker-count">0</span></span>
-        <button class="theme-btn" data-theme-toggle aria-label="Switch theme"><span class="theme-icon"></span></button>
+        <button class="theme-btn" data-theme-toggle aria-label="Switch theme"><span class="theme-icon" data-theme-icon></span></button>
         <button id="leave-btn" class="btn btn-quiet btn-sm">Leave</button>
       </div>
     </header>
+
+    <!-- A guest that has arrived but has not been let in yet. Everything below
+         is still drawn — empty — so the room does not appear broken; this says
+         which of the two it is. -->
+    <div id="lobby-wait" class="lobby-wait" hidden>
+      <span class="lobby-wait-ico" data-icon="shield" aria-hidden="true"></span>
+      <div>
+        <strong>Waiting for the host to let you in</strong>
+        <span>This room asks for approval before anyone can queue songs. Hang on — it is usually a second or two.</span>
+      </div>
+    </div>
+
+    <!-- Where the "another round?" offer lands on a phone. On the host it
+         lives inside the stage instead, so it survives fullscreen; it is one
+         element moved between the two, not two that can drift apart. -->
+    <div id="spin-slot-guest"></div>
 
     <!-- Two columns on a host screen (everything on one page, no scrolling),
          one flowing column on a guest's phone. -->
@@ -368,15 +444,63 @@
             <p id="score-who" class="score-who"></p>
             <p id="score-value" class="score-value">0</p>
             <p id="score-line" class="score-line"></p>
+            <!-- Where that number puts them. Rows move to their new places
+                 rather than being redrawn, so a climb is something the room
+                 watches happen instead of a table that changed while nobody
+                 was looking. -->
+            <ol id="score-board" class="score-board" hidden></ol>
+          </div>
+
+          <!-- The wheel. Lives on the stage for the same reason the score
+               does: it has to survive fullscreen, which is where the host
+               screen actually spends the evening. -->
+          <div id="spin-card" class="spin-card" hidden aria-live="polite">
+            <p id="spin-title" class="spin-title">Song Roulette</p>
+            <p id="spin-label" class="spin-label">Who is singing?</p>
+            <div class="spin-window">
+              <p id="spin-reel" class="spin-reel"></p>
+            </div>
+            <p id="spin-sub" class="spin-sub"></p>
+          </div>
+
+          <!-- The few seconds after a roulette score in which the host can go
+               again without touching the queue. It counts down visibly,
+               because an offer that vanishes silently reads as a glitch. -->
+          <div id="spin-again" class="spin-again" hidden>
+            <span class="spin-again-text">Another round?</span>
+            <button id="spin-again-yes" class="btn btn-primary btn-sm">Spin again</button>
+            <button id="spin-again-no" class="btn btn-quiet btn-sm">Move on</button>
+            <span id="spin-again-count" class="spin-again-count">3</span>
+          </div>
+
+          <!-- 77% through, for a few seconds, and never over the last chorus.
+               Small and in a corner: the point is that the next singer can
+               get up, not that anyone stops watching. -->
+          <div id="up-next" class="up-next" hidden aria-live="polite">
+            <span class="up-next-label">Up next</span>
+            <span id="up-next-title" class="up-next-title"></span>
+            <span id="up-next-who" class="up-next-who"></span>
+          </div>
+
+          <!-- An advert is playing inside YouTube's player. We cannot skip it
+               and will not pretend to; saying what is happening at least stops
+               the room thinking the app has broken. -->
+          <div id="ad-note" class="ad-note" hidden>
+            <span class="ad-dot" aria-hidden="true"></span>
+            <span>Advert playing — the song starts right after</span>
           </div>
 
           <div id="curfew" class="curfew" hidden><span id="curfew-text" class="curfew-text"></span></div>
 
           <!-- Fullscreen hides the header and invite rail, so guests lose the
-               only copy of the join code/QR on screen. These are tiny, corner
-               stand-ins for it, shown only while the stage is fullscreen. -->
-          <span id="room-code-4" class="fs-code"></span>
-          <canvas id="qr-fs" class="fs-qr" aria-label="QR code with the join link"></canvas>
+               only copy of the join code/QR on screen. One badge in the top
+               right stands in for both: the code reads as a caption to the
+               code you point a camera at, which is what it is — and two
+               separate corners cost twice the screen for the same message. -->
+          <div id="fs-join" class="fs-join">
+            <canvas id="qr-fs" class="fs-qr" aria-label="QR code with the join link"></canvas>
+            <span id="room-code-4" class="fs-code"></span>
+          </div>
           <button id="fs-btn" class="fs-btn" title="Fullscreen" aria-label="Toggle fullscreen"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="i" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5.6A1.6 1.6 0 0 1 5.6 4H9" /><path d="M15 4h3.4A1.6 1.6 0 0 1 20 5.6V9" /><path d="M20 15v3.4a1.6 1.6 0 0 1-1.6 1.6H15" /><path d="M9 20H5.6A1.6 1.6 0 0 1 4 18.4V15" /></svg></button>
         </div>
 
@@ -414,15 +538,41 @@
           </button>
         </aside>
 
+        <!-- Icons rather than words: eight labels never fitted a phone or the
+             host's side column, and the row that scrolled to hold them hid
+             half of itself. Every button still carries its name for a screen
+             reader and as a tooltip, and the selected one is captioned below
+             the strip so nobody has to guess from the drawing alone. -->
         <nav class="tabs" role="tablist">
-          <button class="tab on" data-tab="queue" role="tab" aria-selected="true">Queue <span id="queue-count" class="badge">0</span></button>
-          <button class="tab" data-tab="search" role="tab" aria-selected="false">Search</button>
-          <button class="tab" data-tab="library" role="tab" aria-selected="false">Library</button>
-          <button class="tab tab-scores" data-tab="scores" role="tab" aria-selected="false">Scores</button>
-          <button class="tab" data-tab="singers" role="tab" aria-selected="false">Singers</button>
-          <button class="tab host-tab" data-tab="config" role="tab" aria-selected="false">Setup</button>
-          <button class="tab tab-invite" data-tab="share" role="tab" aria-selected="false">Invite</button>
+          <button class="tab on" data-tab="queue" role="tab" aria-selected="true" aria-label="Queue" title="Queue">
+            <span class="tab-ico" data-icon="tab-queue" aria-hidden="true"></span>
+            <span id="queue-count" class="badge">0</span>
+          </button>
+          <button class="tab" data-tab="search" role="tab" aria-selected="false" aria-label="Search" title="Search">
+            <span class="tab-ico" data-icon="tab-search" aria-hidden="true"></span>
+          </button>
+          <button class="tab" data-tab="library" role="tab" aria-selected="false" aria-label="Library" title="Library">
+            <span class="tab-ico" data-icon="tab-library" aria-hidden="true"></span>
+          </button>
+          <button class="tab" data-tab="games" role="tab" aria-selected="false" aria-label="Games" title="Games">
+            <span class="tab-ico" data-icon="tab-games" aria-hidden="true"></span>
+            <span id="games-count" class="badge" hidden>0</span>
+          </button>
+          <button class="tab tab-scores" data-tab="scores" role="tab" aria-selected="false" aria-label="Scores" title="Scores">
+            <span class="tab-ico" data-icon="tab-scores" aria-hidden="true"></span>
+          </button>
+          <button class="tab" data-tab="singers" role="tab" aria-selected="false" aria-label="Singers" title="Singers">
+            <span class="tab-ico" data-icon="tab-singers" aria-hidden="true"></span>
+            <span id="pending-count" class="badge badge-alert" hidden>0</span>
+          </button>
+          <button class="tab host-tab" data-tab="config" role="tab" aria-selected="false" aria-label="Setup" title="Setup">
+            <span class="tab-ico" data-icon="tab-setup" aria-hidden="true"></span>
+          </button>
+          <button class="tab tab-invite" data-tab="share" role="tab" aria-selected="false" aria-label="Invite" title="Invite">
+            <span class="tab-ico" data-icon="tab-invite" aria-hidden="true"></span>
+          </button>
         </nav>
+        <p id="tab-caption" class="tab-caption">Queue</p>
 
         <div class="panels">
           <!-- queue -->
@@ -441,6 +591,40 @@
             <div id="library-slot-room"></div>
           </div>
 
+          <!-- games -->
+          <div class="panel" data-panel="games" hidden>
+            <div class="game-card">
+              <div class="game-head">
+                <span class="game-ico" data-icon="dice" aria-hidden="true"></span>
+                <div class="game-head-meta">
+                  <h3 class="game-title">Song Roulette</h3>
+                  <p class="game-sub">Everyone throws songs in the pot. The wheel picks who sings and what.</p>
+                </div>
+              </div>
+
+              <ul id="roulette-pool" class="list roulette-pool"></ul>
+
+              <p id="roulette-hint" class="side-note"></p>
+
+              <label class="cfg cfg-inline">
+                <input type="checkbox" id="cfg-roulette-host" />
+                <span class="cfg-text">
+                  <strong>Include the host in the draw</strong>
+                  <em>Off when whoever is running the night would rather not be picked.</em>
+                </span>
+              </label>
+
+              <div class="game-actions">
+                <button id="roulette-queue" class="btn btn-primary">Add a round to the queue</button>
+                <button id="roulette-clear" class="btn btn-quiet btn-sm">Empty the pot</button>
+              </div>
+              <p class="side-note">
+                Add songs from Search — the ＋ on a result offers the roulette too. A song
+                that gets picked leaves the pot, so a pot of five is five rounds.
+              </p>
+            </div>
+          </div>
+
           <!-- scores -->
           <div class="panel" data-panel="scores" hidden>
             <ol id="board" class="board"></ol>
@@ -450,6 +634,10 @@
 
           <!-- singers -->
           <div class="panel" data-panel="singers" hidden>
+            <div id="lobby" hidden>
+              <h3 class="side-h side-h-alert">Waiting to be let in</h3>
+              <ul id="pending" class="list"></ul>
+            </div>
             <ul id="singers" class="list"></ul>
             <p class="side-note">Co-hosts can skip, clear the queue and change the setup.</p>
           </div>
@@ -478,7 +666,30 @@
                   <em>Auto-arrange the queue so nobody sings a third song back to back.</em>
                 </span>
               </label>
+              <label class="cfg">
+                <input type="checkbox" id="cfg-approval" />
+                <span class="cfg-text">
+                  <strong>Join approval</strong>
+                  <em>New arrivals wait in a lobby until you let them in. Anything else they
+                      send before that is refused outright.</em>
+                </span>
+              </label>
+              <label class="cfg">
+                <input type="checkbox" id="cfg-sounds" />
+                <span class="cfg-text">
+                  <strong>Room sounds</strong>
+                  <em>The roulette's ticking and the drumroll under a score.</em>
+                </span>
+              </label>
               <p class="side-note">Only the host and co-hosts can change these.</p>
+              <p class="side-note">
+                <strong>Adverts.</strong> YouTube serves them inside its own player and no
+                page may skip, click, or hide one — doing it would break their terms and
+                take the video down with it. The room labels an advert while it runs so
+                nobody thinks the app has hung. A browser-level ad blocker or a YouTube
+                Premium account on the host screen is the only thing that actually removes
+                them, and both are the host's own choice to make.
+              </p>
             </div>
           </div>
 
@@ -510,14 +721,17 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <script src="js/icons.js?v=2.4.0"></script>
-  <script src="js/qr.js?v=2.4.0"></script>
-  <script src="js/peer.js?v=2.4.0"></script>
-  <script src="js/search.js?v=2.4.0"></script>
-  <script src="js/library.js?v=2.4.0"></script>
-  <script src="js/room.js?v=2.4.0"></script>
-  <script src="js/player.js?v=2.4.0"></script>
-  <script src="js/embed.js?v=2.4.0"></script>
-  <script src="js/app.js?v=2.4.0"></script>
+  <script src="js/icons.js?v=2.5.0"></script>
+  <script src="js/sound.js?v=2.5.0"></script>
+  <script src="js/stats.js?v=2.5.0"></script>
+  <script src="js/games.js?v=2.5.0"></script>
+  <script src="js/qr.js?v=2.5.0"></script>
+  <script src="js/peer.js?v=2.5.0"></script>
+  <script src="js/search.js?v=2.5.0"></script>
+  <script src="js/library.js?v=2.5.0"></script>
+  <script src="js/room.js?v=2.5.0"></script>
+  <script src="js/player.js?v=2.5.0"></script>
+  <script src="js/embed.js?v=2.5.0"></script>
+  <script src="js/app.js?v=2.5.0"></script>
 </body>
 </html>

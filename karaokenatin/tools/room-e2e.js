@@ -39,9 +39,9 @@ function serve() {
 
 const FAKE_RESULTS = {
   items: [
-    { url: "/watch?v=aaaaaaaaaaa", type: "stream", title: "Anak", uploaderName: "Freddie Aguilar", duration: 260 },
-    { url: "/watch?v=bbbbbbbbbbb", type: "stream", title: "Harana", uploaderName: "Parokya ni Edgar", duration: 232 },
-    { url: "/watch?v=ccccccccccc", type: "stream", title: "Tadhana", uploaderName: "Up Dharma Down", duration: 301 }
+    { url: "/watch?v=aaaaaaaaaaa", type: "stream", title: "Anak (Karaoke Version)", uploaderName: "Freddie Aguilar", duration: 260 },
+    { url: "/watch?v=bbbbbbbbbbb", type: "stream", title: "Harana Karaoke Version", uploaderName: "Parokya ni Edgar", duration: 232 },
+    { url: "/watch?v=ccccccccccc", type: "stream", title: "Tadhana - Minus One", uploaderName: "Up Dharma Down", duration: 301 }
   ]
 };
 
@@ -49,6 +49,22 @@ let failures = 0;
 function check(name, ok, extra) {
   console.log((ok ? "  ok   " : "  FAIL ") + name + (ok || extra === undefined ? "" : "  → " + extra));
   if (!ok) failures++;
+}
+
+/* Rooms ask for approval before letting anyone in — see `joinApproval` in
+ * js/room.js. A scripted guest therefore arrives in a lobby and is not a guest
+ * at all until the host says so, which is exactly the point of the setting, so
+ * every test drives the real door rather than switching it off. */
+async function admit(host, name) {
+  await host.click('.tab[data-tab="singers"]');
+  const row = host.locator("#pending .row", { hasText: name });
+  await row.first().waitFor({ timeout: 25000 });
+  await row.first().locator(".row-actions button").first().click();
+  await host.waitForFunction(
+    (n) => (window.KN.app.state.guests || []).some((g) => g.name === n),
+    name,
+    { timeout: 20000 }
+  );
 }
 
 async function passNameGate(page, name) {
@@ -120,8 +136,23 @@ async function main() {
   await passNameGate(bob, "Bob");
   await bob.waitForSelector("#conn.conn-ok", { timeout: 30000 });
 
+  /* ── the door ─────────────────────────────────────────────────────────── */
+  check("an arrival is held in the lobby, not in the room", await alice.locator("#lobby-wait").isVisible());
+  const barred = await alice.evaluate(() => {
+    // Straight down the wire, past whatever the UI is or is not showing.
+    window.KN.app.net.send({ type: "ADD", video: { id: "zzzzzzzzzzz", title: "Gatecrash" } });
+    return true;
+  });
+  await host.waitForTimeout(1200);
+  check(
+    "a command from the lobby is refused rather than applied",
+    barred && (await host.evaluate(() => window.KN.app.state.queue.length)) === 0
+  );
+  await admit(host, "Alice");
+  await admit(host, "Bob");
+
   await host.waitForFunction(() => document.querySelector("#guest-count").textContent === "2", null, { timeout: 20000 });
-  check("host sees both guests", true);
+  check("host sees both guests once they are let in", true);
 
   check("a guest gets no Setup tab", !(await alice.locator(".tab[data-tab='config']").isVisible()));
   check("a guest cannot clear the queue", !(await alice.locator("#clear-btn").isVisible()));

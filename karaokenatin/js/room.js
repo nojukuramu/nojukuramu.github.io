@@ -34,6 +34,12 @@
     CONFIG: "CONFIG",         // { config }   host/co-host only
     KICK: "KICK",             // { id }       host/co-host only
     ROLE: "ROLE",             // { id, cohost } host only
+    APPROVE: "APPROVE",       // { id, ok }   host/co-host only
+    GAME_ADD: "GAME_ADD",     // { video }    a song into the roulette pot
+    GAME_REMOVE: "GAME_REMOVE", // { rid }
+    GAME_CONFIG: "GAME_CONFIG", // { includeHost } host/co-host only
+    GAME_QUEUE: "GAME_QUEUE", // queue a roulette round   host/co-host only
+    GAME_AGAIN: "GAME_AGAIN", // spin again, inside the offer window
     RESYNC: "RESYNC"
   };
 
@@ -42,6 +48,7 @@
     WELCOME: "WELCOME",       // { clientId, code }
     STATE: "STATE",           // { rev, state }
     NOTICE: "NOTICE",         // { text, kind }
+    WAIT: "WAIT",             // { }          you are in the lobby, awaiting approval
     BYE: "BYE"                // { reason }
   };
 
@@ -53,9 +60,15 @@
    * without a score is just a playlist. */
   function defaultConfig() {
     return {
-      scoring: true,       // score a song when it finishes
-      leaderboard: true,   // keep a session-long table of those scores
-      maxRun: false        // cap each singer at two songs back to back
+      scoring: true,        // score a song when it finishes
+      leaderboard: true,    // keep a session-long table of those scores
+      maxRun: false,        // cap each singer at two songs back to back
+      /* On by default, and the one default here that is not about taste. A
+       * room code is six characters against a public broker: guessable given
+       * enough tries. Approval is what turns "anyone who guesses the code is
+       * in" into "anyone who guesses the code is in a lobby". */
+      joinApproval: true,
+      sounds: true          // the ticks, the drumroll, the chime
     };
   }
 
@@ -86,6 +99,13 @@
       config: defaultConfig(),
       scores: [],              // [{ name, score, title, at }] newest first
       lastScore: null,         // the one being celebrated on the stage, or null
+      /* Waiting at the door: connected, named, and allowed to do nothing else
+       * until the host says so. Only present while `config.joinApproval` is
+       * on, and empty the rest of the time. */
+      pending: [],             // [{ id, name, at }]
+      roulette: KN.games ? KN.games.createRoulette() : null,
+      spin: null,              // the wheel, mid-turn — broadcast so every phone sees it
+      spinOffer: null,         // { at, ms } the window to spin again
       startedAt: Date.now()
     };
   }
@@ -146,6 +166,14 @@
         else if (cmd.dir === "down") target = i + 1;
         else if (cmd.dir === "top") target = 0;
         else if (cmd.dir === "bottom") target = state.queue.length - 1;
+        /* Dragging names where the row landed rather than which way it went.
+         * The index is clamped instead of rejected: a drag races the queue it
+         * is dragging in, and refusing the drop because somebody else's song
+         * arrived mid-gesture is a worse answer than the nearest slot. */
+        else if (cmd.dir === "to") {
+          target = Math.max(0, Math.min(state.queue.length - 1, Math.round(Number(cmd.to))));
+          if (!isFinite(target)) return { changed: false };
+        }
         if (target === i || target < 0 || target >= state.queue.length) return { changed: false };
         var moved = state.queue.splice(i, 1)[0];
         state.queue.splice(target, 0, moved);
@@ -176,6 +204,13 @@
     return (song && (song.addedById || song.addedBy)) || "";
   }
 
+  /* A roulette card in the queue belongs to nobody until it is spun, so it
+   * cannot be part of anyone's run — and must never be pulled forward or
+   * pushed back on account of who queued it. */
+  function isGameCard(song) {
+    return !!(song && song.kind === "game");
+  }
+
   function rebalance(state) {
     if (!state.config || !state.config.maxRun) return false;
     var pool = state.queue.slice();
@@ -186,8 +221,15 @@
 
     while (pool.length) {
       var pick = 0;
+      if (isGameCard(pool[0])) {
+        out.push(pool.shift());
+        last = null;
+        run = 0;
+        continue;
+      }
       if (last !== null && run >= MAX_RUN && singerOf(pool[0]) === last) {
         for (var i = 1; i < pool.length; i++) {
+          if (isGameCard(pool[i])) break;
           if (singerOf(pool[i]) !== last) { pick = i; changed = true; break; }
         }
         // Nobody else is waiting — a run of one singer is the whole queue.
@@ -245,7 +287,13 @@
       band: scoreBand(score),
       line: scoreLine(score),
       name: (song && song.addedBy) || "Someone",
+      /* The name is what the room reads; the id is what a phone checks to
+       * know the score was its own. Names collide, and two Jos on one
+       * leaderboard should not become one row in anybody's statistics. */
+      by: (song && song.addedById) || null,
       title: (song && song.title) || "",
+      seconds: (song && song.duration) || 0,
+      game: (song && song.viaGame) || null,
       at: Date.now()
     };
     state.lastScore = entry;
@@ -260,7 +308,7 @@
   function standings(state) {
     var by = {};
     (state.scores || []).forEach(function (e) {
-      var row = by[e.name] || (by[e.name] = { name: e.name, best: 0, songs: 0, total: 0 });
+      var row = by[e.name] || (by[e.name] = { name: e.name, id: e.by || e.name, best: 0, songs: 0, total: 0 });
       row.songs++;
       row.total += e.score;
       if (e.score > row.best) row.best = e.score;
@@ -279,8 +327,11 @@
     var next = state.queue.shift() || null;
     state.now = next;
     state.player.time = 0;
-    state.player.duration = next ? next.duration : 0;
-    state.player.status = next ? "loading" : "idle";
+    state.player.duration = next && !isGameCard(next) ? next.duration : 0;
+    /* A game card is not something the player loads — it is the room stopping
+     * to spin a wheel. Saying "loading" would put the transport into a state
+     * no player is ever going to leave. */
+    state.player.status = !next ? "idle" : isGameCard(next) ? "game" : "loading";
     rebalance(state);
     return next;
   }
@@ -311,6 +362,7 @@
     recordScore: recordScore,
     standings: standings,
     toSong: toSong,
+    isGameCard: isGameCard,
     apply: apply,
     advance: advance,
     indexOfSid: indexOfSid,

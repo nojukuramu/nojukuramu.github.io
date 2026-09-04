@@ -22,10 +22,10 @@
  */
 "use strict";
 
-var VERSION = "kn-v5";
+var VERSION = "kn-v6";
 
 /* Matches APP_VERSION in js/app.js and the ?v= in index.html. */
-var ASSET_V = "2.4.0";
+var ASSET_V = "2.5.0";
 var SHELL = VERSION + "-shell";
 
 var SHELL_FILES = [
@@ -42,6 +42,9 @@ var SHELL_FILES = [
   [
     "./css/app.css",
     "./js/icons.js",
+    "./js/sound.js",
+    "./js/stats.js",
+    "./js/games.js",
     "./js/qr.js",
     "./js/peer.js",
     "./js/search.js",
