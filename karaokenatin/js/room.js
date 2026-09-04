@@ -31,6 +31,9 @@
     VOLUME: "VOLUME",         // { v }
     MUTE: "MUTE",             // { on }
     CLEAR: "CLEAR",
+    CONFIG: "CONFIG",         // { config }   host/co-host only
+    KICK: "KICK",             // { id }       host/co-host only
+    ROLE: "ROLE",             // { id, cohost } host only
     RESYNC: "RESYNC"
   };
 
@@ -43,6 +46,30 @@
   };
 
   var QUEUE_LIMIT = 200;
+  var SCORE_LIMIT = 60;
+
+  /* Every knob the host can turn, and what it means with nobody having touched
+   * it. Scoring and the leaderboard are on by default because a karaoke night
+   * without a score is just a playlist. */
+  function defaultConfig() {
+    return {
+      scoring: true,       // score a song when it finishes
+      leaderboard: true,   // keep a session-long table of those scores
+      maxRun: false        // cap each singer at two songs back to back
+    };
+  }
+
+  var MAX_RUN = 2;
+
+  /** Fold a partial config from the wire onto the defaults, dropping junk. */
+  function sanitizeConfig(raw) {
+    var c = defaultConfig();
+    if (!raw || typeof raw !== "object") return c;
+    Object.keys(c).forEach(function (k) {
+      if (typeof raw[k] === "boolean") c[k] = raw[k];
+    });
+    return c;
+  }
 
   /* ---------------- state ---------------- */
 
@@ -52,14 +79,19 @@
       rev: 0,
       now: null,               // song currently loaded, or null
       queue: [],
-      guests: [],              // [{ id, name, since }]
+      guests: [],              // [{ id, name, cohost }]
+      cohosts: {},             // guest id -> true; a co-host can do host things
+      hostName: "Host",
       player: { status: "idle", time: 0, duration: 0, volume: 80, muted: false },
+      config: defaultConfig(),
+      scores: [],              // [{ name, score, title, at }] newest first
+      lastScore: null,         // the one being celebrated on the stage, or null
       startedAt: Date.now()
     };
   }
 
   var seq = 0;
-  function toSong(video, addedBy) {
+  function toSong(video, addedBy, addedById) {
     seq++;
     return {
       sid: "s" + Date.now().toString(36) + seq.toString(36),
@@ -69,6 +101,7 @@
       duration: video.duration || 0,
       thumb: video.thumb || "https://i.ytimg.com/vi/" + video.id + "/mqdefault.jpg",
       addedBy: addedBy || "someone",
+      addedById: addedById || null,
       addedAt: Date.now()
     };
   }
@@ -93,8 +126,9 @@
         if (state.queue.length >= QUEUE_LIMIT) {
           return { changed: false, notice: "The queue is full." };
         }
-        var song = toSong(cmd.video, who);
+        var song = toSong(cmd.video, who, cmd.byId);
         state.queue.push(song);
+        rebalance(state);
         return { changed: true, notice: who + " added “" + song.title + "”" };
       }
 
@@ -128,6 +162,118 @@
     }
   }
 
+  /* ---------------- turn taking ----------------
+   * With `maxRun` on, one person cannot hold the microphone for a third song
+   * in a row while somebody else is waiting. The queue is walked once and the
+   * first song by a different singer is pulled forward whenever the run would
+   * otherwise reach three — the ordering everyone else asked for is left
+   * alone, so this reads as "you got bumped one slot", not as a reshuffle.
+   *
+   * The song playing right now counts towards the run: it is the turn people
+   * in the room can actually see.
+   */
+  function singerOf(song) {
+    return (song && (song.addedById || song.addedBy)) || "";
+  }
+
+  function rebalance(state) {
+    if (!state.config || !state.config.maxRun) return false;
+    var pool = state.queue.slice();
+    var out = [];
+    var last = state.now ? singerOf(state.now) : null;
+    var run = state.now ? 1 : 0;
+    var changed = false;
+
+    while (pool.length) {
+      var pick = 0;
+      if (last !== null && run >= MAX_RUN && singerOf(pool[0]) === last) {
+        for (var i = 1; i < pool.length; i++) {
+          if (singerOf(pool[i]) !== last) { pick = i; changed = true; break; }
+        }
+        // Nobody else is waiting — a run of one singer is the whole queue.
+      }
+      var song = pool.splice(pick, 1)[0];
+      var by = singerOf(song);
+      if (by === last) run++; else { last = by; run = 1; }
+      out.push(song);
+    }
+
+    if (changed) state.queue = out;
+    return changed;
+  }
+
+  /* ---------------- scoring ----------------
+   * Weighted on purpose. A flat 65–100 hands out a 97 every third song and the
+   * number stops meaning anything; here the middle is where almost everyone
+   * lands, the extremes are worth shouting about, and 101 exists so that once
+   * a night somebody breaks the machine.
+   */
+  function rollScore() {
+    if (Math.random() < 0.005) return 101;          // the impossible score
+    var r = Math.random();
+    if (r < 0.06) return 65 + Math.floor(Math.random() * 5);    // 65–69, rare
+    if (r < 0.14) return 95 + Math.floor(Math.random() * 6);    // 95–100, rare
+    return 70 + Math.floor(Math.random() * 25);                 // 70–94, usual
+  }
+
+  var LINES = {
+    impossible: ["THAT IS NOT EVEN POSSIBLE!", "The machine gave up. One hundred and one!"],
+    great: ["Wow, you are amazing!", "Superstar! The neighbours heard that one.", "Unbelievable! Give them a hand."],
+    good: ["Nice one! That was good.", "Very good! The crowd approves.", "Solid. Someone has done this before."],
+    okay: ["Not bad! Keep going.", "Good effort! Try another one.", "You are getting there."],
+    poor: ["Well… you tried. Have another go!", "Brave. Very brave.", "The microphone was probably broken."]
+  };
+
+  function scoreBand(score) {
+    if (score > 100) return "impossible";
+    if (score >= 95) return "great";
+    if (score >= 85) return "good";
+    if (score >= 70) return "okay";
+    return "poor";
+  }
+
+  function scoreLine(score) {
+    var pool = LINES[scoreBand(score)];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  /** Score the song that just finished and file it on the leaderboard. */
+  function recordScore(state, song) {
+    var score = rollScore();
+    var entry = {
+      score: score,
+      band: scoreBand(score),
+      line: scoreLine(score),
+      name: (song && song.addedBy) || "Someone",
+      title: (song && song.title) || "",
+      at: Date.now()
+    };
+    state.lastScore = entry;
+    if (state.config && state.config.leaderboard) {
+      state.scores.unshift(entry);
+      if (state.scores.length > SCORE_LIMIT) state.scores.length = SCORE_LIMIT;
+    }
+    return entry;
+  }
+
+  /** The leaderboard: one row per singer, their best score and how many songs. */
+  function standings(state) {
+    var by = {};
+    (state.scores || []).forEach(function (e) {
+      var row = by[e.name] || (by[e.name] = { name: e.name, best: 0, songs: 0, total: 0 });
+      row.songs++;
+      row.total += e.score;
+      if (e.score > row.best) row.best = e.score;
+    });
+    return Object.keys(by)
+      .map(function (k) {
+        var r = by[k];
+        r.average = Math.round(r.total / r.songs);
+        return r;
+      })
+      .sort(function (a, b) { return b.best - a.best || b.average - a.average; });
+  }
+
   /** Pop the next song into `now`. Returns the song, or null if the queue ran dry. */
   function advance(state) {
     var next = state.queue.shift() || null;
@@ -135,6 +281,7 @@
     state.player.time = 0;
     state.player.duration = next ? next.duration : 0;
     state.player.status = next ? "loading" : "idle";
+    rebalance(state);
     return next;
   }
 
@@ -153,7 +300,16 @@
     CMD: CMD,
     MSG: MSG,
     QUEUE_LIMIT: QUEUE_LIMIT,
+    MAX_RUN: MAX_RUN,
+    defaultConfig: defaultConfig,
+    sanitizeConfig: sanitizeConfig,
     createState: createState,
+    rebalance: rebalance,
+    rollScore: rollScore,
+    scoreBand: scoreBand,
+    scoreLine: scoreLine,
+    recordScore: recordScore,
+    standings: standings,
     toSong: toSong,
     apply: apply,
     advance: advance,

@@ -1,7 +1,9 @@
-/* qr.js — minimal QR Code encoder (byte mode, versions 1–12, ECC L/M).
+/* qr.js — minimal QR Code encoder (byte mode, versions 1–25, ECC L/M).
  *
  * No dependencies, no CDN. Enough to encode a join URL (~60 chars) and draw it
- * to a canvas. Throws if the payload does not fit version 12.
+ * to a canvas. Versions past 12 exist for library sharing, where a whole
+ * library is split across a handful of codes rather than dozens of them.
+ * Throws if the payload does not fit version 25.
  *
  *   QR.encode("https://example.com")  -> { size, modules }  (modules[y][x] = bool)
  *   QR.draw(canvas, text, { scale, quiet, dark, light })
@@ -53,7 +55,9 @@
     return buf.subarray(data.length);
   }
 
-  /* ---------------- version tables (v1–v12) ----------------
+  var MAX_VERSION = 25;
+
+  /* ---------------- version tables (v1–v25) ----------------
    * Each entry: [ecPerBlock, blocks1, data1, blocks2, data2]
    */
   var BLOCKS = {
@@ -70,7 +74,20 @@
       [30, 2, 116, 0, 0],
       [18, 2, 68, 2, 69],
       [20, 4, 81, 0, 0],
-      [24, 2, 92, 2, 93]
+      [24, 2, 92, 2, 93],
+      [26, 4, 107, 0, 0],
+      [30, 3, 115, 1, 116],
+      [22, 5, 87, 1, 88],
+      [24, 5, 98, 1, 99],
+      [28, 1, 107, 5, 108],
+      [30, 5, 120, 1, 121],
+      [28, 3, 113, 4, 114],
+      [28, 3, 107, 5, 108],
+      [28, 4, 116, 4, 117],
+      [28, 2, 111, 7, 112],
+      [30, 4, 121, 5, 122],
+      [30, 6, 117, 4, 118],
+      [26, 8, 106, 4, 107]
     ],
     M: [
       null,
@@ -85,14 +102,30 @@
       [22, 3, 36, 2, 37],
       [26, 4, 43, 1, 44],
       [30, 1, 50, 4, 51],
-      [22, 6, 36, 2, 37]
+      [22, 6, 36, 2, 37],
+      [22, 8, 37, 1, 38],
+      [24, 4, 40, 5, 41],
+      [24, 5, 41, 5, 42],
+      [28, 7, 45, 3, 46],
+      [28, 10, 46, 1, 47],
+      [26, 9, 43, 4, 44],
+      [26, 3, 44, 11, 45],
+      [26, 3, 41, 13, 42],
+      [26, 17, 42, 0, 0],
+      [28, 17, 46, 0, 0],
+      [28, 4, 47, 14, 48],
+      [28, 6, 45, 14, 46],
+      [28, 8, 47, 13, 48]
     ]
   };
 
   // Alignment pattern centre coordinates per version.
   var ALIGN = [
     null, [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34],
-    [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50], [6, 30, 54], [6, 32, 58]
+    [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50], [6, 30, 54], [6, 32, 58],
+    [6, 34, 62], [6, 26, 46, 66], [6, 26, 48, 70], [6, 26, 50, 74], [6, 30, 54, 78],
+    [6, 30, 56, 82], [6, 30, 58, 86], [6, 34, 62, 90], [6, 28, 50, 72, 94],
+    [6, 26, 50, 74, 98], [6, 30, 54, 78, 102], [6, 28, 54, 80, 106], [6, 32, 58, 84, 110]
   ];
 
   var ECC_BITS = { L: 1, M: 0, Q: 3, H: 2 };
@@ -439,12 +472,12 @@
 
     var version = opts.version || 0;
     if (!version) {
-      for (var v = 1; v <= 12; v++) {
+      for (var v = 1; v <= MAX_VERSION; v++) {
         var headerBytes = v < 10 ? 2 : 3; // mode+count bits, rounded up
         if (bytes.length + headerBytes <= dataCapacity(v, ecc)) { version = v; break; }
       }
     }
-    if (!version) throw new Error("QR: payload too large (max version 12)");
+    if (!version) throw new Error("QR: payload too large (max version " + MAX_VERSION + ")");
 
     var codewords = buildCodewords(bytes, version, ecc);
     var grid = makeMatrix(version);
@@ -497,6 +530,13 @@
     encode: encode,
     draw: draw,
     // exposed for the offline conformance test in tools/
+    MAX_VERSION: MAX_VERSION,
+    /** Largest byte-mode payload that still fits, at this ECC level. */
+    capacity: function (ecc, version) {
+      var v = version || MAX_VERSION;
+      if (!BLOCKS[ecc]) ecc = "M";
+      return dataCapacity(v, ecc) - (v < 10 ? 2 : 3);
+    },
     _internal: { makeMatrix: makeMatrix, buildCodewords: buildCodewords, BLOCKS: BLOCKS }
   };
 })(typeof window !== "undefined" ? window : globalThis);

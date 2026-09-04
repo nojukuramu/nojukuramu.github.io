@@ -593,6 +593,7 @@
     // host and hand back the same id instead of reporting it as taken.
     var token = opts.token || rid(12);
     var links = {};          // connectionId -> Link
+    var banned = {};         // connectionId -> true; kicked, and staying out
     var brokers = [];
     var takenRounds = {};    // broker host -> consecutive ID-TAKEN answers
     var surrendered = false;
@@ -635,6 +636,8 @@
       var p = msg.payload || {};
       var cid = p.connectionId;
       if (!cid) return;
+
+      if (banned[cid]) return;   // kicked: their offers stop being interesting
 
       if (msg.type === "OFFER") {
         // A rejoining guest reuses its connection id. If the link we already
@@ -709,6 +712,19 @@
       return Object.keys(links)
         .map(function (k) { return links[k]; })
         .filter(function (l) { return l.isOpen(); });
+    };
+
+    /* Kicking is two things, and only doing the first is why "removed" guests
+     * reappear a second later: drop the channel, and refuse the reconnect the
+     * guest's own retry loop is already dialling. The ban is per connection id
+     * and lives only as long as this room does. */
+    self.kick = function (id) {
+      var link = links[id];
+      banned[id] = true;
+      if (!link) return false;
+      delete links[id];
+      link.destroy("kicked");
+      return true;
     };
 
     self.onlineBrokers = function () {

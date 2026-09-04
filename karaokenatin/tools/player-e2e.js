@@ -260,8 +260,22 @@ async function main() {
   await host.waitForFunction(() => document.querySelectorAll("#queue .row").length === 1, null, { timeout: 15000 });
 
   await host.evaluate(() => window.__player._set(0)); // ENDED
+
+  /* A song that reaches the end gets scored, on the stage rather than in a
+   * panel — the one place that survives the jump to fullscreen. */
+  await host.waitForSelector("#score-card:not([hidden])", { timeout: 10000 });
+  const scored = await host.evaluate(() => Number(document.getElementById("score-value").textContent));
+  check("a finished song is scored on the stage", scored >= 65 && scored <= 101, String(scored));
+  const scoreLine = await host.textContent("#score-line");
+  check("the score comes with something to say", scoreLine.trim().length > 0, scoreLine);
+
   await host.waitForFunction(() => window.__player.videoId === "bbbbbbbbbbb", null, { timeout: 15000 });
   check("a finished song advances to the next in the queue", true);
+  check("the score card clears once the next song loads", await host.locator("#score-card").isHidden());
+
+  const board = await host.evaluate(() => document.querySelectorAll("#board .board-row").length);
+  check("the score reaches the session leaderboard", board === 1, String(board));
+
   await host.waitForFunction(
     () => {
       const t = document.querySelector("#now .now-title");
@@ -271,6 +285,14 @@ async function main() {
     { timeout: 10000 }
   );
   check("now-playing follows the advance", true);
+
+  /* Skipping is not a performance. Scoring one would make every number in the
+   * room meaningless within about four songs. */
+  await host.evaluate(() => document.getElementById("skip-btn").click());
+  await host.waitForTimeout(600);
+  check("a skipped song is not scored", await host.locator("#score-card").isHidden());
+  const boardAfterSkip = await host.evaluate(() => document.querySelectorAll("#board .board-row").length);
+  check("and never reaches the leaderboard", boardAfterSkip === 1, String(boardAfterSkip));
 
   // Volume and mute route through to the player object.
   await host.evaluate(() => {

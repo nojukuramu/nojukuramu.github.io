@@ -217,13 +217,51 @@
     return JSON.stringify({ karaokenatin: "library/1", exportedAt: Date.now(), songs: s.songs, playlists: s.playlists }, null, 2);
   }
 
-  /** Merge an exported file in. Returns { songs, playlists } counts added. */
-  function importAll(text) {
+  function parseBundle(text) {
     var data;
     try { data = JSON.parse(text); } catch (e) { throw new Error("That file is not valid JSON."); }
     if (!data || (!Array.isArray(data.songs) && !Array.isArray(data.playlists))) {
       throw new Error("That does not look like a KaraokeNatin library.");
     }
+    return data;
+  }
+
+  /**
+   * What importing this file would collide with, before anything is written:
+   * { songs, playlists, dupSongs, dupPlaylists }. Importing the same export
+   * twice is the common case, and it should be the user's call whether that
+   * means "nothing to do" or "yes, again, I renamed things since".
+   */
+  function inspectImport(text) {
+    var data = parseBundle(text);
+    var s = load();
+    var out = { songs: 0, playlists: 0, dupSongs: 0, dupPlaylists: 0 };
+
+    data.songs = (data.songs || []).filter(isSong);
+    data.songs.forEach(function (song) {
+      if (s.songs.some(function (x) { return x.id === song.id; })) out.dupSongs++;
+      else out.songs++;
+    });
+
+    (data.playlists || []).forEach(function (p) {
+      if (!p || typeof p.name !== "string" || !Array.isArray(p.songs)) return;
+      if (s.playlists.some(function (x) { return x.name === String(p.name).slice(0, 60); })) out.dupPlaylists++;
+      else out.playlists++;
+    });
+    return out;
+  }
+
+  /**
+   * Merge an exported file in. Returns { songs, playlists } counts added.
+   *
+   * `opts.duplicates` decides what happens to entries already here: "skip"
+   * (the default) leaves them alone, "again" re-imports them — a saved song is
+   * still keyed by video id so it cannot truly double up, but a playlist comes
+   * back as a second, differently named copy.
+   */
+  function importAll(text, opts) {
+    var data = parseBundle(text);
+    var again = !!(opts && opts.duplicates === "again");
     var s = load();
     var added = { songs: 0, playlists: 0 };
 
@@ -236,10 +274,12 @@
 
     (data.playlists || []).forEach(function (p) {
       if (!p || typeof p.name !== "string" || !Array.isArray(p.songs)) return;
+      var name = String(p.name).slice(0, 60);
+      var clash = s.playlists.some(function (x) { return x.name === name; });
+      if (clash && !again) return;
       // Importing twice should not silently merge into an existing list —
       // name the copy instead and let the user decide what to keep.
-      var name = String(p.name).slice(0, 60);
-      if (s.playlists.some(function (x) { return x.name === name; })) name = (name + " (imported)").slice(0, 60);
+      if (clash) name = (name + " (imported)").slice(0, 60);
       s.playlists.push({
         pid: newId("p"),
         name: name,
@@ -252,6 +292,98 @@
 
     persist();
     return added;
+  }
+
+  /* ---------------- sharing over QR ----------------
+   * A QR code holds a couple of thousand bytes at best, and a library is
+   * bigger than that long before it is interesting. So the payload is squeezed
+   * first — short keys, thumbnails dropped (they are derivable from the video
+   * id), playlists holding indices instead of whole songs again — and then cut
+   * into parts that are scanned in any order and reassembled at the far end.
+   */
+  var SHARE_TAG = "KNL1";
+
+  function b64encode(str) {
+    var bytes = new TextEncoder().encode(str);
+    var bin = "";
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+
+  function b64decode(b64) {
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  /** The whole library as one compact, base64 string. */
+  function shareBlob() {
+    var s = load();
+    var index = {};
+    var songs = s.songs.map(function (x, i) {
+      index[x.id] = i;
+      return [x.id, x.title, x.author || "", x.duration || 0];
+    });
+    /* A playlist song that was never in Saved songs still has to travel, so
+     * it is appended to the shared list rather than dropped on the floor —
+     * but it must not arrive at the far end as a *saved* song. Saved songs
+     * come first and `n` says how many, so the two stay distinguishable. */
+    var saved = songs.length;
+    var lists = s.playlists.map(function (p) {
+      return [p.name, p.songs.map(function (x) {
+        if (!(x.id in index)) {
+          index[x.id] = songs.length;
+          songs.push([x.id, x.title, x.author || "", x.duration || 0]);
+        }
+        return index[x.id];
+      })];
+    });
+    return b64encode(JSON.stringify({ v: 1, n: saved, s: songs, p: lists }));
+  }
+
+  /** Split a share blob into `size`-character parts, each its own QR payload. */
+  function shareParts(size) {
+    var blob = shareBlob();
+    var per = Math.max(64, size || 900);
+    var count = Math.max(1, Math.ceil(blob.length / per));
+    var parts = [];
+    for (var i = 0; i < count; i++) {
+      parts.push(SHARE_TAG + ":" + (i + 1) + ":" + count + ":" + blob.substr(i * per, per));
+    }
+    return parts;
+  }
+
+  /** Read one scanned part. Returns { index, count, chunk } or null. */
+  function readPart(text) {
+    var m = /^KNL1:(\d+):(\d+):([\s\S]*)$/.exec(String(text || ""));
+    if (!m) return null;
+    var index = Number(m[1]);
+    var count = Number(m[2]);
+    if (!(index >= 1 && count >= 1 && index <= count)) return null;
+    return { index: index, count: count, chunk: m[3] };
+  }
+
+  /** Turn a complete set of parts back into importable export JSON. */
+  function joinParts(chunks) {
+    var blob = chunks.join("");
+    var data;
+    try { data = JSON.parse(b64decode(blob)); } catch (e) {
+      throw new Error("Those codes did not add up to a library — try scanning them again.");
+    }
+    if (!data || !Array.isArray(data.s)) throw new Error("That is not a shared KaraokeNatin library.");
+
+    var songs = data.s.map(function (row) {
+      return { id: row[0], title: row[1] || "YouTube video", author: row[2] || "", duration: row[3] || 0 };
+    });
+    var playlists = (data.p || []).map(function (row) {
+      return {
+        name: row[0],
+        songs: (row[1] || []).map(function (i) { return songs[i]; }).filter(Boolean)
+      };
+    });
+    var saved = typeof data.n === "number" ? songs.slice(0, data.n) : songs;
+    return JSON.stringify({ karaokenatin: "library/1", exportedAt: Date.now(), songs: saved, playlists: playlists });
   }
 
   function clearAll() {
@@ -281,6 +413,11 @@
     moveInPlaylist: moveInPlaylist,
     exportAll: exportAll,
     importAll: importAll,
+    inspectImport: inspectImport,
+    shareBlob: shareBlob,
+    shareParts: shareParts,
+    readPart: readPart,
+    joinParts: joinParts,
     clearAll: clearAll,
     onChange: onChange,
     stats: stats,
