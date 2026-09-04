@@ -119,6 +119,14 @@ async function passNameGate(page, name) {
   await page.waitForSelector("#name-gate", { state: "hidden" });
 }
 
+/* The tile toggles, so clicking it blindly closes a panel that is already
+ * open — which is right for a person and wrong for a script. */
+async function openRoulette(page) {
+  await page.click('.tab[data-tab="games"]');
+  if (await page.locator("#roulette-root").isHidden()) await page.click("#roulette-open");
+  await page.waitForSelector("#roulette-root:not([hidden])", { timeout: 20000 });
+}
+
 async function admit(host, name) {
   await host.click('.tab[data-tab="singers"]');
   const row = host.locator("#pending .row", { hasText: name });
@@ -203,6 +211,15 @@ async function main() {
   await guest.waitForSelector("#lobby-wait", { state: "hidden", timeout: 20000 });
 
   await host.click('.tab[data-tab="games"]');
+  /* The tab is a menu of tiles now; the roulette opens from its own. On a wide
+   * screen it opens beside the player rather than over it, which is what this
+   * check is really asserting — no backdrop, and the stage still visible. */
+  check("the games tab is a compact menu until you open one", await host.locator("#roulette-root").isHidden());
+  await host.click("#roulette-open");
+  await host.waitForSelector("#roulette-root:not([hidden])", { timeout: 20000 });
+  check("a wide screen opens the roulette without covering the player", await host.locator("#roulette-modal").isHidden());
+  check("and the stage is still on screen", await host.locator("#stage").isVisible());
+
   const queueBtn = host.locator("#roulette-queue");
   check("an empty pot cannot be queued", await queueBtn.isDisabled());
   check("and says how many more it needs", /3 more songs/.test(await host.textContent("#roulette-hint")));
@@ -247,8 +264,19 @@ async function main() {
   check("the same song cannot go in the pot twice", potAfter === potBefore, potBefore + " → " + potAfter);
 
   /* ── the wheel ────────────────────────────────────────────────────────── */
-  await host.click('.tab[data-tab="games"]');
+  await openRoulette(host);
   check("three songs is enough to queue a round", !(await queueBtn.isDisabled()));
+
+  /* "Empty the pot" is a quiet link under the primary action rather than its
+   * equal half of a split row — the pair looked broken the moment the pot had
+   * anything in it, which is the only time the second one appears. */
+  const stacked = await host.evaluate(() => {
+    const a = document.getElementById("roulette-queue").getBoundingClientRect();
+    const b = document.getElementById("roulette-clear").getBoundingClientRect();
+    return { below: b.top >= a.bottom - 1, full: a.width > b.width * 1.5 };
+  });
+  check("the destructive action sits under the primary, not beside it", stacked.below && stacked.full, JSON.stringify(stacked));
+
   await queueBtn.click();
 
   await host.waitForFunction(
@@ -291,30 +319,97 @@ async function main() {
   await host.waitForSelector("#spin-again:not([hidden])", { timeout: 25000 });
   check("and the host is offered another round", true);
   const countdown = await host.textContent("#spin-again-count");
-  check("with a visible countdown rather than a silent one", /^[0-3]$/.test(countdown.trim()), countdown);
+  check("with a visible countdown rather than a silent one", /^([0-9]|10)$/.test(countdown.trim()), countdown);
 
-  /* A co-host is usually on a phone, and the offer is explicitly theirs too —
-   * so it has to reach somewhere they can press it, not just the host screen. */
-  await host.evaluate(() => {
-    window.KN.app.net.guests().forEach((l) => { window.KN.app.cohosts[l.id] = true; });
-    window.KN.app.state.cohosts = window.KN.app.cohosts;
-    window.KN.app.net.guests().forEach((l) =>
-      l.send({ type: "STATE", rev: window.KN.app.state.rev, state: window.KN.app.state }));
+  /* Everybody votes, not just the host — a plain guest with no co-host badge
+   * must get the buttons, or "everyone can choose" is not what it says. */
+  await guest.waitForSelector("#spin-again:not([hidden])", { timeout: 20000 });
+  const plainGuest = await guest.evaluate(() => {
+    const s = window.KN.app.state;
+    return !(s.cohosts && s.cohosts[window.KN.app.clientId]);
   });
-  await guest.waitForSelector("#spin-again:not([hidden])", { timeout: 15000 });
-  check("a co-host on a phone is offered the round too", true);
+  check("a plain guest is offered a vote, not just the host", plainGuest);
 
-  await host.click("#spin-again-yes");
+  await guest.click("#spin-again-yes");
+  await host.waitForFunction(
+    () => {
+      const v = window.KN.app.state.spinOffer && window.KN.app.state.spinOffer.votes;
+      return v && Object.keys(v).length === 1;
+    },
+    null,
+    { timeout: 15000 }
+  );
+  check("a guest's hand reaches the host", true);
+  await host.waitForFunction(
+    () => /Spin again · 1/.test(document.getElementById("spin-again-yes").textContent),
+    null,
+    { timeout: 15000 }
+  );
+  check("and the room can see the tally", true);
+
+  // The host votes the other way: a tie goes to spinning again.
+  await host.click("#spin-again-no");
   await host.waitForFunction(
     () => window.KN.app.state.roulette.pool.length === 1,
     null,
-    { timeout: 30000 }
+    { timeout: 40000 }
   );
-  check("spinning again draws another song from the pot", true);
+  check("the window runs its course and the majority is acted on", true);
   check(
-    "and the offer is gone once it is taken",
+    "and the offer is gone once it is decided",
     await host.locator("#spin-again").isHidden()
   );
+
+  /* ── keeping picked songs in ──────────────────────────────────────────── */
+  // The rounds above drained the pot; this option is about a full one.
+  await host.evaluate(() => {
+    const rl = window.KN.app.state.roulette;
+    ["r1", "r2", "r3"].forEach((id, i) =>
+      window.KN.games.addToPool(rl, { id: id, title: "Refill " + i + " Karaoke" }, "Maria", "m"));
+    window.KN.refresh();
+  });
+  await openRoulette(host);
+  await host.check("#cfg-roulette-keep");
+  await host.waitForFunction(() => window.KN.app.state.roulette.keepPicked === true, null, { timeout: 15000 });
+  check("the pot can be told to hold on to picked songs", true);
+  check(
+    "and says so rather than counting down to empty",
+    /runs until you stop it/.test(await host.textContent("#roulette-hint"))
+  );
+
+  const held = await host.evaluate(() => {
+    const rl = window.KN.app.state.roulette;
+    const before = rl.pool.length;
+    const picks = [];
+    for (let i = 0; i < 6; i++) {
+      const p = window.KN.games.spinSong(rl);
+      picks.push(p && p.id);
+    }
+    return { before, after: rl.pool.length, repeatedBackToBack: picks.some((id, i) => i && id === picks[i - 1]) };
+  });
+  check("picked songs stay in the pot when it is on", held.after === held.before, JSON.stringify(held));
+  check("but the same one never comes up twice running", !held.repeatedBackToBack, JSON.stringify(held));
+  await host.uncheck("#cfg-roulette-keep");
+
+  /* ── the phone gets a sheet, not a panel ──────────────────────────────── */
+  const phone = await newPage(390);
+  await phone.goto(base + "#/r/" + code);
+  await passNameGate(phone, "Bea");
+  await phone.waitForSelector("#conn.conn-ok", { timeout: 30000 });
+  await admit(host, "Bea");
+  await phone.waitForSelector("#lobby-wait", { state: "hidden", timeout: 20000 });
+  await phone.click('.tab[data-tab="games"]');
+  check("a phone sees the compact tile too", await phone.locator("#roulette-open").isVisible());
+  await phone.click("#roulette-open");
+  await phone.waitForSelector("#roulette-modal:not([hidden])", { timeout: 15000 });
+  check("and opening it on a phone raises an overlay", true);
+  const inSheet = await phone.evaluate(
+    () => document.getElementById("roulette-root").closest("#roulette-modal") !== null
+  );
+  check("with the same panel inside it, not a second copy", inSheet);
+  await phone.click("#roulette-close");
+  await phone.waitForSelector("#roulette-modal", { state: "hidden", timeout: 10000 });
+  check("and it closes again", true);
 
   /* ── dragging the queue ───────────────────────────────────────────────── */
   await host.evaluate(() => {
@@ -344,10 +439,10 @@ async function main() {
   await host.waitForFunction(
     () => {
       const t = [...document.querySelectorAll("#queue .row-title")].map((n) => n.textContent);
-      return t[0] === "Second";
+      return t.join("|") === "Second|Third|First";
     },
     null,
-    { timeout: 15000 }
+    { timeout: 20000 }
   );
   const order = await host.locator("#queue .row-title").allTextContents();
   check("dragging a row to the bottom reorders the queue", JSON.stringify(order) === JSON.stringify(["Second", "Third", "First"]), JSON.stringify(order));

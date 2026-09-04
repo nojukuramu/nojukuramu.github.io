@@ -203,12 +203,15 @@ alongside your playlists). Once there are three, the host or a co-host can drop 
 into the queue as a single entry — and when that entry reaches the stage the room spins
 twice, on the big screen where everyone is already looking: first for **who sings**, then
 for **what**. The picked song plays credited to the picked singer and is scored like any
-other, and then there is a three-second window to go round again on the spot.
+other, and then the room is asked whether it wants another.
 
 Four rules are worth stating because they are the ones people argue about:
 
-- **A picked song leaves the pot.** A pot of five is five rounds, not an unbounded supply
-  with the same song coming up twice. Anyone can top it back up mid-game.
+- **A picked song leaves the pot — unless the room says otherwise.** A pot of five is five
+  rounds by default rather than an unbounded supply with the same song coming up twice.
+  But a room that curated twenty good tracks wants them to stay in, so *Keep picked songs
+  in the pot* is a switch. With it on, the one that just played is skipped where there is
+  anything else to draw: the same song twice running reads as a broken wheel, not as luck.
 - **The host can be excluded.** Whoever is running the night is usually not one of the
   people playing, and a wheel that keeps landing on the person holding the laptop stops
   being a game. If excluding them would leave nobody at all, they are back in — a
@@ -219,9 +222,31 @@ Four rules are worth stating because they are the ones people argue about:
   carry on with the one already running: refusing the second round of a three-song pot
   because the pot is now "too small" would end the game two thirds of the way through it.
 
-The offer to spin again is one element with two homes — inside the stage on the host, where
-it survives fullscreen, and in the room body on a phone, because a co-host is usually
-holding one and the offer is explicitly theirs to take too.
+### Another round?
+
+Ten seconds, and **everyone in the room votes**. It is a show of hands rather than a race
+to a button: the first person to tap would otherwise decide for everybody, which is the
+same problem as only the host deciding with the added indignity of being arbitrary. The
+tally is live, tapping again changes your mind, and the window runs its full length before
+anything happens. A tie goes to spinning again — the offer exists to keep a game going, so
+the tie-break should too — and nobody voting at all means the queue carries on, because
+silence is not a mandate to hijack it.
+
+The bar is one element with two homes: inside the stage on the host, where it survives
+fullscreen, and in the room body on a phone, which is where most of the hands are.
+
+### Where it opens
+
+The Games tab is a menu of compact tiles, so it stays readable however many games end up
+in it. The roulette opens from its own tile, and *where* it opens is the point:
+
+- **On a phone**, a sheet rising from the bottom — the native shape for "this now, please".
+- **On anything wider**, inline, hanging off the tile it belongs to inside the side column.
+  A modal on a host screen would black out the one thing the room is watching in order to
+  ask a question about it, and the side column is beside the player rather than over it.
+
+It is one panel moved between the two rather than two that can drift apart, and a window
+dragged across the breakpoint re-homes it.
 
 ## The 10pm rule
 
@@ -483,9 +508,14 @@ than one pair of hands. It fills a roulette pot from two phones and checks the "
 survives the wire and that the same song cannot go in twice; queues a round and watches the
 wheel land, credit the singer it picked, and take that song out of the pot; ends the song
 and checks the score counts *up* to its number rather than appearing at it, that the
-leaderboard follows it onto the stage, and that the offer to spin again reaches a co-host's
-phone and not only the host screen. It then drags a queue row past two others with real
-pointer events and checks the reorder reaches every device. Finally it drives the statistics
+leaderboard follows it onto the stage, and that a plain guest — no co-host badge — is
+offered a vote on another round, that their hand reaches the host, that the tally is
+visible to the room, and that the window runs its course before anything acts on it. It checks the pot can be told to keep what it
+draws, and that even then the same song never comes up twice running. It opens the
+roulette on a phone and asserts an overlay with the *same* panel inside it rather than a
+second copy, and on a wide screen asserts the opposite — no backdrop, and the stage still
+on screen. It then drags a queue row past two others with real pointer events and checks
+the reorder reaches every device. Finally it drives the statistics
 page: empty first, then with history, and asserts the arithmetic — an average, a winrate, a
 best — before erasing the lot and checking the store is really empty. The search assertions
 are in the same file because they are the same question from the other end: the official

@@ -1532,9 +1532,14 @@ body.can-manage .tab.host-tab { display: inline-flex; }
     gap: 6px 8px;
     padding: 10px 0;
   }
-  .head-left { min-width: 0; }
+  /* `min-width: 0` lets the *column* shrink; it does not make a pill inside it
+     any narrower, so a long status ("waiting for the host…") kept its full
+     width and slid out under the badges on the right. Wrapping is the answer
+     rather than truncating: "c…" is not a connection status, and the second
+     line costs nothing on a header this short. */
+  .head-left { min-width: 0; flex-wrap: wrap; row-gap: 4px; }
   .head-left .label { display: none; }
-  .head-right { justify-self: end; }
+  .head-right { justify-self: end; align-self: start; }
 
   .now-thumb { width: 76px; }
   .now-title { font-size: 16px; }
@@ -1726,8 +1731,17 @@ body.can-manage .tab.host-tab { display: inline-flex; }
   text-align: center;
   opacity: 0.7;
 }
-/* Only the people who can actually act on it get the buttons. */
-body:not(.can-manage) .spin-again { display: none !important; }
+/* Everyone in the room votes, so everyone gets the buttons — a show of hands
+   only the host may raise is not a show of hands. */
+.spin-again .btn { transition: filter var(--fast) var(--ease), outline-color var(--fast) var(--ease); }
+/* Your own hand, marked in a colour that reads on both the filled primary and
+   the quiet one — an accent ring around an accent-filled button is invisible,
+   which is the one place it needed to be visible. */
+.spin-again .btn.voted {
+  outline: 2px solid #f0c23c;
+  outline-offset: 2px;
+  filter: brightness(1.06);
+}
 /* On a phone it is not sitting over a video, so it is a bar in the flow
    rather than something floating over the stage. */
 #spin-slot-guest .spin-again {
@@ -1845,14 +1859,42 @@ body.in-lobby .panels { opacity: 0.35; pointer-events: none; }
 .row-pending { border-color: var(--accent); background: var(--accent-soft); }
 .singer-dot-wait { background: var(--accent); animation: pulse-dot 1.8s var(--ease) infinite; }
 
-/* ── the games tab ── */
-.game-card {
+/* ── the games tab ──
+   A menu of tiles rather than one game's worth of controls spilled across the
+   panel. The roulette opens from its tile: as a sheet on a phone, and inline
+   beside the player on anything wider, because a modal on a host screen would
+   black out the one thing the room is watching in order to ask a question
+   about it. */
+.game-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.game-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 13px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--bg-2);
-  padding: 16px;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease), transform var(--fast) var(--ease);
 }
-.game-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+.game-tile:hover { border-color: var(--accent); transform: translateY(-1px); }
+.game-tile[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.game-tile[aria-expanded="true"] .game-tile-go { transform: rotate(90deg); }
+.game-tile-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.game-tile-title { font-family: var(--serif); font-size: 16px; font-weight: 600; }
+.game-tile-sub {
+  font-size: 12px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.game-tile-go { color: var(--ink-3); flex: none; display: grid; place-items: center; transition: transform var(--mid) var(--ease); }
+.game-tile-go .i { width: 18px; height: 18px; }
+
 .game-ico {
   flex: none;
   display: grid;
@@ -1864,14 +1906,59 @@ body.in-lobby .panels { opacity: 0.35; pointer-events: none; }
   color: var(--accent);
 }
 .game-ico .i { width: 22px; height: 22px; }
-.game-head-meta { min-width: 0; }
-.game-title { margin: 0; font-size: 18px; }
-.game-sub { margin: 3px 0 0; font-size: 13px; color: var(--ink-3); }
-.roulette-pool { margin-bottom: 12px; max-height: 40vh; overflow-y: auto; }
-.cfg-inline { border-bottom: 0; padding: 10px 2px; }
-.game-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-.game-actions .btn { flex: 1; }
+.game-ico-sm { width: 28px; height: 28px; border-radius: 9px; }
+.game-ico-sm .i { width: 17px; height: 17px; }
+.game-sub { margin: 3px 0 12px; font-size: 13px; color: var(--ink-3); }
+
+.roulette { animation: panel-in var(--mid) var(--ease) both; }
+.roulette[hidden] { display: none; }
+/* Inline, it reads as the tile above it having opened: it hangs off the
+   bottom of that tile, and drops the title and strapline the tile is already
+   showing three lines higher. In the sheet both are the only thing naming it,
+   so both stay. */
+#roulette-slot-inline .roulette {
+  margin: -9px 0 4px;
+  padding: 18px 14px 14px;
+  border: 1px solid var(--accent);
+  border-top: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--bg-2);
+}
+#roulette-slot-inline .roulette-head,
+#roulette-slot-inline .game-sub { display: none; }
+/* The tile loses its bottom corners to the panel hanging off it. */
+.game-tile[aria-expanded="true"] { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+/* The modal stylesheet turns every h3 into a small uppercase accent label,
+   which is right for the disclaimer's section headings and wrong for a panel
+   title — so this one says what it is rather than inheriting it. */
+.roulette-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--ink);
+}
+.roulette-pool { margin-bottom: 10px; max-height: 38vh; overflow-y: auto; }
+.roulette-opts { margin: 4px 0 10px; }
+.cfg-inline { border-bottom: 0; padding: 9px 2px; }
+
+/* The action row was a 50/50 split between a primary and a destructive
+   button, which put "Empty the pot" beside "Add a round" at equal weight and
+   made the card look broken the moment the pot had anything in it. They are
+   not equals: one is the thing you came for, the other is a thing you almost
+   never want. */
+.game-actions { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.game-actions .btn { width: 100%; }
+.linklike-bad { color: var(--ink-3); align-self: center; font-size: 12px; padding: 4px; }
+.linklike-bad:hover { color: var(--bad); }
+.linklike-bad[hidden] { display: none; }
 .btn:disabled { opacity: 0.5; cursor: default; }
+
 .row-game { border-style: dashed; border-color: var(--accent); background: var(--accent-soft); }
 .row-gameicon {
   width: 62px;
@@ -1882,6 +1969,29 @@ body.in-lobby .panels { opacity: 0.35; pointer-events: none; }
   border-radius: 7px;
   background: var(--bg-3);
   color: var(--accent);
+}
+
+/* On a phone the roulette is a sheet: it rises from the bottom, takes the
+   screen it needs, and leaves. */
+/* On anything wider it is just a modal; `.modal` already scrolls and caps its
+   own height. Only the phone needs it turned into a sheet. */
+@media (max-width: 720px) {
+  .modal-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: none;
+    max-height: 90dvh;
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    animation: sheet-in var(--mid) var(--ease) both;
+  }
+  @keyframes sheet-in {
+    from { transform: translateY(28px); opacity: 0; }
+    to   { transform: none; opacity: 1; }
+  }
 }
 
 /* The add-to-playlist chooser's roulette shortcut. */

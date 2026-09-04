@@ -39,8 +39,15 @@
     return {
       pool: [],
       includeHost: true,
+      /* Off, and the pot drains: five songs is five rounds and then it needs
+       * topping up. On, and the same pot goes all night — which is what a room
+       * that curated twenty good tracks actually wants, and what a room of
+       * three does not. Neither default is right for everybody, so it is a
+       * switch rather than a rule. */
+      keepPicked: false,
       rounds: 0,          // how many times it has been spun this session
-      lastSingerId: null  // avoided on the next spin where there is a choice
+      lastSingerId: null, // avoided on the next spin where there is a choice
+      lastSongId: null    // likewise, once songs can come up more than once
     };
   }
 
@@ -50,8 +57,10 @@
     if (!raw || typeof raw !== "object") return r;
     if (Array.isArray(raw.pool)) r.pool = raw.pool.slice(0, POOL_LIMIT);
     if (typeof raw.includeHost === "boolean") r.includeHost = raw.includeHost;
+    if (typeof raw.keepPicked === "boolean") r.keepPicked = raw.keepPicked;
     if (typeof raw.rounds === "number") r.rounds = raw.rounds;
     if (typeof raw.lastSingerId === "string") r.lastSingerId = raw.lastSingerId;
+    if (typeof raw.lastSongId === "string") r.lastSongId = raw.lastSongId;
     return r;
   }
 
@@ -137,11 +146,25 @@
     return pickFrom(fresh.length ? fresh : all);
   }
 
-  /** Spin for a song, and take it out of the pot. */
+  /**
+   * Spin for a song. It leaves the pot unless the room asked for songs to stay
+   * in — and when they stay in, the one that just played is skipped where
+   * there is anything else to pick, for the same reason the previous singer is:
+   * the same song twice running reads as a broken wheel rather than as luck.
+   */
   function spinSong(rl) {
     if (!rl || !rl.pool.length) return null;
-    var i = Math.floor(Math.random() * rl.pool.length);
-    return rl.pool.splice(i, 1)[0];
+    var pool = rl.pool;
+    if (rl.keepPicked) {
+      var fresh = pool.filter(function (e) { return e.id !== rl.lastSongId; });
+      var pick = pickFrom(fresh.length ? fresh : pool);
+      rl.lastSongId = pick ? pick.id : null;
+      return pick;
+    }
+    var i = Math.floor(Math.random() * pool.length);
+    var out = pool.splice(i, 1)[0];
+    rl.lastSongId = out ? out.id : null;
+    return out;
   }
 
   /**
