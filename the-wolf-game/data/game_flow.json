@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "notes": [
+    "The whole shape of a round, as data. The engine walks this list and does not",
+    "know what a 'discussion' is — it knows a phase has a duration, a sky, a set of",
+    "capabilities it unlocks, and what comes next. Reordering the round, adding a",
+    "phase, or giving one a different clock is an edit to this file.",
+    "",
+    "`sky.from`/`sky.to` name stops in data/sky.json. The theme crossfades between",
+    "them across the phase's duration, so the village really does go night → dawn →",
+    "noon → dusk → night while you play, and the phase you are in is legible from",
+    "the colour of the room before you read a word of it."
+  ],
+
+  "defaults": {
+    "graceMs": 900,
+    "warnAt": 0.8
+  },
+
+  "phases": [
+    {
+      "id": "lobby",
+      "name": "Lobby",
+      "icon": "🚪",
+      "duration": null,
+      "sky": { "from": "dusk", "to": "dusk" },
+      "capabilities": ["chat", "configure", "join", "leave"],
+      "next": "role_reveal",
+      "description": "Before anything. The host sets the roster and the roles."
+    },
+    {
+      "id": "role_reveal",
+      "name": "Your role",
+      "icon": "🎴",
+      "duration": 30,
+      "skippable": true,
+      "sky": { "from": "dusk", "to": "night" },
+      "capabilities": ["seeOwnRole", "seeTeam"],
+      "next": "night",
+      "description": "Everyone reads their own card at the same time. No passing anything around."
+    },
+    {
+      "id": "night",
+      "showRound": true,
+      "name": "Night",
+      "icon": "🌙",
+      "duration": 180,
+      "sky": { "from": "night", "to": "predawn" },
+      "capabilities": ["visitHouses", "act", "teamChat"],
+      "endsWhen": "allTurnsSpent",
+      "next": "dawn",
+      "description": "The village is asleep and everyone moves at once. First knock, first served."
+    },
+    {
+      "id": "dawn",
+      "showRound": true,
+      "name": "Dawn",
+      "icon": "🌅",
+      "duration": 25,
+      "skippable": true,
+      "sky": { "from": "predawn", "to": "morning" },
+      "capabilities": ["seeMorningReport"],
+      "next": "discussion",
+      "description": "What the village finds, and who found it."
+    },
+    {
+      "id": "discussion",
+      "showRound": true,
+      "name": "Discussion",
+      "icon": "💬",
+      "duration": 300,
+      "extendable": true,
+      "sky": { "from": "morning", "to": "noon" },
+      "capabilities": ["chat", "accuse", "callVote"],
+      "next": "voting",
+      "description": "Five minutes of daylight to work out who is lying."
+    },
+    {
+      "id": "voting",
+      "showRound": true,
+      "name": "Voting",
+      "icon": "🗳️",
+      "duration": 120,
+      "sky": { "from": "noon", "to": "dusk" },
+      "capabilities": ["vote", "changeVote", "chat"],
+      "endsWhen": "allVotesIn",
+      "next": "verdict",
+      "description": "Votes are cast openly and can be changed until the clock runs out."
+    },
+    {
+      "id": "verdict",
+      "showRound": true,
+      "name": "Verdict",
+      "icon": "⚖️",
+      "duration": 25,
+      "skippable": true,
+      "sky": { "from": "dusk", "to": "night" },
+      "capabilities": ["seeVerdict"],
+      "next": "night",
+      "description": "The rope, or the reprieve. Then the sun goes down again."
+    },
+    {
+      "id": "game_over",
+      "name": "Game over",
+      "icon": "🏁",
+      "duration": null,
+      "sky": { "from": "dawn", "to": "dawn" },
+      "capabilities": ["seeSummary", "chat", "rematch"],
+      "next": null,
+      "description": "Every role revealed, every night replayed."
+    }
+  ],
+
+  "firstRound": {
+    "skip": [],
+    "notes": "The first night is a full night; immunity is a room setting, not a phase change."
+  },
+
+  "roomConfig": {
+    "phaseDurations": {
+      "label": "Phase timers",
+      "description": "Seconds each phase runs. Null means it waits for the host.",
+      "editable": ["role_reveal", "night", "dawn", "discussion", "voting", "verdict"]
+    },
+    "presets": {
+      "quick":   { "role_reveal": 20, "night": 120, "dawn": 15, "discussion": 150, "voting": 75,  "verdict": 15 },
+      "classic": { "role_reveal": 30, "night": 180, "dawn": 25, "discussion": 300, "voting": 120, "verdict": 25 },
+      "slow":    { "role_reveal": 45, "night": 300, "dawn": 35, "discussion": 480, "voting": 180, "verdict": 35 }
+    }
+  }
+}

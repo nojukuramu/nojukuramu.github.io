@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "notes": [
+    "The clock, as colour. Each stop is a full set of theme tokens; the theme engine",
+    "crossfades between two stops across a phase, so the room's colour is a readout",
+    "of how much of the phase is left. Both themes are the same Ash Blue family —",
+    "light is washed ash, dark is deep slate — and the time of day tints it.",
+    "",
+    "`mix` is how far the stop pulls the base palette towards its own hue: 0 leaves",
+    "the neutral Ash Blue alone, 1 fully commits. Night and noon are the extremes."
+  ],
+
+  "stops": {
+    "night": {
+      "name": "Night",
+      "mix": 1,
+      "light": { "sky1": "#2b3a4a", "sky2": "#16202b", "sky3": "#0d141c", "glow": "#5b7f9e", "tint": "#1b2836", "onSky": "#dbe6ef" },
+      "dark":  { "sky1": "#131c26", "sky2": "#0b1119", "sky3": "#05080c", "glow": "#3f6a8c", "tint": "#0e161f", "onSky": "#c6d5e2" }
+    },
+    "predawn": {
+      "name": "Before dawn",
+      "mix": 0.85,
+      "light": { "sky1": "#4a5a6e", "sky2": "#2c3a4b", "sky3": "#1b2634", "glow": "#8aa4bd", "tint": "#33435a", "onSky": "#e3ecf4" },
+      "dark":  { "sky1": "#1e2b39", "sky2": "#131d28", "sky3": "#0a1018", "glow": "#54789a", "tint": "#16212d", "onSky": "#cbd9e6" }
+    },
+    "dawn": {
+      "name": "Dawn",
+      "mix": 0.55,
+      "light": { "sky1": "#c8d2dc", "sky2": "#9fb2c4", "sky3": "#7b95ac", "glow": "#e2c3a8", "tint": "#b9c8d6", "onSky": "#17202a" },
+      "dark":  { "sky1": "#33465a", "sky2": "#233444", "sky3": "#16222e", "glow": "#a3805f", "tint": "#28394a", "onSky": "#e2ebf2" }
+    },
+    "morning": {
+      "name": "Morning",
+      "mix": 0.3,
+      "light": { "sky1": "#e8eff5", "sky2": "#cfdde9", "sky3": "#b3c7d8", "glow": "#f0dcc4", "tint": "#dae6ef", "onSky": "#17202a" },
+      "dark":  { "sky1": "#2c3f52", "sky2": "#1f2e3d", "sky3": "#15202c", "glow": "#8d7659", "tint": "#243546", "onSky": "#e6eff5" }
+    },
+    "noon": {
+      "name": "Noon",
+      "mix": 0,
+      "light": { "sky1": "#f4f8fb", "sky2": "#e0eaf2", "sky3": "#c6d7e4", "glow": "#ffffff", "tint": "#eaf1f7", "onSky": "#17202a" },
+      "dark":  { "sky1": "#33485c", "sky2": "#253748", "sky3": "#192736", "glow": "#7f97ab", "tint": "#2a3e50", "onSky": "#eaf2f8" }
+    },
+    "afternoon": {
+      "name": "Afternoon",
+      "mix": 0.25,
+      "light": { "sky1": "#eef1f2", "sky2": "#d9e0e4", "sky3": "#bcc9d1", "glow": "#f6e6cf", "tint": "#e2e9ed", "onSky": "#17202a" },
+      "dark":  { "sky1": "#31414f", "sky2": "#23313d", "sky3": "#18232d", "glow": "#8a7a63", "tint": "#293743", "onSky": "#e8eff4" }
+    },
+    "dusk": {
+      "name": "Dusk",
+      "mix": 0.7,
+      "light": { "sky1": "#8e97a8", "sky2": "#5f6b7e", "sky3": "#3d4759", "glow": "#c99a7d", "tint": "#6d7889", "onSky": "#f2f6fa" },
+      "dark":  { "sky1": "#2b3140", "sky2": "#1c2130", "sky3": "#111624", "glow": "#8a5f4b", "tint": "#212636", "onSky": "#d9e3ec" }
+    }
+  },
+
+  "order": ["night", "predawn", "dawn", "morning", "noon", "afternoon", "dusk"]
+}

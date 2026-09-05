@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>The Wolf Game — a village, after dark</title>
+<meta name="description" content="Werewolf for a room full of phones. The night runs for everyone at once, first come first served: pick a house, then decide what to do at its door. Peer-to-peer over WebRTC, no accounts, no server." />
+<meta name="theme-color" content="#eaeff4" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#10161c" media="(prefers-color-scheme: dark)" />
+<meta name="color-scheme" content="light dark" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="mobile-web-app-capable" content="yes" />
+
+<meta property="og:title" content="The Wolf Game" />
+<meta property="og:description" content="Werewolf for a room full of phones. Pick a house, then decide what to do at its door — and find out what being late costs you." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://nojukuramu.github.io/the-wolf-game/" />
+<link rel="canonical" href="https://nojukuramu.github.io/the-wolf-game/" />
+
+<link rel="manifest" href="manifest.webmanifest?v=1.0.0" />
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+
+<!-- Theme before first paint. Without this a dark-mode phone gets one white
+     frame on every load, which on a game that is mostly night is jarring. -->
+<script>
+  (function () {
+    try {
+      var m = localStorage.getItem("wg.theme");
+      if (m === "dark" || m === "light") document.documentElement.setAttribute("data-theme", m);
+      if (localStorage.getItem("wg.motion") === "off") document.documentElement.setAttribute("data-motion", "off");
+    } catch (e) { /* private window: the media query still works */ }
+  })();
+</script>
+
+<link rel="stylesheet" href="css/theme.css?v=1.0.0" />
+<link rel="stylesheet" href="css/app.css?v=1.0.0" />
+</head>
+<body>
+  <div class="sky" aria-hidden="true"></div>
+
+  <div class="app">
+    <header class="topbar" id="topbar"></header>
+    <main id="main" role="main">
+      <div class="empty"><span class="ico">🌙</span>Waking the village…</div>
+    </main>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <noscript>
+    <div class="card" style="max-width:520px;margin:40px auto">
+      <h2>This one needs JavaScript</h2>
+      <p>The whole game is the page — there is no server behind it to render anything.</p>
+    </div>
+  </noscript>
+
+  <!-- Order matters and is not alphabetical: protocol defines the constants the
+       resolver reads at load, the resolver defines the primitives the roles are
+       built out of, and the roles have to have registered before roles.link()
+       is allowed to check them against the data. -->
+  <script src="js/net/peer.js?v=1.0.0"></script>
+  <script src="js/engine/protocol.js?v=1.0.0"></script>
+  <script src="js/engine/roles.js?v=1.0.0"></script>
+  <script src="js/engine/resolver.js?v=1.0.0"></script>
+
+  <script src="js/roles/_generic.js?v=1.0.0"></script>
+  <script src="js/roles/albularyo.js?v=1.0.0"></script>
+  <script src="js/roles/alpha_wolf.js?v=1.0.0"></script>
+  <script src="js/roles/archangel.js?v=1.0.0"></script>
+  <script src="js/roles/assassin.js?v=1.0.0"></script>
+  <script src="js/roles/avenger.js?v=1.0.0"></script>
+  <script src="js/roles/bodyguard.js?v=1.0.0"></script>
+  <script src="js/roles/call_center_agent.js?v=1.0.0"></script>
+  <script src="js/roles/cat.js?v=1.0.0"></script>
+  <script src="js/roles/crazy_naughty_boy.js?v=1.0.0"></script>
+  <script src="js/roles/cult_leader.js?v=1.0.0"></script>
+  <script src="js/roles/cultist.js?v=1.0.0"></script>
+  <script src="js/roles/detective.js?v=1.0.0"></script>
+  <script src="js/roles/diseased.js?v=1.0.0"></script>
+  <script src="js/roles/diwata.js?v=1.0.0"></script>
+  <script src="js/roles/doctor.js?v=1.0.0"></script>
+  <script src="js/roles/dog.js?v=1.0.0"></script>
+  <script src="js/roles/doppelganger.js?v=1.0.0"></script>
+  <script src="js/roles/engineer.js?v=1.0.0"></script>
+  <script src="js/roles/fanatic.js?v=1.0.0"></script>
+  <script src="js/roles/fanatic_plus.js?v=1.0.0"></script>
+  <script src="js/roles/jester.js?v=1.0.0"></script>
+  <script src="js/roles/lycan.js?v=1.0.0"></script>
+  <script src="js/roles/manipulator.js?v=1.0.0"></script>
+  <script src="js/roles/mason.js?v=1.0.0"></script>
+  <script src="js/roles/mayor.js?v=1.0.0"></script>
+  <script src="js/roles/naughty_boy.js?v=1.0.0"></script>
+  <script src="js/roles/naughty_ghost.js?v=1.0.0"></script>
+  <script src="js/roles/pulis.js?v=1.0.0"></script>
+  <script src="js/roles/seer.js?v=1.0.0"></script>
+  <script src="js/roles/trickster.js?v=1.0.0"></script>
+  <script src="js/roles/vet.js?v=1.0.0"></script>
+  <script src="js/roles/villager.js?v=1.0.0"></script>
+  <script src="js/roles/werewolf.js?v=1.0.0"></script>
+  <script src="js/roles/witch.js?v=1.0.0"></script>
+  <script src="js/roles/wolf_shaman.js?v=1.0.0"></script>
+
+  <script src="js/engine/state.js?v=1.0.0"></script>
+  <script src="js/engine/clock.js?v=1.0.0"></script>
+  <script src="js/engine/win.js?v=1.0.0"></script>
+  <script src="js/engine/events.js?v=1.0.0"></script>
+  <script src="js/engine/view.js?v=1.0.0"></script>
+  <script src="js/engine/engine.js?v=1.0.0"></script>
+
+  <script src="js/ui/theme.js?v=1.0.0"></script>
+  <script src="js/app.js?v=1.0.0"></script>
+  <script src="js/ui/screens.js?v=1.0.0"></script>
+
+  <script>
+    /* The data files are the game's content: every role, every event, and the
+       shape of the round. They are fetched rather than inlined so that adding a
+       role or retiming a phase is a data edit somebody can read, and so the
+       headless test harness in tools/ can load exactly the same files. */
+    (function () {
+      var V = "1.0.0";
+      Promise.all([
+        fetch("data/list_of_roles.json?v=" + V).then(function (r) { return r.json(); }),
+        fetch("data/game_flow.json?v=" + V).then(function (r) { return r.json(); }),
+        fetch("data/sky.json?v=" + V).then(function (r) { return r.json(); }),
+        fetch("data/list_of_events.json?v=" + V).then(function (r) { return r.json(); })
+      ]).then(function (d) {
+        WG.VERSION = V;
+        WG.roles.link(d[0]);
+        WG.clock.load(d[1], d[2]);
+        WG.events.load(d[3]);
+        WG.boot();
+      }).catch(function (e) {
+        console.error(e);
+        document.getElementById("main").innerHTML =
+          '<div class="card"><h2>The village would not load</h2>' +
+          '<p class="muted">Something went wrong fetching the game data. A reload usually fixes it.</p>' +
+          '<pre class="small mono" style="white-space:pre-wrap">' + String(e && e.message || e) + '</pre></div>';
+      });
+    })();
+  </script>
+</body>
+</html>

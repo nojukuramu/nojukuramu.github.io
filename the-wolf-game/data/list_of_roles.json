@@ -1,0 +1,1330 @@
+{
+  "$schema": "./list_of_roles.schema.json",
+  "version": 2,
+  "generatedFrom": "wolfgame-mobile/src/js/wolfgame.js (legacy pass-the-phone engine)",
+  "notes": [
+    "This file is the single source of truth for everything a role IS: how it reads,",
+    "what it may do, and what it is allowed to know. Behaviour lives in js/roles/<id>.js;",
+    "that module is validated against this entry at load time, so the two cannot drift.",
+    "",
+    "The game is house-first: a player picks a HOUSE and is then offered the actions",
+    "their role can perform there, given who lives there and what has already happened",
+    "tonight. So every action carries a `houses` selector (which doors it lights up)",
+    "rather than a flat list of legal targets."
+  ],
+
+  "teams": {
+    "village": {
+      "name": "Village",
+      "icon": "🏘️",
+      "accent": "sky",
+      "goal": "Eliminate every werewolf and every cult member.",
+      "description": "The many, the uncoordinated, and the only side that has to work out who it is."
+    },
+    "werewolf": {
+      "name": "Werewolves",
+      "icon": "🐺",
+      "accent": "blood",
+      "goal": "Equal or outnumber the village with no cult left standing.",
+      "description": "They know each other from the first night, and they kill by agreement."
+    },
+    "cult": {
+      "name": "The Cult",
+      "icon": "☪️",
+      "accent": "violet",
+      "goal": "Hold as many living souls as every other side combined.",
+      "description": "Grows by conversion rather than killing, which makes it slow and then sudden."
+    },
+    "solo": {
+      "name": "Solo",
+      "icon": "🃏",
+      "accent": "gold",
+      "goal": "Varies. Each solo role carries its own private victory.",
+      "description": "Wins alone, on its own terms, usually at everyone else's expense."
+    }
+  },
+
+  "classifications": {
+    "human": { "name": "Human", "description": "Ordinary flesh. No supernatural tell." },
+    "supernatural": { "name": "Supernatural", "description": "Reads as uncanny to anything that can sense it." },
+    "animal": { "name": "Animal", "description": "Cannot speak in words during the day." }
+  },
+
+  "houseSelectors": {
+    "any": "Every house in the village, occupied or empty, living or dead.",
+    "living-others": "Houses of living players, except your own.",
+    "living-any": "Houses of living players, your own included.",
+    "living-not-last": "Living players, except the one you chose last night.",
+    "self": "Your own house only.",
+    "dead-any": "Houses whose occupant is dead.",
+    "dead-wolves": "Dead players who were on the werewolf team.",
+    "dead-pets": "Dead Cats and Dogs who have not been treated before.",
+    "dead-tonight": "Houses whose occupant died during the current night.",
+    "living-non-cult": "Living players not already on the cult team.",
+    "living-cult": "Living players on the cult team.",
+    "living-non-wolf": "Living players not on the werewolf team."
+  },
+
+  "chargeModes": {
+    "used": "The player field counts actions SPENT; charges left is `charges` minus it. The default.",
+    "remaining": "The player field IS the number left, and counts down to zero."
+  },
+
+  "roles": [
+    {
+      "id": "werewolf",
+      "name": "Werewolf",
+      "icon": "🐺",
+      "team": "werewolf",
+      "classification": "supernatural",
+      "difficulty": "easy",
+      "tagline": "Kills by committee.",
+      "description": "Chooses a player to kill each night.",
+      "lore": "The pack does not argue for long. Whichever door most of them are howling at is the one that opens.",
+      "winCondition": "Outnumber all villagers.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Every living member of the werewolf team", "Every house marked by the Wolf Shaman", "Deaths the Shaman hid from the village"],
+      "seenAs": null,
+      "state": {},
+      "actions": [
+        {
+          "id": "wolf_vote",
+          "label": "Howl for this house",
+          "houseVerb": "Mark this door for the pack",
+          "icon": "🩸",
+          "description": "Cast your vote for tonight's kill. The pack's votes are tallied when the night closes; the Alpha's howl counts twice.",
+          "houses": "living-others",
+          "weight": 1,
+          "spendsTurn": true,
+          "resolvesAt": "nightEnd",
+          "revocableUntil": "nightEnd",
+          "sharedWith": "team"
+        }
+      ],
+      "passives": [
+        { "id": "pack_sight", "name": "Pack Sight", "description": "You see your fellow wolves and their votes as they land." },
+        { "id": "diseased_bite", "name": "Bad Meat", "description": "If the pack kills a Diseased villager, the wolf who called the kill dies with them." }
+      ]
+    },
+    {
+      "id": "alpha_wolf",
+      "name": "Alpha Wolf",
+      "icon": "🐕‍🦺",
+      "team": "werewolf",
+      "classification": "supernatural",
+      "difficulty": "medium",
+      "tagline": "Turns the village into the pack.",
+      "description": "Infects a player. After two nights, they become a werewolf.",
+      "lore": "Killing is loud. The Alpha prefers a bite that nobody notices until the moon is right.",
+      "winCondition": "Outnumber all villagers.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Every living member of the werewolf team", "Who you have infected and how long they have left"],
+      "seenAs": null,
+      "state": { "infectionsUsed": 0, "maxInfections": 2 },
+      "actions": [
+        {
+          "id": "wolf_vote",
+          "label": "Howl for this house",
+          "houseVerb": "Mark this door for the pack",
+          "icon": "🩸",
+          "description": "Your howl carries: it counts as two votes in the pack's tally.",
+          "houses": "living-others",
+          "weight": 2,
+          "spendsTurn": false,
+          "resolvesAt": "nightEnd",
+          "revocableUntil": "nightEnd",
+          "sharedWith": "team"
+        },
+        {
+          "id": "infect",
+          "label": "Infect",
+          "houseVerb": "Slip inside and bite them in their sleep",
+          "icon": "🧬",
+          "description": "The victim keeps their role and their memories for two more nights, and then wakes up as a werewolf. They are told nothing until it happens.",
+          "houses": "living-non-wolf",
+          "charges": 2,
+          "chargeKey": "infectionsUsed",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "delay": { "nights": 2, "becomes": "werewolf" }
+        }
+      ],
+      "passives": [
+        { "id": "double_howl", "name": "Double Howl", "description": "Your vote for the night's kill is worth two." }
+      ]
+    },
+    {
+      "id": "wolf_shaman",
+      "name": "Wolf Shaman",
+      "icon": "🔮",
+      "team": "werewolf",
+      "classification": "supernatural",
+      "difficulty": "hard",
+      "tagline": "Buries the evidence.",
+      "description": "Marks a house. If the pack kills the player who lives there, no body is ever found.",
+      "lore": "A village that finds no body finds no story either. It just finds someone missing, and starts guessing.",
+      "winCondition": "Outnumber all villagers.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Every living member of the werewolf team", "Every death you have hidden"],
+      "seenAs": null,
+      "state": { "markedPlayer": null },
+      "actions": [
+        {
+          "id": "wolf_vote",
+          "label": "Howl for this house",
+          "houseVerb": "Mark this door for the pack",
+          "icon": "🩸",
+          "description": "Cast your vote for tonight's kill.",
+          "houses": "living-others",
+          "weight": 1,
+          "spendsTurn": false,
+          "resolvesAt": "nightEnd",
+          "revocableUntil": "nightEnd",
+          "sharedWith": "team"
+        },
+        {
+          "id": "mark",
+          "label": "Mark for silence",
+          "houseVerb": "Draw the silencing sign on this door",
+          "icon": "🪦",
+          "description": "You may hold only one mark at a time; marking a new house releases the old one. If the pack kills the marked player, the village is told nothing at all — but the pack, and only the pack, sees who is gone.",
+          "houses": "living-others",
+          "exclusive": true,
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "visibleTo": "team"
+        }
+      ],
+      "passives": [
+        { "id": "hidden_death", "name": "Unburied", "description": "A marked victim of the pack leaves no body, no announcement, and no role reveal." }
+      ]
+    },
+    {
+      "id": "albularyo",
+      "name": "Albularyo",
+      "icon": "🌿",
+      "team": "werewolf",
+      "classification": "supernatural",
+      "difficulty": "medium",
+      "tagline": "The pack's healer.",
+      "description": "Wolf-team folk healer who can bring one dead wolf back, once per game.",
+      "lore": "Herbs, salt, a whispered name. It only ever works on one of their own, and only once.",
+      "winCondition": "Outnumber all villagers.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Every living member of the werewolf team"],
+      "seenAs": null,
+      "state": { "hasRevived": false },
+      "actions": [
+        {
+          "id": "wolf_vote",
+          "label": "Howl for this house",
+          "houseVerb": "Mark this door for the pack",
+          "icon": "🩸",
+          "description": "Cast your vote for tonight's kill.",
+          "houses": "living-others",
+          "weight": 1,
+          "spendsTurn": false,
+          "resolvesAt": "nightEnd",
+          "revocableUntil": "nightEnd",
+          "sharedWith": "team"
+        },
+        {
+          "id": "albularyo_revive",
+          "label": "Call them back",
+          "houseVerb": "Sit with the body and begin the rites",
+          "icon": "🕯️",
+          "description": "A dead wolf wakes immediately and may act again the same night. The village is never told.",
+          "houses": "dead-wolves",
+          "charges": 1,
+          "chargeKey": "hasRevived",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "silent": true
+        }
+      ],
+      "passives": [
+        { "id": "quiet_work", "name": "Quiet Work", "description": "Your revival is never announced in the morning." }
+      ]
+    },
+
+    {
+      "id": "villager",
+      "name": "Villager",
+      "icon": "👤",
+      "team": "village",
+      "classification": "human",
+      "difficulty": "easy",
+      "tagline": "No power. All the votes.",
+      "description": "Works through the night at small tasks, and earns their way to something better.",
+      "lore": "Nobody hands a villager a title. They stay up, do the work, and one morning the village finds it needs them for something.",
+      "winCondition": "Eliminate all werewolves.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Who the Mayor is, once a Mayor exists"],
+      "seenAs": null,
+      "state": { "totalScore": 0, "hasUpgraded": false },
+      "actions": [
+        {
+          "id": "task",
+          "label": "Do the night's work",
+          "houseVerb": "Stay in and work",
+          "icon": "🛠️",
+          "description": "A short puzzle — a sequence, a pattern, a memory run, a reaction test. Score enough across the game and the village promotes you into a real role.",
+          "houses": "self",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "upgradeAt": 1000
+        }
+      ],
+      "passives": [
+        { "id": "promotion", "name": "Promotion", "description": "Reach 1000 points of night work and you are quietly given a village role in its place." }
+      ]
+    },
+    {
+      "id": "seer",
+      "name": "Seer",
+      "icon": "👁️",
+      "team": "village",
+      "classification": "human",
+      "difficulty": "easy",
+      "tagline": "Knows one truth a night.",
+      "description": "Learns the role of one player each night.",
+      "lore": "The hardest part is not the seeing. It is being believed before the pack decides you are worth a visit.",
+      "winCondition": "Help the village eliminate every werewolf.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["The true role of anyone you read, subject to disguises"],
+      "seenAs": null,
+      "state": {},
+      "actions": [
+        {
+          "id": "investigate",
+          "label": "Read them",
+          "houseVerb": "Look through the window and read what is inside",
+          "icon": "🔭",
+          "description": "You learn their role at once. A Lycan reads as a Werewolf; a Trickster reads as whoever they last copied.",
+          "houses": "living-any",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "private": true
+        }
+      ],
+      "passives": []
+    },
+    {
+      "id": "doctor",
+      "name": "Doctor",
+      "icon": "⚕️",
+      "team": "village",
+      "classification": "human",
+      "difficulty": "easy",
+      "tagline": "Stands between a knife and a neck.",
+      "description": "Protects one player from death each night — but never the same player twice in a row.",
+      "lore": "You do not get told whether you were needed. Some nights that is a mercy.",
+      "winCondition": "Keep the village alive long enough to win it.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Whether your patient was attacked while you were there"],
+      "seenAs": null,
+      "state": { "lastProtected": null },
+      "actions": [
+        {
+          "id": "protect",
+          "label": "Keep watch",
+          "houseVerb": "Sit up with them through the night",
+          "icon": "🩺",
+          "description": "Any lethal attack on this house from the moment you arrive is turned away. An attack that already landed tonight is not — you will find the body instead.",
+          "houses": "living-not-last",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "grants": "shield"
+        }
+      ],
+      "passives": [
+        { "id": "no_repeat", "name": "Rounds", "description": "You cannot guard the same house two nights running." }
+      ]
+    },
+    {
+      "id": "bodyguard",
+      "name": "Bodyguard",
+      "icon": "🛡️",
+      "team": "village",
+      "classification": "human",
+      "difficulty": "medium",
+      "tagline": "Takes the hit.",
+      "description": "Guards a player and dies in their place if the blow lands.",
+      "lore": "The Doctor turns the blade aside. The Bodyguard is what is standing where the blade was going.",
+      "winCondition": "Protect the people who matter and eliminate the wolves.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Whether anyone came for your charge tonight"],
+      "seenAs": null,
+      "state": {},
+      "actions": [
+        {
+          "id": "guard",
+          "label": "Guard this house",
+          "houseVerb": "Stand at the door all night",
+          "icon": "🧍",
+          "description": "The first lethal attack after you arrive kills you instead. Arrive after the killing and you find your charge already dead.",
+          "houses": "living-others",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "grants": "bodyshield"
+        }
+      ],
+      "passives": []
+    },
+    {
+      "id": "detective",
+      "name": "Detective",
+      "icon": "🔍",
+      "team": "village",
+      "classification": "human",
+      "difficulty": "medium",
+      "tagline": "Follows footprints, not faces.",
+      "description": "Learns where a player went last night, and who came to see them.",
+      "lore": "Roles lie. Movement does not.",
+      "winCondition": "Work out who is hunting, and get the village to listen.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Last night's comings and goings at any one house"],
+      "seenAs": null,
+      "state": {},
+      "actions": [
+        {
+          "id": "detect",
+          "label": "Read the tracks",
+          "houseVerb": "Study the mud on the step",
+          "icon": "👣",
+          "description": "You learn which house this player visited last night and how many people came to theirs — names, not roles.",
+          "houses": "living-any",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "private": true
+        }
+      ],
+      "passives": []
+    },
+    {
+      "id": "engineer",
+      "name": "Engineer",
+      "icon": "🔧",
+      "team": "village",
+      "classification": "human",
+      "difficulty": "medium",
+      "tagline": "Sets a bell, not a blade.",
+      "description": "Rigs a house so that anyone who visits it is named.",
+      "lore": "Wire, a latch, and a tin can. It has caught more wolves than the Seer has.",
+      "winCondition": "Catch the traffic and hand the village a name.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Everyone who entered your trapped house tonight, in order"],
+      "seenAs": null,
+      "state": { "trapSet": null },
+      "actions": [
+        {
+          "id": "trap",
+          "label": "Set the trap",
+          "houseVerb": "Rig the doorway",
+          "icon": "🪤",
+          "description": "For the rest of the night, every visitor to this house is reported to you by name, as they arrive. The trap is spent at dawn.",
+          "houses": "living-any",
+          "exclusive": true,
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "private": true
+        }
+      ],
+      "passives": []
+    },
+    {
+      "id": "avenger",
+      "name": "Avenger",
+      "icon": "⚔️",
+      "team": "village",
+      "classification": "human",
+      "difficulty": "easy",
+      "tagline": "Dying is the plan.",
+      "description": "Names a player. If the Avenger dies, that player dies too.",
+      "lore": "Point at whoever you would take with you. Hope you are pointing at the right door.",
+      "winCondition": "Take a wolf down with you.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": [],
+      "seenAs": null,
+      "state": { "revengeTarget": null },
+      "actions": [
+        {
+          "id": "revenge",
+          "label": "Swear revenge",
+          "houseVerb": "Swear that if you fall, this house falls with you",
+          "icon": "🪓",
+          "description": "Re-swearable every night. If you die by any cause while the oath stands, they die immediately after you.",
+          "houses": "living-others",
+          "exclusive": true,
+          "spendsTurn": true,
+          "resolvesAt": "onDeath"
+        }
+      ],
+      "passives": [
+        { "id": "last_word", "name": "Last Word", "description": "Your revenge fires whether you were killed at night or hanged at noon." }
+      ]
+    },
+    {
+      "id": "witch",
+      "name": "Witch",
+      "icon": "🧙‍♀️",
+      "team": "village",
+      "classification": "supernatural",
+      "difficulty": "medium",
+      "tagline": "Two bottles, one game.",
+      "description": "Holds a saving potion and a killing potion. Each may be used once, ever.",
+      "lore": "Both bottles look the same in the dark, which is the only reason she has ever been careful.",
+      "winCondition": "Villager-aligned. Spend the bottles well.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": [],
+      "seenAs": null,
+      "state": { "savePotionUsed": false, "killPotionUsed": false },
+      "actions": [
+        {
+          "id": "save",
+          "label": "Save",
+          "houseVerb": "Pour the clear bottle at their threshold",
+          "icon": "🧪",
+          "description": "Turns aside any lethal attack that arrives after you do. Once per game.",
+          "houses": "living-any",
+          "charges": 1,
+          "chargeKey": "savePotionUsed",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "grants": "shield"
+        },
+        {
+          "id": "poison",
+          "label": "Poison",
+          "houseVerb": "Pour the dark bottle at their threshold",
+          "icon": "☠️",
+          "description": "Kills at once, through most protections that were not already in place. Once per game.",
+          "houses": "living-others",
+          "charges": 1,
+          "chargeKey": "killPotionUsed",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "lethal": true
+        }
+      ],
+      "passives": []
+    },
+    {
+      "id": "mason",
+      "name": "Mason",
+      "icon": "🧱",
+      "team": "village",
+      "classification": "human",
+      "difficulty": "easy",
+      "tagline": "One person you can trust.",
+      "description": "Knows every other Mason from the first night.",
+      "lore": "Two people who are certain of each other are worth more than either one of them knowing a secret.",
+      "winCondition": "Build the trust the village votes on.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Every other living Mason"],
+      "seenAs": null,
+      "state": {},
+      "actions": [
+        {
+          "id": "task",
+          "label": "Do the night's work",
+          "houseVerb": "Stay in and work",
+          "icon": "🛠️",
+          "description": "Masons have no night power beyond knowing each other.",
+          "houses": "self",
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        }
+      ],
+      "passives": [
+        { "id": "brotherhood", "name": "Brotherhood", "description": "You and the other Masons see one another every night." }
+      ]
+    },
+    {
+      "id": "mayor",
+      "name": "Mayor",
+      "icon": "👑",
+      "team": "village",
+      "classification": "human",
+      "difficulty": "easy",
+      "tagline": "Public, and therefore hunted.",
+      "description": "Every villager knows who the Mayor is. So does everybody else.",
+      "lore": "A known honest voice is the most useful thing the village has and the first thing the pack removes.",
+      "winCondition": "Lead the village to victory.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": [],
+      "seenAs": null,
+      "state": {},
+      "actions": [
+        {
+          "id": "task",
+          "label": "Do the night's work",
+          "houseVerb": "Stay in and work",
+          "icon": "🛠️",
+          "description": "The Mayor's power is entirely daylight.",
+          "houses": "self",
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        }
+      ],
+      "passives": [
+        { "id": "known", "name": "Known Face", "description": "Your role is shown to every village-team player, and is an assassination target." }
+      ]
+    },
+    {
+      "id": "lycan",
+      "name": "Lycan",
+      "icon": "🌙",
+      "team": "village",
+      "classification": "supernatural",
+      "difficulty": "easy",
+      "tagline": "Innocent, and reads guilty.",
+      "description": "A villager who appears as a Werewolf to anyone who reads them.",
+      "lore": "Something in the blood. Not enough to howl with, more than enough to hang for.",
+      "winCondition": "Villager-aligned, and good luck proving it.",
+      "actsAtNight": false,
+      "actsWhileDead": false,
+      "knows": ["That you will be read as a Werewolf"],
+      "seenAs": "werewolf",
+      "state": {},
+      "actions": [],
+      "passives": [
+        { "id": "false_scent", "name": "False Scent", "description": "The Seer, the Assassin's stalking and every other reader see a Werewolf." }
+      ]
+    },
+    {
+      "id": "diseased",
+      "name": "Diseased",
+      "icon": "🤒",
+      "team": "village",
+      "classification": "human",
+      "difficulty": "easy",
+      "tagline": "Poisonous to eat.",
+      "description": "The wolf who kills this player dies of it.",
+      "lore": "You will not survive the night. Neither will whoever came through the window.",
+      "winCondition": "If the wolves take you, they lose one of their own.",
+      "actsAtNight": false,
+      "actsWhileDead": false,
+      "knows": [],
+      "seenAs": null,
+      "state": {},
+      "actions": [],
+      "passives": [
+        { "id": "bad_meat", "name": "Bad Meat", "description": "A werewolf kill on you kills the wolf that carried it out." }
+      ]
+    },
+    {
+      "id": "doppelganger",
+      "name": "Doppelgänger",
+      "icon": "🎭",
+      "team": "village",
+      "classification": "supernatural",
+      "difficulty": "hard",
+      "tagline": "Becomes someone else, permanently.",
+      "description": "Copies another player's role once per game, and keeps it.",
+      "lore": "Not a disguise. You stop being what you were.",
+      "winCondition": "You win with whichever team you end up on.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["The role you copied, from the moment you take it"],
+      "seenAs": null,
+      "state": { "hasCopied": false },
+      "actions": [
+        {
+          "id": "copy",
+          "label": "Become them",
+          "houseVerb": "Study them until you are them",
+          "icon": "🪞",
+          "description": "You take their role — and their team — for the rest of the game. They keep theirs. Once per game, and there is no going back.",
+          "houses": "living-others",
+          "charges": 1,
+          "chargeKey": "hasCopied",
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        }
+      ],
+      "passives": []
+    },
+    {
+      "id": "trickster",
+      "name": "Trickster",
+      "icon": "🎪",
+      "team": "village",
+      "classification": "supernatural",
+      "difficulty": "hard",
+      "tagline": "Wears other people's roles.",
+      "description": "Takes on the appearance of another player's role for investigators.",
+      "lore": "The Seer is only ever as reliable as the night the Trickster picked.",
+      "winCondition": "Survive to the end with the village.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["The role view of whoever you last copied"],
+      "seenAs": "self.currentAppearance",
+      "state": { "currentAppearance": "villager", "copyTarget": null },
+      "actions": [
+        {
+          "id": "copy_appearance",
+          "label": "Wear their face",
+          "houseVerb": "Take on the shape of this house",
+          "icon": "🪞",
+          "description": "Every reader now sees you as their role, and you see the world through that role's eyes until you change again.",
+          "houses": "living-others",
+          "exclusive": true,
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        }
+      ],
+      "passives": [
+        { "id": "worn_face", "name": "Worn Face", "description": "Investigation results on you return the copied role, not yours." }
+      ]
+    },
+    {
+      "id": "naughty_boy",
+      "name": "Naughty Boy",
+      "icon": "😈",
+      "team": "village",
+      "classification": "supernatural",
+      "difficulty": "hard",
+      "tagline": "Swaps two lives, once.",
+      "description": "Swaps the roles of two players. Once per game.",
+      "lore": "Neither of them is told. That is the whole joke.",
+      "winCondition": "Cause chaos and survive it with the village.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Both roles you swapped"],
+      "seenAs": null,
+      "state": { "hasSwapped": false },
+      "actions": [
+        {
+          "id": "swap_roles",
+          "label": "Swap this house with another",
+          "houseVerb": "Pick this house as one half of a swap",
+          "icon": "🔁",
+          "description": "Choose a second house to complete the swap. The two players exchange roles at once and are told nothing.",
+          "houses": "living-others",
+          "arity": 2,
+          "charges": 1,
+          "chargeKey": "hasSwapped",
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        }
+      ],
+      "passives": []
+    },
+    {
+      "id": "crazy_naughty_boy",
+      "name": "Crazy Naughty Boy",
+      "icon": "🤪",
+      "team": "village",
+      "classification": "supernatural",
+      "difficulty": "hard",
+      "tagline": "Swaps two lives, nightly.",
+      "description": "Swaps the roles of two players. Every single night.",
+      "lore": "By the fourth night nobody in the village is who they say they are, and half of them are right about it.",
+      "winCondition": "Maximum chaos, village victory.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Both roles in every swap you make"],
+      "seenAs": null,
+      "state": {},
+      "actions": [
+        {
+          "id": "swap_roles",
+          "label": "Swap this house with another",
+          "houseVerb": "Pick this house as one half of a swap",
+          "icon": "🔁",
+          "description": "Choose a second house to complete the swap. No limit, every night.",
+          "houses": "living-others",
+          "arity": 2,
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        }
+      ],
+      "passives": []
+    },
+    {
+      "id": "naughty_ghost",
+      "name": "Naughty Ghost",
+      "icon": "👻",
+      "team": "village",
+      "classification": "supernatural",
+      "difficulty": "hard",
+      "tagline": "Only dangerous once dead.",
+      "description": "An ordinary villager while alive. After dying, swaps roles every night from beyond the grave.",
+      "lore": "Killing them is the mistake. They were harmless right up until the funeral.",
+      "winCondition": "Help the village win, alive or otherwise.",
+      "actsAtNight": true,
+      "actsWhileDead": true,
+      "knows": ["Both roles in every swap you make, once dead"],
+      "seenAs": null,
+      "state": {},
+      "actions": [
+        {
+          "id": "task",
+          "label": "Do the night's work",
+          "houseVerb": "Stay in and work",
+          "icon": "🛠️",
+          "description": "While you are alive you are a villager and nothing more.",
+          "houses": "self",
+          "requires": "alive",
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        },
+        {
+          "id": "swap_roles",
+          "label": "Swap this house with another",
+          "houseVerb": "Reach through and pick this house",
+          "icon": "🔁",
+          "description": "Available only after your death. Choose a second house to complete the swap.",
+          "houses": "living-others",
+          "arity": 2,
+          "requires": "dead",
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        }
+      ],
+      "passives": [
+        { "id": "restless", "name": "Restless", "description": "Death is a promotion. You keep taking night turns after it." }
+      ]
+    },
+    {
+      "id": "archangel",
+      "name": "Archangel",
+      "icon": "😇",
+      "team": "village",
+      "classification": "supernatural",
+      "difficulty": "hard",
+      "tagline": "Raises the dead, and punishes its killers.",
+      "description": "Can bring one dead player back with a brand new role. Killing it is expensive.",
+      "lore": "Whatever is left after the wings come off is only a villager, and the village usually notices too late.",
+      "winCondition": "Protect the village and eliminate the wolves.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": [],
+      "seenAs": null,
+      "state": { "hasRevived": false, "isDemoted": false },
+      "actions": [
+        {
+          "id": "revive",
+          "label": "Raise them",
+          "houseVerb": "Kneel at the body and call it back",
+          "icon": "✨",
+          "description": "The dead player returns at once, with a new village role of your choosing or one drawn at random — and may take their turn the same night. You may reveal the new role to the village or keep it secret. Once per game.",
+          "houses": "dead-any",
+          "charges": 1,
+          "chargeKey": "hasRevived",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "options": ["random", "manual", "reveal", "conceal"]
+        }
+      ],
+      "passives": [
+        { "id": "retribution", "name": "Divine Retribution", "description": "Killed by the pack: every wolf that howled for you dies. Killed by anyone else: they die instead of you." },
+        { "id": "fall", "name": "The Fall", "description": "Surviving either of those, or being voted out, strips you to an ordinary Villager. Being voted out does not kill you." }
+      ]
+    },
+    {
+      "id": "diwata",
+      "name": "Diwata",
+      "icon": "🧚‍♀️",
+      "team": "village",
+      "classification": "supernatural",
+      "difficulty": "hard",
+      "tagline": "Kill her and the forest answers.",
+      "description": "A forest spirit. If the werewolves kill her, every werewolf dies with her.",
+      "lore": "The trees keep a count. They settle it all at once.",
+      "winCondition": "Protect the village and eliminate the wolves.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": [],
+      "seenAs": null,
+      "state": { "hasUsedImmunity": false, "isDemoted": false },
+      "actions": [
+        {
+          "id": "task",
+          "label": "Do the night's work",
+          "houseVerb": "Stay in and hold the ward",
+          "icon": "🌿",
+          "description": "Her power is entirely passive; the night's work keeps it lit.",
+          "houses": "self",
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        }
+      ],
+      "passives": [
+        { "id": "forest_curse", "name": "Forest Curse", "description": "A werewolf kill on her kills every living werewolf." },
+        { "id": "one_ward", "name": "One Ward", "description": "The first non-werewolf attempt on her life fails. The second strips her to an ordinary Villager." }
+      ]
+    },
+    {
+      "id": "vet",
+      "name": "Vet",
+      "icon": "🩺",
+      "team": "village",
+      "classification": "human",
+      "difficulty": "medium",
+      "tagline": "Only saves the animals.",
+      "description": "Brings one dead Cat or Dog back, once per game.",
+      "lore": "It is not much of a power until the village realises the Cat was the only honest witness it had.",
+      "winCondition": "Eliminate all werewolves.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Which pets are dead and still treatable"],
+      "seenAs": null,
+      "state": { "hasRevived": false },
+      "actions": [
+        {
+          "id": "vet_revive",
+          "label": "Treat them",
+          "houseVerb": "Carry them in and work on them",
+          "icon": "🐾",
+          "description": "The Cat or Dog wakes immediately, keeps its role, and may act again the same night. Each animal can be treated only once, ever.",
+          "houses": "dead-pets",
+          "charges": 1,
+          "chargeKey": "hasRevived",
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        }
+      ],
+      "passives": []
+    },
+    {
+      "id": "cat",
+      "name": "Cat",
+      "icon": "🐱",
+      "team": "village",
+      "classification": "animal",
+      "difficulty": "medium",
+      "tagline": "Can only meow.",
+      "description": "A villager who cannot say a word in daylight, and who bites in the dark.",
+      "lore": "It knows exactly which house smells wrong. It cannot tell you which one.",
+      "winCondition": "Eliminate all werewolves.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Whether your bite met a wolf — by dying of it"],
+      "seenAs": null,
+      "communicationRestriction": "meow",
+      "state": { "hasBeenTreatedByVet": false, "lastBiteTarget": null },
+      "actions": [
+        {
+          "id": "bite",
+          "label": "Bite",
+          "houseVerb": "Slip in and bite whoever is sleeping there",
+          "icon": "🦷",
+          "description": "Harmless to everyone except a werewolf. Bite a wolf and you die of it, and the village is told a Cat died biting something. The victim is told they were bitten.",
+          "houses": "living-others",
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        }
+      ],
+      "passives": [
+        { "id": "meow_only", "name": "Meow", "description": "During discussion you may send only meows. The room sees them as meows." }
+      ]
+    },
+    {
+      "id": "dog",
+      "name": "Dog",
+      "icon": "🐶",
+      "team": "village",
+      "classification": "animal",
+      "difficulty": "medium",
+      "tagline": "Can only bark.",
+      "description": "A villager who cannot say a word in daylight, and who bites in the dark.",
+      "lore": "Loud, loyal, and completely unable to explain itself.",
+      "winCondition": "Eliminate all werewolves.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Whether your bite met a wolf — by dying of it"],
+      "seenAs": null,
+      "communicationRestriction": "bark",
+      "state": { "hasBeenTreatedByVet": false, "lastBiteTarget": null },
+      "actions": [
+        {
+          "id": "bite",
+          "label": "Bite",
+          "houseVerb": "Slip in and bite whoever is sleeping there",
+          "icon": "🦷",
+          "description": "Harmless to everyone except a werewolf. Bite a wolf and you die of it. The victim is told they were bitten.",
+          "houses": "living-others",
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        }
+      ],
+      "passives": [
+        { "id": "bark_only", "name": "Bark", "description": "During discussion you may send only barks. The room sees them as barks." }
+      ]
+    },
+    {
+      "id": "pulis",
+      "name": "Pulis",
+      "icon": "👮",
+      "team": "village",
+      "classification": "human",
+      "difficulty": "hard",
+      "tagline": "Armed, and accountable.",
+      "description": "Can search a body for clues, or shoot a living suspect. One or the other, each night.",
+      "lore": "Shoot the right person and the village hands you the whole armoury. Shoot the wrong one and they take the badge.",
+      "winCondition": "Eliminate all werewolves.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["What the bodies you search were, and what killed them"],
+      "seenAs": null,
+      "state": { "isDemoted": false, "hasUnlimitedKills": false, "investigationsUsed": 0, "killsUsed": 0 },
+      "actions": [
+        {
+          "id": "pulis_investigate",
+          "label": "Search the body",
+          "houseVerb": "Go over the body for clues",
+          "icon": "🔦",
+          "description": "You learn the dead player's true role and what killed them. Unlimited, but it is your action for the night.",
+          "houses": "dead-any",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "private": true
+        },
+        {
+          "id": "pulis_kill",
+          "label": "Shoot",
+          "houseVerb": "Kick the door in",
+          "icon": "🔫",
+          "description": "Kills at once. Shoot a village-team player and you are stripped to an ordinary Villager on the spot; shoot anyone else and you are cleared for unlimited kills.",
+          "houses": "living-others",
+          "charges": 1,
+          "chargeKey": "killsUsed",
+          "unlimitedWhen": "hasUnlimitedKills",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "lethal": true
+        }
+      ],
+      "passives": [
+        { "id": "accountability", "name": "Accountability", "description": "Killing an innocent demotes you permanently." }
+      ]
+    },
+    {
+      "id": "call_center_agent",
+      "name": "Call Center Agent",
+      "icon": "📞",
+      "team": "village",
+      "classification": "human",
+      "difficulty": "hard",
+      "tagline": "Puts a player on hold.",
+      "description": "Writes a question with four answers and makes a player answer it before they may act.",
+      "lore": "Your call is important to us. Please stay on the line while the wolves eat.",
+      "winCondition": "Eliminate all werewolves.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Whether your mark answered correctly"],
+      "seenAs": null,
+      "state": { "chargesUsed": 0, "maxCharges": 2 },
+      "actions": [
+        {
+          "id": "call_center_block",
+          "label": "Put on hold",
+          "houseVerb": "Ring this house and keep them talking",
+          "icon": "☎️",
+          "description": "You write the question and mark the right answer. Next night, before they may do anything, they must get it right. Two calls per game.",
+          "houses": "living-others",
+          "charges": 2,
+          "chargeKey": "chargesUsed",
+          "spendsTurn": true,
+          "resolvesAt": "nextNight",
+          "authoring": "quiz"
+        }
+      ],
+      "passives": []
+    },
+
+    {
+      "id": "cult_leader",
+      "name": "Cult Leader",
+      "icon": "☪️",
+      "team": "cult",
+      "classification": "human",
+      "difficulty": "hard",
+      "tagline": "Wins by conversion.",
+      "description": "Recruits non-wolf players into the cult. Three attempts per game.",
+      "lore": "Nobody dies. That is exactly how far along it gets before anyone counts.",
+      "winCondition": "Hold as many living souls as every other side put together.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Every living member of the cult"],
+      "seenAs": null,
+      "state": { "recruitsLeft": 3 },
+      "actions": [
+        {
+          "id": "recruit",
+          "label": "Recruit",
+          "houseVerb": "Knock, and make the offer",
+          "icon": "🕯️",
+          "description": "The target is asked, on their own phone, whether they accept. If they do they become a Cultist immediately and see the rest of the cult. Werewolves cannot be recruited.",
+          "houses": "living-non-cult",
+          "charges": 3,
+          "chargeKey": "recruitsLeft",
+          "chargeMode": "remaining",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "consent": true
+        }
+      ],
+      "passives": [
+        { "id": "succession", "name": "Succession", "description": "If you die, every Fanatic is promoted to Fanatic+." }
+      ]
+    },
+    {
+      "id": "cultist",
+      "name": "Cultist",
+      "icon": "🕯️",
+      "team": "cult",
+      "classification": "human",
+      "difficulty": "easy",
+      "tagline": "Newly converted, still useless.",
+      "description": "A villager taken by the Cult Leader. Becomes a Fanatic after two nights.",
+      "lore": "They keep the job, the house and the face. The loyalty is the only part that changed.",
+      "winCondition": "Help the cult take the village.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Every living member of the cult"],
+      "seenAs": null,
+      "state": { "nightsAsCultist": 0 },
+      "actions": [
+        {
+          "id": "task",
+          "label": "Do the night's work",
+          "houseVerb": "Stay in and keep up appearances",
+          "icon": "🛠️",
+          "description": "Nothing yet. Two nights of this and you become a Fanatic.",
+          "houses": "self",
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        }
+      ],
+      "passives": [
+        { "id": "evolution", "name": "Evolution", "description": "After two nights you become a Fanatic automatically." }
+      ]
+    },
+    {
+      "id": "fanatic",
+      "name": "Fanatic",
+      "icon": "🔥",
+      "team": "cult",
+      "classification": "human",
+      "difficulty": "medium",
+      "tagline": "Dies for the cult.",
+      "description": "Guards a cult member and dies in their place.",
+      "lore": "There is no version of this where the Fanatic gets to live and be right.",
+      "winCondition": "Protect the cult until it is the majority.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Every living member of the cult"],
+      "seenAs": null,
+      "state": { "guardTarget": null },
+      "actions": [
+        {
+          "id": "guard_cult",
+          "label": "Guard",
+          "houseVerb": "Stand watch at this door",
+          "icon": "🧍",
+          "description": "The first lethal attack on this cult member after you arrive kills you instead.",
+          "houses": "living-cult",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "grants": "bodyshield"
+        }
+      ],
+      "passives": []
+    },
+    {
+      "id": "fanatic_plus",
+      "name": "Fanatic+",
+      "icon": "💥",
+      "team": "cult",
+      "classification": "human",
+      "difficulty": "medium",
+      "tagline": "The cult's doctor.",
+      "description": "Saves a cult member from death outright, without dying for it.",
+      "lore": "Promotion, in a cult, means the last person above you is dead.",
+      "winCondition": "Lead the cult to victory.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Every living member of the cult"],
+      "seenAs": null,
+      "state": { "lastSaved": null },
+      "actions": [
+        {
+          "id": "save_cult",
+          "label": "Shield",
+          "houseVerb": "Ward this door",
+          "icon": "🩺",
+          "description": "Any lethal attack on this cult member after you arrive is turned away. Not the same member two nights running.",
+          "houses": "living-cult",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "grants": "shield"
+        }
+      ],
+      "passives": []
+    },
+
+    {
+      "id": "jester",
+      "name": "Jester",
+      "icon": "🃏",
+      "team": "solo",
+      "classification": "human",
+      "difficulty": "medium",
+      "tagline": "Wants to be hanged.",
+      "description": "Wins the moment the village votes them out.",
+      "lore": "Every clumsy lie is on purpose. Being obviously guilty of nothing is a very hard trick.",
+      "winCondition": "Get yourself eliminated by the village vote.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": [],
+      "seenAs": null,
+      "state": {},
+      "actions": [
+        {
+          "id": "task",
+          "label": "Look busy",
+          "houseVerb": "Stay in and do something incriminating",
+          "icon": "🎭",
+          "description": "You are given a deliberately suspicious errand each night. It does nothing. That is the point.",
+          "houses": "self",
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        }
+      ],
+      "passives": [
+        { "id": "last_laugh", "name": "Last Laugh", "description": "Being voted out ends the game in your favour immediately. Dying at night does not." }
+      ]
+    },
+    {
+      "id": "assassin",
+      "name": "Assassin",
+      "icon": "🗡️",
+      "team": "solo",
+      "classification": "human",
+      "difficulty": "hard",
+      "tagline": "Hunts the leaders.",
+      "description": "Learns roles slowly, and kills by naming one correctly.",
+      "lore": "Wrong guess, wrong throat. The knife does not care whose it is.",
+      "winCondition": "Kill every team leader — Alpha Wolf, Cult Leader, Mayor and Seer.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Which leaders are still alive", "Every role you have stalked, one night late"],
+      "seenAs": null,
+      "state": { "killCharges": 0, "pendingStalkResults": [] },
+      "actions": [
+        {
+          "id": "stalk",
+          "label": "Stalk",
+          "houseVerb": "Watch this house from the dark",
+          "icon": "👁️",
+          "description": "You learn their role — but not until your next turn. Unlimited.",
+          "houses": "living-others",
+          "spendsTurn": true,
+          "resolvesAt": "delayed",
+          "private": true
+        },
+        {
+          "id": "assassinate",
+          "label": "Assassinate",
+          "houseVerb": "Go in with the knife and a name",
+          "icon": "🗡️",
+          "description": "Name the role you believe they hold. Right, and they die at once. Wrong, and you do. Charges equal the number of leaders in the game.",
+          "houses": "living-others",
+          "chargeKey": "killCharges",
+          "chargeMode": "remaining",
+          "spendsTurn": true,
+          "resolvesAt": "immediate",
+          "lethal": true,
+          "authoring": "roleGuess"
+        }
+      ],
+      "passives": []
+    },
+    {
+      "id": "manipulator",
+      "name": "Manipulator",
+      "icon": "🤫",
+      "team": "solo",
+      "classification": "human",
+      "difficulty": "hard",
+      "tagline": "Sees everything, does nothing, wins anyway.",
+      "description": "Knows every role in the game, and steals the victory of whichever side wins — as long as they are alive to take it.",
+      "lore": "They never lifted a finger, and the whole village worked for them.",
+      "winCondition": "Be alive when anyone else wins. Then it is yours instead.",
+      "actsAtNight": true,
+      "actsWhileDead": false,
+      "knows": ["Every player's true role, every night"],
+      "seenAs": null,
+      "state": {},
+      "actions": [
+        {
+          "id": "task",
+          "label": "Watch the board",
+          "houseVerb": "Stay in and read the room",
+          "icon": "👁️",
+          "description": "The full role list is in front of you. There is nothing to do but stay alive.",
+          "houses": "self",
+          "spendsTurn": true,
+          "resolvesAt": "immediate"
+        }
+      ],
+      "passives": [
+        { "id": "omniscience", "name": "Omniscience", "description": "You see every player's true role." },
+        { "id": "theft", "name": "Theft", "description": "Any side's victory becomes yours instead, provided you are alive. Dead, you win nothing." }
+      ]
+    }
+  ],
+
+  "universalActions": [
+    {
+      "id": "report",
+      "label": "Report the body",
+      "houseVerb": "Raise the alarm",
+      "icon": "📢",
+      "description": "Offered at any house whose occupant died tonight. The village is told at dawn who found them — including if the finder was the killer. Reporting does not spend your turn.",
+      "houses": "dead-tonight",
+      "spendsTurn": false,
+      "availableTo": "all",
+      "resolvesAt": "immediate"
+    },
+    {
+      "id": "peek",
+      "label": "Look inside",
+      "houseVerb": "Try the door",
+      "icon": "🚪",
+      "description": "Walk up to any house and see what is on offer there. Costs nothing and is never recorded as a visit until you actually do something.",
+      "houses": "any",
+      "spendsTurn": false,
+      "availableTo": "all",
+      "resolvesAt": "none"
+    },
+    {
+      "id": "stay_in",
+      "label": "Stay home",
+      "houseVerb": "Bolt the door and wait for morning",
+      "icon": "🌙",
+      "description": "End your night without acting.",
+      "houses": "self",
+      "spendsTurn": true,
+      "availableTo": "all",
+      "resolvesAt": "none"
+    }
+  ]
+}
