@@ -1,0 +1,784 @@
+/* app.css — a game that happens to run in a browser.
+ *
+ * Two rules the old stylesheet broke and this one does not:
+ *
+ *   Nothing scrolls. The app is exactly one viewport, always, on every screen —
+ *   `position: fixed` frame, a three-row grid, and a stage in the middle that
+ *   is allowed to be any height and must fit whatever is in it. Only two things
+ *   may scroll internally and they are both explicitly marked: a chat log and a
+ *   long list. Everything else scales.
+ *
+ *   No emoji. Every glyph is a drawn stroke path from ui/icons.js, inheriting
+ *   `currentColor`, so icons go bloody with the rest of the interface instead
+ *   of staying cheerful while the village dies.
+ *
+ * The colour tokens all come from theme.css and are rewritten continuously by
+ * ui/theme.js as the clock moves. Nothing below hard-codes a colour that is
+ * meant to change with the hour.
+ */
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0; padding: 0;
+  height: 100%;
+  overflow: hidden;                 /* the page never scrolls. ever. */
+  overscroll-behavior: none;
+  font-family: var(--sans);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  touch-action: manipulation;
+}
+
+/* The drawn sky, behind everything. */
+#sky {
+  position: fixed; inset: 0;
+  width: 100%; height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ---------------- the frame ----------------
+ * Three rows: a slim bar, a stage that takes the rest, and a dock. The stage
+ * is `minmax(0, 1fr)` rather than `1fr` because a grid row will otherwise
+ * refuse to shrink below its content and quietly reintroduce a scrollbar. */
+
+.app {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding:
+    env(safe-area-inset-top) max(10px, env(safe-area-inset-right))
+    env(safe-area-inset-bottom) max(10px, env(safe-area-inset-left));
+  gap: 6px;
+}
+
+/* The bar sits directly on the sky, which at noon is pale and at midnight is
+   nearly black. A short scrim in the page's own background colour keeps the
+   title legible at both ends without boxing it in. */
+.topbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 8px 6px;
+  margin: 0 -6px;
+  min-height: 0;
+  position: relative;
+  border-radius: 12px;
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--bg) 92%, transparent),
+    color-mix(in srgb, var(--bg) 55%, transparent) 62%,
+    transparent);
+  backdrop-filter: blur(6px);
+}
+.brand { display: flex; align-items: center; gap: 8px; margin-right: auto; min-width: 0; }
+.brand-mark {
+  width: 30px; height: 30px; flex: 0 0 30px;
+  display: grid; place-items: center;
+  border-radius: 9px;
+  background: var(--accent); color: var(--accent-ink);
+}
+.brand-name {
+  font-family: var(--serif);
+  font-size: clamp(0.94rem, 3.4vw, 1.08rem);
+  letter-spacing: -0.01em; line-height: 1.1;
+}
+.brand-sub {
+  font-size: 0.68rem; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.08em;
+}
+
+.stage {
+  min-height: 0;
+  display: flex; flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+.dock { padding: 2px 2px 6px; }
+.dock:empty { display: none; }
+
+/* A pane is a stage child. `grow` takes the slack; `scroll` is the only place
+   in the app where a scrollbar is allowed, and it says so. */
+.pane { min-height: 0; }
+.pane.grow { flex: 1 1 auto; }
+.pane.scroll { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+
+/* ---------------- controls ---------------- */
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: clamp(0.84rem, 3.2vw, 0.94rem);
+  min-height: 44px;
+  padding: 0 15px;
+  border-radius: 11px;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease),
+              transform var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.btn:hover { background: var(--bg-3); }
+.btn:active { transform: translateY(1px) scale(0.995); }
+.btn:focus-visible { outline: none; box-shadow: var(--ring); border-color: var(--accent-line); }
+.btn[disabled] { opacity: 0.42; cursor: not-allowed; transform: none; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
+.btn.ghost:hover { background: var(--bg-3); color: var(--ink); }
+.btn.danger { color: var(--bad); }
+.btn.danger:hover { background: color-mix(in srgb, var(--bad) 14%, transparent); }
+.btn.wide { width: 100%; }
+.btn.big { min-height: 52px; font-size: clamp(0.94rem, 3.6vw, 1.04rem); }
+.btn.icon { width: 40px; min-height: 40px; padding: 0; flex: 0 0 40px; }
+.btn.small { min-height: 32px; font-size: 0.78rem; padding: 0 10px; border-radius: 8px; gap: 5px; }
+.btn.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+.ico { flex: 0 0 auto; display: block; }
+
+input[type="text"], input[type="number"], textarea, select {
+  appearance: none; width: 100%; font: inherit;
+  color: var(--ink); background: var(--bg-2);
+  border: 1px solid var(--line); border-radius: 11px;
+  min-height: 44px; padding: 10px 12px;
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent-line); box-shadow: var(--ring); }
+label.field { display: block; margin-bottom: 10px; }
+label.field > span { display: block; font-size: 0.76rem; color: var(--ink-2); margin-bottom: 4px; letter-spacing: 0.02em; }
+
+.code-input { font-family: var(--mono); font-size: 1.5rem; letter-spacing: 0.3em; text-align: center; text-transform: uppercase; }
+
+.toggle { display: flex; align-items: center; gap: 11px; padding: 9px 0; cursor: pointer; }
+.toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.toggle .track {
+  flex: 0 0 42px; width: 42px; height: 25px; border-radius: 13px;
+  background: var(--bg-4); border: 1px solid var(--line); position: relative;
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+.toggle .track::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 19px; height: 19px;
+  border-radius: 50%; background: var(--bg-2); box-shadow: var(--shadow-sm);
+  transition: transform var(--fast) var(--ease);
+}
+.toggle input:checked + .track { background: var(--accent); border-color: var(--accent); }
+.toggle input:checked + .track::after { transform: translateX(17px); }
+.toggle .label b { display: block; font-weight: 500; font-size: 0.88rem; }
+.toggle .label span { display: block; font-size: 0.74rem; color: var(--ink-3); line-height: 1.35; }
+
+/* ---------------- surfaces ---------------- */
+
+.card {
+  background: color-mix(in srgb, var(--bg-2) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 13px;
+  box-shadow: var(--shadow-sm);
+}
+.card + .card { margin-top: 8px; }
+.card.flush { padding: 0; overflow: hidden; }
+.card-head { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border-bottom: 1px solid var(--line); }
+.card-head h3 { margin: 0; flex: 1; }
+
+h1, h2, h3, .serif { font-family: var(--serif); font-weight: 500; letter-spacing: -0.012em; margin: 0; }
+h1 { font-size: clamp(1.5rem, 6vw, 2.1rem); }
+h2 { font-size: clamp(1.1rem, 4.6vw, 1.35rem); }
+h3 { font-size: clamp(0.92rem, 3.6vw, 1rem); }
+p { margin: 0 0 0.55em; line-height: 1.5; font-size: clamp(0.84rem, 3.2vw, 0.92rem); }
+p:last-child { margin-bottom: 0; }
+.muted { color: var(--ink-2); }
+.dim { color: var(--ink-3); }
+.small { font-size: 0.78rem; }
+.mono { font-family: var(--mono); }
+[hidden] { display: none !important; }
+
+.row { display: flex; align-items: center; gap: 10px; padding: 9px 13px; border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: none; }
+.grow { flex: 1; min-width: 0; }
+.row-title { font-size: 0.89rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-sub { font-size: 0.74rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spread { display: flex; gap: 8px; align-items: center; }
+.stack > * + * { margin-top: 7px; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.68rem; padding: 3px 8px; border-radius: 999px;
+  background: var(--bg-3); color: var(--ink-2); border: 1px solid var(--line);
+  white-space: nowrap; letter-spacing: 0.02em;
+}
+.pill.accent { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+.pill.bad { background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); border-color: transparent; }
+.pill.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); border-color: transparent; }
+.pill.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); border-color: transparent; }
+
+.team-village { --team: var(--team-village); }
+.team-werewolf { --team: var(--team-werewolf); }
+.team-cult { --team: var(--team-cult); }
+.team-solo { --team: var(--team-solo); }
+.team-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--team, var(--ink-3)); flex: 0 0 7px; }
+
+/* ---------------- phase bar ---------------- */
+
+.phase {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--bg-2) 82%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  position: relative; overflow: hidden;
+  flex: 0 0 auto;
+}
+.phase-icon { color: var(--accent); }
+.phase-name { font-family: var(--serif); font-size: clamp(0.98rem, 4vw, 1.14rem); line-height: 1.1; }
+.phase-sub { font-size: 0.7rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phase-clock {
+  margin-left: auto; font-family: var(--mono);
+  font-size: clamp(1.05rem, 4.4vw, 1.3rem);
+  font-variant-numeric: tabular-nums; letter-spacing: -0.03em;
+}
+.phase.urgent .phase-clock { color: var(--bad); }
+.phase-bar { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--accent); opacity: 0.75; transition: width 1s linear; }
+.phase.urgent .phase-bar { background: var(--bad); }
+
+/* ---------------- the village ----------------
+ *
+ * A landscape, not a chart. Every colour below is derived from the theme
+ * tokens, which ui/theme.js rewrites continuously as the phase clock moves — so
+ * the fields go blue at dusk and the river goes black at midnight without a
+ * single value here changing. `--sky-glow` is the light source; anything warm
+ * on this board is lit by it.
+ */
+
+.village-wrap { flex: 1 1 auto; min-height: 0; display: flex; overflow: hidden; }
+/* The land fades into the drawn sky at the top rather than ending on a ruled
+   line, so the valley and the sky behind it read as one scene instead of a
+   picture pasted onto a background. */
+.village-svg {
+  width: 100%; height: 100%; display: block;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 13%, #000 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 13%, #000 100%);
+}
+
+/* The land.
+ *
+ * Every natural colour on this board is a fixed pigment mixed with the *sky*.
+ * That one trick is what makes the valley beautiful at every hour and costs
+ * nothing: `--sky-2` is pale at noon and nearly black at midnight, so
+ * `color-mix(pasture, sky)` is a green field by day and a blue-black one by
+ * night, without a media query or a second palette anywhere.
+ */
+.ln-field { stroke: none; }
+.ln-field.far  { fill: color-mix(in srgb, #55735f 48%, var(--sky-2)); }
+.ln-field.mid  { fill: color-mix(in srgb, #446750 60%, var(--sky-2)); }
+.ln-field.near { fill: color-mix(in srgb, #2f5340 70%, var(--sky-3)); }
+
+/* Mist in the gaps between the bands. It costs two rectangles and does more for
+   the sense of distance than anything else on the board. */
+.ln-mist {
+  fill: var(--sky-1); opacity: 0.30;
+  filter: blur(9px);
+}
+
+/* Nightfall. `--sky-mix` is the theme's own "how far from noon are we", so the
+   valley darkens on exactly the same curve as the interface around it. */
+.ln-dusk { fill: var(--sky-3); opacity: calc(var(--sky-mix) * 0.52); pointer-events: none; }
+.ln-night { fill: var(--sky-3); opacity: calc(var(--sky-mix) * 0.34); pointer-events: none; }
+.ln-lit { pointer-events: none; }
+
+.ln-river-bank { fill: none; stroke: color-mix(in srgb, #6d6a4e 46%, var(--sky-3)); stroke-width: 27; stroke-linecap: round; }
+.ln-river { fill: none; stroke: color-mix(in srgb, #38769e 52%, var(--sky-2)); stroke-width: 17; stroke-linecap: round; }
+.ln-river-glint {
+  fill: none; stroke: var(--sky-glow); stroke-width: 3.5; stroke-linecap: round;
+  stroke-dasharray: 12 30; opacity: 0.45;
+  animation: drift-glint 24s linear infinite;
+}
+@keyframes drift-glint { to { stroke-dashoffset: -420; } }
+
+.ln-road-edge { fill: none; stroke: color-mix(in srgb, #4c4530 60%, var(--sky-3)); stroke-width: 33; stroke-linecap: round; }
+.ln-road { fill: none; stroke: color-mix(in srgb, #9c8156 56%, var(--sky-3)); stroke-width: 23; stroke-linecap: round; }
+.ln-track { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 5 10; stroke-linecap: round; opacity: 0.55; }
+/* The short track from the road to a door. Every house has one, which is most
+   of what makes the village look built rather than scattered. */
+.ln-drive { fill: none; stroke: color-mix(in srgb, #9c8156 46%, var(--sky-3)); stroke-width: 6; stroke-linecap: round; opacity: 0.55; }
+
+.ln-bridge .deck { stroke: color-mix(in srgb, #6a5638 66%, var(--sky-3)); stroke-width: 9; stroke-linecap: round; }
+.ln-bridge .rail, .ln-bridge .post { stroke: color-mix(in srgb, #6a5638 58%, var(--sky-3)); stroke-width: 3; stroke-linecap: round; fill: none; }
+
+.ln-fence path { stroke: color-mix(in srgb, #6a5638 60%, var(--sky-3)); stroke-width: 2.4; stroke-linecap: round; fill: none; }
+.ln-fence .post { stroke-width: 3.4; }
+
+.ln-tree-shadow { fill: #000; opacity: 0.22; }
+.ln-trunk { fill: color-mix(in srgb, #4a3826 62%, var(--sky-3)); }
+.ln-branch { fill: none; stroke: color-mix(in srgb, #4a3826 62%, var(--sky-3)); stroke-width: 2.4; stroke-linecap: round; }
+.ln-crown { stroke: none; }
+.ln-crown.c1 { fill: color-mix(in srgb, #33684a 62%, var(--sky-2)); }
+.ln-crown.c2 { fill: color-mix(in srgb, #274f37 68%, var(--sky-3)); }
+
+.ln-rock { fill: color-mix(in srgb, #6b6c68 52%, var(--sky-3)); }
+
+/* The square: worn ground, a fire, a well. The only warm light on the board
+   that is not a window, and the thing the roads run to. */
+.ln-clearing { fill: color-mix(in srgb, #8a7048 46%, var(--sky-3)); }
+.ln-fire-glow { fill: #e8944e; opacity: 0.16; }
+.ln-logs { stroke: color-mix(in srgb, #4a3826 66%, var(--sky-3)); stroke-width: 6; stroke-linecap: round; fill: none; }
+.ln-flame {
+  fill: #e8894b; opacity: 0.94;
+  transform-box: fill-box; transform-origin: 50% 100%;
+  animation: flicker 2.4s var(--ease) infinite alternate;
+}
+@keyframes flicker {
+  0% { transform: scaleY(0.84) scaleX(1.06) translateY(1px); opacity: 0.76; }
+  100% { transform: scaleY(1.08) scaleX(0.94); opacity: 1; }
+}
+.ln-well { fill: color-mix(in srgb, #74736c 52%, var(--sky-3)); }
+.ln-well-frame { fill: none; stroke: color-mix(in srgb, #4a3826 62%, var(--sky-3)); stroke-width: 3.4; stroke-linejoin: round; }
+
+.ln-grass {
+  fill: none; stroke: color-mix(in srgb, #24462f 74%, var(--sky-3));
+  stroke-width: 3.4; stroke-linecap: round;
+  transform-box: fill-box; transform-origin: 50% 100%;
+  animation: sway 9s ease-in-out infinite alternate;
+}
+@keyframes sway { from { transform: skewX(-1.6deg); } to { transform: skewX(1.6deg); } }
+
+/* The woods breathe too, a half-degree at a time, out of phase with the grass
+   so the whole board never moves as one sheet. The animation is on an inner
+   group: putting a CSS transform on the element that carries the placement
+   `transform` attribute replaces the placement. */
+.ln-tree {
+  transform-box: fill-box; transform-origin: 50% 100%;
+  animation: tree-sway 11s ease-in-out infinite alternate;
+}
+@keyframes tree-sway { from { transform: rotate(-0.7deg); } to { transform: rotate(0.7deg); } }
+
+.ln-fly {
+  fill: #ffd98a; opacity: 0;
+  animation-name: firefly; animation-iteration-count: infinite; animation-timing-function: ease-in-out;
+}
+@keyframes firefly {
+  0%, 100% { opacity: 0; transform: translate(0, 0); }
+  30% { opacity: 0.85; }
+  50% { opacity: 0.25; transform: translate(9px, -7px); }
+  70% { opacity: 0.7; transform: translate(-4px, -12px); }
+}
+
+/* ---------------- the houses ---------------- */
+
+.hs { cursor: pointer; }
+.hs.static { cursor: default; }
+.hs:hover:not(.static), .hs:focus-visible { outline: none; }
+.hs:hover:not(.static) .hs-wall, .hs:focus-visible .hs-wall { stroke: var(--accent); stroke-width: 2.4; }
+.hs:hover:not(.static) .hs-roof, .hs:focus-visible .hs-roof { fill: color-mix(in srgb, var(--accent) 40%, var(--bg-4)); }
+
+.hs-shadow { fill: #000; opacity: 0.28; }
+
+/* Pinned to the near-surface tone rather than mixed with the sky: a house has
+   to read against a sky that moves through the entire palette. */
+.hs-wall {
+  fill: color-mix(in srgb, #d6cdb8 52%, var(--sky-2));
+  stroke: color-mix(in srgb, #000 34%, transparent); stroke-width: 1.4;
+  transition: fill var(--mid) var(--ease), stroke var(--fast) var(--ease);
+}
+.hs-gable { fill: color-mix(in srgb, #b8ac97 40%, var(--sky-3)); }
+.hs-roof { fill: color-mix(in srgb, #7d4a3c 52%, var(--sky-2)); stroke: none; transition: fill var(--fast) var(--ease); }
+.hs-roof-side { fill: color-mix(in srgb, #5e3529 60%, var(--sky-3)); }
+.hs-door { fill: color-mix(in srgb, #3a2d1f 70%, var(--sky-3)); }
+.hs-doorway { fill: #06090d; opacity: 0.82; }
+.hs-door.open { fill: color-mix(in srgb, #4a3826 66%, var(--sky-3)); }
+.hs-smoke {
+  fill: none; stroke: var(--sky-1); stroke-width: 4; stroke-linecap: round;
+  opacity: 0.4; animation: smoke 7s var(--ease) infinite;
+}
+@keyframes smoke {
+  0% { opacity: 0; transform: translateY(4px) scaleX(0.9); }
+  35% { opacity: 0.45; }
+  100% { opacity: 0; transform: translateY(-10px) scaleX(1.2); }
+}
+
+/* The window is the state of the house in one shape. */
+.hs-window { fill: #f2c37c; transition: fill var(--slow) var(--ease); }
+.hs-mullion { stroke: color-mix(in srgb, #000 46%, transparent); stroke-width: 1.5; fill: none; }
+.hs-sill { stroke: color-mix(in srgb, #b8ac97 46%, var(--sky-3)); stroke-width: 2.4; stroke-linecap: round; fill: none; }
+.hs-spill { fill: url(#wg-spill); }
+.hs-shingles { stroke: color-mix(in srgb, #000 26%, transparent); stroke-width: 1.4; fill: none; }
+.hs-logs { stroke: color-mix(in srgb, #000 22%, transparent); stroke-width: 1.3; fill: none; }
+.hs-step { fill: color-mix(in srgb, #8e8578 48%, var(--sky-3)); }
+.hs-handle { fill: color-mix(in srgb, #d8c07a 60%, var(--sky-3)); }
+.hs-props { fill: color-mix(in srgb, #55432c 60%, var(--sky-3)); }
+.hs-props-line { stroke: color-mix(in srgb, #000 24%, transparent); stroke-width: 1.4; fill: none; }
+
+/* The lantern by the door. It swings, and its glow is the one light on the
+   outside of the house — which is why a dead house reads instantly: nothing on
+   the porch, nothing in the windows, no smoke. */
+.hs-bracket { stroke: color-mix(in srgb, #3a3128 70%, var(--sky-3)); stroke-width: 1.8; stroke-linecap: round; fill: none; }
+.hs-lamp-body { fill: #f0b459; }
+.hs-lamp-glow { fill: url(#wg-lamp); }
+.hs-lamp-swing {
+  transform-box: fill-box; transform-origin: 50% 0;
+  animation: lamp-sway 5.5s var(--ease) infinite alternate;
+}
+@keyframes lamp-sway {
+  from { transform: rotate(-3.5deg); }
+  to { transform: rotate(3.5deg); }
+}
+
+/* Candlelight: the window brightness breathes, so a lit house is never a flat
+   yellow rectangle. Slow and shallow on purpose — it should be felt, not seen. */
+.hs-window { animation: candle 4.2s ease-in-out infinite alternate; }
+@keyframes candle { from { opacity: 0.86; } to { opacity: 1; } }
+.hs-spill { animation: candle 4.2s ease-in-out infinite alternate; }
+
+.hs.own .hs-wall { stroke: var(--accent); stroke-width: 2.6; }
+.hs.own .hs-window { fill: #ffdca4; }
+.hs.own .hs-spill { opacity: 1.25; }
+
+.hs.dead { opacity: 0.6; }
+.hs.dead .hs-window { fill: #141c24; animation: none; opacity: 1; }
+.hs.dead .hs-lamp { display: none; }
+.hs.dead .hs-handle { display: none; }
+.hs.dead .hs-roof { fill: color-mix(in srgb, #5a4a44 44%, var(--sky-3)); }
+.hs.dead .hs-wall { fill: color-mix(in srgb, #8f8a80 40%, var(--sky-3)); }
+.hs.dead .hs-name { fill: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 1px; }
+
+.hs.fresh { opacity: 1; }
+.hs.fresh .hs-wall { stroke: var(--bad); stroke-width: 2.2; }
+.hs.fresh .hs-name { fill: var(--bad); text-decoration: none; }
+.hs-blood { fill: #9e211a; }
+.hs-smear { fill: #7d1a14; opacity: 0.95; }
+.hs-drop { fill: #9e211a; opacity: 0.9; }
+.hs-alarm {
+  fill: none; stroke: var(--bad); stroke-width: 2.4;
+  transform-box: fill-box; transform-origin: center;
+  animation: alarm 2.2s var(--ease) infinite;
+}
+@keyframes alarm {
+  0% { opacity: 0.6; transform: scale(0.5); }
+  70%, 100% { opacity: 0; transform: scale(1.1); }
+}
+.hs.reported .hs-alarm { display: none; }
+.hs.visited .hs-wall { stroke-dasharray: 6 4; }
+
+.hs-name {
+  fill: var(--ink); font-family: var(--sans); font-size: 19px; font-weight: 500;
+  paint-order: stroke; stroke: color-mix(in srgb, var(--bg) 72%, transparent);
+  stroke-width: 3px; stroke-linejoin: round;
+}
+.hs-sub {
+  fill: var(--ink-2); font-family: var(--sans); font-size: 14px;
+  paint-order: stroke; stroke: color-mix(in srgb, var(--bg) 62%, transparent);
+  stroke-width: 2.6px; stroke-linejoin: round;
+}
+
+/* ---------------- the door sheet ---------------- */
+
+.sheet-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(5, 9, 14, 0.62); backdrop-filter: blur(4px); animation: fade var(--mid) var(--ease); }
+@keyframes fade { from { opacity: 0; } }
+.sheet {
+  position: fixed; z-index: 61; left: 0; right: 0; bottom: 0;
+  max-height: 86dvh; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--bg-2);
+  border-radius: 20px 20px 0 0; border-top: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  padding: 6px 14px calc(16px + env(safe-area-inset-bottom));
+  animation: rise var(--mid) var(--ease);
+}
+@keyframes rise { from { transform: translateY(16%); opacity: 0; } }
+.sheet-grab { width: 38px; height: 4px; border-radius: 2px; background: var(--line-2); margin: 6px auto 12px; }
+.sheet-head { display: flex; align-items: center; gap: 11px; margin-bottom: 4px; }
+.sheet-avatar {
+  width: 46px; height: 46px; flex: 0 0 46px; border-radius: 13px;
+  background: var(--bg-4); color: var(--ink-2); display: grid; place-items: center; overflow: hidden;
+}
+.sheet-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.sheet-title { font-family: var(--serif); font-size: 1.22rem; }
+
+/* Finding a body is the loudest thing that happens at a door. It looks it. */
+.discovery {
+  border: 1px solid var(--bad);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bad) 18%, transparent), transparent);
+  border-radius: 13px; padding: 12px; margin: 11px 0;
+  position: relative; overflow: hidden;
+  animation: thud 0.5s var(--ease);
+}
+.discovery::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
+  background: linear-gradient(90deg, transparent, var(--bad), transparent);
+}
+@keyframes thud {
+  0% { transform: scale(0.96); opacity: 0; }
+  60% { transform: scale(1.012); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.discovery .lead { display: flex; align-items: center; gap: 7px; font-family: var(--serif); font-size: 1.02rem; margin-bottom: 4px; color: var(--bad); }
+
+.offer {
+  width: 100%; display: flex; align-items: flex-start; gap: 11px; text-align: left;
+  padding: 11px 12px; margin-bottom: 7px;
+  border: 1px solid var(--line); border-radius: 13px;
+  background: var(--bg); cursor: pointer; font: inherit; color: inherit;
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+.offer:hover:not([disabled]) { border-color: var(--accent-line); background: var(--accent-soft); }
+.offer:active:not([disabled]) { transform: translateY(1px); }
+.offer[disabled] { opacity: 0.42; cursor: not-allowed; }
+.offer > .ico { color: var(--accent); margin-top: 1px; }
+.offer .body { min-width: 0; flex: 1; display: block; }
+.offer .verb, .offer .desc, .offer .meta { display: block; }
+.offer .verb { font-size: 0.93rem; margin-bottom: 2px; }
+.offer .desc { font-size: 0.76rem; color: var(--ink-3); line-height: 1.4; }
+.offer .meta { font-size: 0.7rem; color: var(--ink-2); margin-top: 3px; }
+.offer .meta.warn { color: var(--warn); }
+.offer .free-tag { font-size: 0.6rem; padding: 1px 5px; border-radius: 999px; background: var(--bg-3); color: var(--ink-3); margin-left: 6px; vertical-align: 1px; }
+
+/* ---------------- role card ---------------- */
+
+.rolecard {
+  border: 1px solid var(--team, var(--line));
+  border-radius: 18px; padding: clamp(14px, 4vw, 22px);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--team, var(--accent)) 14%, transparent), transparent),
+              color-mix(in srgb, var(--bg-2) 90%, transparent);
+  backdrop-filter: blur(10px);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.rolecard .crest { color: var(--team, var(--accent)); }
+.rolecard .name { font-family: var(--serif); font-size: clamp(1.5rem, 7vw, 2rem); margin: 6px 0 1px; line-height: 1; }
+.rolecard .tagline { color: var(--team, var(--accent)); font-size: clamp(0.8rem, 3.4vw, 0.92rem); margin-bottom: 9px; }
+.rolecard .lore {
+  font-family: var(--serif); font-style: italic; color: var(--ink-2);
+  border-left: 2px solid var(--team, var(--line)); padding-left: 10px; margin: 9px 0;
+  font-size: clamp(0.82rem, 3.2vw, 0.9rem);
+}
+.rolecard dt { font-size: 0.7rem; color: var(--ink-3); margin-top: 9px; letter-spacing: 0.05em; text-transform: uppercase; }
+.rolecard dd { margin: 2px 0 0; font-size: 0.87rem; line-height: 1.45; }
+
+.abilities { list-style: none; margin: 8px 0 0; padding: 0; }
+.abilities li { display: flex; gap: 9px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 0.83rem; line-height: 1.4; align-items: flex-start; }
+.abilities li > .ico { color: var(--team, var(--accent)); margin-top: 1px; }
+.abilities b { font-weight: 500; }
+
+/* ---------------- roster ---------------- */
+
+.roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; align-content: start; }
+.roster-item {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px;
+  border: 1px solid var(--line); border-radius: 11px; background: var(--bg-2);
+  text-align: left; font: inherit; color: inherit;
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+button.roster-item { cursor: pointer; }
+.roster-item.in { border-color: var(--team, var(--accent-line)); background: color-mix(in srgb, var(--team, var(--accent)) 10%, transparent); }
+.roster-item > .ico { color: var(--team, var(--ink-2)); }
+.roster-item .rn { font-size: 0.84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster-item .rd { font-size: 0.69rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stepper { display: flex; align-items: center; gap: 1px; flex: 0 0 auto; }
+.stepper button { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; display: grid; place-items: center; }
+.stepper button:hover { background: var(--bg-3); }
+.stepper .n { min-width: 20px; text-align: center; font-variant-numeric: tabular-nums; font-size: 0.86rem; }
+
+.tally { display: flex; align-items: center; gap: 8px; padding: 7px 0; font-size: 0.78rem; }
+.tally .bar { flex: 1; height: 7px; border-radius: 4px; background: var(--bg-4); overflow: hidden; display: flex; }
+.tally .bar i { display: block; height: 100%; }
+
+.tabs { display: flex; gap: 3px; padding: 3px; background: var(--bg-3); border-radius: 11px; overflow-x: auto; scrollbar-width: none; flex: 0 0 auto; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button {
+  flex: 1 0 auto; min-height: 33px; padding: 0 11px; border: none; border-radius: 9px;
+  background: transparent; color: var(--ink-2); font: inherit; font-size: 0.8rem; cursor: pointer;
+  white-space: nowrap; display: inline-flex; align-items: center; gap: 5px;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.tabs button.on { background: var(--bg-2); color: var(--ink); box-shadow: var(--shadow-sm); }
+
+/* ---------------- log, chat, votes ---------------- */
+
+.log { list-style: none; margin: 0; padding: 0; }
+.log li {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 7px 0; border-bottom: 1px solid var(--line);
+  font-size: 0.83rem; line-height: 1.45;
+  animation: slidein var(--mid) var(--ease);
+}
+@keyframes slidein { from { opacity: 0; transform: translateY(3px); } }
+.log li:last-child { border-bottom: none; }
+.log li > .ico { margin-top: 1px; color: var(--ink-3); }
+.log li.death { color: var(--bad); }
+.log li.death > .ico { color: var(--bad); }
+.log li.vote { color: var(--warn); }
+.log li.vote > .ico { color: var(--warn); }
+.log li.end { font-family: var(--serif); font-size: 0.98rem; }
+.log li.event > .ico, .log li.event { color: var(--accent); }
+
+.chat { display: flex; flex-direction: column; gap: 1px; }
+.msg { display: flex; gap: 7px; padding: 4px 0; font-size: 0.85rem; line-height: 1.4; }
+.msg .who { color: var(--ink-2); flex: 0 0 auto; max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg.me .who { color: var(--accent); }
+.msg.animal .text { font-style: italic; color: var(--ink-2); }
+.chat-form { display: flex; gap: 6px; margin-top: 6px; flex: 0 0 auto; }
+.chat-form input { flex: 1; min-height: 40px; }
+
+/* `align-content: start` matters: without it the grid stretches its rows to
+   fill the pane and nine voters become nine enormous slabs. */
+.vote-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px; align-content: start; grid-auto-rows: minmax(52px, auto);
+}
+.vote-btn {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 11px; background: var(--bg-2);
+  font: inherit; color: inherit; cursor: pointer; text-align: left;
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.vote-btn:hover:not([disabled]) { border-color: var(--accent-line); }
+.vote-btn.mine { border-color: var(--accent); background: var(--accent-soft); }
+.vote-btn[disabled] { opacity: 0.55; cursor: not-allowed; filter: grayscale(0.5); }
+.vote-btn .n { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 1rem; min-width: 1.3em; text-align: right; }
+.vote-face { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 9px; background: var(--bg-4); color: var(--ink-2); display: grid; place-items: center; overflow: hidden; }
+.vote-face img { width: 100%; height: 100%; object-fit: cover; }
+.voters { font-size: 0.68rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------------- toasts ---------------- */
+
+.toasts {
+  position: fixed; z-index: 80; left: 50%; transform: translateX(-50%);
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  width: min(420px, calc(100vw - 20px));
+  display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+}
+.toast {
+  display: flex; gap: 8px; align-items: flex-start;
+  background: color-mix(in srgb, var(--bg-2) 94%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line); border-left-width: 3px; border-radius: 11px;
+  padding: 9px 12px; font-size: 0.83rem; line-height: 1.4;
+  box-shadow: var(--shadow); animation: pop var(--mid) var(--ease);
+}
+@keyframes pop { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+.toast > .ico { margin-top: 1px; }
+.toast.warn { border-left-color: var(--warn); } .toast.warn > .ico { color: var(--warn); }
+.toast.bad { border-left-color: var(--bad); } .toast.bad > .ico { color: var(--bad); }
+.toast.ok { border-left-color: var(--ok); } .toast.ok > .ico { color: var(--ok); }
+
+/* ---------------- connection ---------------- */
+
+.conn { display: inline-flex; align-items: center; gap: 5px; font-size: 0.68rem; color: var(--ink-2); }
+.conn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); }
+.conn.online .dot { background: var(--ok); }
+.conn.retrying .dot { background: var(--warn); animation: blink 1.1s infinite; }
+.conn.offline .dot { background: var(--bad); }
+@keyframes blink { 50% { opacity: 0.25; } }
+
+/* ---------------- gore ----------------
+ * The village keeps a running count of its dead, and the frame knows. `--gore`
+ * is 0 with everybody alive and 1 when half of them are gone; it stains the
+ * edges of the screen and puts a drip along the top. It is deliberately at the
+ * frame rather than on any one element — the room gets worse, not a widget. */
+
+.gore {
+  position: fixed; inset: 0; z-index: 2; pointer-events: none;
+  opacity: var(--gore, 0);
+  transition: opacity 2.4s var(--ease);
+}
+.gore::before {
+  content: ""; position: absolute; inset: 0;
+  background:
+    radial-gradient(120% 90% at 50% 50%, transparent 52%, rgba(96, 16, 12, 0.55) 100%);
+}
+.gore::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 34px;
+  background: linear-gradient(180deg, rgba(110, 18, 14, 0.75), transparent);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 34' preserveAspectRatio='none'%3E%3Cpath d='M0 0h120v10c-6 0-6 12-11 12s-5-7-10-7-4 15-9 15-5-16-10-16-6 9-11 9-4-11-9-11-6 14-11 14-5-13-10-13-5 8-10 8-5-9-10-9-6 6-9 6z' fill='%23000'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 34' preserveAspectRatio='none'%3E%3Cpath d='M0 0h120v10c-6 0-6 12-11 12s-5-7-10-7-4 15-9 15-5-16-10-16-6 9-11 9-4-11-9-11-6 14-11 14-5-13-10-13-5 8-10 8-5-9-10-9-6 6-9 6z' fill='%23000'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%; mask-size: 100% 100%;
+}
+
+/* The turn of a phase, swept across the screen once. Dark going into the
+   night, light coming out of it — the same information the colour is already
+   giving you, delivered fast enough to catch your eye. */
+.sweep {
+  position: fixed; inset: 0; z-index: 3; pointer-events: none; opacity: 0;
+}
+.sweep.to-night {
+  background: linear-gradient(180deg, rgba(6, 10, 16, 0.92), rgba(6, 10, 16, 0));
+  animation: sweep-down 0.85s var(--ease);
+}
+.sweep.to-day {
+  background: linear-gradient(0deg, rgba(255, 236, 208, 0.7), rgba(255, 236, 208, 0));
+  animation: sweep-up 0.85s var(--ease);
+}
+@keyframes sweep-down {
+  0% { opacity: 0; transform: translateY(-100%); }
+  35% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(100%); }
+}
+@keyframes sweep-up {
+  0% { opacity: 0; transform: translateY(100%); }
+  35% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-100%); }
+}
+html[data-motion="off"] .sweep { display: none; }
+@media (prefers-reduced-motion: reduce) { .sweep { display: none; } }
+
+/* A death just landed: one hard flash, then it settles into the stain. */
+body.struck .app { animation: struck 0.5s var(--ease); }
+@keyframes struck {
+  0% { filter: none; transform: none; }
+  12% { filter: saturate(1.5) contrast(1.08); transform: translate3d(2px, -1px, 0); }
+  28% { transform: translate3d(-2px, 1px, 0); }
+  100% { filter: none; transform: none; }
+}
+
+/* ---------------- misc ---------------- */
+
+.roomcode { font-family: var(--mono); font-size: clamp(1.7rem, 9vw, 2.4rem); letter-spacing: 0.24em; text-align: center; padding: 6px 0 2px; text-indent: 0.24em; }
+.turn-state {
+  display: flex; align-items: center; gap: 9px; padding: 9px 12px;
+  border-radius: 12px; border: 1px dashed var(--line-2);
+  font-size: 0.82rem; color: var(--ink-2); flex: 0 0 auto;
+  background: color-mix(in srgb, var(--bg-2) 70%, transparent);
+}
+.turn-state > .ico { color: var(--accent); }
+.turn-state.spent { border-style: solid; background: color-mix(in srgb, var(--bg-3) 80%, transparent); }
+.turn-state.blocked { border-color: var(--warn); color: var(--warn); }
+.turn-state.blocked > .ico { color: var(--warn); }
+
+.empty { text-align: center; padding: 24px 14px; color: var(--ink-3); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.empty > .ico { opacity: 0.5; }
+.center { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; }
+.reveal { animation: reveal 0.6s var(--ease); }
+@keyframes reveal { from { opacity: 0; transform: translateY(8px) scale(0.985); } }
+
+/* Wide screens: the host is usually on a laptop or a TV. Give the village the
+   room and put the side panels beside it rather than under it. */
+@media (min-width: 900px) and (min-height: 560px) {
+  .app { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+  .split { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.85fr); gap: 10px; min-height: 0; flex: 1 1 auto; }
+  .split > * { min-height: 0; display: flex; flex-direction: column; }
+  .sheet {
+    left: 50%; right: auto; bottom: auto; top: 50%; transform: translate(-50%, -50%);
+    width: min(500px, calc(100vw - 40px)); max-height: 84dvh;
+    border-radius: 18px; border: 1px solid var(--line);
+    animation: pop var(--mid) var(--ease);
+  }
+  .sheet-grab { display: none; }
+  .hs-name { font-size: 17px; }
+  .hs-sub { font-size: 13px; }
+}
+/* Stacked, and both halves have to actually take their share — otherwise the
+   village sits at the top of a screen with a third of it left blank. */
+@media (max-width: 899px) {
+  .split { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1 1 auto; }
+  .split > * { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+  .split > :first-child { flex: 1 1 42%; }
+  .split > :last-child { flex: 1 1 58%; }
+}
+
+/* Very short viewports (a phone in landscape) drop the decorative rows rather
+   than letting anything scroll. */
+@media (max-height: 480px) {
+  .phase-sub, .brand-sub, .rolecard .lore { display: none; }
+  .topbar { padding-top: 4px; }
+}

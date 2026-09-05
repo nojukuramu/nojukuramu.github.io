@@ -1,0 +1,250 @@
+/* consistency.js — the checks that catch drift between files that must agree.
+ *
+ * Three pairs get out of step silently, and each one produces a bug that looks
+ * like something else:
+ *
+ *   1. The base palette lives in css/theme.css (what the page looks like with
+ *      no JavaScript) and again in js/ui/theme.js (what gets blended with the
+ *      sky). If they disagree, the app changes colour the instant the theme
+ *      engine starts, which reads as a flash rather than as a bug.
+ *   2. The ?v= stamps in index.html, sw.js and the service worker's precache
+ *      list. A mismatch serves one deploy's HTML with another's CSS for exactly
+ *      one load.
+ *   3. Every file index.html loads has to exist, and every role module has to
+ *      be loaded. A role that is never scripted throws at link() — but only
+ *      once somebody opens the page.
+ *
+ * Run: node tools/consistency.js
+ */
+"use strict";
+var fs = require("fs"), path = require("path");
+var ROOT = path.join(__dirname, "..");
+var pass = 0, fail = 0;
+function ok(l, c, x) { if (c) { pass++; console.log("  ✓ " + l); } else { fail++; console.log("  ✗ " + l + (x ? "  <- " + x : "")); } }
+function read(p) { return fs.readFileSync(path.join(ROOT, p), "utf8"); }
+
+var css = read("css/theme.css");
+var themeJs = read("js/ui/theme.js");
+var html = read("index.html");
+var sw = read("sw.js");
+
+console.log("\nThe palette is written twice and must agree");
+(function () {
+  function fromCss(block) {
+    var out = {};
+    var re = /--([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})/g, m;
+    while ((m = re.exec(block))) out[m[1]] = m[2].toLowerCase();
+    return out;
+  }
+  // The light block is bare :root; the explicit dark block is html[data-theme="dark"].
+  var lightBlock = css.slice(css.indexOf(":root {"), css.indexOf('html[data-theme="dark"] { color-scheme'));
+  var darkStart = css.lastIndexOf('html[data-theme="dark"] {');
+  var darkBlock = css.slice(darkStart);
+  var cssLight = fromCss(lightBlock), cssDark = fromCss(darkBlock);
+
+  var jsBlock = themeJs.slice(themeJs.indexOf("var BASE = {"), themeJs.indexOf("var PULL"));
+  function fromJs(name) {
+    var seg = jsBlock.slice(jsBlock.indexOf(name + ": {"));
+    seg = seg.slice(0, seg.indexOf("}"));
+    var out = {}, re = /"?([a-z0-9-]+)"?:\s*"(#[0-9a-fA-F]{6})"/g, m;
+    while ((m = re.exec(seg))) out[m[1]] = m[2].toLowerCase();
+    return out;
+  }
+  var jsLight = fromJs("light"), jsDark = fromJs("dark");
+
+  ["light", "dark"].forEach(function (mode) {
+    var a = mode === "light" ? cssLight : cssDark;
+    var b = mode === "light" ? jsLight : jsDark;
+    var keys = Object.keys(b);
+    var bad = keys.filter(function (k) { return a[k] !== b[k]; });
+    ok(mode + ": every token the blender touches matches the stylesheet",
+      bad.length === 0,
+      bad.map(function (k) { return k + " css=" + a[k] + " js=" + b[k]; }).join(", "));
+    ok(mode + ": the blender covers something real", keys.length >= 10, String(keys.length));
+  });
+})();
+
+console.log("\nCache-busting stamps agree");
+(function () {
+  var htmlV = /\?v=([0-9.]+)/.exec(html);
+  var swV = /ASSET_V = "([0-9.]+)"/.exec(sw);
+  ok("index.html stamps a version", !!htmlV);
+  ok("sw.js names the same one", htmlV && swV && htmlV[1] === swV[1],
+    (htmlV && htmlV[1]) + " vs " + (swV && swV[1]));
+  var stamps = (html.match(/\?v=[0-9.]+/g) || []).map(function (s) { return s.slice(3); });
+  ok("every asset in index.html carries it", new Set(stamps).size === 1, JSON.stringify([].concat(new Set(stamps))));
+})();
+
+console.log("\nEverything index.html loads exists, and nothing is missed");
+(function () {
+  var srcs = (html.match(/src="([^"]+)"/g) || []).map(function (s) { return s.slice(5, -1).split("?")[0]; });
+  var hrefs = (html.match(/href="([^"]+\.(?:css|webmanifest|png))[^"]*"/g) || [])
+    .map(function (s) { return /href="([^"?]+)/.exec(s)[1]; });
+  var missing = srcs.concat(hrefs).filter(function (f) { return !fs.existsSync(path.join(ROOT, f)); });
+  ok("no dead script or stylesheet references", missing.length === 0, missing.join(", "));
+
+  var roleFiles = fs.readdirSync(path.join(ROOT, "js/roles")).filter(function (f) { return f.endsWith(".js"); });
+  var loaded = srcs.filter(function (s) { return s.indexOf("js/roles/") === 0; })
+    .map(function (s) { return s.split("/").pop(); });
+  var notLoaded = roleFiles.filter(function (f) { return loaded.indexOf(f) < 0; });
+  ok("every role module is on the page", notLoaded.length === 0, notLoaded.join(", "));
+  ok("the generic actions load before the roles that use them",
+    loaded[0] === "_generic.js", loaded[0]);
+
+  var data = JSON.parse(read("data/list_of_roles.json"));
+  var declared = data.roles.map(function (r) { return r.id + ".js"; });
+  var orphans = roleFiles.filter(function (f) { return f !== "_generic.js" && declared.indexOf(f) < 0; });
+  var unimplemented = declared.filter(function (f) { return roleFiles.indexOf(f) < 0; });
+  ok("no role module without a data entry", orphans.length === 0, orphans.join(", "));
+  ok("no data entry without a role module", unimplemented.length === 0, unimplemented.join(", "));
+  ok("the service worker precaches the data files",
+    ["list_of_roles", "game_flow", "sky", "list_of_events"].every(function (n) { return sw.indexOf(n + ".json") > 0; }));
+})();
+
+console.log("\nNo emoji ship anywhere");
+(function () {
+  /* Emoji render as a different picture on every platform, are full-colour
+   * blobs in a two-tone interface, and are the loudest possible signal that a
+   * thing is a web page rather than a game. Every glyph is a stroke path in
+   * ui/icons.js instead, and this is what stops one creeping back in. */
+  var EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/u;
+  var files = [];
+  (function walk(dir) {
+    fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true }).forEach(function (e) {
+      if (e.name === "node_modules" || e.name === "icons") return;
+      var rel = dir ? dir + "/" + e.name : e.name;
+      if (e.isDirectory()) return walk(rel);
+      if (/\.(js|css|html|json|webmanifest|md)$/.test(e.name)) files.push(rel);
+    });
+  })("");
+
+  var dirty = [];
+  files.forEach(function (f) {
+    if (f.indexOf("tools/") === 0) return;             // the tests may say "emoji"
+    var src = read(f);
+    src.split("\n").forEach(function (line, i) {
+      if (EMOJI.test(line)) dirty.push(f + ":" + (i + 1));
+    });
+  });
+  ok("nothing shipped contains an emoji", dirty.length === 0, dirty.slice(0, 6).join(", "));
+
+  // And every glyph a data file names has to actually exist.
+  var icons = read("js/ui/icons.js");
+  var declared = {};
+  (icons.match(/^\s{4}([a-zA-Z]+):\s+"/gm) || []).forEach(function (m) {
+    declared[m.trim().split(":")[0]] = true;
+  });
+  (icons.match(/^\s{4}([a-z_]+): "([a-zA-Z]+)"/gm) || []).forEach(function (m) {
+    var parts = /([a-z_]+): "([a-zA-Z]+)"/.exec(m);
+    if (parts) declared[parts[1]] = true;
+  });
+
+  var wanted = [];
+  var roles = JSON.parse(read("data/list_of_roles.json"));
+  roles.roles.forEach(function (r) {
+    wanted.push(r.icon);
+    (r.actions || []).forEach(function (a) { wanted.push(a.icon); });
+  });
+  roles.universalActions.forEach(function (a) { wanted.push(a.icon); });
+  Object.keys(roles.teams).forEach(function (t) { wanted.push(roles.teams[t].icon); });
+  JSON.parse(read("data/list_of_events.json")).events.forEach(function (e) { wanted.push(e.icon); });
+  JSON.parse(read("data/game_flow.json")).phases.forEach(function (p) { wanted.push(p.icon); });
+
+  var unknown = wanted.filter(function (n) { return n && !declared[n]; });
+  ok("every glyph the data asks for is drawn", unknown.length === 0,
+    [].concat(new Set(unknown)).join(", "));
+  ok("the data names a glyph for everything", wanted.every(Boolean));
+})();
+
+console.log("\nNo CSS transform sits on top of an SVG transform attribute");
+(function () {
+  /* A CSS `transform` REPLACES a `transform` presentation attribute rather than
+   * composing with it. Animating a class that is also placed with the attribute
+   * stacks every one of those elements at the origin, silently. It happened to
+   * the whole treeline once; this is so it cannot happen again. */
+  var css = read("css/app.css");
+  var animated = {};
+  css.replace(/\.([a-zA-Z-]+)\s*\{[^}]*animation:[^}]*\}/g, function (block, cls) {
+    if (/transform/.test(block) || /animation:\s*(tree-sway|sway|lamp-sway|flicker|alarm|firefly)/.test(block)) {
+      animated[cls] = true;
+    }
+    return block;
+  });
+  // Also anything whose keyframes touch transform.
+  var kf = {};
+  css.replace(/@keyframes\s+([a-zA-Z-]+)\s*\{([\s\S]*?)\n\}/g, function (_, name, body) {
+    if (/transform:/.test(body)) kf[name] = true;
+    return _;
+  });
+  css.replace(/\.([a-zA-Z-]+)[^{]*\{([^}]*)\}/g, function (_, cls, body) {
+    var m = /animation(?:-name)?:\s*([a-zA-Z-]+)/.exec(body);
+    if (m && kf[m[1]]) animated[cls] = true;
+    return _;
+  });
+
+  var js = read("js/ui/village.js") + read("js/ui/screens.js");
+  var clashes = [];
+  // el("g", { class: "x", transform: ... }) — the exact shape that breaks.
+  js.replace(/class:\s*"([^"]+)"[^)]*?transform:/g, function (_, classes) {
+    classes.split(/\s+/).forEach(function (c) { if (animated[c]) clashes.push(c); });
+    return _;
+  });
+  js.replace(/transform:[^)]*?class:\s*"([^"]+)"/g, function (_, classes) {
+    classes.split(/\s+/).forEach(function (c) { if (animated[c]) clashes.push(c); });
+    return _;
+  });
+  ok("no animated class is also placed with a transform attribute",
+    clashes.length === 0, [].concat(new Set(clashes)).join(", "));
+})();
+
+console.log("\nThe flow and the sky refer to each other correctly");
+(function () {
+  var flow = JSON.parse(read("data/game_flow.json"));
+  var sky = JSON.parse(read("data/sky.json"));
+  var bad = [];
+  flow.phases.forEach(function (p) {
+    if (!p.sky) return bad.push(p.id + ": no sky");
+    if (!sky.stops[p.sky.from]) bad.push(p.id + ": unknown from " + p.sky.from);
+    if (!sky.stops[p.sky.to]) bad.push(p.id + ": unknown to " + p.sky.to);
+  });
+  ok("every phase names sky stops that exist", bad.length === 0, bad.join(", "));
+
+  /* Both palettes, in full, on every stop. This is here because a scalar field
+   * that happened to be called `dark` once replaced the dark palette outright,
+   * and the only symptom was that dark mode quietly rendered in light colours. */
+  var TOKENS = ["sky1", "sky2", "sky3", "glow", "tint", "onSky"];
+  var broken = [];
+  Object.keys(sky.stops).forEach(function (k) {
+    var st = sky.stops[k];
+    ["light", "dark"].forEach(function (mode) {
+      var pal = st[mode];
+      if (!pal || typeof pal !== "object") return broken.push(k + "." + mode + " missing");
+      TOKENS.forEach(function (t) {
+        if (!/^#[0-9a-f]{6}$/i.test(pal[t] || "")) broken.push(k + "." + mode + "." + t);
+      });
+    });
+    if (typeof st.hour !== "number" || st.hour < 0 || st.hour >= 24) broken.push(k + ".hour");
+    if (typeof st.starlight !== "number") broken.push(k + ".starlight");
+  });
+  ok("every stop has a complete light and dark palette", broken.length === 0, broken.slice(0, 5).join(", "));
+  ok("the light and dark palettes are actually different",
+    Object.keys(sky.stops).every(function (k) {
+      return sky.stops[k].light.sky1 !== sky.stops[k].dark.sky1;
+    }));
+
+  var ids = flow.phases.map(function (p) { return p.id; });
+  var dangling = flow.phases.filter(function (p) { return p.next && ids.indexOf(p.next) < 0; });
+  ok("every `next` points at a real phase", dangling.length === 0,
+    dangling.map(function (p) { return p.id + "->" + p.next; }).join(", "));
+
+  var loop = [], id = "night";
+  for (var i = 0; i < 12 && id; i++) {
+    if (loop.indexOf(id) >= 0) break;
+    loop.push(id);
+    id = (flow.phases.filter(function (p) { return p.id === id; })[0] || {}).next;
+  }
+  ok("the round is a loop, not a dead end", id === "night", loop.join(">") + " then " + id);
+})();
+
+console.log("\n" + pass + " passed, " + fail + " failed\n");
+process.exit(fail ? 1 : 0);

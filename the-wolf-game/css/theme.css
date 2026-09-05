@@ -1,0 +1,171 @@
+/* theme.css — Ash Blue, in two modes, tinted by the time of day.
+ *
+ * The palette is Anthropic's structure with a different family in it: one
+ * neutral ramp, one accent doing all the pointing, serif headings against a
+ * system sans. Where Claude's is warm paper and clay, this is washed ash and
+ * slate — a village at the blue hour, which is the only hour this game happens in.
+ *
+ * The tokens below are the *base* palette, and they are what the page looks
+ * like before any JavaScript runs. Once the game is going, js/ui/theme.js
+ * overwrites the same variables several times a second with the base blended
+ * towards whatever the phase clock says the sky is doing. So the room is
+ * genuinely darker at 00:30 than it was at 00:05, and a discussion visibly
+ * runs out of morning. Nothing else in the CSS knows this is happening.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* surfaces, back to front */
+  --bg:      #eaeff4;
+  --bg-2:    #f7fafc;
+  --bg-3:    #dfe7ee;
+  --bg-4:    #d0dae4;
+  --line:    #c6d2dd;
+  --line-2:  #adbdcc;
+
+  /* ink */
+  --ink:     #141d26;
+  --ink-2:   #4d5f70;
+  --ink-3:   #7a8c9b;
+
+  --accent:      #2f6484;
+  --accent-2:    #4a86a8;
+  --accent-soft: rgba(47, 100, 132, 0.10);
+  --accent-line: rgba(47, 100, 132, 0.28);
+  --accent-ink:  #ffffff;
+
+  --ok:   #2f7d63;
+  --warn: #96662a;
+  --bad:  #a8453e;
+
+  /* the four sides, each with one colour it owns everywhere */
+  --team-village:  #2f6484;
+  --team-werewolf: #a8453e;
+  --team-cult:     #7a5896;
+  --team-solo:     #96762a;
+
+  /* the sky — overwritten continuously by ui/theme.js */
+  --sky-1: #f4f8fb;
+  --sky-2: #e0eaf2;
+  --sky-3: #c6d7e4;
+  --sky-glow: #ffffff;
+  --sky-on: #17202a;
+  --sky-mix: 0;
+
+  --shadow-sm: 0 1px 2px rgba(20, 29, 38, 0.06);
+  --shadow:    0 6px 20px -8px rgba(20, 29, 38, 0.18);
+  --shadow-lg: 0 28px 64px -24px rgba(20, 29, 38, 0.34);
+  --ring:      0 0 0 3px var(--accent-soft);
+
+  --radius:    16px;
+  --radius-sm: 10px;
+  --radius-lg: 22px;
+  --tap:       44px;
+
+  --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --sans:  ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* One easing for the whole app, so nothing feels like it came from elsewhere.
+     Slower than an admin panel deserves and about right for a game that is
+     mostly people waiting to find out what happened. */
+  --ease: cubic-bezier(0.22, 0.68, 0.28, 1);
+  --fast: 0.18s;
+  --mid:  0.36s;
+  --slow: 0.9s;
+  --sky-fade: 1.6s;   /* how lazily the sky is allowed to move */
+}
+
+html[data-theme="dark"] { color-scheme: dark; }
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg:      #10161c;
+    --bg-2:    #171f27;
+    --bg-3:    #1e2833;
+    --bg-4:    #27333f;
+    --line:    #2a3540;
+    --line-2:  #3b4a58;
+
+    --ink:     #e9eff4;
+    --ink-2:   #a4b4c2;
+    --ink-3:   #71838f;
+
+    --accent:      #7cb0d0;
+    --accent-2:    #9dc6de;
+    --accent-soft: rgba(124, 176, 208, 0.14);
+    --accent-line: rgba(124, 176, 208, 0.32);
+    --accent-ink:  #0d1319;
+
+    --ok:   #58b593;
+    --warn: #d3a25b;
+    --bad:  #e0796f;
+
+    --team-village:  #7cb0d0;
+    --team-werewolf: #e0796f;
+    --team-cult:     #b294d6;
+    --team-solo:     #d8b969;
+
+    --sky-1: #131c26;
+    --sky-2: #0b1119;
+    --sky-3: #05080c;
+    --sky-glow: #3f6a8c;
+    --sky-on: #c6d5e2;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+    --shadow:    0 6px 22px -8px rgba(0, 0, 0, 0.66);
+    --shadow-lg: 0 28px 64px -24px rgba(0, 0, 0, 0.78);
+  }
+}
+
+/* An explicit choice beats the system preference in both directions, which is
+   why the dark values are written twice rather than pulled into one block: a
+   media query cannot be overridden by an attribute selector that came first. */
+html[data-theme="dark"] {
+  --bg:      #10161c;
+  --bg-2:    #171f27;
+  --bg-3:    #1e2833;
+  --bg-4:    #27333f;
+  --line:    #2a3540;
+  --line-2:  #3b4a58;
+
+  --ink:     #e9eff4;
+  --ink-2:   #a4b4c2;
+  --ink-3:   #71838f;
+
+  --accent:      #7cb0d0;
+  --accent-2:    #9dc6de;
+  --accent-soft: rgba(124, 176, 208, 0.14);
+  --accent-line: rgba(124, 176, 208, 0.32);
+  --accent-ink:  #0d1319;
+
+  --ok:   #58b593;
+  --warn: #d3a25b;
+  --bad:  #e0796f;
+
+  --team-village:  #7cb0d0;
+  --team-werewolf: #e0796f;
+  --team-cult:     #b294d6;
+  --team-solo:     #d8b969;
+
+  --sky-1: #131c26;
+  --sky-2: #0b1119;
+  --sky-3: #05080c;
+  --sky-glow: #3f6a8c;
+  --sky-on: #c6d5e2;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow:    0 6px 22px -8px rgba(0, 0, 0, 0.66);
+  --shadow-lg: 0 28px 64px -24px rgba(0, 0, 0, 0.78);
+}
+
+/* Somebody who has asked their machine to stop moving things gets a theme that
+   still changes colour — that is information, not decoration — but never
+   animates, slides or pulses. */
+@media (prefers-reduced-motion: reduce) {
+  :root { --fast: 0.01ms; --mid: 0.01ms; --slow: 0.01ms; --sky-fade: 0.01ms; }
+}
+html[data-motion="off"] { --fast: 0.01ms; --mid: 0.01ms; --slow: 0.01ms; --sky-fade: 0.01ms; }

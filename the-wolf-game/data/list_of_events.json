@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "notes": [
+    "Random events that can seize a round. Each entry is pure data; the code that",
+    "`icon` names a glyph in js/ui/icons.js, never an emoji."
+  ],
+  "chance": 0.08,
+  "earliestRound": 2,
+  "events": [
+    {
+      "id": "festival",
+      "name": "Festival",
+      "icon": "star",
+      "colour": "gold",
+      "description": "The whole village is drunk. Every choice made tonight — and every vote cast tomorrow — lands somewhere other than where it was aimed.",
+      "shortDescription": "Everyone is drunk. Actions and votes go astray.",
+      "phases": [
+        "night",
+        "day"
+      ],
+      "duration": 1,
+      "effects": [
+        {
+          "kind": "randomizeTarget",
+          "appliesTo": "nightActions",
+          "chance": 1
+        },
+        {
+          "kind": "randomizeTarget",
+          "appliesTo": "dayVotes",
+          "chance": 1
+        }
+      ]
+    },
+    {
+      "id": "pandemic",
+      "name": "Pandemic",
+      "icon": "virus",
+      "colour": "sick",
+      "description": "A sickness starts in one house and walks to its neighbours. Three nights with it and you do not get up. If it takes the whole village, it wins the game outright.",
+      "shortDescription": "A contagion spreads house to house. Three nights sick is fatal.",
+      "phases": [
+        "continuous"
+      ],
+      "duration": -1,
+      "effects": [
+        {
+          "kind": "infectPatientZero",
+          "count": 1
+        },
+        {
+          "kind": "spread",
+          "to": "adjacent",
+          "perNight": 1
+        },
+        {
+          "kind": "killAfter",
+          "nights": 3
+        },
+        {
+          "kind": "winIfAllSick",
+          "team": "pandemic"
+        }
+      ]
+    },
+    {
+      "id": "blood_moon",
+      "name": "Blood Moon",
+      "icon": "blood",
+      "colour": "blood",
+      "description": "The pack hunts twice tonight, and the night runs short — every phase timer is cut by a third.",
+      "shortDescription": "The wolves kill twice, and the night is shorter.",
+      "phases": [
+        "night"
+      ],
+      "duration": 1,
+      "effects": [
+        {
+          "kind": "extraKill",
+          "team": "werewolf",
+          "count": 1
+        },
+        {
+          "kind": "scaleDuration",
+          "phase": "night",
+          "factor": 0.66
+        }
+      ]
+    },
+    {
+      "id": "curfew",
+      "name": "Curfew",
+      "icon": "lock",
+      "colour": "ash",
+      "description": "The village bolts its doors. Nobody may visit a house that is not their own; only the pack, who were never asked, can still move.",
+      "shortDescription": "Only the wolves may leave their houses tonight.",
+      "phases": [
+        "night"
+      ],
+      "duration": 1,
+      "effects": [
+        {
+          "kind": "restrictHouses",
+          "to": "self",
+          "except": [
+            "werewolf"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "long_night",
+      "name": "Long Night",
+      "icon": "moon",
+      "colour": "night",
+      "description": "Dawn is late. The night runs half again as long, which is a gift to anyone who was going to be too slow.",
+      "shortDescription": "The night runs 50% longer.",
+      "phases": [
+        "night"
+      ],
+      "duration": 1,
+      "effects": [
+        {
+          "kind": "scaleDuration",
+          "phase": "night",
+          "factor": 1.5
+        }
+      ]
+    }
+  ]
+}

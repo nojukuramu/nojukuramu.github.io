@@ -64,7 +64,8 @@
     arrow:  svg('<path d="M5 12h13M13 6.5l5.5 5.5L13 17.5"/>'),
     sun:    svg('<circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>'),
     code:   svg('<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>'),
-    play:   svg('<circle cx="12" cy="12" r="9"/><path d="M10 8.5l6 3.5-6 3.5z"/>')
+    play:   svg('<circle cx="12" cy="12" r="9"/><path d="M10 8.5l6 3.5-6 3.5z"/>'),
+    moon:   svg('<path d="M20.5 14.2A8.6 8.6 0 0 1 9.8 3.5a8.6 8.6 0 1 0 10.7 10.7z"/><path d="M15.5 3.2l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7z"/>')
   };
 
   /* ---------- projects (add new ones here) ---------- */
@@ -113,6 +114,11 @@
       name: "KaraokeNatin", href: "karaokenatin/", icon: ICONS.mic, badge: "Party",
       desc: "Turn any screen into a karaoke machine. Guests scan a code and their phone becomes the remote — search, queue, skip. Peer-to-peer over WebRTC, so no server of mine is involved.",
       tags: ["WebRTC", "P2P", "PWA"]
+    },
+    {
+      name: "The Wolf Game", href: "the-wolf-game/", icon: ICONS.moon, badge: "Party game",
+      desc: "Werewolf for a room full of phones. The night runs for everyone at once, first come first served \u2014 you pick a house, then decide what to do at its door, and a bodyguard who arrives late finds a body instead of a charge. 35 roles, peer-to-peer over WebRTC.",
+      tags: ["WebRTC", "P2P", "35 roles"]
     },
     {
       name: "RouteCast", href: "routecast/", icon: ICONS.route, badge: "Navigation",
