@@ -116,6 +116,37 @@ section("Role data and behaviour agree");
   console.log("    teams: " + JSON.stringify(teams));
 })();
 
+/* ---------------- how small a village can be ---------------- */
+
+section("The minimum table comes from the roster, not from a number");
+(function () {
+  var min = WG.win.minimumSeats;
+
+  ok("one wolf and two villagers is a game of three", min({ werewolf: 1 }) === 3,
+     String(min({ werewolf: 1 })));
+  ok("one wolf against one villager is over before it starts", min({ werewolf: 1 }) > 2);
+  ok("two wolves need five", min({ werewolf: 2 }) === 5, String(min({ werewolf: 2 })));
+  ok("a seer does not change that", min({ werewolf: 2, seer: 1 }) === 5,
+     String(min({ werewolf: 2, seer: 1 })));
+  ok("three wolves need seven", min({ werewolf: 3 }) === 7, String(min({ werewolf: 3 })));
+  ok("a bag with no threat in it is not a game", min({ seer: 1, doctor: 1 }) === 0,
+     String(min({ seer: 1, doctor: 1 })));
+  ok("a cult of one can play at three", min({ cult_leader: 1 }) === 3,
+     String(min({ cult_leader: 1 })));
+
+  // And the engine agrees with the number it shows.
+  var r = room(["A", "B", "C"]);
+  r.state.roster = { werewolf: 1 };
+  var res = r.eng.handle({ type: "START" }, "p0");
+  ok("three players can start a one-wolf village", res.ok !== false, res && res.reason);
+
+  var tight = room(["A", "B", "C"]);
+  tight.state.roster = { werewolf: 2 };
+  var no = tight.eng.handle({ type: "START" }, "p0");
+  ok("but not a two-wolf one", no && no.ok === false);
+  ok("and it says how many it would take", !!no && /needs 5 players/.test(no.reason || ""), no && no.reason);
+})();
+
 /* ---------------- the late bodyguard ---------------- */
 
 section("The map never says who died");

@@ -126,9 +126,40 @@ cannot read at dusk.
 A fixed frame, three rows, and a stage in the middle that must fit whatever is
 in it at any size. Only a chat log or a genuinely unbounded list scrolls, inside
 itself, and it is marked where it does. `tools/fit-test.js` walks every screen at
-nine real viewport sizes — from a 320x568 phone to a TV — and fails if the
-document is ever taller than the window or anything outside a marked pane has
-overflowed.
+twelve real viewport sizes — from a 320x568 phone to a TV, and either side of
+the 900px split — and fails if the document is ever taller or wider than the
+window, if anything outside a marked pane has overflowed, or if any element
+nothing clips reaches past the right edge.
+
+### The smallest village is whatever the roster allows
+
+There is no fixed minimum head count. Four was inherited from the legacy app
+and it is wrong in both directions: one wolf against two villagers is a real
+game of three, while two wolves and two villagers is decided before anybody
+sleeps. So `WG.win.minimumSeats(roster)` deals the host's bag onto N seats —
+padding with villagers exactly as the engine does — and asks the same win check
+the game itself uses. The first N it has no answer for is the floor, it is shown
+in the lobby as the host builds the bag, and it moves on its own when they change
+it.
+
+### It tells you when it is out of date
+
+Installed to a home screen there is no address bar and no reload button, and a
+cached shell would serve last month's build forever. The service worker no
+longer takes over on install: it waits, the page notices it waiting, and offers
+the reload — on load, on coming back to the foreground, every half hour, and on
+"Check for updates" under the home screen. A host mid-night is asked to confirm,
+because reloading closes the village for everyone in it. `tools/version-check.js`
+holds the one version number across `index.html`, `sw.js` and the loader.
+
+### A repaint never takes the screen away from you
+
+The host rebuilds the stage whenever the state moves, and once every few
+seconds regardless; a guest rebuilds it when a snapshot lands. That has to be
+invisible. Every scroll position, every half-typed line and the focus and caret
+are carried across the rebuild, a log that was at the bottom stays pinned to
+it, and a snapshot identical to the last one is not painted at all. This is
+what `tools/render-test.js` holds down.
 
 ### No emoji
 
@@ -259,9 +290,11 @@ no pack tally reaches a phone that should not have it.
 ## Tests
 
 ```
-node tools/engine-test.js    # 158 assertions, no browser, no network
+node tools/engine-test.js    # 168 assertions, no browser, no network
 node tools/consistency.js    #  22 checks for drift between files that must agree
-node tools/fit-test.js       #   9 viewport sizes, nothing may scroll
+node tools/fit-test.js       #  12 viewport sizes, nothing may scroll or overflow
+node tools/render-test.js    #   9 checks: a repaint keeps the reader's place
+node tools/version-check.js  #  16 checks: one version number across three files
 node tools/sound-test.js     #  13 checks: every voice renders real audio
 node tools/e2e.js            #  41 assertions: four real browsers, one real room
 node tools/shots.js          # a screenshot of every screen in both themes

@@ -26,6 +26,10 @@ var SIZES = [
   ["small phone", 320, 568], ["phone", 390, 844], ["big phone", 430, 932],
   ["phone landscape", 844, 390], ["small landscape", 568, 320],
   ["tablet", 768, 1024], ["tablet landscape", 1024, 768],
+  /* The awkward middle. 900px is where the two-column layout switches on, so
+   * the widths either side of it are exactly where a minimum-width column can
+   * push the whole page sideways. */
+  ["narrow window", 640, 760], ["just under split", 899, 700], ["just over split", 901, 700],
   ["laptop", 1440, 900], ["tv", 1920, 1080]
 ];
 var SCENES = ["home", "lobby", "role_reveal", "night", "door", "dawn", "discussion", "voting", "game_over"];
@@ -59,14 +63,18 @@ function serve() {
     var bad = [];
     for (var j = 0; j < SCENES.length; j++) {
       await page.evaluate(scene, SCENES[j]);
-      await page.waitForTimeout(120);
+      /* Long enough for the entrance animations to finish. A sheet sliding in
+       * or the hit-flash shaking the frame is off the edge on purpose for a
+       * few frames, and neither can scroll anything: measure once it lands. */
+      await page.waitForTimeout(700);
       var r = await page.evaluate(measure);
       if (r.docH > r.winH + 1 || r.docW > r.winW + 1) {
         bad.push(SCENES[j] + " doc " + r.docW + "x" + r.docH + " > " + r.winW + "x" + r.winH);
       }
       if (r.overflowing.length) bad.push(SCENES[j] + " overflow: " + r.overflowing.join(", "));
+      if (r.wide.length) bad.push(SCENES[j] + " past the edge: " + r.wide.join(", "));
     }
-    ok(name + " (" + w + "x" + h + ") fits without scrolling", bad.length === 0, bad.slice(0, 2).join(" | "));
+    ok(name + " (" + w + "x" + h + ") fits", bad.length === 0, bad.slice(0, 3).join(" | "));
     if (bad.length) worst = worst.concat(bad);
     if (errs.length) ok(name + " had no page errors", false, errs[0]);
     await page.close();
@@ -86,17 +94,65 @@ function measure() {
     docH: Math.max(d.scrollHeight, document.body.scrollHeight),
     docW: Math.max(d.scrollWidth, document.body.scrollWidth),
     winH: window.innerHeight, winW: window.innerWidth,
-    overflowing: []
+    overflowing: [], wide: []
   };
-  // Anything that scrolls and is not explicitly allowed to is a bug.
-  var all = document.querySelectorAll(".app *");
+
+  /* True when some ancestor clips this node horizontally. */
+  function clipped(n) {
+    for (var p = n.parentElement; p && p !== document.body; p = p.parentElement) {
+      var o = getComputedStyle(p).overflowX;
+      if (o && o !== "visible") return true;
+    }
+    return false;
+  }
+
+  function name(n) {
+    return (n.tagName || "").toLowerCase() +
+      (n.id ? "#" + n.id : "") +
+      (typeof n.className === "string" && n.className ? "." + n.className.trim().split(/\s+/).join(".") : "");
+  }
+
+  /* Anything sticking out past the right edge of the window. This is the check
+   * that was missing: the old one only looked at vertical overflow and at the
+   * document, so an element 40px too wide inside a clipped ancestor went
+   * unnoticed here and showed up as a cut-off interface in a real browser. */
+  var all = document.querySelectorAll("body *");
   for (var i = 0; i < all.length; i++) {
     var n = all[i];
-    if (n.closest(".pane.scroll") || n.classList.contains("scroll")) continue;
-    if (n.scrollHeight > n.clientHeight + 2 && getComputedStyle(n).overflowY !== "visible") {
-      out.overflowing.push((n.className || n.tagName) + "");
-      if (out.overflowing.length > 3) break;
+    if (n.id === "sky" || n.classList.contains("gore") || n.classList.contains("sweep")) continue;
+    /* Inside an <svg>, geometry is deliberately drawn past the viewBox and the
+     * viewport clips it - a ridge that spans -20..VW+20 is correct, not a bug.
+     * So only the <svg> element itself is measured, never its contents. */
+    if (n.ownerSVGElement) continue;
+    /* Something inside a scroller or any other clipping box is not sticking
+     * out of the window - it is cut off by its own ancestor, which is what a
+     * scroll strip is for. Only things nothing clips can reach the edge. */
+    if (clipped(n)) continue;
+    var cs = getComputedStyle(n);
+    if (cs.display === "none" || cs.visibility === "hidden") continue;
+    var r = n.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) continue;
+    if (r.right > out.winW + 1 || r.left < -1) {
+      out.wide.push(name(n) + " " + Math.round(r.left) + ".." + Math.round(r.right));
+      if (out.wide.length > 5) break;
     }
+  }
+
+  // And anything that scrolls without being told it may.
+  var inner = document.querySelectorAll(".app *");
+  for (var j = 0; j < inner.length; j++) {
+    var m = inner[j];
+    if (m.closest(".pane.scroll") || m.classList.contains("scroll") || m.classList.contains("tabs")) continue;
+    var mc = getComputedStyle(m);
+    if (m.scrollHeight > m.clientHeight + 2 && mc.overflowY !== "visible") {
+      out.overflowing.push(name(m) + " v");
+    }
+    /* A single line that ends in an ellipsis is over-wide by design. */
+    var ellipsis = mc.textOverflow === "ellipsis" && mc.whiteSpace === "nowrap";
+    if (!ellipsis && m.scrollWidth > m.clientWidth + 2 && mc.overflowX !== "visible") {
+      out.overflowing.push(name(m) + " h");
+    }
+    if (out.overflowing.length > 4) break;
   }
   return out;
 }

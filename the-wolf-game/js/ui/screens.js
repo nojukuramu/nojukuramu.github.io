@@ -52,8 +52,13 @@
     if (manage) {
       var seats = v.players.filter(function (p) { return !p.spectator; }).length;
       var dealt = Object.keys(v.roster).reduce(function (n, k) { return n + v.roster[k]; }, 0);
-      var problem = seats < 4 ? "Four players minimum."
-        : dealt > seats ? "More roles than players." : null;
+      // The floor moves with the roster: what matters is whether the board is
+      // already decided the moment it is dealt, not a fixed head count.
+      var min = WG.win.minimumSeats(v.roster);
+      var problem = dealt > seats ? "More roles than players."
+        : !min ? "That mix has no game in it."
+        : seats < min ? "This mix needs " + min + " players."
+        : null;
       dock = el("button", {
         class: "btn primary big wide", disabled: !!problem,
         onclick: function () { dispatch({ type: CMD.START }); }
@@ -131,6 +136,12 @@
       el("span", { class: "dim", text: byTeam.werewolf + "W · " + byTeam.village + "V" +
         (byTeam.cult ? " · " + byTeam.cult + "C" : "") + (byTeam.solo ? " · " + byTeam.solo + "S" : "") })
     ]));
+
+    // What this exact bag needs to be a game rather than an instant result.
+    var floor = WG.win.minimumSeats(v.roster);
+    box.appendChild(el("div", { class: "row-sub", style: "margin:2px 0 8px" , text:
+      !floor ? "No mix of survivors here can ever end the game."
+        : "Smallest table for this bag: " + floor + " players." }));
 
     box.appendChild(el("div", { class: "spread", style: "margin-bottom:8px" }, [
       el("button", { class: "btn small grow", onclick: function () { setRoster(H.suggestRoster(seats)); } }, ["Suggest"]),
@@ -284,8 +295,8 @@
         body.appendChild(el("label", { class: "field", style: "margin-top:8px" }, [
           el("span", { text: "Maximum players" }),
           el("input", {
-            type: "number", min: "4", max: "40", value: String(cfg.room.maxPlayers), disabled: !manage,
-            onchange: function (e) { patch("room", { maxPlayers: Math.max(4, Math.min(40, Number(e.target.value) || 24)) }); }
+            type: "number", min: "3", max: "40", value: String(cfg.room.maxPlayers), disabled: !manage,
+            onchange: function (e) { patch("room", { maxPlayers: Math.max(3, Math.min(40, Number(e.target.value) || 24)) }); }
           })
         ]));
       }
@@ -709,7 +720,9 @@
       icon("chat", 15),
       el("h3", { class: "grow", text: channel === "dead" ? "The dead" : channel === "pack" ? "The pack" : "The square" })
     ]));
-    var box = el("div", { class: "chat pane scroll grow" });
+    /* `data-stick` tells the renderer this log belongs at the bottom: it stays
+       pinned there as lines arrive, unless the reader scrolled up. */
+    var box = el("div", { class: "chat pane scroll grow", "data-stick": "end" });
     ((v.chat || {})[channel] || []).forEach(function (m) {
       var me = v.me && m.id === v.me.id;
       var animal = /^(meow|bark)( |$)/.test(m.text);
@@ -728,14 +741,13 @@
     };
     input.addEventListener("keydown", function (e) { if (e.key === "Enter") send(); });
     card.appendChild(el("div", { class: "chat-form" }, [input, el("button", { class: "btn", onclick: send }, [icon("arrowRight", 16)])]));
-    setTimeout(function () { box.scrollTop = box.scrollHeight; }, 0);
     return card;
   }
 
   function logPanel(v) {
     var card = el("div", { class: "card flush", style: "display:flex;flex-direction:column;min-height:0;flex:1" });
     card.appendChild(el("div", { class: "card-head" }, [icon("flag", 16), el("h3", { text: "So far" })]));
-    var list = el("ul", { class: "log pane scroll grow", style: "padding:2px 13px 10px" });
+    var list = el("ul", { class: "log pane scroll grow", "data-stick": "end", style: "padding:2px 13px 10px" });
     v.publicLog.slice(-30).forEach(function (e) {
       list.appendChild(el("li", { class: e.kind || "" }, [icon(logIcon(e.kind), 15), el("span", { text: e.text })]));
     });

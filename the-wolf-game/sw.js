@@ -21,8 +21,8 @@
  */
 "use strict";
 
-var VERSION = "wg-v2";
-var ASSET_V = "1.1.0";          /* matches the ?v= in index.html */
+var VERSION = "wg-v3";
+var ASSET_V = "1.2.0";          /* matches the ?v= in index.html */
 var SHELL = VERSION + "-shell";
 
 var SHELL_FILES = [
@@ -49,8 +49,16 @@ self.addEventListener("install", function (e) {
       return Promise.all(SHELL_FILES.map(function (u) {
         return c.add(u).catch(function () { /* it will be fetched on demand */ });
       }));
-    }).then(function () { return self.skipWaiting(); })
+    })
+    /* Deliberately no skipWaiting() here. A new build must not take over
+     * underneath a room that is mid-night: the page is told a version is
+     * ready and reloads onto it when the player says so, or when the tab is
+     * next opened cold. The page asks for the handover with "skip-waiting". */
   );
+});
+
+self.addEventListener("message", function (e) {
+  if (e.data === "skip-waiting") self.skipWaiting();
 });
 
 self.addEventListener("activate", function (e) {

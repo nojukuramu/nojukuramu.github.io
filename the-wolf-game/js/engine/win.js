@@ -130,5 +130,49 @@
     return state.leadersAlive;
   }
 
-  WG.win = { check: check, count: count, noteLeaders: noteLeaders };
+  /* ---------------- how small a village can be ----------------
+   * There is no fixed minimum. Four was a guess inherited from the legacy
+   * app, and it is wrong in both directions: one wolf against two villagers
+   * is a real game of three, while two wolves and two villagers is over
+   * before anybody sleeps. What actually matters is whether the board is
+   * already decided the moment it is dealt.
+   *
+   * So deal the host's roster onto N seats - padding with villagers exactly
+   * as the engine does - and ask the same win check the game itself uses. The
+   * first N it has no answer for is the smallest table this mix can be played
+   * on, and it moves on its own as the host changes the roster.
+   */
+
+  /** The roster dealt onto n seats, as a state the win check can read. */
+  function deal(roster, n) {
+    var bag = [];
+    Object.keys(roster || {}).forEach(function (rid) {
+      for (var i = 0; i < roster[rid]; i++) bag.push(rid);
+    });
+    while (bag.length < n) bag.push("villager");
+    bag = bag.slice(0, n);
+
+    var state = { players: [], round: 0 };
+    bag.forEach(function (rid, i) {
+      var p = { id: "s" + i, name: "s" + i, alive: true, role: rid };
+      var init = R.initialState(rid) || {};
+      Object.keys(init).forEach(function (k) { p[k] = init[k]; });
+      state.players.push(p);
+    });
+    noteLeaders(state);
+    return state;
+  }
+
+  /** Smallest playable table for this roster, or 0 if there is no game in it. */
+  function minimumSeats(roster, cap) {
+    var dealt = 0;
+    Object.keys(roster || {}).forEach(function (k) { dealt += roster[k]; });
+    var top = cap || 40;
+    for (var n = Math.max(2, dealt); n <= top; n++) {
+      if (!check(deal(roster, n))) return n;
+    }
+    return 0;
+  }
+
+  WG.win = { check: check, count: count, noteLeaders: noteLeaders, minimumSeats: minimumSeats };
 })(typeof window !== "undefined" ? window : globalThis);
