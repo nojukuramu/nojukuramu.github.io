@@ -12,11 +12,9 @@
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
         if (c.body.cause === "pack") {
-          return "You came to " + c.occupant.name + "'s house and found the work already done. " +
-            "The pack was here before you.";
+          return "Already done. The pack was here first.";
         }
-        return "You came for " + c.occupant.name + " and somebody beat you to it. " +
-          "Whatever killed them, it was not one of yours.";
+        return "Somebody beat you to it. Not one of yours.";
       }
     }
   });

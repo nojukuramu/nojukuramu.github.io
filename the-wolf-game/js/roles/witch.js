@@ -11,16 +11,15 @@
         c.R.shield(c.state, c.house.ownerId, "shield", c.actor.id, c.out);
         c.actor.savePotionUsed = true;
         c.out.say(c.actor.id,
-          "🧪 The clear bottle is spent on " + c.occupant.name + "'s threshold. " +
-          "Nothing lethal gets past it from now until dawn.", "act");
+          "Clear bottle spent. Nothing lethal gets past it tonight.", "act");
         return { ok: true };
       },
       poison: function (c) {
         c.actor.killPotionUsed = true;
         var res = c.R.kill(c.state, c.occupant.id, { cause: "poison", byId: c.actor.id, out: c.out });
         c.out.say(c.actor.id, res.result === "dead"
-          ? "☠️ " + c.occupant.name + " will not wake up."
-          : "☠️ You poured it, and something turned it aside. The bottle is gone regardless.", "act");
+          ? "" + c.occupant.name + " will not wake up."
+          : "Turned aside. The bottle is gone regardless.", "act");
         return { ok: true };
       }
     },

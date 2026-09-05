@@ -10,7 +10,7 @@
       revenge: function (c) {
         c.actor.revengeTarget = c.occupant.id;
         c.out.say(c.actor.id,
-          "⚔️ Sworn. If you die tonight or tomorrow, " + c.occupant.name + " goes with you.", "act");
+          "Sworn. If you die, " + c.occupant.name + " goes with you.", "act");
         return { ok: true };
       }
     },
@@ -24,7 +24,7 @@
       },
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
-        return "You came to swear on " + c.occupant.name + ". They are past being anybody's revenge.";
+        return "Past being anybody's revenge.";
       }
     }
   });

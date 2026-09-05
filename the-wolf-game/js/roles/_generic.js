@@ -27,13 +27,13 @@
     if (score > 400) score = 400;                  // one puzzle is worth one puzzle
     c.actor.totalScore = (c.actor.totalScore || 0) + score;
     c.out.say(c.actor.id, score
-      ? "Night's work done. " + score + " points — " + (c.actor.totalScore || 0) + " in total."
-      : "You bolted the door and waited it out.", "act");
+      ? score + " points. " + (c.actor.totalScore || 0) + " in total."
+      : "You bolted the door and waited.", "act");
     return { ok: true };
   });
 
   G("stay_in", function (c) {
-    c.out.say(c.actor.id, "You stayed in and let the night go by.", "act");
+    c.out.say(c.actor.id, "You stayed in.", "act");
     return { ok: true };
   });
 
@@ -47,8 +47,7 @@
     c.house.body.reportedAt = c.at;
     c.actor.reportedBodies = (c.actor.reportedBodies || 0) + 1;
     c.out.say(c.actor.id,
-      "You raised the alarm over " + c.occupant.name + ". The village will know at dawn that you were the one who found them.",
-      "act");
+      "Alarm raised. At dawn the village learns you found them.", "act");
     return { ok: true, spent: false };
   });
 })(typeof window !== "undefined" ? window : globalThis);

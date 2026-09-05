@@ -17,8 +17,7 @@
           name: c.occupant.name, role: seen, night: c.state.round
         }]);
         c.out.say(c.actor.id,
-          "👁️ You watched " + c.occupant.name + "'s house all night. You will know what they are by your next turn.",
-          "act");
+          "Watched. You will know what they are by your next turn.", "act");
         return { ok: true };
       },
 
@@ -28,10 +27,10 @@
         c.actor.killCharges = Math.max(0, (c.actor.killCharges || 0) - 1);
 
         if (c.occupant.role === guess) {
-          c.out.say(c.actor.id, "🗡️ Right first time. " + c.occupant.name + " was a " + WG.roles.get(guess).name + ".", "act");
+          c.out.say(c.actor.id, "Right. " + c.occupant.name + " was a " + WG.roles.get(guess).name + ".", "act");
           c.R.kill(c.state, c.occupant.id, { cause: "assassin", byId: c.actor.id, out: c.out });
         } else {
-          c.out.say(c.actor.id, "🗡️ Wrong. They were not a " + WG.roles.get(guess).name + ", and they were faster than you.", "death");
+          c.out.say(c.actor.id, "Wrong, and they were faster than you.", "death");
           c.R.kill(c.state, c.actor.id, { cause: "suicide", byId: c.occupant.id, out: c.out, ignoreShields: true });
         }
         return { ok: true };
@@ -54,7 +53,7 @@
       },
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
-        return "You came for " + c.occupant.name + " with a knife and a name. Somebody spent it for you.";
+        return "Somebody spent your knife for you.";
       }
     }
   });

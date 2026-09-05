@@ -54,18 +54,53 @@ state they are in.
   work.** The village is told at dawn who found the body. It is never told
   whether finding it was a coincidence.
 
-### The room's colour is a readout of the clock
+### The board is a valley, and the clock is the weather over it
 
-Every phase names where the sun is when it starts and where it is when it ends.
-The theme paints the blend continuously, so a five-minute discussion begins in
-morning light and ends at noon; voting runs noon to dusk; the verdict drops into
-night and the night comes back up to dawn.
+The board is not a list of players. It is a landscape: a river with a bridge, a
+road climbing from the ford to the square, fields behind fences, woods on the
+slopes, and the houses set into the land at the depth they belong to. Four bands
+from the treeline to the foreground, mist in the gaps, nearer things larger and
+drawn last. Generated from the room code, so it is the same valley every time
+you open that room and a different one for every room.
 
-Nobody has to be told the phase is nearly over. The room is already getting dark.
+Behind it, a drawn sky: a star field that fades in as the sun goes down, the sun
+and the moon on opposite ends of one arc, a warm band along the ridge at sunrise
+and sunset, clouds lit from wherever the sun is.
 
-Both light and dark modes are the same **Ash Blue** family, and the time of day
-tints whichever one you are in. Surfaces move a lot, ink barely moves — text
-that drifts with the light is text you cannot read at dusk.
+Both are driven by the same two numbers the phase clock produces — the hour, and
+how much starlight is showing — so the sky, the valley and the interface can
+never drift out of step. A five-minute discussion begins in morning light and
+ends at noon; voting runs noon to dusk; the verdict drops into night and the
+night comes back up to dawn. Nobody has to be told the phase is nearly over.
+The room is already getting dark.
+
+Every natural colour in the valley is a fixed pigment mixed with the sky, which
+is the whole trick: `color-mix(pasture, sky)` is a green field at noon and a
+blue-black one at midnight, with no second palette anywhere. On top of that the
+ground takes a scrim keyed to the theme's own distance-from-noon, because mixing
+alone cannot take a colour below the darkest thing in the mix.
+
+Both light and dark modes are the same **Ash Blue** family. Surfaces move a lot
+with the hour, ink barely moves — text that drifts with the light is text you
+cannot read at dusk.
+
+### It is one screen, and it never scrolls
+
+A fixed frame, three rows, and a stage in the middle that must fit whatever is
+in it at any size. Only a chat log or a genuinely unbounded list scrolls, inside
+itself, and it is marked where it does. `tools/fit-test.js` walks every screen at
+nine real viewport sizes — from a 320x568 phone to a TV — and fails if the
+document is ever taller than the window or anything outside a marked pane has
+overflowed.
+
+### No emoji
+
+Every glyph is a drawn stroke path in `js/ui/icons.js`, inheriting
+`currentColor`. Emoji render as a different picture on every platform, are
+full-colour blobs in a two-tone interface, and are the loudest possible signal
+that a thing is a web page rather than a game. `tools/consistency.js` fails the
+build if one gets back in, and checks that every glyph the data asks for is
+actually drawn.
 
 ### Other things that are new
 
@@ -80,6 +115,11 @@ that drifts with the light is text you cannot read at dusk.
   phone, instead of a 70% dice roll.
 - **Fullscreen** and an **install button** (it is a proper PWA, offline shell
   and all).
+- **Blood.** A death lands as a flash and a spatter across the glass; the
+  running stain on the edges of the screen is the fraction of the village that
+  is gone, so a game going badly looks like it. A house whose occupant died
+  tonight stands with its door open and a pool at the threshold, pulsing until
+  somebody raises the alarm.
 - Settings **grouped by the question a host is actually asking** — clock, rules,
   room, events, look — rather than one column of unrelated checkboxes.
 
@@ -122,7 +162,10 @@ js/
     engine.js          the thing that runs the game
   roles/               one file per role. 35 of them, plus _generic.js
   ui/
+    icons.js           every glyph, drawn. no emoji anywhere
     theme.js           light/dark, and the time-of-day blend
+    sky.js             the drawn sky: stars, sun, moon, hills, blood
+    village.js         the valley: river, road, woods, houses at depth
     screens.js         the drawing half
   app.js               the wiring half: transport, identity, who may ask what
 tools/                 tests, the local broker stand-in, the icon generator
@@ -172,10 +215,12 @@ no pack tally reaches a phone that should not have it.
 ## Tests
 
 ```
-node tools/engine-test.js    # 107 assertions, no browser, no network
-node tools/consistency.js    #  16 checks for drift between files that must agree
-node tools/e2e.js            #  37 assertions: four real browsers, one real room
+node tools/engine-test.js    # 109 assertions, no browser, no network
+node tools/consistency.js    #  21 checks for drift between files that must agree
+node tools/fit-test.js       #   9 viewport sizes, nothing may scroll
+node tools/e2e.js            #  38 assertions: four real browsers, one real room
 node tools/shots.js          # a screenshot of every screen in both themes
+node tools/icon-sheet.js     # every glyph at every size, to look at
 node tools/make-icons.py     # regenerate the app icon
 ```
 

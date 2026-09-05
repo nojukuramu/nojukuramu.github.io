@@ -101,6 +101,61 @@ console.log("\nEverything index.html loads exists, and nothing is missed");
     ["list_of_roles", "game_flow", "sky", "list_of_events"].every(function (n) { return sw.indexOf(n + ".json") > 0; }));
 })();
 
+console.log("\nNo emoji ship anywhere");
+(function () {
+  /* Emoji render as a different picture on every platform, are full-colour
+   * blobs in a two-tone interface, and are the loudest possible signal that a
+   * thing is a web page rather than a game. Every glyph is a stroke path in
+   * ui/icons.js instead, and this is what stops one creeping back in. */
+  var EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/u;
+  var files = [];
+  (function walk(dir) {
+    fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true }).forEach(function (e) {
+      if (e.name === "node_modules" || e.name === "icons") return;
+      var rel = dir ? dir + "/" + e.name : e.name;
+      if (e.isDirectory()) return walk(rel);
+      if (/\.(js|css|html|json|webmanifest|md)$/.test(e.name)) files.push(rel);
+    });
+  })("");
+
+  var dirty = [];
+  files.forEach(function (f) {
+    if (f.indexOf("tools/") === 0) return;             // the tests may say "emoji"
+    var src = read(f);
+    src.split("\n").forEach(function (line, i) {
+      if (EMOJI.test(line)) dirty.push(f + ":" + (i + 1));
+    });
+  });
+  ok("nothing shipped contains an emoji", dirty.length === 0, dirty.slice(0, 6).join(", "));
+
+  // And every glyph a data file names has to actually exist.
+  var icons = read("js/ui/icons.js");
+  var declared = {};
+  (icons.match(/^\s{4}([a-zA-Z]+):\s+"/gm) || []).forEach(function (m) {
+    declared[m.trim().split(":")[0]] = true;
+  });
+  (icons.match(/^\s{4}([a-z_]+): "([a-zA-Z]+)"/gm) || []).forEach(function (m) {
+    var parts = /([a-z_]+): "([a-zA-Z]+)"/.exec(m);
+    if (parts) declared[parts[1]] = true;
+  });
+
+  var wanted = [];
+  var roles = JSON.parse(read("data/list_of_roles.json"));
+  roles.roles.forEach(function (r) {
+    wanted.push(r.icon);
+    (r.actions || []).forEach(function (a) { wanted.push(a.icon); });
+  });
+  roles.universalActions.forEach(function (a) { wanted.push(a.icon); });
+  Object.keys(roles.teams).forEach(function (t) { wanted.push(roles.teams[t].icon); });
+  JSON.parse(read("data/list_of_events.json")).events.forEach(function (e) { wanted.push(e.icon); });
+  JSON.parse(read("data/game_flow.json")).phases.forEach(function (p) { wanted.push(p.icon); });
+
+  var unknown = wanted.filter(function (n) { return n && !declared[n]; });
+  ok("every glyph the data asks for is drawn", unknown.length === 0,
+    [].concat(new Set(unknown)).join(", "));
+  ok("the data names a glyph for everything", wanted.every(Boolean));
+})();
+
 console.log("\nThe flow and the sky refer to each other correctly");
 (function () {
   var flow = JSON.parse(read("data/game_flow.json"));
@@ -112,6 +167,29 @@ console.log("\nThe flow and the sky refer to each other correctly");
     if (!sky.stops[p.sky.to]) bad.push(p.id + ": unknown to " + p.sky.to);
   });
   ok("every phase names sky stops that exist", bad.length === 0, bad.join(", "));
+
+  /* Both palettes, in full, on every stop. This is here because a scalar field
+   * that happened to be called `dark` once replaced the dark palette outright,
+   * and the only symptom was that dark mode quietly rendered in light colours. */
+  var TOKENS = ["sky1", "sky2", "sky3", "glow", "tint", "onSky"];
+  var broken = [];
+  Object.keys(sky.stops).forEach(function (k) {
+    var st = sky.stops[k];
+    ["light", "dark"].forEach(function (mode) {
+      var pal = st[mode];
+      if (!pal || typeof pal !== "object") return broken.push(k + "." + mode + " missing");
+      TOKENS.forEach(function (t) {
+        if (!/^#[0-9a-f]{6}$/i.test(pal[t] || "")) broken.push(k + "." + mode + "." + t);
+      });
+    });
+    if (typeof st.hour !== "number" || st.hour < 0 || st.hour >= 24) broken.push(k + ".hour");
+    if (typeof st.starlight !== "number") broken.push(k + ".starlight");
+  });
+  ok("every stop has a complete light and dark palette", broken.length === 0, broken.slice(0, 5).join(", "));
+  ok("the light and dark palettes are actually different",
+    Object.keys(sky.stops).every(function (k) {
+      return sky.stops[k].light.sky1 !== sky.stops[k].dark.sky1;
+    }));
 
   var ids = flow.phases.map(function (p) { return p.id; });
   var dangling = flow.phases.filter(function (p) { return p.next && ids.indexOf(p.next) < 0; });

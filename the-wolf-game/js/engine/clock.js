@@ -52,7 +52,7 @@
     var p = byId[id];
     if (!p) throw new Error("[wg] no such phase: " + id);
     state.phase = id;
-    state.phaseStartedAt = at || Date.now();
+    state.phaseStartedAt = now(at);
     var d = durationMs(state, id);
     state.phaseEndsAt = d ? state.phaseStartedAt + d : 0;
     state.paused = false;
@@ -64,10 +64,15 @@
     return p ? p.next : null;
   }
 
+  /* `at` is an explicit timestamp, and 0 is a legitimate one — `at || Date.now()`
+   * quietly ignored it, which made every test that pinned the clock to zero
+   * read the wall clock instead. */
+  function now(at) { return at == null ? Date.now() : at; }
+
   /** 0 at the start of the phase, 1 at its end. Untimed phases sit at 0. */
   function progress(state, at) {
     if (!state.phaseEndsAt) return 0;
-    var t = (at || Date.now()) - state.phaseStartedAt;
+    var t = now(at) - state.phaseStartedAt;
     var span = state.phaseEndsAt - state.phaseStartedAt;
     if (span <= 0) return 1;
     return Math.max(0, Math.min(1, t / span));
@@ -75,11 +80,11 @@
 
   function remainingMs(state, at) {
     if (!state.phaseEndsAt) return Infinity;
-    return Math.max(0, state.phaseEndsAt - (at || Date.now()));
+    return Math.max(0, state.phaseEndsAt - now(at));
   }
 
   function expired(state, at) {
-    return !!state.phaseEndsAt && (at || Date.now()) >= state.phaseEndsAt;
+    return !!state.phaseEndsAt && now(at) >= state.phaseEndsAt;
   }
 
   function can(state, capability) {
@@ -118,11 +123,25 @@
     var from = (sky.stops[(p.sky || {}).from] || sky.stops.night);
     var to = (sky.stops[(p.sky || {}).to] || from);
     var t = ease(progress(state, at));
-    var a = from[mode] || from.light, b = to[mode] || to.light;
+    /* Falling back to the light palette when the dark one is missing is how a
+     * data bug once turned the whole of dark mode bright without anything
+     * erroring. Say so instead. */
+    if (!from[mode] || !to[mode]) {
+      throw new Error("[wg] sky stop is missing its '" + mode + "' palette");
+    }
+    var a = from[mode], b = to[mode];
     var out = {};
     Object.keys(a).forEach(function (k) { out[k] = mixHex(a[k], b[k] || a[k], t); });
     out.mix = from.mix + (to.mix - from.mix) * t;
+    out.starlight = from.starlight + (to.starlight - from.starlight) * t;
     out.label = t < 0.5 ? from.name : to.name;
+
+    /* The hour drives the sun and moon along their arc in ui/sky.js. It has to
+     * wrap: the verdict runs dusk (18.6) into night (0), and interpolating that
+     * the short way sends the sun backwards across the whole afternoon. */
+    var h0 = from.hour, h1 = to.hour;
+    if (h1 < h0 - 6) h1 += 24;
+    out.hour = (h0 + (h1 - h0) * t) % 24;
     return out;
   }
 

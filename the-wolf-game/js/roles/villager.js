@@ -27,8 +27,8 @@
         c.self.role = picked.id;
         Object.assign(c.self, global.WG.roles.initialState(picked.id));
         c.out.say(c.self.id,
-          "The village has been watching you work. You are the " + picked.name + " now.", "transform");
-        return { public: "Someone in the village has grown into something more useful." };
+          "You are the " + picked.name + " now.", "transform");
+        return { public: "Someone in the village has grown into something more." };
       }
     }
   });

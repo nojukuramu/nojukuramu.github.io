@@ -19,11 +19,10 @@
         c.occupant.markedByShaman = c.actor.id;
         c.actor.markedPlayer = c.occupant.id;
         c.out.say(c.actor.id,
-          "The sign is on " + c.occupant.name + "'s door. If the pack takes them, the village will never be told.",
-          "act");
+          "Marked. A pack kill here is never announced.", "act");
         WG.resolver.living(c.state).forEach(function (p) {
           if (p.id !== c.actor.id && WG.roles.isWolf(p.role)) {
-            c.out.say(p.id, "🪦 The Shaman has marked " + c.occupant.name + ".", "pack");
+            c.out.say(p.id, "The Shaman marked " + c.occupant.name + ".", "pack");
           }
         });
         return { ok: true };
@@ -33,8 +32,8 @@
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
         return c.body.hidden
-          ? "Your sign held. " + c.occupant.name + " is gone, and the village will find an empty house and no story."
-          : "You came to hide " + c.occupant.name + ", too late to hide anything. The village will see this one.";
+          ? "Your sign held. No body, no story."
+          : "Too late to hide this one.";
       }
     }
   });

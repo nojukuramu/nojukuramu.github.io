@@ -177,7 +177,8 @@ section("A Doctor's shield only covers what arrives after it");
   late.eng.handle({ type: "KNOCK", houseId: "p2" }, "p1");
   ok("arriving second does not", !WG.resolver.P(late.state, "p2").alive);
   ok("the Doctor gets a Doctor's version of it",
-    /nothing left to treat/.test(late.lastOffers("p1").discovery.text));
+    /Nothing left to treat/i.test(late.lastOffers("p1").discovery.text),
+    late.lastOffers("p1").discovery.text);
 })();
 
 /* ---------------- revival is instant ---------------- */
@@ -331,7 +332,7 @@ section("Engineer's trap reports live");
   night(r);
   r.eng.handle({ type: "ACT", houseId: "p2", actionId: "trap" }, "p0");
   r.eng.handle({ type: "ACT", houseId: "p2", actionId: "investigate" }, "p1");
-  ok("the engineer is named the visitor at once", r.said("p0", "Your trap sprang"));
+  ok("the engineer is named the visitor at once", r.said("p0", "Trap:"), r.inbox("p0").join(" | "));
   ok("by name", r.said("p0", "Seer"));
 })();
 
@@ -532,6 +533,15 @@ section("The phase clock and the sky it paints");
   ok("it starts at morning", a.label === "Morning", a.label);
   ok("and ends at noon", b.label === "Noon", b.label);
   ok("every stop resolves in dark too", WG.clock.skyAt(r.state, "dark", t0).sky1.length === 7);
+
+  // The sky now carries an hour and a starlight level, and both must move.
+  var t1 = t0 + WG.clock.durationMs(r.state, "discussion");
+  ok("the hour advances with the phase",
+    WG.clock.skyAt(r.state, "light", t0).hour < WG.clock.skyAt(r.state, "light", t1).hour);
+  var nightSky = { phase: "night", phaseStartedAt: 0, phaseEndsAt: 1000, config: r.state.config };
+  ok("night has stars and noon does not",
+    WG.clock.skyAt(nightSky, "dark", 0).starlight === 1 &&
+    WG.clock.skyAt(r.state, "dark", t1).starlight === 0);
 
   var order = [];
   var id = "night";

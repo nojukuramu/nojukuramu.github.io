@@ -131,14 +131,14 @@
           var got = neighbours[Math.floor(Math.random() * neighbours.length)];
           P.sick[got] = true;
           P.since[got] = state.round;
-          out.say(got, "🦠 You woke up burning. Three nights of this and you will not wake up at all.", "sick");
+          out.say(got, "You woke up burning. Three nights of this is fatal.", "sick");
         });
 
         var living = alive.filter(function (p) { return p.alive; });
         var sick = living.filter(function (p) { return P.sick[p.id]; });
         if (living.length && sick.length >= living.length) state.pandemicWon = true;
         else if (sick.length) {
-          out.say("all", "🦠 " + sick.length + " of " + living.length + " houses have the sickness in them.", "sick");
+          out.say("all", sick.length + " of " + living.length + " houses have the sickness.", "sick");
         }
       }
     }

@@ -101,7 +101,7 @@
       state.pandemicWon = false;
       state.currentEvent = null;
       assignRoles();
-      publish("The village settles for the night. " + seats.length + " houses, and not all of them are what they look like.", "start");
+      publish(seats.length + " houses. Not all of them are what they look like.", "start");
       enter("role_reveal");
       return { ok: true };
     }
@@ -169,20 +169,20 @@
       var shown = night.deaths.filter(function (d) { return !d.hidden; });
 
       if (!shown.length) {
-        publish("🌅 Morning. Everybody who went to bed got up again.", "morning");
+        publish("Everybody who went to bed got up again.", "morning");
       } else {
         shown.forEach(function (d) {
           var p = P(d.id);
           if (!p) return;
           var role = state.config.rules.revealRolesOnDeath
-            ? " They were a " + R.get(p.role).name + " " + R.get(p.role).icon + "." : "";
-          publish("💀 " + p.name + " is dead — " + (WG.protocol.CAUSE_TEXT[d.cause] || "dead") + "." + role, "death");
+            ? " They were a " + R.get(p.role).name + "." : "";
+          publish("" + p.name + " is dead — " + (WG.protocol.CAUSE_TEXT[d.cause] || "dead") + "." + role, "death");
         });
       }
       night.reports.forEach(function (r) {
         var finder = P(r.byId), victim = P(r.houseId);
         if (!finder || !victim) return;
-        publish("📢 " + finder.name + " found " + victim.name + " and raised the alarm.", "report");
+        publish("" + finder.name + " found " + victim.name + " and raised the alarm.", "report");
       });
 
       queuedPublic.forEach(function (o) { publish(o.text, o.kind); });
@@ -203,7 +203,7 @@
       state.voteHistory.push({ round: state.round, votes: Object.assign({}, state.votes) });
 
       if ((counts.SKIP || 0) >= majority) {
-        publish("🗳️ The village voted to hang nobody (" + counts.SKIP + " of " + aliveCount + ").", "vote");
+        publish("The village hanged nobody. " + counts.SKIP + " of " + aliveCount + ".", "vote");
         return;
       }
       delete counts.SKIP;
@@ -214,13 +214,13 @@
         else if (counts[id] === high) tied.push(id);
       });
 
-      if (!top) { publish("🗳️ Nobody voted. Nobody hangs.", "vote"); return; }
+      if (!top) { publish("Nobody voted. Nobody hangs.", "vote"); return; }
       if (tied.length > 1) {
         if (state.config.rules.tieBehaviour === "random") {
           top = tied[Math.floor(Math.random() * tied.length)];
-          publish("🗳️ A tie, broken by the drawing of a straw.", "vote");
+          publish("A tie, broken by the drawing of a straw.", "vote");
         } else {
-          publish("🗳️ The vote tied " + tied.length + " ways. Nobody hangs.", "vote");
+          publish("Tied " + tied.length + " ways. Nobody hangs.", "vote");
           return;
         }
       }
@@ -236,7 +236,7 @@
       var veto = R.hook(target.role, "onLynch", { state: state, R: Res, self: target, out: out, votes: votes });
       deliver(out.list);
       if (veto && veto.prevent) {
-        publish("⚖️ " + (veto.message || (target.name + " was voted out and walked away from it.")), "vote");
+        publish("" + (veto.message || (target.name + " was voted out and walked away from it.")), "vote");
         checkWin();
         return;
       }
@@ -249,8 +249,8 @@
       queuedPublic = [];
 
       var role = state.config.rules.revealRolesOnDeath
-        ? " They were a " + R.get(target.role).name + " " + R.get(target.role).icon + "." : "";
-      publish("⚖️ " + target.name + " was hanged, " + votes + " votes to " +
+        ? " They were a " + R.get(target.role).name + "." : "";
+      publish("" + target.name + " was hanged, " + votes + " votes to " +
         Math.max(0, aliveCount - votes) + "." + role, "vote");
 
       var phaseOut = Res.bag();
@@ -263,7 +263,7 @@
       var res = Win.check(state);
       if (!res) return false;
       state.winner = res;
-      publish("🏁 " + res.message, "end");
+      publish("" + res.message, "end");
       Clock.enter(state, "game_over");
       io.ended(res);
       io.changed();
@@ -325,7 +325,7 @@
           var g = P(cmd.id);
           if (g) {
             g.cohost = !!cmd.cohost;
-            publish("👥 " + g.name + (cmd.cohost ? " is a co-host now." : " is no longer a co-host."), "room");
+            publish("" + g.name + (cmd.cohost ? " is a co-host now." : " is no longer a co-host."), "room");
           }
           return done();
 
@@ -421,7 +421,7 @@
             delete state.night.quizzes[fromId];
             if (state.night.turns[fromId]) state.night.turns[fromId].blocked = null;
             notice(fromId, "Thank you for holding. You may go about your night.", "ok");
-            io.toPlayer(q.byId, { type: MSG.PRIVATE, entry: { text: "☎️ Your mark answered correctly on attempt " + q.attempts + ".", kind: "info" } });
+            io.toPlayer(q.byId, { type: MSG.PRIVATE, entry: { text: "Your mark answered correctly on attempt " + q.attempts + ".", kind: "info" } });
           } else {
             notice(fromId, "That is not the answer. Please try again.", "warn");
           }

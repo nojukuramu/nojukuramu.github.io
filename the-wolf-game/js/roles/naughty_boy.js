@@ -13,7 +13,7 @@
     var pending = c.actor._swapFirst;
     if (!pending) {
       c.actor._swapFirst = c.occupant.id;
-      c.out.say(c.actor.id, "🔁 " + c.occupant.name + " is the first half. Now pick the house they change places with.", "act");
+      c.out.say(c.actor.id, "" + c.occupant.name + " is the first half. Pick the second house.", "act");
       return { ok: true, pending: { kind: "swap-second", firstId: c.occupant.id } };
     }
     if (pending === c.occupant.id) {
@@ -30,9 +30,9 @@
     if (oncePerGame) c.actor.hasSwapped = true;
 
     c.out.say(c.actor.id,
-      "🔁 Done. " + a.name + " is now a " + WG.roles.get(rb).name + " and " + b.name + " is now a " +
-      WG.roles.get(ra).name + ". Neither of them has been told.", "act");
-    c.out.say([a.id, b.id], "Something about you changed in the night. Read your card again.", "transform");
+      "Swapped. " + a.name + " is a " + WG.roles.get(rb).name + ", " + b.name + " a " +
+      WG.roles.get(ra).name + ". Neither was told.", "act");
+    c.out.say([a.id, b.id], "Something changed. Read your card again.", "transform");
     return { ok: true };
   }
 
@@ -41,7 +41,7 @@
     hooks: {
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
-        return "You came to swap " + c.occupant.name + " into somebody else's life. They have left theirs already.";
+        return "They have left their life already.";
       }
     }
   });

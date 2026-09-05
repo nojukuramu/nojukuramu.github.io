@@ -14,7 +14,7 @@
         var def = WG.roles.get(seen);
         c.actor.readings = (c.actor.readings || []).concat([{ id: c.occupant.id, role: seen, night: c.state.round }]);
         c.out.say(c.actor.id,
-          "🔭 " + c.occupant.name + " is a " + def.name + " " + def.icon + ".", "read",
+          c.occupant.name + " is a " + def.name + ".", "read",
           { targetId: c.occupant.id, role: seen });
         return { ok: true };
       }
@@ -23,8 +23,7 @@
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
         var def = WG.roles.get(c.occupant.role);
-        return "You looked through " + c.occupant.name + "'s window to read them and read a dead " +
-          def.name + " instead. You know what they were. It is not much use to them now.";
+        return "A dead " + def.name + ". You know what they were, for what that is worth.";
       }
     }
   });

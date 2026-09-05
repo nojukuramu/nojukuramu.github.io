@@ -33,11 +33,11 @@
         c.actor.hasRevived = true;
         var def = WG.roles.get(role);
         var reveal = c.payload.reveal !== false;
-        c.out.say(c.actor.id, "✨ " + c.occupant.name + " is back, as a " + def.name + ". They still have tonight.", "act");
-        c.out.say(c.occupant.id, "✨ Something with wings pulled you back. You are a " + def.name + " " + def.icon + " now.", "revive");
+        c.out.say(c.actor.id, "" + c.occupant.name + " is back as a " + def.name + ", with tonight intact.", "act");
+        c.out.say(c.occupant.id, "Pulled back. You are a " + def.name + " now.", "revive");
         c.out.say("all", reveal
-          ? "✨ " + c.occupant.name + " walked back into the village, and they are a " + def.name + " now."
-          : "✨ " + c.occupant.name + " walked back into the village. Nobody will say what they are.", "revive");
+          ? "" + c.occupant.name + " is back, as a " + def.name + "."
+          : "" + c.occupant.name + " is back. Nobody will say as what.", "revive");
         return { ok: true };
       }
     },
@@ -57,16 +57,15 @@
           });
           fall(c);
           out.say("all", died
-            ? "🔥 Something in the village answered the pack tonight, and " + died +
-              (died === 1 ? " of them did not make it home." : " of them did not make it home.")
-            : "🔥 Something in the village answered the pack tonight.", "retribution");
+            ? "Something answered the pack, and " + died + " did not make it home."
+            : "Something in the village answered the pack.", "retribution");
           return { prevent: true, result: "retribution" };
         }
 
         var killer = c.state.players.filter(function (p) { return p.id === c.byId && p.alive; })[0];
         if (killer) {
           c.R.kill(state, killer.id, { cause: "retribution", byId: c.self.id, out: out, ignoreShields: true });
-          out.say("all", "⚡ Somebody raised a hand against the wrong person last night, and it was the last thing they did.", "retribution");
+          out.say("all", "Somebody raised a hand against the wrong person. It was the last thing they did.", "retribution");
         }
         fall(c);
         return { prevent: true, result: "retribution" };
@@ -81,7 +80,7 @@
 
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
-        return "You knelt at " + c.occupant.name + "'s body. It is still warm. You could call them back, tonight, in time to matter.";
+        return "Still warm. You could call them back tonight, in time to matter.";
       }
     }
   });
@@ -91,6 +90,6 @@
     c.self.isDemoted = true;
     Object.assign(c.self, WG.roles.initialState("villager"));
     c.self.isDemoted = true;
-    c.out.say(c.self.id, "😔 You are alive, and you are nothing special any more. Ordinary Villager, from here on.", "transform");
+    c.out.say(c.self.id, "Alive, and nothing special any more. Ordinary Villager.", "transform");
   }
 })(typeof window !== "undefined" ? window : globalThis);

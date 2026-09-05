@@ -12,13 +12,13 @@
   function bite(c, noise) {
     var t = c.occupant;
     c.actor.lastBiteTarget = t.id;
-    c.out.say(t.id, "🦷 Something small got in and bit you in the night. It did no real harm.", "bite");
+    c.out.say(t.id, "Something small bit you in the night. No harm done.", "bite");
     if (WG.roles.isWolf(t.role)) {
-      c.out.say(c.actor.id, "🦷 You bit " + t.name + " and something much larger bit back.", "death");
+      c.out.say(c.actor.id, "You bit " + t.name + ". Something larger bit back.", "death");
       c.R.kill(c.state, c.actor.id, { cause: "bite", byId: t.id, out: c.out, ignoreShields: true });
       c.out.say(t.id, "It was not a person. You dealt with it.", "pack");
     } else {
-      c.out.say(c.actor.id, "🦷 You bit " + t.name + ". Nothing happened, which tells you something.", "act");
+      c.out.say(c.actor.id, "You bit " + t.name + ". Nothing happened. That is information.", "act");
     }
     return { ok: true };
   }

@@ -17,7 +17,7 @@
         Object.assign(c.actor, WG.roles.initialState(taken));
         c.actor.hasCopied = true;
         c.out.say(c.actor.id,
-          "🪞 You are a " + def.name + " " + def.icon + " now, on the " +
+          "You are a " + def.name + " now, on the " +
           WG.roles.teams[def.team].name + " side, and there is no going back. " +
           c.occupant.name + " has no idea.", "transform", { role: taken });
         return { ok: true };

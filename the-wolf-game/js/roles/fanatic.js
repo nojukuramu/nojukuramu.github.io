@@ -11,15 +11,14 @@
       guard_cult: function (c) {
         c.R.shield(c.state, c.house.ownerId, "bodyshield", c.actor.id, c.out);
         c.actor.guardTarget = c.occupant.id;
-        c.out.say(c.actor.id, "🧍 You are at " + c.occupant.name + "'s door. Anything that comes for them gets you.", "act");
+        c.out.say(c.actor.id, "At the door. Anything that comes for them gets you.", "act");
         return { ok: true };
       }
     },
     hooks: {
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
-        return "You came to stand in front of " + c.occupant.name + " and got there after it was over. " +
-          "There is nothing to put yourself between any more.";
+        return "Too late. Nothing left to stand in front of.";
       }
     }
   });

@@ -12,8 +12,7 @@
     hooks: {
       onDeath: function (c) {
         c.out.say(c.self.id,
-          "👻 You are dead, and that was the promotion. From tonight you can reach into two houses " +
-          "and swap what is inside them, every night, for as long as this goes on.", "transform");
+          "Dead, and promoted. From tonight you swap two houses, every night.", "transform");
         return null;
       },
       brief: function (c) {

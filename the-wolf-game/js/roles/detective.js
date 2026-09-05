@@ -29,7 +29,7 @@
           ? came.length + (came.length === 1 ? " person came to theirs." : " people came to theirs.")
           : "Nobody came to theirs.");
 
-        c.out.say(c.actor.id, "👣 " + lines.join(" "), "read",
+        c.out.say(c.actor.id, lines.join(" "), "read",
           { targetId: c.occupant.id, went: goneTo, visitors: came.length });
         return { ok: true };
       }
@@ -38,8 +38,7 @@
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
         var n = c.house.visits.length;
-        return "You came to read " + c.occupant.name + "'s tracks and found their body. " +
-          "The step has " + (n ? n + " sets of prints on it tonight." : "one set of prints on it, and they are yours.");
+        return "A body, and " + (n ? n + " sets of prints on the step." : "one set of prints on the step. Yours.");
       }
     }
   });

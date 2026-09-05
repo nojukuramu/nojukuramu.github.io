@@ -16,11 +16,10 @@
         t.infectedOn = c.state.round;
         c.actor.infectionsUsed = (c.actor.infectionsUsed || 0) + 1;
         c.out.say(c.actor.id,
-          "You bit " + t.name + " while they slept. In two nights they will be one of yours, " +
-          "and they will not see it coming either.", "act");
+          "Bitten. Two nights and " + t.name + " is one of yours.", "act");
         WG.resolver.living(c.state).forEach(function (p) {
           if (p.id !== c.actor.id && WG.roles.isWolf(p.role)) {
-            c.out.say(p.id, "🧬 The Alpha has bitten someone tonight.", "pack");
+            c.out.say(p.id, "The Alpha bit someone tonight.", "pack");
           }
         });
         return { ok: true };
@@ -29,7 +28,7 @@
     hooks: {
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
-        return "You came to bite " + c.occupant.name + ". There is nothing left in there worth turning.";
+        return "Nothing left in there worth turning.";
       }
     }
   });

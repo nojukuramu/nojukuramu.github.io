@@ -16,15 +16,14 @@
         c.house.trap = { byId: c.actor.id, at: c.at };
         c.actor.trapSet = c.house.ownerId;
         c.out.say(c.actor.id,
-          "🪤 The doorway at " + c.occupant.name + "'s is rigged. From now until dawn you get a name " +
-          "the moment anyone walks in.", "act");
+          "Rigged. You get a name the moment anyone walks in.", "act");
         return { ok: true };
       }
     },
     hooks: {
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
-        return "You came to rig " + c.occupant.name + "'s doorway. There is no longer anything worth catching here.";
+        return "Nothing worth catching here now.";
       }
     }
   });

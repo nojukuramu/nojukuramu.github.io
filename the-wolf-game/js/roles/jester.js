@@ -17,7 +17,7 @@
     actions: {
       task: function (c) {
         var line = ERRANDS[Math.floor(Math.random() * ERRANDS.length)];
-        c.out.say(c.actor.id, "🎭 " + line + " It achieved nothing. Make sure somebody suspects you anyway.", "act");
+        c.out.say(c.actor.id, "" + line + " Make sure somebody suspects you anyway.", "act");
         return { ok: true };
       }
     },

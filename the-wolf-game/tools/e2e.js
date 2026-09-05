@@ -58,9 +58,9 @@ async function open(browser, name) {
 }
 
 async function join(page, name, code) {
-  await page.fill('input[type="text"]', name);
+  await page.fill('input[type="text"]:not(.code-input)', name);
   await page.fill(".code-input", code);
-  await page.click("text=Walk in");
+  await page.click("#btn-join");
 }
 
 /** What this page's own view says, straight from the renderer's input. */
@@ -76,8 +76,8 @@ function view(page) { return page.evaluate(function () { return WG.app.currentVi
 
   section("The village opens");
   var host = await open(browser, "host");
-  await host.fill('input[type="text"]', "Aisa");
-  await host.click("text=Open a village");
+  await host.fill('input[type="text"]:not(.code-input)', "Aisa");
+  await host.click("#btn-host");
   await host.waitForSelector(".roomcode", { timeout: 20000 });
   var code = (await host.textContent(".roomcode")).trim();
   ok("a room code was minted", /^[A-Z0-9]{6}$/.test(code), code);
@@ -90,7 +90,7 @@ function view(page) { return page.evaluate(function () { return WG.app.currentVi
     guests.push(g);
   }
   for (var j = 0; j < 3; j++) {
-    await guests[j].waitForSelector("text=Waiting at the door", { timeout: 45000 });
+    await guests[j].waitForSelector("text=At the door", { timeout: 45000 });
   }
   ok("all three are held at the door", true);
   ok("a six-character code alone does not get you in", true);
@@ -141,7 +141,7 @@ function view(page) { return page.evaluate(function () { return WG.app.currentVi
   var roles = seen.map(function (s) { return s.role; }).sort().join(",");
   ok("the bag was dealt as configured", roles === "bodyguard,villager,villager,werewolf", roles);
 
-  for (var r2 = 0; r2 < all.length; r2++) await all[r2].click("text=I have read it");
+  for (var r2 = 0; r2 < all.length; r2++) await all[r2].click(".dock .btn.primary");
   for (var r3 = 0; r3 < all.length; r3++) {
     await all[r3].waitForFunction(function () { return WG.app.currentView().phase === "night"; }, null, { timeout: 20000 });
   }
@@ -154,8 +154,10 @@ function view(page) { return page.evaluate(function () { return WG.app.currentVi
   var victimId = (await view(villagers[0])).me.id;
   var victimName = (await view(villagers[0])).me.name;
 
-  var houses = await wolf.locator(".house").count();
-  ok("the village is drawn as doors, one per player", houses === 4, String(houses));
+  var houses = await wolf.locator(".village-svg .hs").count();
+  ok("the village is drawn as houses, one per player", houses === 4, String(houses));
+  ok("and it is one SVG that scales, not a scrolling grid",
+    (await wolf.locator(".village-svg").count()) === 1);
 
   // The wolf knocks on the victim's door and howls. One wolf, so it lands now.
   await wolf.evaluate(function (id) { WG_HELPERS.dispatch({ type: "KNOCK", houseId: id }); }, victimId);

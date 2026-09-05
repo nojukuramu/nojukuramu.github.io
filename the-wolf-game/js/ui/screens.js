@@ -1,77 +1,74 @@
 /* screens.js — the drawing half.
  *
- * app.js is the wiring: transport, state, who is allowed to ask for what. This
- * is what any of that looks like. The split is the main thing the legacy build
- * did not have — one 8,500-line file where a role's rules, its HTML and the
- * transition that revealed it were the same three lines — and it is why adding
- * a phase here is an edit in two obvious places instead of a search.
+ * app.js is the wiring: transport, state, who may ask for what. This is what
+ * any of it looks like. Every function takes the *view* — the redacted,
+ * per-player snapshot — and there is no path from here to the authoritative
+ * state, so a screen cannot leak what it was never handed.
  *
- * Every function takes the *view*: the redacted, per-player snapshot. There is
- * no path from here to the authoritative state, which is deliberate. A screen
- * cannot leak what it was never handed.
+ * Each screen returns `{ body, dock }`: the thing you look at, and the thing
+ * you press. `body` must fit the stage it is given at any size, on any screen,
+ * without the page scrolling. Where a list genuinely can be arbitrarily long —
+ * a chat, a log, the roster — it gets `.pane.scroll` and scrolls inside itself.
  */
 (function (global) {
   "use strict";
   var WG = global.WG;
   var H = global.WG_HELPERS;
-  var el = H.el, toast = H.toast, dispatch = H.dispatch;
+  var el = H.el, toast = H.toast, dispatch = H.dispatch, icon = H.icon;
   var CMD = WG.protocol.CMD;
 
-  function avatarNode(p, size) {
-    var n = el("span", { class: "avatar", style: size ? "width:" + size + "px;height:" + size + "px;flex:0 0 " + size + "px" : null });
+  function face(p, size, cls) {
+    var n = el("span", { class: cls || "vote-face", style: size ? "width:" + size + "px;height:" + size + "px;flex:0 0 " + size + "px" : null });
     if (p && p.avatar) n.appendChild(el("img", { src: p.avatar, alt: "" }));
-    else n.textContent = p && p.role ? p.role.icon : (p && !p.alive ? "🕯️" : "👤");
+    else n.appendChild(icon(p && p.role ? p.role.icon : (p && !p.alive ? "skull" : "person"), Math.round((size || 30) * 0.6)));
     return n;
   }
-
   function teamClass(p) { return p && p.role ? "team-" + p.role.team : ""; }
+  function playerOf(v, id) {
+    for (var i = 0; i < v.players.length; i++) if (v.players[i].id === id) return v.players[i];
+    return null;
+  }
 
   /* ================= lobby ================= */
 
   function lobby(v) {
-    var wrap = el("div");
     var manage = H.canManage(v);
+    var body = el("div", { class: "pane grow scroll" });
 
-    wrap.appendChild(el("div", { class: "card" }, [
+    body.appendChild(el("div", { class: "card" }, [
       el("div", { class: "roomcode", text: v.code }),
-      el("p", { class: "small dim", style: "text-align:center", text: "Read this out, or send the link." }),
-      el("div", { class: "spread" }, [
-        el("button", { class: "btn grow", onclick: function () { shareRoom(v.code); } }, ["Share the link"]),
-        el("button", { class: "btn grow", onclick: function () { copy(v.code); } }, ["Copy the code"])
+      el("div", { class: "spread", style: "margin-top:6px" }, [
+        el("button", { class: "btn small grow", onclick: function () { shareRoom(v.code); } }, [icon("link", 15), "Share"]),
+        el("button", { class: "btn small grow", onclick: function () { copy(v.code); } }, [icon("copy", 15), "Copy code"])
       ])
     ]));
 
-    wrap.appendChild(playerList(v, manage));
-    if (manage && v.pending && v.pending.length) wrap.appendChild(doorQueue(v));
-    if (manage) wrap.appendChild(rosterBuilder(v));
-    wrap.appendChild(settingsPanel(v, manage));
+    if (manage && v.pending && v.pending.length) body.appendChild(doorQueue(v));
+    body.appendChild(playerList(v, manage));
+    if (manage) body.appendChild(rosterBuilder(v));
+    body.appendChild(settingsPanel(v, manage));
 
+    var dock;
     if (manage) {
       var seats = v.players.filter(function (p) { return !p.spectator; }).length;
       var dealt = Object.keys(v.roster).reduce(function (n, k) { return n + v.roster[k]; }, 0);
-      var problem = seats < 4 ? "You need at least four people."
-        : dealt > seats ? "There are more roles in the bag than there are people."
-        : null;
-      wrap.appendChild(el("div", { class: "card" }, [
-        problem ? el("p", { class: "small", style: "color:var(--warn)", text: problem }) : null,
-        el("button", {
-          class: "btn primary big wide", disabled: !!problem,
-          onclick: function () { dispatch({ type: CMD.START }); }
-        }, ["Start the night"])
-      ]));
+      var problem = seats < 4 ? "Four players minimum."
+        : dealt > seats ? "More roles than players." : null;
+      dock = el("button", {
+        class: "btn primary big wide", disabled: !!problem,
+        onclick: function () { dispatch({ type: CMD.START }); }
+      }, [icon("moon", 18), problem || "Start the night"]);
     } else {
-      wrap.appendChild(el("div", { class: "card" }, [
-        el("p", { class: "muted", style: "margin:0;text-align:center", text: "Waiting for the host to start." })
-      ]));
+      dock = el("div", { class: "turn-state" }, [icon("hourglass", 17), "Waiting for the host."]);
     }
-    return wrap;
+    return { body: body, dock: dock };
   }
 
   function playerList(v, manage) {
     var card = el("div", { class: "card flush" });
     card.appendChild(el("div", { class: "card-head" }, [
-      el("h3", { text: "In the village" }),
-      el("span", { class: "pill", text: v.players.filter(function (p) { return !p.spectator; }).length + " seated" })
+      icon("users", 17), el("h3", { text: "In the village" }),
+      el("span", { class: "pill", text: String(v.players.filter(function (p) { return !p.spectator; }).length) })
     ]));
     v.players.forEach(function (p) {
       var actions = [];
@@ -79,14 +76,14 @@
         actions.push(el("button", {
           class: "btn small" + (p.cohost ? " on" : ""), title: "Co-host",
           onclick: function () { dispatch({ type: CMD.ROLE_GRANT, id: p.id, cohost: !p.cohost }); }
-        }, [p.cohost ? "★" : "☆"]));
+        }, [icon("star", 14)]));
         actions.push(el("button", {
-          class: "btn small danger",
+          class: "btn small danger", title: "Remove",
           onclick: function () { if (confirm("Remove " + p.name + "?")) dispatch({ type: CMD.KICK, id: p.id }); }
-        }, ["✕"]));
+        }, [icon("close", 14)]));
       }
       card.appendChild(el("div", { class: "row" }, [
-        avatarNode(p, 34),
+        face(p, 30),
         el("div", { class: "grow" }, [
           el("div", { class: "row-title", text: p.name + (p.isMe ? " (you)" : "") }),
           el("div", { class: "row-sub", text: p.isHost ? "Host" : p.cohost ? "Co-host" : p.spectator ? "Watching" : "Player" })
@@ -99,79 +96,76 @@
 
   function doorQueue(v) {
     var card = el("div", { class: "card flush", style: "border-color:var(--accent-line)" });
-    card.appendChild(el("div", { class: "card-head" }, [el("h3", { text: "At the door" })]));
+    card.appendChild(el("div", { class: "card-head" }, [icon("door", 17), el("h3", { text: "At the door" })]));
     v.pending.forEach(function (g) {
       card.appendChild(el("div", { class: "row" }, [
         el("div", { class: "grow" }, [el("div", { class: "row-title", text: g.name })]),
-        el("button", { class: "btn small primary", onclick: function () { dispatch({ type: CMD.APPROVE, id: g.id, ok: true }); } }, ["Let in"]),
-        el("button", { class: "btn small", onclick: function () { dispatch({ type: CMD.APPROVE, id: g.id, ok: false }); } }, ["No"])
+        el("button", { class: "btn small primary", onclick: function () { dispatch({ type: CMD.APPROVE, id: g.id, ok: true }); } }, [icon("check", 14), "In"]),
+        el("button", { class: "btn small", onclick: function () { dispatch({ type: CMD.APPROVE, id: g.id, ok: false }); } }, [icon("close", 14)])
       ]));
     });
     return card;
   }
 
-  /* The bag. Steppers rather than a multi-select, because the question is never
-   * "which roles exist" — it is "how many of this one". */
   function rosterBuilder(v) {
     var card = el("div", { class: "card flush" });
     var seats = v.players.filter(function (p) { return !p.spectator; }).length;
     var dealt = Object.keys(v.roster).reduce(function (n, k) { return n + v.roster[k]; }, 0);
 
     card.appendChild(el("div", { class: "card-head" }, [
-      el("h3", { text: "The bag" }),
-      el("span", { class: "pill" + (dealt === seats ? " ok" : dealt > seats ? " bad" : ""), text: dealt + " / " + seats })
+      icon("mask", 17), el("h3", { text: "The bag" }),
+      el("span", { class: "pill" + (dealt === seats ? " ok" : dealt > seats ? " bad" : ""), text: dealt + "/" + seats })
     ]));
 
-    var body = el("div", { style: "padding:12px 16px 16px" });
-
-    // The balance bar: four sides, at a glance, before anybody is dealt in.
+    var box = el("div", { style: "padding:10px 13px 13px" });
     var byTeam = { village: 0, werewolf: 0, cult: 0, solo: 0 };
     Object.keys(v.roster).forEach(function (rid) {
       var r = WG.roles.get(rid); if (r) byTeam[r.team] += v.roster[rid];
     });
     var bar = el("div", { class: "bar" });
     ["werewolf", "cult", "solo", "village"].forEach(function (t) {
-      if (!byTeam[t]) return;
-      bar.appendChild(el("i", { class: "team-" + t, style: "flex:" + byTeam[t] + ";background:var(--team)" }));
+      if (byTeam[t]) bar.appendChild(el("i", { class: "team-" + t, style: "flex:" + byTeam[t] + ";background:var(--team)" }));
     });
-    body.appendChild(el("div", { class: "tally" }, [
-      el("span", { class: "small dim", text: "Balance" }), bar,
-      el("span", { class: "small", text: byTeam.werewolf + " wolf · " + byTeam.village + " village" +
-        (byTeam.cult ? " · " + byTeam.cult + " cult" : "") + (byTeam.solo ? " · " + byTeam.solo + " solo" : "") })
+    box.appendChild(el("div", { class: "tally" }, [
+      bar,
+      el("span", { class: "dim", text: byTeam.werewolf + "W · " + byTeam.village + "V" +
+        (byTeam.cult ? " · " + byTeam.cult + "C" : "") + (byTeam.solo ? " · " + byTeam.solo + "S" : "") })
     ]));
 
-    body.appendChild(el("div", { class: "spread", style: "margin-bottom:10px;flex-wrap:wrap" }, [
-      el("button", { class: "btn small", onclick: function () { setRoster(H.suggestRoster(seats)); } }, ["Suggest for " + seats]),
-      el("button", { class: "btn small", onclick: function () { setRoster(chaos(seats)); } }, ["Chaos"]),
-      el("button", { class: "btn small", onclick: function () { setRoster({}); } }, ["Empty the bag"])
+    box.appendChild(el("div", { class: "spread", style: "margin-bottom:8px" }, [
+      el("button", { class: "btn small grow", onclick: function () { setRoster(H.suggestRoster(seats)); } }, ["Suggest"]),
+      el("button", { class: "btn small grow", onclick: function () { setRoster(chaos(seats)); } }, ["Chaos"]),
+      el("button", { class: "btn small grow", onclick: function () { setRoster({}); } }, ["Clear"])
     ]));
 
     ["werewolf", "village", "cult", "solo"].forEach(function (team) {
-      body.appendChild(el("div", { class: "spread", style: "margin:14px 0 6px" }, [
+      box.appendChild(el("div", { class: "spread", style: "margin:11px 0 5px" }, [
         el("span", { class: "team-dot team-" + team }),
-        el("h3", { style: "margin:0;font-size:.94rem", text: WG.roles.teams[team].name })
+        el("h3", { style: "margin:0;font-size:.86rem", text: WG.roles.teams[team].name })
       ]));
       var grid = el("div", { class: "roster" });
       WG.roles.all().filter(function (r) { return r.team === team; }).forEach(function (r) {
         var n = v.roster[r.id] || 0;
         grid.appendChild(el("div", { class: "roster-item team-" + team + (n ? " in" : "") }, [
-          el("button", { class: "ico", style: "background:none;border:none;cursor:pointer;font-size:1.2rem",
-            title: "What is a " + r.name + "?", onclick: function () { H.showRoleCard(r.id); } }, [r.icon]),
+          el("button", {
+            style: "background:none;border:none;cursor:pointer;color:inherit;padding:0;display:flex",
+            title: r.name, onclick: function () { H.showRoleCard(r.id); }
+          }, [icon(r.icon, 19)]),
           el("span", { class: "grow" }, [
             el("div", { class: "rn", text: r.name }),
             el("div", { class: "rd", text: r.tagline })
           ]),
           el("span", { class: "stepper" }, [
-            el("button", { onclick: function () { bump(r.id, -1); }, "aria-label": "One fewer " + r.name }, ["−"]),
+            el("button", { onclick: function () { bump(r.id, -1); }, "aria-label": "Fewer" }, [icon("minus", 13)]),
             el("span", { class: "n", text: String(n) }),
-            el("button", { onclick: function () { bump(r.id, 1); }, "aria-label": "One more " + r.name }, ["+"])
+            el("button", { onclick: function () { bump(r.id, 1); }, "aria-label": "More" }, [icon("plus", 13)])
           ])
         ]));
       });
-      body.appendChild(grid);
+      box.appendChild(grid);
     });
 
-    card.appendChild(body);
+    card.appendChild(box);
     return card;
 
     function bump(rid, d) {
@@ -184,8 +178,7 @@
   }
 
   function chaos(n) {
-    var all = WG.roles.all();
-    var roster = {};
+    var all = WG.roles.all(), roster = {};
     var wolves = Math.max(1, Math.round(n / 4.5));
     var pool = all.filter(function (r) { return r.team === "werewolf"; });
     for (var i = 0; i < wolves; i++) {
@@ -200,74 +193,59 @@
     return roster;
   }
 
-  /* Settings, grouped by the question a host is actually asking. The old build
-   * had one column of unrelated checkboxes; these are four tabs because there
-   * are four decisions, and they are not the same decision. */
-  var GROUPS = {
-    flow:   { label: "Clock",    icon: "⏱" },
-    rules:  { label: "Rules",    icon: "⚖️" },
-    room:   { label: "Room",     icon: "🚪" },
-    events: { label: "Events",   icon: "🎲" },
-    look:   { label: "Look",     icon: "🎨" }
-  };
+  /* Settings grouped by the question a host is actually asking. */
+  var GROUPS = { flow: ["Clock", "clock"], rules: ["Rules", "scales"], room: ["Room", "door"],
+                 events: ["Events", "star"], look: ["Look", "contrast"] };
   var COPY = {
-    "flow.endNightEarly":  ["End the night early", "Close it as soon as everybody has spent their turn."],
-    "flow.endVotingEarly": ["End the vote early", "Close it as soon as everybody has voted."],
-    "rules.revealRolesOnDeath": ["Reveal roles on death", "The village is told what somebody was."],
-    "rules.firstNightImmunity": ["First night is safe", "Nobody can be killed on night one."],
-    "rules.showVoteCounts": ["Show the tally", "Everybody sees the vote counts as they land."],
-    "rules.showPersonalVotes": ["Show who voted for you", "You can see the names on your own rope."],
-    "rules.allowSkipVote": ["Allow skipping", "The village can vote to hang nobody."],
-    "rules.allowSelfVote": ["Allow voting for yourself", "Mostly for the Jester."],
-    "rules.villagerPromotion": ["Villagers can be promoted", "Enough night work and a Villager becomes something else."],
-    "rules.animalSpeech": ["Cats and dogs really cannot talk", "Their messages are replaced with meows and barks."],
-    "room.joinApproval": ["Approve everyone at the door", "A six-character code is guessable. This is the lock."],
+    "flow.endNightEarly": ["End night early", "Close it once every turn is spent."],
+    "flow.endVotingEarly": ["End vote early", "Close it once everyone has voted."],
+    "rules.revealRolesOnDeath": ["Reveal roles on death", "The village learns what they were."],
+    "rules.firstNightImmunity": ["First night is safe", "Nobody dies on night one."],
+    "rules.showVoteCounts": ["Show the tally", "Everyone sees the counts."],
+    "rules.showPersonalVotes": ["Show votes on you", "You see who voted for you."],
+    "rules.allowSkipVote": ["Allow skipping", "The village can hang nobody."],
+    "rules.allowSelfVote": ["Allow self-votes", "Mostly for the Jester."],
+    "rules.villagerPromotion": ["Villagers can be promoted", "Night work earns a real role."],
+    "rules.animalSpeech": ["Animals cannot talk", "Cats and dogs send only noises."],
+    "room.joinApproval": ["Approve at the door", "A six-character code is guessable."],
     "room.chat": ["Chat", "Discussion happens in the app."],
-    "room.deadChat": ["The dead get their own channel", "Which the living cannot read."],
-    "room.allowSpectators": ["Latecomers can watch", "They join as spectators rather than players."],
-    "events.enabled": ["Events", "A festival, a plague, a blood moon. Occasionally."],
-    "look.timeOfDayTheme": ["Colour follows the clock", "The room goes from night to dawn to noon to dusk as you play."],
-    "look.reduceMotion": ["Reduce motion", "Nothing slides, pulses or drifts."],
+    "room.deadChat": ["The dead get a channel", "The living cannot read it."],
+    "room.allowSpectators": ["Latecomers can watch", "They join as spectators."],
+    "events.enabled": ["Events", "A festival, a plague, a blood moon."],
+    "look.timeOfDayTheme": ["Colour follows the clock", "Night to dawn to noon to dusk."],
+    "look.reduceMotion": ["Reduce motion", "Nothing drifts or pulses."],
     "look.sound": ["Sound", "The clock, the alarm, the verdict."]
   };
 
   function settingsPanel(v, manage) {
     var card = el("div", { class: "card" });
-    card.appendChild(el("h3", { text: "Settings" }));
-    var tabs = el("div", { class: "tabs" });
-    var body = el("div");
     var cur = global.WG_APP.settingsTab || "flow";
-
+    var tabs = el("div", { class: "tabs" });
     Object.keys(GROUPS).forEach(function (g) {
       tabs.appendChild(el("button", {
         class: cur === g ? "on" : "", onclick: function () { global.WG_APP.settingsTab = g; WG.app.render(); }
-      }, [GROUPS[g].icon + " " + GROUPS[g].label]));
+      }, [icon(GROUPS[g][1], 14), GROUPS[g][0]]));
     });
     card.appendChild(tabs);
 
-    var cfg = v.config;
+    var body = el("div"), cfg = v.config;
     if (cur === "flow") {
-      body.appendChild(el("p", { class: "small dim", text:
-        "How long each part of the round runs. The colour of the room tracks these, so a longer discussion is a longer morning." }));
       var presets = (WG.clock.flow.roomConfig || {}).presets || {};
-      body.appendChild(el("div", { class: "spread", style: "margin-bottom:10px" },
+      body.appendChild(el("div", { class: "spread", style: "margin:8px 0" },
         Object.keys(presets).map(function (name) {
           return el("button", {
-            class: "btn small" + (cfg.flow.preset === name ? " on" : ""), disabled: !manage,
+            class: "btn small grow" + (cfg.flow.preset === name ? " on" : ""), disabled: !manage,
             onclick: function () { patch("flow", { preset: name, durations: presets[name] }); }
           }, [name]);
         })));
       Object.keys(cfg.flow.durations).forEach(function (id) {
-        var ph = WG.clock.phase(id) || { name: id, icon: "•" };
+        var ph = WG.clock.phase(id) || { name: id, icon: "star" };
         body.appendChild(el("div", { class: "row", style: "padding-left:0;padding-right:0" }, [
-          el("span", { text: ph.icon }),
-          el("div", { class: "grow" }, [
-            el("div", { class: "row-title", text: ph.name }),
-            el("div", { class: "row-sub", text: ph.description || "" })
-          ]),
+          icon(ph.icon, 16),
+          el("div", { class: "grow" }, [el("div", { class: "row-title", text: ph.name })]),
           el("input", {
             type: "number", min: "5", max: "1200", value: String(cfg.flow.durations[id]),
-            style: "width:88px", disabled: !manage,
+            style: "width:78px;min-height:36px", disabled: !manage,
             onchange: function (e) {
               var d = Object.assign({}, cfg.flow.durations);
               d[id] = Math.max(5, Math.min(1200, Number(e.target.value) || d[id]));
@@ -292,19 +270,17 @@
             }
           }),
           el("span", { class: "track" }),
-          el("span", { class: "label" }, [
-            el("b", { text: ev.icon + " " + ev.name }),
-            el("span", { text: ev.shortDescription })
+          el("span", { class: "label grow" }, [
+            el("b", { text: ev.name }), el("span", { text: ev.shortDescription })
           ])
         ]));
       });
     } else {
       Object.keys(cfg[cur]).forEach(function (k) {
-        if (typeof cfg[cur][k] !== "boolean") return;
-        body.appendChild(toggle(cur + "." + k, cfg, manage, patch));
+        if (typeof cfg[cur][k] === "boolean") body.appendChild(toggle(cur + "." + k, cfg, manage, patch));
       });
       if (cur === "room") {
-        body.appendChild(el("label", { class: "field", style: "margin-top:10px" }, [
+        body.appendChild(el("label", { class: "field", style: "margin-top:8px" }, [
           el("span", { text: "Maximum players" }),
           el("input", {
             type: "number", min: "4", max: "40", value: String(cfg.room.maxPlayers), disabled: !manage,
@@ -313,15 +289,12 @@
         ]));
       }
     }
-
     card.appendChild(body);
-    if (!manage) card.appendChild(el("p", { class: "small dim", text: "Only the host and co-hosts can change these." }));
     return card;
 
     function patch(group, changes) {
       var next = JSON.parse(JSON.stringify(v.config));
       Object.assign(next[group], changes);
-      // The look settings are this device's business, not the room's.
       if (group === "look" && changes.reduceMotion != null) WG.theme.setMotion(!changes.reduceMotion);
       dispatch({ type: CMD.CONFIG, config: next });
     }
@@ -332,12 +305,10 @@
     var copy = COPY[path] || [key, ""];
     var on = !!cfg[group][key];
     return el("label", { class: "toggle" }, [
-      el("input", {
-        type: "checkbox", checked: on, disabled: !enabled,
-        onchange: function () { var c = {}; c[key] = !on; patch(group, c); }
-      }),
+      el("input", { type: "checkbox", checked: on, disabled: !enabled,
+        onchange: function () { var c = {}; c[key] = !on; patch(group, c); } }),
       el("span", { class: "track" }),
-      el("span", { class: "label" }, [el("b", { text: copy[0] }), el("span", { text: copy[1] })])
+      el("span", { class: "label grow" }, [el("b", { text: copy[0] }), el("span", { text: copy[1] })])
     ]);
   }
 
@@ -346,123 +317,98 @@
   function reveal(v) {
     var me = v.me;
     if (!me || !me.role) {
-      return el("div", { class: "card empty" }, [el("span", { class: "ico", text: "👁️" }), "You are watching this one."]);
+      return { body: el("div", { class: "pane grow center" }, [
+        el("div", { class: "empty" }, [icon("eye", 40), "You are watching this one."])
+      ]) };
     }
     var r = me.role;
-    var wrap = el("div", { class: "reveal" });
-    wrap.appendChild(el("div", { class: "rolecard team-" + r.team }, [
-      el("div", { class: "icon", text: r.icon }),
+    var body = el("div", { class: "pane grow scroll reveal" });
+    body.appendChild(el("div", { class: "rolecard team-" + r.team }, [
+      el("div", { class: "crest" }, [icon(r.icon, 46, { weight: 1.15 })]),
       el("div", { class: "name", text: r.name }),
       el("div", { class: "tagline", text: r.tagline }),
       el("p", { text: r.description }),
       r.lore ? el("div", { class: "lore", text: r.lore }) : null,
-      el("dl", {}, [
-        el("dt", { text: "You win by" }), el("dd", { text: r.winCondition })
-      ]),
-      r.actions && r.actions.length ? el("ul", { class: "abilities" }, r.actions.map(function (a) {
-        return el("li", {}, [el("span", { class: "ico", text: a.icon }),
-          el("span", {}, [el("b", { text: a.label }), " — ", a.description])]);
-      })) : null,
-      r.passives && r.passives.length ? el("ul", { class: "abilities" }, r.passives.map(function (pp) {
-        return el("li", {}, [el("span", { class: "ico", text: "◆" }),
-          el("span", {}, [el("b", { text: pp.name }), " — ", pp.description])]);
-      })) : null
+      el("dl", { style: "margin:0" }, [el("dt", { text: "You win by" }), el("dd", { text: r.winCondition })]),
+      H.abilityList(r)
     ]));
-    if (me.brief) wrap.appendChild(briefCard(me.brief));
-    wrap.appendChild(el("button", {
-      class: "btn primary big wide", disabled: me.ready,
-      onclick: function () { dispatch({ type: CMD.READY }); }
-    }, [me.ready ? "Waiting for the others…" : "I have read it"]));
-    return wrap;
+    if (me.brief) body.appendChild(briefCard(me.brief));
+    return {
+      body: body,
+      dock: el("button", {
+        class: "btn primary big wide", disabled: me.ready,
+        onclick: function () { dispatch({ type: CMD.READY }); }
+      }, [me.ready ? "Waiting for the others" : "Ready"])
+    };
   }
 
   function briefCard(b) {
-    return el("div", { class: "card" }, [
-      el("h3", { text: b.title }),
-      el("ul", { class: "abilities" }, b.lines.map(function (l) {
-        return el("li", {}, [el("span", { class: "ico", text: "›" }), el("span", { text: l })]);
-      }))
-    ]);
+    var card = el("div", { class: "card" });
+    card.appendChild(el("h3", { text: b.title }));
+    card.appendChild(el("ul", { class: "abilities" }, b.lines.map(function (l) {
+      return el("li", {}, [icon("arrowRight", 15), el("span", { text: l })]);
+    })));
+    return card;
   }
 
   /* ================= night ================= */
 
   function night(v) {
-    var wrap = el("div");
     var me = v.me;
-    if (!me || !me.role) return watching(v);
+    if (!me || !me.role) return watching();
+    if (me.quiz) return { body: quizScreen(me.quiz) };
+    if (me.prompt) return { body: promptScreen(me.prompt) };
 
-    if (me.quiz) return quizScreen(me.quiz);
-    if (me.prompt) return promptScreen(me.prompt);
-
-    wrap.appendChild(turnState(v));
-
-    if (global.WG_APP.pendingSwap) {
-      wrap.appendChild(el("div", { class: "turn-state blocked" }, [
-        "🔁 Now pick the second house — the one it changes places with.",
-        el("button", { class: "btn small", style: "margin-left:auto",
-          onclick: function () { global.WG_APP.pendingSwap = null; WG.app.render(); } }, ["Cancel"])
+    var body = el("div", { class: "pane grow", style: "display:flex;flex-direction:column;gap:8px;min-height:0" });
+    var swap = global.WG_APP.pendingSwap;
+    if (swap) {
+      body.appendChild(el("div", { class: "turn-state blocked" }, [
+        icon("swap", 17), el("span", { class: "grow", text: "Pick the second house." }),
+        el("button", { class: "btn small", onclick: function () { global.WG_APP.pendingSwap = null; WG.app.render(); } }, ["Cancel"])
       ]));
     }
+    body.appendChild(el("div", { class: "village-wrap" }, [
+      WG.village.render(v, {
+        onPick: function (id) { knock(id); },
+        subtitle: function (h, p) { return p.role ? p.role.name : null; }
+      })
+    ]));
 
-    wrap.appendChild(village(v));
-
-    if (me.brief) wrap.appendChild(briefCard(me.brief));
-    if (v.night && v.night.packTally) wrap.appendChild(packPanel(v));
-    wrap.appendChild(privatePanel());
-    if (v.config.room.chat) {
-      var team = me.role.team === "werewolf" ? "pack" : me.role.team === "cult" ? "cult" : (!me.alive ? "dead" : null);
-      if (team) wrap.appendChild(chatPanel(v, team, team === "pack" ? "The pack" : team === "cult" ? "The cult" : "The dead"));
+    var side = el("div", { style: "display:flex;flex-direction:column;gap:6px" });
+    if (me.brief) side.appendChild(briefCard(me.brief));
+    if (v.night && v.night.packTally) side.appendChild(packPanel(v));
+    var priv = privatePanel();
+    if (priv) side.appendChild(priv);
+    if (side.children.length) {
+      var wide = global.matchMedia && global.matchMedia("(min-width: 900px)").matches;
+      if (wide) {
+        var split = el("div", { class: "split" });
+        var vw = body.querySelector(".village-wrap");
+        body.removeChild(vw);
+        split.appendChild(vw);
+        side.className = "pane scroll";
+        split.appendChild(side);
+        body.appendChild(split);
+      }
     }
-    return wrap;
+
+    return { body: body, dock: turnState(v) };
   }
 
   function turnState(v) {
     var t = v.me.turn;
-    if (!t) return el("div", { class: "turn-state spent" }, ["You are watching tonight."]);
-    if (t.blocked) return el("div", { class: "turn-state blocked" }, ["☎️ You are on hold. Answer the call before you can do anything."]);
+    if (!t) return el("div", { class: "turn-state spent" }, [icon("eye", 16), "Watching tonight."]);
+    if (t.blocked) return el("div", { class: "turn-state blocked" }, [icon("phone", 16), "On hold. Answer the call."]);
     if (t.spent) {
       return el("div", { class: "turn-state spent" }, [
-        "Your night is spent.",
-        el("span", { class: "grow" }),
-        el("span", { class: "small dim", text: (v.night.turnsSpent) + " of " + v.night.turnsTotal + " done" })
+        icon("check", 16), el("span", { class: "grow", text: "Night spent." }),
+        el("span", { class: "dim", text: v.night.turnsSpent + "/" + v.night.turnsTotal })
       ]);
     }
     return el("div", { class: "turn-state" }, [
-      "🌙 Pick a house. You will be offered whatever you can do there.",
-      el("span", { class: "grow" }),
-      el("span", { class: "small dim", text: (v.night.turnsSpent) + "/" + v.night.turnsTotal })
+      icon("door", 16), el("span", { class: "grow", text: "Pick a house." }),
+      el("span", { class: "dim", text: v.night.turnsSpent + "/" + v.night.turnsTotal })
     ]);
-  }
-
-  /** The village: one door per player, and the state of the house is the only
-   *  thing a door has to say. */
-  function village(v) {
-    var grid = el("div", { class: "village" });
-    (v.houses || []).forEach(function (h) {
-      var p = v.players.filter(function (x) { return x.id === h.id; })[0] || {};
-      var cls = ["house", h.state];
-      if (h.isOwn) cls.push("own");
-      if (h.visited) cls.push("visited");
-      if (h.reported) cls.push("reported");
-      if (!h.occupantAlive) cls.push("dead");
-      var badge = null;
-      if (h.state === "dead-tonight" && !h.reported) badge = el("span", { class: "badge bad", text: "body" });
-      else if (h.reported) badge = el("span", { class: "badge", text: "reported" });
-      else if (p.marked) badge = el("span", { class: "badge bad", text: "marked" });
-      else if (h.isOwn) badge = el("span", { class: "badge accent", text: "you" });
-
-      grid.appendChild(el("button", {
-        class: cls.join(" "),
-        onclick: function () { knock(h.id); }
-      }, [
-        badge,
-        avatarNode(p, 46),
-        el("span", { class: "name", text: p.name || "?" }),
-        el("span", { class: "tag", text: p.role ? p.role.name : (h.occupantAlive ? "" : "dead") })
-      ]));
-    });
-    return grid;
   }
 
   function knock(houseId) {
@@ -475,62 +421,57 @@
     dispatch({ type: CMD.KNOCK, houseId: houseId });
   }
 
-  /* The sheet you get for knocking. This is the whole interaction model: a door
-   * first, then what your role can do about what is behind it. */
+  /* The sheet you get for knocking: who lives here, and what you can do about it. */
   function doorSheet(data) {
     var v = WG.app.currentView();
-    var p = v.players.filter(function (x) { return x.id === data.houseId; })[0] || {};
+    var p = playerOf(v, data.houseId) || {};
     var box = el("div");
 
     box.appendChild(el("div", { class: "sheet-head" }, [
-      avatarNode(p, 52),
+      face(p, 46, "sheet-avatar"),
       el("div", { class: "grow" }, [
         el("div", { class: "sheet-title", text: data.occupant }),
         el("div", { class: "row-sub", text: {
-          own: "Your own house.",
-          living: "Somebody is asleep in there.",
-          dead: "Empty. It has been for a while.",
-          "dead-tonight": "The door is open and nobody answered.",
-          quiet: "Quiet. Nothing to see."
+          own: "Your house.", living: "Asleep inside.",
+          dead: "Empty for a while now.", "dead-tonight": "Door open. No answer.",
+          quiet: "Quiet."
         }[data.state] || "" })
       ])
     ]));
 
     if (data.discovery) {
       box.appendChild(el("div", { class: "discovery" }, [
-        el("div", { class: "lead", text: "💀 " + data.occupant + " is dead." }),
+        el("div", { class: "lead" }, [icon("skull", 19), data.occupant + " is dead."]),
         el("p", { style: "margin:0", text: data.discovery.text }),
-        data.discovery.first ? el("p", { class: "small", style: "margin:8px 0 0;color:var(--warn)",
-          text: "You are the first person to find them." }) : null
+        data.discovery.first ? el("p", { class: "small", style: "margin:6px 0 0;color:var(--warn)", text: "You found them first." }) : null
       ]));
     }
 
     var usable = data.offers.filter(function (o) { return o.actionId !== "peek"; });
     if (!usable.length) {
-      box.appendChild(el("div", { class: "empty" }, [
-        el("span", { class: "ico", text: "🚪" }),
-        "There is nothing here for you tonight."
-      ]));
+      box.appendChild(el("div", { class: "empty" }, [icon("door", 32), "Nothing for you here."]));
     }
     usable.forEach(function (o) {
       box.appendChild(el("button", {
-        class: "offer" + (o.spendsTurn ? "" : " free"), disabled: !o.enabled,
-        onclick: function () { chooseOffer(data, o); }
+        class: "offer", disabled: !o.enabled, onclick: function () { chooseOffer(data, o); }
       }, [
-        el("span", { class: "ico", text: o.icon }),
+        icon(o.icon, 20),
         el("span", { class: "body" }, [
-          el("span", { class: "verb", text: o.houseVerb || o.label }),
+          el("span", { class: "verb" }, [
+            o.houseVerb || o.label,
+            o.spendsTurn ? null : el("span", { class: "free-tag", text: "free" })
+          ]),
           el("span", { class: "desc", text: o.description }),
-          (o.charges != null || !o.enabled) ? el("span", { class: "meta" + (o.enabled ? "" : " warn"),
-            text: o.enabled ? (o.charges + " left") : o.reason }) : null
+          (o.charges != null || !o.enabled) ? el("span", {
+            class: "meta" + (o.enabled ? "" : " warn"),
+            text: o.enabled ? (o.charges + " left") : o.reason
+          }) : null
         ])
       ]));
     });
     return box;
   }
 
-  /* Some actions need a second question before they mean anything: which role
-   * you are naming, what the quiz says, which house the swap pairs with. */
   function chooseOffer(door, o) {
     if (o.arity === 2) {
       global.WG_APP.pendingSwap = { actionId: o.actionId, firstId: door.houseId };
@@ -545,25 +486,32 @@
     H.closeModal();
   }
 
-  function askRoleGuess(door, o) {
+  function pickList(list, onPick, cap) {
     var chosen = null;
-    var grid = el("div", { class: "roster", style: "max-height:44dvh;overflow-y:auto" });
-    WG.roles.all().forEach(function (r) {
+    var grid = el("div", { class: "roster", style: "max-height:" + (cap || "40dvh") + ";overflow-y:auto" });
+    list.forEach(function (r) {
       grid.appendChild(el("button", {
         class: "roster-item team-" + r.team, onclick: function (e) {
           chosen = r.id;
           [].forEach.call(grid.children, function (c) { c.classList.remove("in"); });
           e.currentTarget.classList.add("in");
+          onPick(r.id);
         }
-      }, [el("span", { class: "ico", text: r.icon }), el("span", { class: "grow" }, [el("div", { class: "rn", text: r.name })])]));
+      }, [icon(r.icon, 18), el("span", { class: "grow" }, [el("div", { class: "rn", text: r.name })])]));
     });
+    return grid;
+  }
+
+  function askRoleGuess(door, o) {
+    var chosen = null;
+    var grid = pickList(WG.roles.all(), function (id) { chosen = id; });
     H.openModal(el("div", {}, [
       el("h2", { text: "Name what they are" }),
-      el("p", { class: "small dim", text: "Right, and " + door.occupant + " dies. Wrong, and you do." }),
+      el("p", { class: "small dim", text: "Right, they die. Wrong, you do." }),
       grid,
       el("button", {
-        class: "btn primary wide", style: "margin-top:12px", onclick: function () {
-          if (!chosen) return toast("Pick a role first.", "warn");
+        class: "btn primary wide", style: "margin-top:10px", onclick: function () {
+          if (!chosen) return toast("Pick a role.", "warn");
           dispatch({ type: CMD.ACT, houseId: door.houseId, actionId: o.actionId, payload: { roleGuess: chosen } });
           H.closeModal();
         }
@@ -572,73 +520,65 @@
   }
 
   function askQuiz(door, o) {
-    var q = el("input", { type: "text", placeholder: "Your question", maxlength: "200" });
+    var q = el("input", { type: "text", placeholder: "Question", maxlength: "200" });
     var cs = [0, 1, 2, 3].map(function (i) { return el("input", { type: "text", placeholder: "Answer " + (i + 1), maxlength: "80" }); });
     var correct = 0;
-    var picks = el("div", { class: "spread", style: "flex-wrap:wrap" }, [0, 1, 2, 3].map(function (i) {
+    var picks = el("div", { class: "spread" }, [0, 1, 2, 3].map(function (i) {
       return el("button", {
-        class: "btn small" + (i === 0 ? " on" : ""), onclick: function (e) {
+        class: "btn small grow" + (i === 0 ? " on" : ""), onclick: function (e) {
           correct = i;
           [].forEach.call(picks.children, function (c) { c.classList.remove("on"); });
           e.currentTarget.classList.add("on");
         }
-      }, ["#" + (i + 1) + " is right"]);
+      }, [String(i + 1)]);
     }));
     H.openModal(el("div", {}, [
       el("h2", { text: "Put " + door.occupant + " on hold" }),
-      el("p", { class: "small dim", text: "Tomorrow night they cannot do anything until they get this right." }),
+      el("p", { class: "small dim", text: "They cannot act tomorrow night until they get this right." }),
       el("label", { class: "field" }, [el("span", { text: "Question" }), q])
     ].concat(cs.map(function (c, i) {
       return el("label", { class: "field" }, [el("span", { text: "Answer " + (i + 1) }), c]);
     })).concat([
-      picks,
+      el("div", { class: "small dim", style: "margin-bottom:5px", text: "Which one is right" }), picks,
       el("button", {
-        class: "btn primary wide", style: "margin-top:12px", onclick: function () {
+        class: "btn primary wide", style: "margin-top:10px", onclick: function () {
           var choices = cs.map(function (c) { return c.value.trim(); });
           if (!q.value.trim() || choices.some(function (c) { return !c; })) return toast("Fill all five boxes.", "warn");
           dispatch({ type: CMD.ACT, houseId: door.houseId, actionId: o.actionId,
             payload: { quiz: { question: q.value.trim(), choices: choices, correct: correct } } });
           H.closeModal();
         }
-      }, ["Place the call"])
+      }, ["Call"])
     ])));
   }
 
   function askRevive(door, o) {
-    var mode = "random", role = null, reveal_ = true;
+    var mode = "random", role = null, tell = true;
     var pool = WG.roles.all().filter(function (r) {
       return r.team === "village" && ["archangel", "mayor"].indexOf(r.id) < 0;
     });
-    var grid = el("div", { class: "roster", style: "max-height:36dvh;overflow-y:auto", hidden: true });
-    pool.forEach(function (r) {
-      grid.appendChild(el("button", {
-        class: "roster-item team-village", onclick: function (e) {
-          role = r.id;
-          [].forEach.call(grid.children, function (c) { c.classList.remove("in"); });
-          e.currentTarget.classList.add("in");
-        }
-      }, [el("span", { class: "ico", text: r.icon }), el("span", { class: "grow" }, [el("div", { class: "rn", text: r.name })])]));
-    });
+    var grid = pickList(pool, function (id) { role = id; }, "32dvh");
+    grid.hidden = true;
     var modes = el("div", { class: "spread" }, [
-      el("button", { class: "btn small on", onclick: function (e) { mode = "random"; grid.hidden = true; only(e); } }, ["Let fate pick"]),
-      el("button", { class: "btn small", onclick: function (e) { mode = "manual"; grid.hidden = false; only(e); } }, ["I will pick"])
+      el("button", { class: "btn small grow on", onclick: function (e) { mode = "random"; grid.hidden = true; only(e); } }, ["Random role"]),
+      el("button", { class: "btn small grow", onclick: function (e) { mode = "manual"; grid.hidden = false; only(e); } }, ["I choose"])
     ]);
     function only(e) { [].forEach.call(modes.children, function (c) { c.classList.remove("on"); }); e.currentTarget.classList.add("on"); }
 
     H.openModal(el("div", {}, [
       el("h2", { text: "Raise " + door.occupant }),
-      el("p", { class: "small dim", text: "They come back tonight, with their turn intact, as something new." }),
+      el("p", { class: "small dim", text: "They return tonight, with their turn intact." }),
       modes, grid,
       el("label", { class: "toggle" }, [
-        el("input", { type: "checkbox", checked: true, onchange: function (e) { reveal_ = e.target.checked; } }),
+        el("input", { type: "checkbox", checked: true, onchange: function (e) { tell = e.target.checked; } }),
         el("span", { class: "track" }),
-        el("span", { class: "label" }, [el("b", { text: "Tell the village what they are now" })])
+        el("span", { class: "label", text: "Tell the village what they are" })
       ]),
       el("button", {
         class: "btn primary wide", onclick: function () {
-          if (mode === "manual" && !role) return toast("Pick a role, or let fate do it.", "warn");
+          if (mode === "manual" && !role) return toast("Pick a role.", "warn");
           dispatch({ type: CMD.ACT, houseId: door.houseId, actionId: o.actionId,
-            payload: { assignment: mode, newRole: role, reveal: reveal_ } });
+            payload: { assignment: mode, newRole: role, reveal: tell } });
           H.closeModal();
         }
       }, ["Call them back"])
@@ -646,123 +586,129 @@
   }
 
   function quizScreen(q) {
-    return el("div", { class: "card reveal" }, [
-      el("h2", { text: "☎️ Please hold" }),
-      el("p", { class: "muted", text: "Somebody has you on the line. You cannot do anything tonight until you answer correctly." }),
-      el("h3", { text: q.question }),
+    var body = el("div", { class: "pane grow scroll reveal" });
+    body.appendChild(el("div", { class: "card" }, [
+      el("div", { class: "spread", style: "margin-bottom:6px" }, [icon("phone", 20), el("h2", { text: "Please hold" })]),
+      el("p", { class: "muted small", text: "You cannot act until you answer." }),
+      el("h3", { style: "margin:10px 0", text: q.question }),
       el("div", { class: "stack" }, q.choices.map(function (c, i) {
         return el("button", { class: "btn wide", onclick: function () { dispatch({ type: CMD.QUIZ_ANSWER, choice: i }); } }, [c]);
       })),
-      q.attempts ? el("p", { class: "small", style: "color:var(--warn)", text: q.attempts + " wrong so far." }) : null
-    ]);
+      q.attempts ? el("p", { class: "small", style: "color:var(--warn);margin-top:8px", text: q.attempts + " wrong so far." }) : null
+    ]));
+    return body;
   }
 
   function promptScreen(pr) {
-    return el("div", { class: "card reveal" }, [
-      el("h2", { text: "Somebody is at your door" }),
+    var body = el("div", { class: "pane grow center reveal" });
+    body.appendChild(el("div", { class: "card" }, [
+      el("div", { class: "spread", style: "margin-bottom:6px" }, [icon("door", 20), el("h2", { text: "Someone is at your door" })]),
       el("p", { class: "muted", text: pr.question }),
-      el("div", { class: "spread" }, [
+      el("div", { class: "spread", style: "margin-top:10px" }, [
         el("button", { class: "btn primary grow", onclick: function () { dispatch({ type: CMD.CONSENT, offerId: pr.id, ok: true }); } }, [pr.accept]),
         el("button", { class: "btn grow", onclick: function () { dispatch({ type: CMD.CONSENT, offerId: pr.id, ok: false }); } }, [pr.decline])
       ])
-    ]);
+    ]));
+    return body;
   }
 
   function packPanel(v) {
     var tally = v.night.packTally || {};
     var card = el("div", { class: "card flush" });
-    card.appendChild(el("div", { class: "card-head" }, [el("h3", { text: "🐺 The pack" })]));
+    card.appendChild(el("div", { class: "card-head" }, [icon("howl", 16), el("h3", { text: "The pack" })]));
     var any = false;
     Object.keys(tally).forEach(function (hid) {
       any = true;
-      var p = v.players.filter(function (x) { return x.id === hid; })[0] || {};
+      var p = playerOf(v, hid) || {};
       card.appendChild(el("div", { class: "row" }, [
         el("div", { class: "grow" }, [el("div", { class: "row-title", text: p.name || hid })]),
-        el("span", { class: "pill accent", text: tally[hid] + (tally[hid] === 1 ? " howl" : " howls") })
+        el("span", { class: "pill accent", text: String(tally[hid]) })
       ]));
     });
-    if (!any) card.appendChild(el("div", { class: "row" }, [el("span", { class: "row-sub", text: "Nobody has howled yet." })]));
-    card.appendChild(el("div", { class: "row" }, [
-      el("span", { class: "row-sub", text: "The kill happens the moment the last of you has voted — not at dawn." })
-    ]));
+    if (!any) card.appendChild(el("div", { class: "row" }, [el("span", { class: "row-sub", text: "No howls yet." })]));
     return card;
   }
 
   function privatePanel() {
     var lines = WG.app.privateLog();
-    if (!lines.length) return el("span");
+    if (!lines.length) return null;
     var card = el("div", { class: "card flush" });
-    card.appendChild(el("div", { class: "card-head" }, [el("h3", { text: "Your night" })]));
-    var body = el("ul", { class: "log", style: "padding:4px 16px 12px" });
-    lines.slice(-14).forEach(function (e) {
-      body.appendChild(el("li", { class: e.kind || "", text: e.text }));
+    card.appendChild(el("div", { class: "card-head" }, [icon("eye", 16), el("h3", { text: "Your night" })]));
+    var body = el("ul", { class: "log", style: "padding:2px 13px 10px" });
+    lines.slice(-10).forEach(function (e) {
+      body.appendChild(el("li", { class: e.kind || "" }, [icon(logIcon(e.kind), 15), el("span", { text: e.text })]));
     });
     card.appendChild(body);
     return card;
   }
 
+  function logIcon(kind) {
+    return { death: "skull", saved: "shield", revive: "wings", act: "check", read: "eye",
+      pack: "howl", trap: "trap", transform: "swap", warn: "hourglass", bite: "cat",
+      hidden: "skull", team: "users", prompt: "door", sick: "virus", morning: "sunrise",
+      report: "alarm", vote: "scales", event: "star", end: "flag", start: "moon",
+      retribution: "flame", room: "users" }[kind] || "star";
+  }
+
   /* ================= dawn / verdict ================= */
 
   function dawn(v) {
-    var wrap = el("div", { class: "reveal" });
-    var card = el("div", { class: "card" });
-    card.appendChild(el("h2", { text: v.phase === "verdict" ? "⚖️ The verdict" : "🌅 What the village found" }));
+    var body = el("div", { class: "pane grow", style: "display:flex;flex-direction:column;gap:8px;min-height:0" });
     var lines = v.publicLog.filter(function (e) { return e.round === v.round; });
     if (!lines.length) lines = v.publicLog.slice(-4);
+
+    var card = el("div", { class: "card reveal" });
     var list = el("ul", { class: "log" });
-    lines.forEach(function (e) { list.appendChild(el("li", { class: e.kind || "", text: e.text })); });
+    lines.forEach(function (e) {
+      list.appendChild(el("li", { class: e.kind || "" }, [icon(logIcon(e.kind), 16), el("span", { text: e.text })]));
+    });
     card.appendChild(list);
-    wrap.appendChild(card);
-    wrap.appendChild(privatePanel());
-    wrap.appendChild(rollCall(v));
-    if (v.me) {
-      wrap.appendChild(el("button", {
+    body.appendChild(card);
+
+    body.appendChild(el("div", { class: "village-wrap" }, [
+      WG.village.render(v, { selectable: false })
+    ]));
+
+    return {
+      body: body,
+      dock: v.me ? el("button", {
         class: "btn primary big wide", disabled: v.me.ready,
         onclick: function () { dispatch({ type: CMD.READY }); }
-      }, [v.me.ready ? "Waiting for the others…" : "Ready"]));
-    }
-    return wrap;
-  }
-
-  function rollCall(v) {
-    var card = el("div", { class: "card flush" });
-    var alive = v.players.filter(function (p) { return p.alive && !p.spectator; });
-    card.appendChild(el("div", { class: "card-head" }, [
-      el("h3", { text: "Still standing" }), el("span", { class: "pill", text: String(alive.length) })
-    ]));
-    var grid = el("div", { class: "village", style: "padding:12px 16px 16px;margin:0" });
-    v.players.filter(function (p) { return !p.spectator; }).forEach(function (p) {
-      grid.appendChild(el("div", { class: "house" + (p.alive ? "" : " dead") + " " + teamClass(p) }, [
-        avatarNode(p, 46),
-        el("span", { class: "name", text: p.name }),
-        el("span", { class: "tag", text: p.role ? p.role.name : (p.alive ? "" : "dead") })
-      ]));
-    });
-    card.appendChild(grid);
-    return card;
+      }, [v.me.ready ? "Waiting for the others" : "Ready"]) : null
+    };
   }
 
   /* ================= discussion ================= */
 
   function discussion(v) {
-    var wrap = el("div");
-    wrap.appendChild(rollCall(v));
-    if (v.me && v.me.role && v.me.role.id === "cat") {
-      wrap.appendChild(el("div", { class: "turn-state blocked" }, ["🐱 You can only meow. Whatever you type comes out as meows."]));
+    var body = el("div", { class: "split" });
+
+    var left = el("div", { style: "display:flex;flex-direction:column;min-height:0" }, [
+      el("div", { class: "village-wrap" }, [WG.village.render(v, { selectable: false })])
+    ]);
+    body.appendChild(left);
+
+    var right = el("div", { style: "display:flex;flex-direction:column;gap:6px;min-height:0" });
+    if (v.me && v.me.role && (v.me.role.id === "cat" || v.me.role.id === "dog")) {
+      right.appendChild(el("div", { class: "turn-state blocked" }, [
+        icon(v.me.role.id, 16),
+        "You can only " + (v.me.role.id === "cat" ? "meow" : "bark") + "."
+      ]));
     }
-    if (v.me && v.me.role && v.me.role.id === "dog") {
-      wrap.appendChild(el("div", { class: "turn-state blocked" }, ["🐶 You can only bark. Whatever you type comes out as barks."]));
-    }
-    if (v.config.room.chat) wrap.appendChild(chatPanel(v, "day", "The village square"));
-    if (v.me && !v.me.alive && v.config.room.deadChat) wrap.appendChild(chatPanel(v, "dead", "The dead"));
-    wrap.appendChild(logPanel(v));
-    return wrap;
+    if (v.config.room.chat) right.appendChild(chatPanel(v, v.me && !v.me.alive && v.config.room.deadChat ? "dead" : "day"));
+    else right.appendChild(logPanel(v));
+    body.appendChild(right);
+
+    return { body: body };
   }
 
-  function chatPanel(v, channel, title) {
-    var card = el("div", { class: "card" });
-    card.appendChild(el("h3", { text: title }));
-    var box = el("div", { class: "chat" });
+  function chatPanel(v, channel) {
+    var card = el("div", { class: "card", style: "display:flex;flex-direction:column;min-height:0;flex:1" });
+    card.appendChild(el("div", { class: "spread", style: "margin-bottom:4px;flex:0 0 auto" }, [
+      icon("chat", 15),
+      el("h3", { class: "grow", text: channel === "dead" ? "The dead" : channel === "pack" ? "The pack" : "The square" })
+    ]));
+    var box = el("div", { class: "chat pane scroll grow" });
     ((v.chat || {})[channel] || []).forEach(function (m) {
       var me = v.me && m.id === v.me.id;
       var animal = /^(meow|bark)( |$)/.test(m.text);
@@ -780,16 +726,18 @@
       input.value = "";
     };
     input.addEventListener("keydown", function (e) { if (e.key === "Enter") send(); });
-    card.appendChild(el("div", { class: "chat-form" }, [input, el("button", { class: "btn", onclick: send }, ["Send"])]));
+    card.appendChild(el("div", { class: "chat-form" }, [input, el("button", { class: "btn", onclick: send }, [icon("arrowRight", 16)])]));
     setTimeout(function () { box.scrollTop = box.scrollHeight; }, 0);
     return card;
   }
 
   function logPanel(v) {
-    var card = el("div", { class: "card flush" });
-    card.appendChild(el("div", { class: "card-head" }, [el("h3", { text: "What has happened" })]));
-    var list = el("ul", { class: "log", style: "padding:4px 16px 12px" });
-    v.publicLog.slice(-20).forEach(function (e) { list.appendChild(el("li", { class: e.kind || "", text: e.text })); });
+    var card = el("div", { class: "card flush", style: "display:flex;flex-direction:column;min-height:0;flex:1" });
+    card.appendChild(el("div", { class: "card-head" }, [icon("flag", 16), el("h3", { text: "So far" })]));
+    var list = el("ul", { class: "log pane scroll grow", style: "padding:2px 13px 10px" });
+    v.publicLog.slice(-30).forEach(function (e) {
+      list.appendChild(el("li", { class: e.kind || "" }, [icon(logIcon(e.kind), 15), el("span", { text: e.text })]));
+    });
     card.appendChild(list);
     return card;
   }
@@ -797,26 +745,29 @@
   /* ================= voting ================= */
 
   function voting(v) {
-    var wrap = el("div");
     var votes = v.votes || {};
-    if (!v.me || !v.me.alive) {
-      wrap.appendChild(el("div", { class: "turn-state spent" }, ["The dead do not vote. You can watch."]));
-    }
-    var card = el("div", { class: "card" });
-    card.appendChild(el("h2", { text: "Who hangs?" }));
-    card.appendChild(el("p", { class: "small dim", text: votes.cast + " of " + votes.total + " votes in. You can change yours until the clock runs out." }));
+    var body = el("div", { class: "pane grow", style: "display:flex;flex-direction:column;gap:8px;min-height:0" });
 
-    var grid = el("div", { class: "vote-grid" });
+    if (!v.me || !v.me.alive) {
+      body.appendChild(el("div", { class: "turn-state spent" }, [icon("eye", 16), "The dead do not vote."]));
+    }
+    body.appendChild(el("div", { class: "spread", style: "flex:0 0 auto" }, [
+      icon("scales", 18),
+      el("h2", { class: "grow", text: "Who hangs?" }),
+      el("span", { class: "pill", text: votes.cast + "/" + votes.total })
+    ]));
+
+    var grid = el("div", { class: "vote-grid pane scroll grow" });
     v.players.filter(function (p) { return p.alive && !p.spectator; }).forEach(function (p) {
       var n = votes.counts ? (votes.counts[p.id] || 0) : null;
       var who = votes.detail ? Object.keys(votes.detail).filter(function (k) { return votes.detail[k] === p.id; })
-        .map(function (k) { var x = v.players.filter(function (y) { return y.id === k; })[0]; return x ? x.name : "?"; }) : [];
+        .map(function (k) { var x = playerOf(v, k); return x ? x.name : "?"; }) : [];
       grid.appendChild(el("button", {
         class: "vote-btn" + (votes.mine === p.id ? " mine" : ""),
         disabled: !v.me || !v.me.alive || (p.isMe && !v.config.rules.allowSelfVote),
         onclick: function () { dispatch({ type: CMD.VOTE, targetId: p.id }); }
       }, [
-        avatarNode(p, 32),
+        face(p, 30),
         el("span", { class: "grow" }, [
           el("div", { class: "row-title", text: p.name }),
           who.length ? el("div", { class: "voters", text: who.join(", ") }) : null
@@ -824,102 +775,96 @@
         n != null ? el("span", { class: "n", text: String(n) }) : null
       ]));
     });
-    card.appendChild(grid);
+    body.appendChild(grid);
 
+    var dock = el("div", { style: "display:flex;flex-direction:column;gap:6px" });
+    if (votes.onMe && votes.onMe.length) {
+      dock.appendChild(el("div", { class: "turn-state blocked" }, [
+        icon("scales", 16), votes.onMe.length + (votes.onMe.length === 1 ? " vote" : " votes") + " on you."
+      ]));
+    }
     if (v.config.rules.allowSkipVote) {
-      card.appendChild(el("button", {
-        class: "btn wide" + (votes.mine === "SKIP" ? " on" : ""), style: "margin-top:10px",
+      dock.appendChild(el("button", {
+        class: "btn wide" + (votes.mine === "SKIP" ? " on" : ""),
         disabled: !v.me || !v.me.alive,
         onclick: function () { dispatch({ type: CMD.VOTE, targetId: "SKIP" }); }
       }, ["Hang nobody" + (votes.counts && votes.counts.SKIP ? " (" + votes.counts.SKIP + ")" : "")]));
     }
-    if (votes.onMe && votes.onMe.length) {
-      card.appendChild(el("p", { class: "small", style: "color:var(--warn);margin-top:10px",
-        text: votes.onMe.length + (votes.onMe.length === 1 ? " person has" : " people have") + " voted for you." }));
-    }
-    wrap.appendChild(card);
-    if (v.config.room.chat) wrap.appendChild(chatPanel(v, "day", "Last words"));
-    return wrap;
+    return { body: body, dock: dock };
   }
 
   /* ================= game over ================= */
 
   function gameOver(v) {
     var w = v.winner || {};
-    var wrap = el("div", { class: "reveal" });
-    wrap.appendChild(el("div", { class: "card", style: "text-align:center" }, [
-      el("div", { style: "font-size:3rem", text: (WG.roles.teams[w.team] || {}).icon || "🏁" }),
-      el("h1", { text: (WG.roles.teams[w.team] || {}).name || "Over" }),
-      el("p", { class: "muted", text: w.message || "" })
+    var body = el("div", { class: "pane grow scroll reveal" });
+    body.appendChild(el("div", { class: "card", style: "text-align:center" }, [
+      el("div", { style: "color:var(--team," + "var(--accent))" , class: "team-" + w.team },
+        [icon((WG.roles.teams[w.team] || {}).icon || "flag", 44, { weight: 1.15 })]),
+      el("h1", { style: "margin:6px 0 2px", text: (WG.roles.teams[w.team] || {}).name || "Over" }),
+      el("p", { class: "muted small", text: w.message || "" })
     ]));
 
     var card = el("div", { class: "card flush" });
-    card.appendChild(el("div", { class: "card-head" }, [el("h3", { text: "Everybody, finally" })]));
+    card.appendChild(el("div", { class: "card-head" }, [icon("users", 16), el("h3", { text: "Everybody" })]));
     v.players.filter(function (p) { return !p.spectator; }).forEach(function (p) {
       card.appendChild(el("div", { class: "row " + teamClass(p) }, [
         el("span", { class: "team-dot" }),
-        avatarNode(p, 34),
+        face(p, 30),
         el("div", { class: "grow" }, [
           el("div", { class: "row-title", text: p.name }),
-          el("div", { class: "row-sub", text: p.role ? p.role.icon + " " + p.role.name : "?" })
+          el("div", { class: "row-sub", text: p.role ? p.role.name : "?" })
         ]),
-        el("span", { class: "pill" + (p.alive ? " ok" : ""), text: p.alive ? "survived" : "died night " + (p.diedNight || "?") })
+        el("span", { class: "pill" + (p.alive ? " ok" : ""), text: p.alive ? "alive" : "night " + (p.diedNight || "?") })
       ]));
     });
-    wrap.appendChild(card);
-    wrap.appendChild(logPanel(v));
+    body.appendChild(card);
+    body.appendChild(logPanel(v));
 
-    if (H.canManage(v)) {
-      wrap.appendChild(el("div", { class: "card" }, [
-        el("button", { class: "btn primary big wide", onclick: function () { dispatch({ type: CMD.ABORT }); } }, ["Back to the lobby"])
-      ]));
-    }
-    return wrap;
+    return {
+      body: body,
+      dock: H.canManage(v) ? el("button", {
+        class: "btn primary big wide", onclick: function () { dispatch({ type: CMD.ABORT }); }
+      }, [icon("back", 18), "Back to the lobby"]) : null
+    };
   }
 
-  function watching(v) {
-    return el("div", { class: "card empty" }, [
-      el("span", { class: "ico", text: "👁️" }),
-      el("h2", { text: "You are watching" }),
-      el("p", { class: "muted", text: "The village is asleep. You will see what it finds in the morning." })
-    ]);
+  function watching() {
+    return { body: el("div", { class: "pane grow center" }, [
+      el("div", { class: "empty" }, [icon("eye", 40), el("h2", { text: "Watching" }),
+        el("p", { class: "muted small", text: "You will see what the morning brings." })])
+    ]) };
   }
 
   /* ================= host controls ================= */
 
   function hostControls(v) {
-    return el("div", { class: "card" }, [
-      el("div", { class: "spread", style: "flex-wrap:wrap" }, [
-        el("span", { class: "small dim grow", text: "Host" }),
-        el("button", { class: "btn small", onclick: function () { dispatch({ type: CMD.EXTEND, seconds: 60 }); } }, ["+1 min"]),
-        el("button", { class: "btn small", onclick: function () { dispatch({ type: CMD.SKIP_PHASE }); } }, ["Move on ›"]),
-        el("button", { class: "btn small danger", onclick: function () {
-          if (confirm("End the game and go back to the lobby?")) dispatch({ type: CMD.ABORT });
-        } }, ["End"])
-      ])
+    return el("div", { class: "spread" }, [
+      el("span", { class: "small dim grow", text: "Host" }),
+      el("button", { class: "btn small", title: "Add a minute", onclick: function () { dispatch({ type: CMD.EXTEND, seconds: 60 }); } }, [icon("clock", 14), "+1m"]),
+      el("button", { class: "btn small", onclick: function () { dispatch({ type: CMD.SKIP_PHASE }); } }, ["Skip", icon("arrowRight", 14)]),
+      el("button", { class: "btn small danger", title: "End the game", onclick: function () {
+        if (confirm("End the game?")) dispatch({ type: CMD.ABORT });
+      } }, [icon("close", 14)])
     ]);
   }
 
   /* ================= sharing ================= */
 
-  function roomUrl(code) {
-    return location.origin + location.pathname + "#/join/" + code;
-  }
+  function roomUrl(code) { return location.origin + location.pathname + "#/join/" + code; }
   function shareRoom(code) {
     var url = roomUrl(code);
-    if (navigator.share) {
-      navigator.share({ title: "The Wolf Game", text: "Room " + code, url: url }).catch(function () { copy(url); });
-    } else copy(url);
+    if (navigator.share) navigator.share({ title: "The Wolf Game", text: "Room " + code, url: url }).catch(function () { copy(url); });
+    else copy(url);
   }
   function copy(text) {
-    if (navigator.clipboard) navigator.clipboard.writeText(text).then(function () { toast("Copied."); },
-      function () { toast(text); });
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(function () { toast("Copied.", "ok"); }, function () { toast(text); });
     else toast(text);
   }
 
   WG.screens = {
     lobby: lobby, reveal: reveal, night: night, dawn: dawn,
     discussion: discussion, voting: voting, gameOver: gameOver,
-    hostControls: hostControls, doorSheet: doorSheet, rollCall: rollCall
+    hostControls: hostControls, doorSheet: doorSheet, logIcon: logIcon
   };
 })(typeof window !== "undefined" ? window : globalThis);

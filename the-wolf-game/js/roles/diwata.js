@@ -15,14 +15,14 @@
         if (c.cause === "pack") return null;      // she dies; the curse fires in onDeath
         if (!c.self.hasUsedImmunity) {
           c.self.hasUsedImmunity = true;
-          c.out.say(c.self.id, "🌟 Something reached for you tonight and the trees did not allow it.", "saved");
+          c.out.say(c.self.id, "Something reached for you. The trees did not allow it.", "saved");
           return { prevent: true, result: "warded" };
         }
         c.self.role = "villager";
         c.self.isDemoted = true;
         Object.assign(c.self, WG.roles.initialState("villager"));
         c.self.isDemoted = true;
-        c.out.say(c.self.id, "😔 The forest has stopped answering. You are an ordinary Villager, and you are still in danger.", "transform");
+        c.out.say(c.self.id, "The forest has stopped answering. Ordinary Villager now.", "transform");
         return null;                              // demoted, and the kill lands
       },
 
@@ -33,8 +33,7 @@
           c.R.kill(c.state, w.id, { cause: "retribution", byId: c.self.id, out: c.out, ignoreShields: true });
         });
         c.out.say("all",
-          "🧚‍♀️ The trees kept a count, and last night they settled it. Every werewolf in this village is dead.",
-          "retribution");
+          "The trees settled their count. Every werewolf is dead.", "retribution");
         return { public: "The forest has taken its side." };
       },
 

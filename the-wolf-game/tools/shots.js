@@ -63,8 +63,8 @@ var SCENES = ["lobby", "role_reveal", "night", "dawn", "discussion", "voting", "
 
 /* Everything below runs inside the page. */
 function fake(phase) {
-  var NAMES = ["Aisa", "Bruno", "Carla", "Dario", "Elena", "Fitz", "Gia", "Hugo"];
-  var ROLES = ["bodyguard", "werewolf", "seer", "villager", "doctor", "wolf_shaman", "villager", "cat"];
+  var NAMES = ["Aisa", "Bruno", "Carla", "Dario", "Elena", "Fitz", "Gia", "Hugo", "Ivo", "Jun"];
+  var ROLES = ["bodyguard", "werewolf", "seer", "villager", "doctor", "wolf_shaman", "villager", "cat", "mason", "witch"];
   var state = WG.state.createState("7HGPR6");
   state.hostId = "host";
   NAMES.forEach(function (n, i) {
@@ -73,7 +73,7 @@ function fake(phase) {
     Object.assign(p, WG.roles.initialState(ROLES[i]));
     state.players.push(p);
   });
-  state.roster = { werewolf: 1, wolf_shaman: 1, seer: 1, doctor: 1, bodyguard: 1, cat: 1, villager: 2 };
+  state.roster = { werewolf: 1, wolf_shaman: 1, seer: 1, doctor: 1, bodyguard: 1, cat: 1, mason: 1, witch: 1, villager: 2 };
   state.round = phase === "lobby" ? 0 : 2;
   WG.win.noteLeaders(state);
 
@@ -84,13 +84,13 @@ function fake(phase) {
     state.night.houses.p3.reportedBy = "host";
     state.night.turns.host.spent = phase !== "night";
     state.publicLog = [
-      { text: "🌅 Morning. The village found a door open.", kind: "morning", round: 2, at: Date.now() },
-      { text: "💀 Dario is dead — torn apart in the night. They were a Villager 👤.", kind: "death", round: 2, at: Date.now() },
-      { text: "📢 Aisa found Dario and raised the alarm.", kind: "report", round: 2, at: Date.now() }
+      { text: "Dario is dead - torn apart in the night. They were a Villager.", kind: "death", round: 2, at: Date.now() },
+      { text: "Aisa found Dario and raised the alarm.", kind: "report", round: 2, at: Date.now() }
     ];
     state.chat.day = [
       { id: "p2", name: "Carla", text: "Aisa found the body awfully fast.", at: Date.now() },
       { id: "host", name: "Aisa", text: "I was there to guard him. I was late.", at: Date.now() },
+      { id: "p4", name: "Elena", text: "Late, or first?", at: Date.now() },
       { id: "p7", name: "Hugo", text: "meow meow meow meow meow", at: Date.now() }
     ];
   }
@@ -98,7 +98,7 @@ function fake(phase) {
     state.votes = { host: "p1", p2: "p1", p4: "p6", p5: "p1" };
   }
   if (phase === "game_over") {
-    state.winner = { team: "village", message: "The Village wins. Every wolf is dead and nothing else was hiding in here." };
+    state.winner = { team: "village", message: "The Village wins. Every wolf is dead." };
     state.players[1].alive = false; state.players[1].diedNight = 3;
     state.players[5].alive = false; state.players[5].diedNight = 2;
   }
@@ -111,6 +111,7 @@ function fake(phase) {
   // is the whole of what "being in a game" means to them.
   window.__fakeState = state;
   window.WG_APP.role = "host";
+  window.WG_APP.waiting = false;
   window.WG_APP.state = state;
   window.WG_APP.clientId = "host";
   window.WG_APP.screen = "room";

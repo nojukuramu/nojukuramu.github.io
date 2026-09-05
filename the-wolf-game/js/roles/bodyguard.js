@@ -14,18 +14,16 @@
         c.R.shield(c.state, c.house.ownerId, "bodyshield", c.actor.id, c.out);
         c.actor.guarding = c.occupant.id;
         c.out.say(c.actor.id,
-          "You are at " + c.occupant.name + "'s door and you are not moving. " +
-          "The next thing that comes through it goes through you first.", "act");
+          "At the door, and not moving. The next thing through goes through you.", "act");
         return { ok: true };
       }
     },
     hooks: {
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) {
-          return "You came to guard " + c.occupant.name + "'s house. There has been nobody in it for nights.";
+          return "Nobody has lived here for nights.";
         }
-        return "You came to stand watch over " + c.occupant.name + " — and found them already dead inside. " +
-          "You were minutes late. Whoever did this is still out there, and your night is still yours to spend.";
+        return "You came to stand watch and found them already dead inside. Minutes late. Your night is still yours.";
       }
     }
   });

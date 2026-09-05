@@ -178,8 +178,8 @@
     });
     if (custom) return custom;
     var tonight = house.body.night === state.round;
-    if (!tonight) return "You let yourself into " + occupant.name + "'s house. It has been empty since they died.";
-    return "You knocked at " + occupant.name + "'s door. Nobody answered — they are lying dead inside, and they were warm not long ago.";
+    if (!tonight) return "Empty since they died.";
+    return "No answer. They are dead inside, and they were warm not long ago.";
   }
 
   /* ---------------- offers ---------------- */
@@ -346,8 +346,7 @@
     house.visits.push({ byId: actor.id, actionId: actionId, at: now() });
     if (house.trap && house.trap.byId !== actor.id) {
       out.say(house.trap.byId,
-        "🪤 Your trap sprang: " + actor.name + " just walked into " +
-        P(state, house.ownerId).name + "'s house.", "trap",
+        "Trap: " + actor.name + " walked into " + P(state, house.ownerId).name + "'s.", "trap",
         { visitor: actor.id, house: house.ownerId });
     }
   }
@@ -386,14 +385,14 @@
         var s = house.shields[i];
         if (s.kind === "shield") {
           house.shields.splice(i, 1);
-          out.say(s.byId, "🛡️ Something came for " + target.name + " tonight and did not get through. That was you.", "saved");
-          out.say(target.id, "You woke up for no reason you could name, and went back to sleep. You are alive.", "saved");
+          out.say(s.byId, "Something came for " + target.name + " and did not get through. That was you.", "saved");
+          out.say(target.id, "You woke for no reason, and went back to sleep. You are alive.", "saved");
           return { result: "saved", byId: s.byId };
         }
         if (s.kind === "bodyshield") {
           house.shields.splice(i, 1);
           var guard = P(state, s.byId);
-          out.say(target.id, "Something came through the door for you. Somebody else was standing in front of it.", "saved");
+          out.say(target.id, "Something came for you. Somebody was standing in front of it.", "saved");
           if (guard && guard.alive) {
             kill(state, guard.id, { cause: CAUSE.GUARD, byId: byId, out: out, ignoreShields: true });
           }
@@ -415,7 +414,7 @@
       hidden = true;
       var shaman = P(state, target.markedByShaman);
       target.markedByShaman = null;
-      if (shaman) out.say(shaman.id, "🪦 " + target.name + " died under your mark. The village will never be told.", "hidden");
+      if (shaman) out.say(shaman.id, "" + target.name + " died under your mark. Nothing will be announced.", "hidden");
     }
 
     var record = { id: target.id, cause: cause, byId: byId, at: at, night: state.round, hidden: hidden };
@@ -433,7 +432,7 @@
     target.diedNight = state.round;
     target.diedCause = cause;
 
-    out.say(target.id, "You are dead. You can still watch — and the village cannot hear you any more.", "death");
+    out.say(target.id, "You are dead. You can watch. The village cannot hear you.", "death");
 
     // Consequences. Order matters: the victim's own last act, then everyone
     // else's reaction to it, then bookkeeping the game itself cares about.
@@ -482,7 +481,7 @@
       releaseTurn(state, targetId, false);
     }
 
-    out.say(target.id, "You are breathing again, and the night is not over. Take your turn.", "revive");
+    out.say(target.id, "Breathing again, and the night is not over.", "revive");
     return { result: "alive", id: targetId, role: target.role };
   }
 
@@ -595,15 +594,14 @@
         var was = p.role;
         p.role = "werewolf";
         Object.assign(p, R.initialState("werewolf"));
-        out.say(p.id, "🐺 Something has been growing in you since the bite. Tonight you are a Werewolf, and you were a " +
-          R.get(was).name + ".", "transform");
+        out.say(p.id, "The bite took. You are a Werewolf now, and you were a " + R.get(was).name + ".", "transform");
       }
       if (p.role === "cultist" && p.alive) {
         p.nightsAsCultist = (p.nightsAsCultist || 0) + 1;
         if (p.nightsAsCultist >= 2) {
           p.role = "fanatic";
           Object.assign(p, R.initialState("fanatic"));
-          out.say(p.id, "🔥 You have been in this long enough. You are a Fanatic now.", "transform");
+          out.say(p.id, "Long enough in. You are a Fanatic now.", "transform");
         }
       }
     });

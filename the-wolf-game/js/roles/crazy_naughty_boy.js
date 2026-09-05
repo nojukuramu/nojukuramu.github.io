@@ -12,7 +12,7 @@
     hooks: {
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
-        return "You came for " + c.occupant.name + "'s life to hand to somebody else. It is not worth much now.";
+        return "Their life is not worth much now.";
       }
     }
   });

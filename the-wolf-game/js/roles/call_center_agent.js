@@ -28,14 +28,14 @@
         };
         c.actor.chargesUsed = (c.actor.chargesUsed || 0) + 1;
         c.out.say(c.actor.id,
-          "☎️ " + c.occupant.name + " will be on hold tomorrow night until they answer you correctly.", "act");
+          "" + c.occupant.name + " is on hold tomorrow night.", "act");
         return { ok: true };
       }
     },
     hooks: {
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
-        return "You rang " + c.occupant.name + "'s house and let it ring. Nobody is going to pick up.";
+        return "You let it ring. Nobody is picking up.";
       }
     }
   });

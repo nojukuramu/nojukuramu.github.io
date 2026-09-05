@@ -45,10 +45,14 @@
   function load(k) { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return null; } }
   function drop(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
 
+  var TOAST_ICON = { warn: "hourglass", bad: "blood", ok: "check" };
   function toast(text, kind) {
     var box = $("toasts");
     if (!box) return;
-    var t = el("div", { class: "toast " + (kind || ""), text: text });
+    var t = el("div", { class: "toast " + (kind || "") }, [
+      WG.icons.node(TOAST_ICON[kind] || "star", 16),
+      el("span", { class: "grow", text: text })
+    ]);
     box.appendChild(t);
     setTimeout(function () {
       t.style.transition = "opacity .3s, transform .3s";
@@ -442,16 +446,45 @@
   function showHome() { app.screen = "home"; render(); }
   function showRoom() { app.screen = "room"; render(); }
 
+  /* The frame is fixed and the stage is the only part that changes, so a
+   * screen returns { stage, dock } — the thing you look at, and the thing you
+   * press. Nothing here is allowed to make the page taller than the viewport. */
   function render() {
-    var root = $("main");
-    if (!root) return;
-    var scrollTop = root.scrollTop;
-    clear(root);
-    if (app.screen === "home") root.appendChild(renderHome());
-    else if (app.waiting) root.appendChild(renderLobbyWait());
-    else root.appendChild(renderRoom());
+    var stage = $("stage"), dock = $("dock");
+    if (!stage) return;
+    clear(stage); clear(dock);
+    var out = app.screen === "home" ? renderHome()
+      : app.waiting ? renderLobbyWait()
+      : renderRoom();
+    if (out.stage) stage.appendChild(out.stage); else stage.appendChild(out);
+    if (out.dock) dock.appendChild(out.dock);
     renderTopbar();
-    root.scrollTop = scrollTop;
+    updateGore();
+  }
+
+  /* How bloody the room is. A death lands as a flash and a spatter; the running
+   * stain is the fraction of the village that is gone, so a game that is going
+   * badly looks like it. */
+  var lastDeadCount = 0;
+  function updateGore() {
+    var v = currentView();
+    if (!v || !v.players || !v.players.length) {
+      document.documentElement.style.setProperty("--gore", "0");
+      lastDeadCount = 0;
+      if (WG.sky) WG.sky.stain(0);
+      return;
+    }
+    var seats = v.players.filter(function (p) { return !p.spectator; });
+    var dead = seats.filter(function (p) { return !p.alive; }).length;
+    if (dead > lastDeadCount && v.phase !== "lobby") {
+      for (var i = 0; i < dead - lastDeadCount; i++) if (WG.sky) WG.sky.bleed(0.18);
+      document.body.classList.add("struck");
+      setTimeout(function () { document.body.classList.remove("struck"); }, 520);
+    }
+    lastDeadCount = dead;
+    var level = seats.length ? Math.min(1, (dead / seats.length) * 2) : 0;
+    document.documentElement.style.setProperty("--gore", String(level * 0.9));
+    if (WG.sky) WG.sky.stain(level);
   }
 
   function renderTopbar() {
@@ -460,25 +493,27 @@
     clear(bar);
     var v = currentView();
     bar.appendChild(el("div", { class: "brand" }, [
-      el("span", { class: "brand-mark", text: "🐺" }),
-      el("span", {}, [
-        el("div", { text: "The Wolf Game" }),
-        el("div", { class: "brand-sub", text: v && v.code ? "Room " + v.code : "a village, after dark" })
+      el("span", { class: "brand-mark" }, [WG.icons.node("moon", 17)]),
+      el("span", { class: "grow" }, [
+        el("div", { class: "brand-name", text: "The Wolf Game" }),
+        el("div", { class: "brand-sub", text: v && v.code ? v.code : "" })
       ])
     ]));
     if (app.role) bar.appendChild(renderConnPill());
+    if (app.installPrompt) {
+      bar.appendChild(el("button", {
+        class: "btn ghost icon", title: "Install", "aria-label": "Install", onclick: doInstall
+      }, [WG.icons.node("download", 18)]));
+    }
     bar.appendChild(el("button", {
       class: "btn ghost icon", title: "Theme", "aria-label": "Change theme",
-      onclick: function () { toast("Theme: " + WG.theme.cycle()); }
-    }, ["◐"]));
+      onclick: function () { WG.theme.cycle(); render(); }
+    }, [WG.icons.node("contrast", 18)]));
     if (fullscreenAvailable()) {
       bar.appendChild(el("button", {
         class: "btn ghost icon", id: "fs-btn", title: "Fullscreen", "aria-label": "Fullscreen",
         onclick: toggleFullscreen
-      }, [fullscreenElement() ? "⤡" : "⛶"]));
-    }
-    if (app.installPrompt) {
-      bar.appendChild(el("button", { class: "btn small", onclick: doInstall }, ["Install"]));
+      }, [WG.icons.node(fullscreenElement() ? "contract" : "expand", 18)]));
     }
   }
 
@@ -489,95 +524,94 @@
       ? (app.net && app.net.onlineBrokers && app.net.onlineBrokers() > 0 ? "online" : "retrying")
       : app.connection;
     var label = app.role === "host"
-      ? { online: "room is open", retrying: "reopening the room", offline: "offline", stopped: "closed" }
-      : { online: "connected", retrying: "reconnecting", waiting: "finding host", offline: "offline", stopped: "offline" };
+      ? { online: "open", retrying: "reopening", offline: "offline", stopped: "closed" }
+      : { online: "linked", retrying: "reconnecting", waiting: "finding host", offline: "offline", stopped: "offline" };
     return el("span", { class: "conn " + (s === "online" ? "online" : s === "offline" || s === "stopped" ? "offline" : "retrying"), id: "conn" },
-      [el("span", { class: "dot" }), el("span", { text: label[s] || s })]);
+      [el("span", { class: "dot" }), el("span", { class: "hide-tight", text: label[s] || s })]);
   }
   function renderConnection() { renderTopbar(); }
 
   /* ---------------- home ---------------- */
 
   function renderHome() {
-    var wrap = el("div", { class: "reveal" });
-    wrap.appendChild(el("div", { class: "card" }, [
-      el("h1", { text: "The Wolf Game" }),
-      el("p", { class: "muted", text:
-        "A village, a pack, and everybody on their own phone. Nobody passes anything around any more — " +
-        "the night runs for all of you at once, and being late to a door is a thing that can happen to you." })
+    var stage = el("div", { class: "pane grow center reveal" });
+    var dock = el("div");
+
+    stage.appendChild(el("div", { style: "text-align:center;margin-bottom:14px" }, [
+      el("div", { style: "color:var(--accent);display:flex;justify-content:center" },
+        [WG.icons.node("moon", 54, { weight: 1.1 })]),
+      el("h1", { style: "margin:8px 0 2px", text: "The Wolf Game" }),
+      el("p", { class: "muted small", style: "max-width:30ch;margin:0 auto",
+        text: "A village. A pack. Everyone on their own phone." })
     ]));
 
     var nameInput = el("input", {
-      type: "text", value: app.name || "", maxlength: "20", placeholder: "What should the village call you?",
+      type: "text", value: app.name || "", maxlength: "20", placeholder: "Your name",
       oninput: function (e) { app.name = e.target.value.slice(0, 20); save(STORE.name, app.name); }
     });
-    wrap.appendChild(el("div", { class: "card" }, [
-      el("label", { class: "field" }, [el("span", { text: "Your name" }), nameInput]),
-      el("button", {
-        class: "btn primary big wide", onclick: function () {
-          if (!app.name.trim()) return toast("Put a name in first.", "warn");
-          startHost(WG.net.makeCode());
-        }
-      }, ["🏚️ Open a village"])
-    ]));
-
     var codeInput = el("input", {
-      type: "text", class: "code-input", maxlength: "6", placeholder: "······",
+      type: "text", class: "code-input", maxlength: "6", placeholder: "CODE",
       autocapitalize: "characters", autocomplete: "off", spellcheck: "false",
       oninput: function (e) { e.target.value = WG.net.normalizeCode(e.target.value); }
     });
-    wrap.appendChild(el("div", { class: "card" }, [
-      el("label", { class: "field" }, [el("span", { text: "Or join one" }), codeInput]),
+
+    stage.appendChild(el("div", { class: "card" }, [
+      el("label", { class: "field" }, [el("span", { text: "Name" }), nameInput]),
+      el("label", { class: "field", style: "margin-bottom:0" }, [el("span", { text: "Room code" }), codeInput])
+    ]));
+
+    var prev = load(STORE.guest);
+    if (prev && Date.now() - prev.at < 6 * 3600 * 1000) {
+      stage.appendChild(el("div", { class: "card spread" }, [
+        WG.icons.node("back", 17),
+        el("div", { class: "grow" }, [el("div", { class: "row-title", text: "Rejoin " + prev.code })]),
+        el("button", { class: "btn small", onclick: function () { startGuest(prev.code); } }, ["Rejoin"])
+      ]));
+    }
+
+    stage.appendChild(el("div", { style: "margin-top:10px;text-align:center" }, [
       el("button", {
-        class: "btn big wide", onclick: function () {
+        class: "btn ghost small", onclick: function () { showCast(); }
+      }, [WG.icons.node("users", 15), "All 35 roles"])
+    ]));
+
+    dock.appendChild(el("div", { class: "spread" }, [
+      el("button", {
+        class: "btn big grow", id: "btn-join", onclick: function () {
           var code = WG.net.normalizeCode(codeInput.value);
           if (code.length !== 6) return toast("Room codes are six characters.", "warn");
           if (!app.name.trim()) return toast("Put a name in first.", "warn");
           save(STORE.name, app.name);
           startGuest(code);
         }
-      }, ["🚪 Walk in"])
+      }, [WG.icons.node("door", 18), "Join"]),
+      el("button", {
+        class: "btn primary big grow", id: "btn-host", onclick: function () {
+          if (!app.name.trim()) return toast("Put a name in first.", "warn");
+          startHost(WG.net.makeCode());
+        }
+      }, [WG.icons.node("village", 18), "Open a village"])
     ]));
 
-    var prev = load(STORE.guest);
-    if (prev && Date.now() - prev.at < 6 * 3600 * 1000) {
-      wrap.appendChild(el("div", { class: "card" }, [
-        el("div", { class: "spread" }, [
-          el("div", { class: "grow" }, [
-            el("div", { class: "row-title", text: "Rejoin " + prev.code }),
-            el("div", { class: "row-sub", text: "You were in this room recently." })
-          ]),
-          el("button", { class: "btn small", onclick: function () { startGuest(prev.code); } }, ["Rejoin"])
-        ])
-      ]));
-    }
-
-    wrap.appendChild(renderRolesBrowser());
-    return wrap;
+    return { stage: stage, dock: dock };
   }
 
-  /** The whole cast, readable before anybody has dealt anything. */
-  function renderRolesBrowser() {
-    var card = el("div", { class: "card flush" });
-    card.appendChild(el("div", { class: "card-head" }, [
-      el("h3", { text: "The cast" }),
-      el("span", { class: "pill", text: WG.roles.all().length + " roles" })
-    ]));
-    var body = el("div", { style: "padding:12px 16px 16px" });
+  /** The whole cast, browsable before anybody has dealt anything. */
+  function showCast() {
+    var body = el("div");
     ["village", "werewolf", "cult", "solo"].forEach(function (team) {
       var list = WG.roles.all().filter(function (r) { return r.team === team; });
-      body.appendChild(el("div", { class: "spread", style: "margin:14px 0 8px" }, [
+      body.appendChild(el("div", { class: "spread", style: "margin:12px 0 6px" }, [
         el("span", { class: "team-dot team-" + team }),
         el("h3", { style: "margin:0", text: WG.roles.teams[team].name }),
         el("span", { class: "pill", text: String(list.length) })
       ]));
-      body.appendChild(el("p", { class: "small dim", text: WG.roles.teams[team].goal }));
       var grid = el("div", { class: "roster" });
       list.forEach(function (r) {
         grid.appendChild(el("button", {
           class: "roster-item team-" + team, onclick: function () { showRoleCard(r.id); }
         }, [
-          el("span", { class: "ico", text: r.icon }),
+          WG.icons.node(r.icon, 20),
           el("span", { class: "grow" }, [
             el("div", { class: "rn", text: r.name }),
             el("div", { class: "rd", text: r.tagline })
@@ -586,37 +620,40 @@
       });
       body.appendChild(grid);
     });
-    card.appendChild(body);
-    return card;
+    openModal(el("div", {}, [el("h2", { text: "The cast" }), body]));
   }
 
   function renderLobbyWait() {
-    return el("div", { class: "card reveal", style: "text-align:center" }, [
-      el("div", { class: "empty" }, [
-        el("span", { class: "ico", text: "🚪" }),
-        el("h2", { text: "Waiting at the door" }),
-        el("p", { class: "muted", text: "The host has to let you in. Keep this open." })
+    return {
+      stage: el("div", { class: "pane grow center reveal" }, [
+        el("div", { class: "empty" }, [
+          WG.icons.node("door", 44, { weight: 1.2 }),
+          el("h2", { text: "At the door" }),
+          el("p", { class: "muted small", text: "Waiting to be let in." })
+        ])
       ]),
-      el("button", { class: "btn wide", onclick: leave }, ["Give up and leave"])
-    ]);
+      dock: el("button", { class: "btn wide", onclick: leave }, ["Leave"])
+    };
   }
 
   /* ---------------- room ---------------- */
 
   function renderRoom() {
     var v = currentView();
-    if (!v) return el("div", { class: "empty" }, [el("span", { class: "ico", text: "📡" }), "Finding the room…"]);
+    if (!v) {
+      return { stage: el("div", { class: "pane grow center" }, [
+        el("div", { class: "empty" }, [WG.icons.node("link", 40), "Finding the room"])
+      ]) };
+    }
 
-    var wrap = el("div");
-    if (v.phase !== "lobby") wrap.appendChild(renderPhaseHeader(v));
+    var stage = el("div", { class: "pane grow", style: "display:flex;flex-direction:column;gap:8px;min-height:0" });
+    if (v.phase !== "lobby") stage.appendChild(renderPhaseHeader(v));
     if (v.currentEvent) {
-      wrap.appendChild(el("div", { class: "card", style: "border-color:var(--accent-line)" }, [
-        el("div", { class: "spread" }, [
-          el("span", { style: "font-size:1.5rem", text: v.currentEvent.icon }),
-          el("div", { class: "grow" }, [
-            el("div", { class: "row-title", text: v.currentEvent.name }),
-            el("div", { class: "row-sub", text: v.currentEvent.description })
-          ])
+      stage.appendChild(el("div", { class: "turn-state", style: "border-color:var(--accent-line)" }, [
+        WG.icons.node(v.currentEvent.icon, 17),
+        el("span", { class: "grow" }, [
+          el("b", { text: v.currentEvent.name }), " ",
+          el("span", { class: "dim", text: v.currentEvent.shortDescription || "" })
         ])
       ]));
     }
@@ -626,32 +663,33 @@
       lobby: S.lobby, role_reveal: S.reveal, night: S.night, dawn: S.dawn,
       discussion: S.discussion, voting: S.voting, verdict: S.dawn, game_over: S.gameOver
     }[v.phase] || S.lobby;
-    wrap.appendChild(draw(v));
 
-    if (v.phase !== "lobby" && canManage(v)) wrap.appendChild(S.hostControls(v));
-    return wrap;
+    var out = draw(v) || {};
+    if (out.body) stage.appendChild(out.body);
+
+    var dock = el("div", { style: "display:flex;flex-direction:column;gap:6px" });
+    if (out.dock) dock.appendChild(out.dock);
+    if (v.phase !== "lobby" && v.phase !== "game_over" && canManage(v)) dock.appendChild(S.hostControls(v));
+
+    return { stage: stage, dock: dock };
   }
 
   function renderPhaseHeader(v) {
-    var p = WG.clock.phase(v.phase) || { name: v.phase, icon: "•" };
+    var p = WG.clock.phase(v.phase) || { name: v.phase, icon: "star" };
     var remain = v.phaseEndsAt ? v.phaseEndsAt - Date.now() : Infinity;
     var frac = v.phaseEndsAt ? Math.max(0, Math.min(1, (v.phaseEndsAt - Date.now()) / (v.phaseEndsAt - v.phaseStartedAt))) : 1;
     var urgent = isFinite(remain) && remain < 20000;
-    var node = el("div", { class: "phase" + (urgent ? " urgent" : ""), id: "phase-head" }, [
-      el("span", { class: "phase-icon", text: p.icon }),
-      el("span", {}, [
-        // Only the phases that repeat carry a number. "Your role 2" is not a
-        // thing, and neither is "Game over 2".
+    return el("div", { class: "phase" + (urgent ? " urgent" : ""), id: "phase-head" }, [
+      el("span", { class: "phase-icon" }, [WG.icons.node(p.icon, 22)]),
+      el("span", { class: "grow" }, [
         el("div", { class: "phase-name", text: p.name + (p.showRound && v.round ? " " + v.round : "") }),
         el("div", { class: "phase-sub", text: p.description || "" })
       ]),
-      v.phaseEndsAt ? el("span", { class: "phase-clock" + (urgent ? " urgent" : ""), id: "phase-clock", text: fmt(remain) }) : null,
+      v.phaseEndsAt ? el("span", { class: "phase-clock", id: "phase-clock", text: fmt(remain) }) : null,
       el("i", { class: "phase-bar", id: "phase-bar", style: "width:" + (frac * 100) + "%" })
     ]);
-    return node;
   }
 
-  /** Repainted twice a second without rebuilding the DOM around it. */
   function paintClock() {
     var v = currentView();
     if (!v || !v.phaseEndsAt) return;
@@ -729,30 +767,30 @@
   function showRoleCard(roleId) {
     var r = WG.roles.get(roleId);
     if (!r) return;
-    openModal(el("div", { class: "rolecard team-" + r.team, style: "margin:0;border:none;padding:0" }, [
-      el("div", { class: "icon", text: r.icon }),
+    openModal(el("div", { class: "rolecard team-" + r.team, style: "border:none;padding:0;background:none;backdrop-filter:none" }, [
+      el("div", { class: "crest" }, [WG.icons.node(r.icon, 44, { weight: 1.2 })]),
       el("div", { class: "name", text: r.name }),
       el("div", { class: "tagline", text: r.tagline }),
       el("p", { text: r.description }),
       r.lore ? el("div", { class: "lore", text: r.lore }) : null,
-      el("dl", {}, [
+      el("dl", { style: "margin:0" }, [
         el("dt", { text: "Wins by" }), el("dd", { text: r.winCondition }),
-        el("dt", { text: "Side" }), el("dd", { text: WG.roles.teams[r.team].name + " · " + WG.roles.classifications[r.classification].name })
-      ].concat(
-        r.knows && r.knows.length ? [el("dt", { text: "Knows" }), el("dd", { text: r.knows.join(" · ") })] : []
-      )),
-      r.actions && r.actions.length ? el("h3", { style: "margin-top:16px", text: "At a door" }) : null,
-      r.actions && r.actions.length ? el("ul", { class: "abilities" }, r.actions.map(function (a) {
-        return el("li", {}, [
-          el("span", { class: "ico", text: a.icon }),
-          el("span", {}, [el("b", { text: a.label }), " — ", a.description])
-        ]);
-      })) : null,
-      r.passives && r.passives.length ? el("h3", { style: "margin-top:16px", text: "Always true" }) : null,
-      r.passives && r.passives.length ? el("ul", { class: "abilities" }, r.passives.map(function (p) {
-        return el("li", {}, [el("span", { class: "ico", text: "◆" }), el("span", {}, [el("b", { text: p.name }), " — ", p.description])]);
-      })) : null
+        el("dt", { text: "Side" }), el("dd", { text: WG.roles.teams[r.team].name })
+      ]),
+      abilityList(r)
     ]));
+  }
+
+  /** Actions then passives, as one list — the player does not care which is which. */
+  function abilityList(r) {
+    var items = (r.actions || []).map(function (a) {
+      return el("li", {}, [WG.icons.node(a.icon, 17),
+        el("span", {}, [el("b", { text: a.label }), " — ", a.description])]);
+    }).concat((r.passives || []).map(function (pp) {
+      return el("li", {}, [WG.icons.node("star", 17),
+        el("span", {}, [el("b", { text: pp.name }), " — ", pp.description])]);
+    }));
+    return items.length ? el("ul", { class: "abilities" }, items) : null;
   }
 
   var modalNode = null;
@@ -776,6 +814,8 @@
   WG_HELPERS.openModal = openModal;
   WG_HELPERS.closeModal = closeModal;
   WG_HELPERS.showRoleCard = showRoleCard;
+  WG_HELPERS.abilityList = abilityList;
+  WG_HELPERS.icon = function (n, size, o) { return WG.icons.node(n, size, o); };
 
   function openSheet(data) {
     app.sheet = data;
@@ -803,10 +843,14 @@
     app.name = load(STORE.name) || "";
     app.avatar = load(STORE.avatar) || null;
     WG.theme.init();
-    WG.theme.follow(function () {
+    var liveView = function () {
       var v = currentView();
       return v && v.phase ? v : null;
-    });
+    };
+    WG.theme.follow(liveView);
+    // One canvas behind everything, painting the hour the clock is already on.
+    var canvas = $("sky");
+    if (canvas) WG.sky.mount(canvas, liveView);
 
     doc.addEventListener("fullscreenchange", syncFullscreen);
     doc.addEventListener("webkitfullscreenchange", syncFullscreen);

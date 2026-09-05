@@ -14,16 +14,14 @@
         c.R.shield(c.state, c.house.ownerId, "shield", c.actor.id, c.out);
         c.actor.lastProtected = c.occupant.id;
         c.out.say(c.actor.id,
-          "You are sitting up with " + c.occupant.name + ". Anything that comes for them from now on does not get in. " +
-          "You will only find out whether that mattered if it did.", "act");
+          "Sitting up with " + c.occupant.name + ". Nothing gets in from now on.", "act");
         return { ok: true };
       }
     },
     hooks: {
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
-        return "You came to sit up with " + c.occupant.name + " and let yourself in. " +
-          "There was nothing left to treat — they were dead before you reached the door.";
+        return "Nothing left to treat. Dead before you reached the door.";
       }
     }
   });

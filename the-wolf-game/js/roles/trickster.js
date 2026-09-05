@@ -16,8 +16,7 @@
         c.actor.currentAppearance = worn;
         c.actor.copyTarget = c.occupant.id;
         c.out.say(c.actor.id,
-          "🪞 Every reader now sees a " + def.name + " " + def.icon + " when they look at you. " +
-          "You will see what one of them sees, too.", "act", { appearance: worn });
+          "Readers see a " + def.name + " now. You get their view of the night.", "act", { appearance: worn });
         return { ok: true };
       }
     },
@@ -25,11 +24,11 @@
       brief: function (c) {
         var worn = c.self.currentAppearance || "villager";
         var def = WG.roles.get(worn);
-        return { title: "Wearing", lines: [def.icon + " " + def.name + " — " + def.description] };
+        return { title: "Wearing", lines: [def.name + " - " + def.description] };
       },
       onFindBody: function (c) {
         if (c.body.night !== c.state.round) return null;
-        return "You came to take " + c.occupant.name + "'s shape. Wearing a dead face would fool nobody.";
+        return "A dead face would fool nobody.";
       }
     }
   });

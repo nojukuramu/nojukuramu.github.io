@@ -21,8 +21,8 @@
  */
 "use strict";
 
-var VERSION = "wg-v1";
-var ASSET_V = "1.0.0";          /* matches the ?v= in index.html */
+var VERSION = "wg-v2";
+var ASSET_V = "1.1.0";          /* matches the ?v= in index.html */
 var SHELL = VERSION + "-shell";
 
 var SHELL_FILES = [
