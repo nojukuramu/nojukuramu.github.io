@@ -89,9 +89,16 @@
 
     function startGame() {
       var seats = state.players.filter(function (p) { return !p.spectator; });
-      if (seats.length < 4) return { ok: false, reason: "You need at least four people." };
       var total = Object.keys(state.roster).reduce(function (n, k) { return n + state.roster[k]; }, 0);
       if (total > seats.length) return { ok: false, reason: "More roles than players." };
+      /* The minimum comes from the roster, not from a number somebody picked.
+       * One wolf and two villagers is a game; two wolves and two villagers is
+       * already over. Win.minimumSeats asks the win check which is which. */
+      var min = Win.minimumSeats(state.roster);
+      if (!min) return { ok: false, reason: "That mix has no game in it." };
+      if (seats.length < min) {
+        return { ok: false, reason: "This mix needs " + min + " players." };
+      }
 
       state.round = 0;
       state.winner = null;

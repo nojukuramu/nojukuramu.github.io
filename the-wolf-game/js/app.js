@@ -304,7 +304,10 @@
     if (app.role !== "host") return;
     var s = app.state;
     s.rev++;
-    render();
+    // The heartbeat only keeps the guests' clocks honest. Nothing on the
+    // host's own screen has changed, and rebuilding it would restart every
+    // entrance animation for nothing.
+    if (!(opts && opts.quiet)) render();
     persistHost();
 
     // Snapshots are per recipient — a lobby view for the people at the door, a
@@ -340,6 +343,7 @@
   /* The clock. One interval for the whole game: it nudges the engine, which
    * decides whether anything is actually due, and repaints the countdown. */
   var loop = null;
+  var lastViewJSON = null;
   function startLoop() {
     if (loop) return;
     loop = setInterval(function () {
@@ -388,9 +392,15 @@
         // Snapshots are authoritative; a straggler from before the last one is
         // not an update, it is a rollback.
         if (app.view && data.rev < app.view.rev) return;
+        // Most snapshots are the heartbeat and say exactly what the last one
+        // said. Repainting them would restart the animations and throw away
+        // the reader's place a few times a minute, so identical is a no-op.
+        var json = JSON.stringify(data.state);
+        var same = json === lastViewJSON;
+        lastViewJSON = json;
         app.view = data.state;
         app.waiting = !!data.state.lobby;
-        render();
+        if (same) { paintClock(); updateAudio(); } else render();
         break;
       case MSG.NOTICE: toast(data.text, data.kind); break;
       case MSG.PRIVATE: pushPrivate(data.entry); break;
@@ -440,7 +450,7 @@
   function leave() {
     if (app.net) app.net.stop();
     app.net = null; app.role = null; app.state = null; app.view = null;
-    app.engine = null; privateLog = [];
+    app.engine = null; privateLog = []; lastViewJSON = null;
     drop(STORE.guest);
     showHome();
   }
@@ -456,15 +466,78 @@
   function render() {
     var stage = $("stage"), dock = $("dock");
     if (!stage) return;
+    // A render throws the whole stage away and builds it again, and on the
+    // host that happens by itself every few seconds. Without this, a log read
+    // halfway up jumps back to the top and half-typed chat disappears while
+    // somebody is still typing it.
+    var keep = {};
+    remember(stage, "s", keep); remember(dock, "d", keep);
     clear(stage); clear(dock);
     var out = app.screen === "home" ? renderHome()
       : app.waiting ? renderLobbyWait()
       : renderRoom();
     if (out.stage) stage.appendChild(out.stage); else stage.appendChild(out);
     if (out.dock) dock.appendChild(out.dock);
+    restore(stage, "s", keep); restore(dock, "d", keep);
     renderTopbar();
     updateGore();
     updateAudio();
+  }
+
+  /* ---- carrying state across a rebuild ----
+   * There are no stable ids in the stage, so a node is identified by where it
+   * sits: its tag, its classes and its position among its siblings, all the
+   * way up. Same screen, same place -> same key. A screen that changed shape
+   * simply finds no match and starts fresh, which is what you want. */
+  function keyOf(node, root, prefix) {
+    var parts = [];
+    for (var n = node; n && n !== root; n = n.parentElement) {
+      var i = 0, sib = n;
+      while ((sib = sib.previousElementSibling)) i++;
+      parts.push(n.tagName + "." + (n.className || "") + ":" + i);
+    }
+    parts.push(prefix);
+    return parts.reverse().join("/");
+  }
+
+  function carriers(root) {
+    return root ? root.querySelectorAll(".scroll, input, textarea") : [];
+  }
+
+  function remember(root, prefix, into) {
+    var all = carriers(root);
+    for (var i = 0; i < all.length; i++) {
+      var n = all[i], rec = {};
+      if (n.classList.contains("scroll")) {
+        rec.top = n.scrollTop;
+        rec.atEnd = n.scrollTop + n.clientHeight >= n.scrollHeight - 24;
+      }
+      if (n.tagName === "INPUT" || n.tagName === "TEXTAREA") {
+        rec.value = n.value;
+        rec.focused = doc.activeElement === n;
+        rec.start = n.selectionStart; rec.end = n.selectionEnd;
+      }
+      into[keyOf(n, root, prefix)] = rec;
+    }
+  }
+
+  function restore(root, prefix, from) {
+    var all = carriers(root);
+    for (var i = 0; i < all.length; i++) {
+      var n = all[i], was = from[keyOf(n, root, prefix)];
+      if (n.classList.contains("scroll")) {
+        // A log that was at the bottom stays there as lines arrive; one the
+        // reader had scrolled up in stays exactly where they left it.
+        if (n.getAttribute("data-stick") === "end" && (!was || was.atEnd)) n.scrollTop = n.scrollHeight;
+        else if (was && was.top) n.scrollTop = was.top;
+      }
+      if (was && was.value != null && (n.tagName === "INPUT" || n.tagName === "TEXTAREA")) {
+        n.value = was.value;
+        if (was.focused) {
+          try { n.focus({ preventScroll: true }); n.setSelectionRange(was.start, was.end); } catch (e) { /* not a text field */ }
+        }
+      }
+    }
   }
 
   /* Sound and blood both key off the same thing: what changed since the last
@@ -555,6 +628,12 @@
       ])
     ]));
     if (app.role) bar.appendChild(renderConnPill());
+    if (updateReady) {
+      bar.appendChild(el("button", {
+        class: "btn primary icon", id: "update-btn", title: "A new version is ready",
+        "aria-label": "Reload onto the new version", onclick: applyUpdate
+      }, [WG.icons.node("refresh", 18)]));
+    }
     if (app.installPrompt) {
       bar.appendChild(el("button", {
         class: "btn ghost icon", title: "Install", "aria-label": "Install", onclick: doInstall
@@ -647,6 +726,7 @@
         }
       }, [WG.icons.node("village", 18), "Open a village"])
     ]));
+    dock.appendChild(versionLine());
 
     return { stage: stage, dock: dock };
   }
@@ -767,6 +847,7 @@
   }
 
   WG.app = { render: render, toast: toast, el: el, dispatch: dispatch, currentView: currentView,
+             onHostMessage: onHostMessage,
              get state() { return app; }, privateLog: function () { return privateLog; } };
 
   /* The rest of the screens live in js/ui/screens.js — this file is the wiring,
@@ -815,6 +896,109 @@
       app.installPrompt = null;
       renderTopbar();
     });
+  }
+
+  /* ---------------- updates ----------------
+   * Installed to a home screen there is no address bar and no reload button,
+   * and the cached shell will happily serve last month's build forever. So the
+   * page asks: on load, whenever it comes back to the foreground, and on a
+   * button. The answer is offered, never forced - a reload in the middle of a
+   * night would take the whole room down with the host.
+   */
+
+  var UPDATE_CHECK_MS = 30 * 60 * 1000;
+  var swReg = null, lastUpdateCheck = 0, updateReady = false, reloading = false, hadController = false;
+
+  function announceUpdate() {
+    if (updateReady) return;
+    updateReady = true;
+    renderTopbar();
+    if (app.screen === "home") render();
+    toast(app.role ? "A new version is ready — reload when the room is done."
+                   : "A new version is ready.", "ok");
+  }
+
+  function watchWorker(worker) {
+    if (!worker) return;
+    worker.addEventListener("statechange", function () {
+      // A worker reaching "installed" while another is already in charge is by
+      // definition a newer build waiting its turn.
+      if (worker.state === "installed" && navigator.serviceWorker.controller) announceUpdate();
+    });
+  }
+
+  function setupUpdates(reg) {
+    if (!reg) return;
+    swReg = reg;
+    hadController = !!navigator.serviceWorker.controller;
+
+    if (reg.waiting && hadController) announceUpdate();
+    watchWorker(reg.installing);
+    reg.addEventListener("updatefound", function () { watchWorker(reg.installing); });
+
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      // The first worker claiming a page that had none is not an update.
+      if (!hadController || reloading) return;
+      reloading = true;
+      location.reload();
+    });
+
+    checkForUpdate(false);
+    doc.addEventListener("visibilitychange", function () {
+      if (doc.hidden || Date.now() - lastUpdateCheck < UPDATE_CHECK_MS) return;
+      checkForUpdate(false);
+    });
+    setInterval(function () { if (!doc.hidden) checkForUpdate(false); }, UPDATE_CHECK_MS);
+  }
+
+  function checkForUpdate(manual) {
+    if (updateReady) { if (manual) announceUpdate(); return; }
+    if (!swReg) {
+      if (manual) toast("This browser cannot check for updates — reload the page instead.", "warn");
+      return;
+    }
+    lastUpdateCheck = Date.now();
+    if (manual) toast("Checking for updates…");
+
+    swReg.update().then(function () {
+      // update() resolves the moment the new worker starts installing, so give
+      // the install a beat to land before calling it a day.
+      setTimeout(function () {
+        if (updateReady || swReg.waiting || swReg.installing) {
+          if (swReg.waiting) announceUpdate();
+          else if (manual) toast("A new version is downloading — hold on a moment.");
+          return;
+        }
+        if (manual) toast("You are on the latest version (v" + (WG.VERSION || "?") + ").", "ok");
+      }, 1500);
+    }, function () {
+      if (manual) toast("Could not check right now — try again when you are online.", "warn");
+    });
+  }
+
+  function applyUpdate() {
+    if (app.role === "host" && app.state && app.state.phase !== "lobby" && !app.state.winner &&
+        !confirm("Reloading closes this village for everyone in it. Update now?")) return;
+    if (swReg && swReg.waiting) {
+      // The waiting worker takes over, which fires controllerchange above and
+      // reloads us onto the new build.
+      swReg.waiting.postMessage("skip-waiting");
+      setTimeout(function () { if (!reloading) { reloading = true; location.reload(); } }, 2000);
+      return;
+    }
+    reloading = true;
+    location.reload();
+  }
+
+  /** The line on the home screen: what you are running, and a way to ask. */
+  function versionLine() {
+    return el("div", { class: "version-line" }, [
+      el("span", { text: "v" + (WG.VERSION || "?") }),
+      el("button", {
+        class: "linklike", id: "update-check",
+        onclick: function () { if (updateReady) applyUpdate(); else checkForUpdate(true); }
+      }, [updateReady ? "Update ready — reload" : "Check for updates"])
+    ]);
   }
 
   /* ---------------- role card modal ---------------- */
@@ -939,7 +1123,9 @@
     });
 
     if ("serviceWorker" in navigator && location.protocol !== "file:") {
-      navigator.serviceWorker.register("./sw.js").catch(function () { /* offline is a bonus, not a requirement */ });
+      navigator.serviceWorker.register("./sw.js")
+        .then(setupUpdates)
+        .catch(function () { /* offline is a bonus, not a requirement */ });
     }
     if (isStandalone()) doc.body.classList.add("standalone");
 

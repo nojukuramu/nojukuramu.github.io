@@ -50,6 +50,11 @@ html, body {
   z-index: 1;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  /* The column matters as much as the rows. A grid item's automatic minimum
+     size is its min-content width, so one unshrinkable row - the top bar's
+     flex line - would widen the single implicit column past the viewport and
+     drag every other row out with it. That is the sideways overflow. */
+  grid-template-columns: minmax(0, 1fr);
   padding:
     env(safe-area-inset-top) max(10px, env(safe-area-inset-right))
     env(safe-area-inset-bottom) max(10px, env(safe-area-inset-left));
@@ -61,6 +66,7 @@ html, body {
    title legible at both ends without boxing it in. */
 .topbar {
   display: flex; align-items: center; gap: 8px;
+  min-width: 0;
   padding: 8px 8px 6px;
   margin: 0 -6px;
   min-height: 0;
@@ -88,9 +94,12 @@ html, body {
   font-size: 0.68rem; color: var(--ink-2);
   font-variant-numeric: tabular-nums; letter-spacing: 0.08em;
 }
+/* The name and the room line give way before the bar does. */
+.brand > div { min-width: 0; }
+.brand-name, .brand-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .stage {
-  min-height: 0;
+  min-height: 0; min-width: 0;
   display: flex; flex-direction: column;
   gap: 8px;
   position: relative;
@@ -100,7 +109,7 @@ html, body {
 
 /* A pane is a stage child. `grow` takes the slack; `scroll` is the only place
    in the app where a scrollbar is allowed, and it says so. */
-.pane { min-height: 0; }
+.pane { min-height: 0; min-width: 0; }
 .pane.grow { flex: 1 1 auto; }
 .pane.scroll { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 
@@ -664,7 +673,9 @@ button.roster-item { cursor: pointer; }
 
 /* ---------------- connection ---------------- */
 
-.conn { display: inline-flex; align-items: center; gap: 5px; font-size: 0.68rem; color: var(--ink-2); }
+.conn { display: inline-flex; align-items: center; gap: 5px; font-size: 0.68rem; color: var(--ink-2); min-width: 0; flex: 0 1 auto; overflow: hidden; }
+.conn > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conn .dot { flex: 0 0 6px; }
 .conn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); }
 .conn.online .dot { background: var(--ok); }
 .conn.retrying .dot { background: var(--warn); animation: blink 1.1s infinite; }
@@ -733,6 +744,20 @@ body.struck .app { animation: struck 0.5s var(--ease); }
 
 /* ---------------- misc ---------------- */
 
+/* The version line under the home buttons: what you are running, and the one
+   way to find out there is something newer when the app was installed and has
+   no address bar to reload from. */
+.version-line {
+  display: flex; gap: 8px; justify-content: center; align-items: center;
+  margin: 8px 0 0; font-size: 0.7rem; color: var(--ink-3);
+}
+.linklike {
+  appearance: none; background: none; border: none; padding: 0;
+  font: inherit; color: var(--ink-2); text-decoration: underline;
+  text-underline-offset: 2px; cursor: pointer;
+}
+.linklike:hover { color: var(--ink); }
+
 .roomcode { font-family: var(--mono); font-size: clamp(1.7rem, 9vw, 2.4rem); letter-spacing: 0.24em; text-align: center; padding: 6px 0 2px; text-indent: 0.24em; }
 .turn-state {
   display: flex; align-items: center; gap: 9px; padding: 9px 12px;
@@ -778,6 +803,12 @@ body.struck .app { animation: struck 0.5s var(--ease); }
 
 /* Very short viewports (a phone in landscape) drop the decorative rows rather
    than letting anything scroll. */
+/* Below this the bar is only a brand, a dot and the buttons: the words next
+   to the connection dot are the first thing to go. */
+@media (max-width: 400px) {
+  .hide-tight { display: none; }
+}
+
 @media (max-height: 480px) {
   .phase-sub, .brand-sub, .rolecard .lore { display: none; }
   .topbar { padding-top: 4px; }
