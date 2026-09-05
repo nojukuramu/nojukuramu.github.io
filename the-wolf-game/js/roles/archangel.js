@@ -27,7 +27,9 @@
           });
           role = pool[Math.floor(Math.random() * pool.length)].id;
         }
-        var res = c.R.revive(c.state, c.occupant.id, { newRole: role, out: c.out });
+        var res = c.R.revive(c.state, c.occupant.id, {
+          newRole: role, out: c.out, byId: c.actor.id, publicly: c.payload.reveal !== false
+        });
         if (res.result !== "alive") return { ok: false, reason: "They are beyond calling back." };
 
         c.actor.hasRevived = true;

@@ -81,6 +81,8 @@ function fake(phase) {
     WG.resolver.beginNight(state);
     var out = WG.resolver.bag();
     WG.resolver.kill(state, "p3", { cause: "pack", byId: "p1", out: out });
+    // Anything past the night has been through a dawn, so the village knows.
+    if (phase !== "night") WG.resolver.announceDeath(state, "p3");
     state.night.houses.p3.reportedBy = "host";
     state.night.turns.host.spent = phase !== "night";
     state.publicLog = [

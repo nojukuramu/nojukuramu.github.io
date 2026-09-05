@@ -82,6 +82,9 @@ function room(names) {
   };
 }
 
+/** Turn on "Don't believe anyone" for this room. */
+function trustNoone(r) { r.state.config.rules.trustNoone = true; return r; }
+
 function give(r, assignments) {
   Object.keys(assignments).forEach(function (pid) {
     var p = WG.resolver.P(r.state, pid);
@@ -115,38 +118,230 @@ section("Role data and behaviour agree");
 
 /* ---------------- the late bodyguard ---------------- */
 
-section("A Bodyguard who arrives after the pack finds a body, not a charge");
+section("The map never says who died");
 (function () {
-  var r = room(["Wolf", "Guard", "Vic", "Vil", "Vil2"]);
-  give(r, { p0: "werewolf", p1: "bodyguard", p2: "villager", p3: "villager", p4: "villager" });
+  var r = room(["Wolf", "Guard", "Vic", "Vil", "Vil2", "Vil3"]);
+  give(r, { p0: "werewolf", p1: "bodyguard", p2: "villager", p3: "villager", p4: "villager", p5: "villager" });
   night(r);
-
-  // 00:38 — the pack settles. One wolf, so the vote closes at once.
   r.eng.handle({ type: "ACT", houseId: "p2", actionId: "wolf_vote" }, "p0");
-  ok("the victim is dead immediately", !WG.resolver.P(r.state, "p2").alive);
+  ok("the victim really is dead", !WG.resolver.P(r.state, "p2").alive);
 
-  // 00:41 — the Bodyguard walks up to that same door.
+  // The board a villager is looking at, one minute after the killing.
+  var v = WG.view.build(r.state, "p3");
+  var house = v.houses.filter(function (h) { return h.id === "p2"; })[0];
+  ok("their house looks like every other house", house.state === "living", house.state);
+  ok("and the roster still counts them", v.players.filter(function (p) { return p.id === "p2"; })[0].alive === true);
+  ok("nothing about the body is in the view",
+    JSON.stringify(v).indexOf("dead-tonight") < 0);
+
+  // The pack knows, because the pack did it.
+  var w = WG.view.build(r.state, "p0");
+  ok("the pack knows what it did",
+    w.houses.filter(function (h) { return h.id === "p2"; })[0].state === "dead-tonight");
+})();
+
+section("Standing at a door tells you nothing");
+(function () {
+  var r = room(["Wolf", "Guard", "Vic", "Vil", "Vil2", "Vil3"]);
+  give(r, { p0: "werewolf", p1: "bodyguard", p2: "villager", p3: "villager", p4: "villager", p5: "villager" });
+  night(r);
+  r.eng.handle({ type: "ACT", houseId: "p2", actionId: "wolf_vote" }, "p0");
+
   r.eng.handle({ type: "KNOCK", houseId: "p2" }, "p1");
   var offers = r.lastOffers("p1");
-  ok("the house reads as dead-tonight", offers.state === "dead-tonight", offers.state);
-  ok("he is told, in his own words, that he was late",
-    /found them already dead inside/.test(offers.discovery.text), offers.discovery.text);
-  ok("guarding is no longer on offer there",
-    !offers.offers.some(function (o) { return o.actionId === "guard" && o.enabled; }));
-  ok("reporting the body is on offer",
-    offers.offers.some(function (o) { return o.actionId === "report"; }));
+  ok("the door gives nothing away", offers.discovery === null);
+  ok("the house still reads as lived-in", offers.state === "living", offers.state);
+  ok("guarding is still on the menu, because he cannot know",
+    offers.offers.some(function (o) { return o.actionId === "guard" && o.enabled; }));
+  ok("raising the alarm is not — he has found nothing",
+    !offers.offers.some(function (o) { return o.actionId === "report"; }));
+  ok("knocking costs nothing", r.state.night.turns.p1.spent === false);
+})();
 
-  // Knocking cost him nothing: the night is still his to spend.
-  ok("his turn is not spent by finding a body", r.state.night.turns.p1.spent === false);
+section("A Bodyguard finds the body when he tries to guard");
+(function () {
+  var r = room(["Wolf", "Guard", "Vic", "Vil", "Vil2", "Vil3"]);
+  give(r, { p0: "werewolf", p1: "bodyguard", p2: "villager", p3: "villager", p4: "villager", p5: "villager" });
+  night(r);
+  r.eng.handle({ type: "ACT", houseId: "p2", actionId: "wolf_vote" }, "p0");
 
-  // And reporting it does not spend it either.
+  // 00:41 — he commits to standing at that door.
+  var res = r.eng.handle({ type: "ACT", houseId: "p2", actionId: "guard" }, "p1");
+  ok("the attempt is accepted, not refused", res.ok === true);
+  ok("he is told, in the Bodyguard's own words, that he was late",
+    r.said("p1", "found them already dead inside"), r.inbox("p1").join(" | "));
+
+  // The attempt could not be carried out, so it cost him nothing but the time.
+  ok("his night is still his", r.state.night.turns.p1.spent === false);
+  ok("nobody was guarded", r.state.night.houses.p2.shields.length === 0);
+
+  // And now he knows, so the house changes for him and only for him.
+  var his = WG.view.build(r.state, "p1");
+  ok("the house is a crime scene to him now",
+    his.houses.filter(function (h) { return h.id === "p2"; })[0].state === "dead-tonight");
+  var theirs = WG.view.build(r.state, "p3");
+  ok("and still an ordinary house to everyone else",
+    theirs.houses.filter(function (h) { return h.id === "p2"; })[0].state === "living");
+
+  // Raising the alarm is now offered, and is free.
+  r.eng.handle({ type: "KNOCK", houseId: "p2" }, "p1");
+  ok("reporting is offered once he has found them",
+    r.lastOffers("p1").offers.some(function (o) { return o.actionId === "report" && o.enabled; }));
   r.eng.handle({ type: "ACT", houseId: "p2", actionId: "report" }, "p1");
-  ok("reporting is free", r.state.night.turns.p1.spent === false);
+  ok("and it is free", r.state.night.turns.p1.spent === false);
   ok("the finder is recorded", r.state.night.houses.p2.reportedBy === "p1");
 
-  // He can still do his actual job somewhere that is still alive.
+  // He can still do his actual job, somewhere that is still breathing.
   r.eng.handle({ type: "ACT", houseId: "p3", actionId: "guard" }, "p1");
-  ok("he can still guard someone living", r.state.night.turns.p1.spent === true);
+  ok("he can still guard somebody living", r.state.night.turns.p1.spent === true);
+})();
+
+section("An action on somebody perfectly well costs nothing either");
+(function () {
+  var r = room(["Vet", "Cat", "V", "V2", "W"]);
+  give(r, { p0: "vet", p1: "cat", p2: "villager", p3: "villager", p4: "werewolf" });
+  night(r);
+  var res = r.eng.handle({ type: "ACT", houseId: "p1", actionId: "vet_revive" }, "p0");
+  ok("the attempt is accepted", res.ok === true);
+  ok("the vet is told they are fine", r.said("p0", "alive and perfectly well"));
+  ok("the charge is not spent", WG.resolver.P(r.state, "p0").hasRevived === false);
+  ok("nor is the night", r.state.night.turns.p0.spent === false);
+  ok("and now the vet knows they are alive",
+    WG.resolver.knowsStatus(r.state, WG.resolver.P(r.state, "p0"), WG.resolver.P(r.state, "p1")));
+})();
+
+section("A Vet can still reach a Cat that died an hour ago");
+(function () {
+  var r = room(["Vet", "Cat", "V", "V2", "W", "W2"]);
+  give(r, { p0: "vet", p1: "cat", p2: "villager", p3: "villager", p4: "werewolf", p5: "werewolf" });
+  night(r);
+  r.eng.handle({ type: "ACT", houseId: "p1", actionId: "wolf_vote" }, "p4");
+  r.eng.handle({ type: "ACT", houseId: "p1", actionId: "wolf_vote" }, "p5");
+  ok("the cat is dead", !WG.resolver.P(r.state, "p1").alive);
+
+  // The Vet cannot know — and the door is still offered, which is the point.
+  r.eng.handle({ type: "KNOCK", houseId: "p1" }, "p0");
+  ok("treating is offered at a door of unknown status",
+    r.lastOffers("p0").offers.some(function (o) { return o.actionId === "vet_revive" && o.enabled; }));
+  r.eng.handle({ type: "ACT", houseId: "p1", actionId: "vet_revive" }, "p0");
+  ok("and it works", WG.resolver.P(r.state, "p1").alive);
+  ok("the night is spent on it", r.state.night.turns.p0.spent === true);
+})();
+
+section("Dawn tells the village, reported or not");
+(function () {
+  var r = room(["Wolf", "Guard", "Vic", "Vil", "Vil2", "Vil3"]);
+  give(r, { p0: "werewolf", p1: "bodyguard", p2: "villager", p3: "villager", p4: "villager", p5: "villager" });
+  ok("the room announces its dead by default", r.state.config.rules.trustNoone === false);
+  night(r);
+  r.eng.handle({ type: "ACT", houseId: "p2", actionId: "wolf_vote" }, "p0");
+
+  // Nobody went round, so nobody reported it.
+  ok("nothing is public during the night",
+    !r.state.announcedDead || !r.state.announcedDead.p2);
+  r.eng.advance();
+
+  var log = r.state.publicLog.map(function (e) { return e.text; }).join(" | ");
+  ok("dawn names them anyway", /Vic is dead/.test(log), log);
+  ok("with no finder, because there was none", log.indexOf("raised the alarm") < 0);
+  ok("and now the whole village knows", r.state.announcedDead.p2 === true);
+
+  var v = WG.view.build(r.state, "p3");
+  ok("the roster greys them out from here on",
+    v.players.filter(function (p) { return p.id === "p2"; })[0].alive === false);
+})();
+
+section("Reporting adds a name to the morning, it does not unlock it");
+(function () {
+  var r = room(["Wolf", "Guard", "Vic", "Vil", "Vil2", "Vil3"]);
+  give(r, { p0: "werewolf", p1: "bodyguard", p2: "villager", p3: "villager", p4: "villager", p5: "villager" });
+  night(r);
+  r.eng.handle({ type: "ACT", houseId: "p2", actionId: "wolf_vote" }, "p0");
+  r.eng.handle({ type: "ACT", houseId: "p2", actionId: "guard" }, "p1");     // finds the body
+  r.eng.handle({ type: "ACT", houseId: "p2", actionId: "report" }, "p1");
+  r.eng.advance();
+
+  var log = r.state.publicLog.map(function (e) { return e.text; }).join(" | ");
+  ok("the death is named", /Vic is dead/.test(log), log);
+  ok("and so is the finder", /Guard found Vic and raised the alarm/.test(log), log);
+})();
+
+section("The mark stays on the house for the rest of the game");
+(function () {
+  var r = room(["Wolf", "Guard", "Vic", "Vil", "Vil2", "Vil3"]);
+  give(r, { p0: "werewolf", p1: "bodyguard", p2: "villager", p3: "villager", p4: "villager", p5: "villager" });
+  night(r);
+  r.eng.handle({ type: "ACT", houseId: "p2", actionId: "wolf_vote" }, "p0");
+  r.eng.advance();                                   // dawn announces it
+
+  function houseFor(viewerId) {
+    return WG.view.build(r.state, viewerId).houses.filter(function (h) { return h.id === "p2"; })[0];
+  }
+  ok("dead tonight, on the morning it happened", houseFor("p3").state === "dead-tonight");
+  night(r);                                          // the next night
+  ok("and simply dead from then on", houseFor("p3").state === "dead", houseFor("p3").state);
+  ok("for everybody", houseFor("p4").state === "dead");
+})();
+
+section("Don't believe anyone: dawn names only what was reported");
+(function () {
+  var quiet = room(["Wolf", "Guard", "Vic", "Vil", "Vil2", "Vil3"]);
+  trustNoone(quiet);
+  give(quiet, { p0: "werewolf", p1: "bodyguard", p2: "villager", p3: "villager", p4: "villager", p5: "villager" });
+  night(quiet);
+  quiet.eng.handle({ type: "ACT", houseId: "p2", actionId: "wolf_vote" }, "p0");
+  quiet.eng.advance();
+  var qlog = quiet.state.publicLog.map(function (e) { return e.text; }).join(" | ");
+  ok("an unreported death is never announced", qlog.indexOf("Vic") < 0, qlog);
+  ok("the roster goes on counting them",
+    WG.view.build(quiet.state, "p3").players.filter(function (p) { return p.id === "p2"; })[0].alive === true);
+  ok("but the pack still knows what it did",
+    WG.view.build(quiet.state, "p0").players.filter(function (p) { return p.id === "p2"; })[0].alive === false);
+
+  var loud = room(["Wolf", "Guard", "Vic", "Vil", "Vil2", "Vil3"]);
+  trustNoone(loud);
+  give(loud, { p0: "werewolf", p1: "bodyguard", p2: "villager", p3: "villager", p4: "villager", p5: "villager" });
+  night(loud);
+  loud.eng.handle({ type: "ACT", houseId: "p2", actionId: "wolf_vote" }, "p0");
+  loud.eng.handle({ type: "ACT", houseId: "p2", actionId: "guard" }, "p1");
+  loud.eng.handle({ type: "ACT", houseId: "p2", actionId: "report" }, "p1");
+  loud.eng.advance();
+  var llog = loud.state.publicLog.map(function (e) { return e.text; }).join(" | ");
+  ok("a reported one is", /Vic is dead/.test(llog), llog);
+  ok("and it names who found them", /raised the alarm/.test(llog), llog);
+})();
+
+section("A Shaman's mark hides the body in either mode");
+(function () {
+  [false, true].forEach(function (mode) {
+    var r = room(["W", "Shaman", "Vic", "V", "V2", "V3", "V4"]);
+    r.state.config.rules.trustNoone = mode;
+    give(r, {
+      p0: "werewolf", p1: "wolf_shaman", p2: "villager",
+      p3: "villager", p4: "villager", p5: "villager", p6: "villager"
+    });
+    night(r);
+    r.eng.handle({ type: "ACT", houseId: "p2", actionId: "mark" }, "p1");
+    r.eng.handle({ type: "ACT", houseId: "p2", actionId: "wolf_vote" }, "p0");
+    r.eng.handle({ type: "ACT", houseId: "p2", actionId: "wolf_vote" }, "p1");
+    var label = mode ? "trust nobody" : "normal";
+    var v = WG.view.build(r.state, "p3");
+    ok(label + ": the village sees nothing",
+      v.houses.filter(function (h) { return h.id === "p2"; })[0].state === "living");
+    var w = WG.view.build(r.state, "p0");
+    ok(label + ": the pack does",
+      w.houses.filter(function (h) { return h.id === "p2"; })[0].state === "dead-tonight");
+
+    // And going round does not turn one up either — that is the whole role.
+    var probe = r.eng.handle({ type: "ACT", houseId: "p2", actionId: "task" }, "p3");
+    r.eng.handle({ type: "ACT", houseId: "p2", actionId: "guard" }, "p3");
+    ok(label + ": walking up to the door finds nothing",
+      WG.view.build(r.state, "p3").houses.filter(function (h) { return h.id === "p2"; })[0].state === "living");
+
+    r.eng.advance();
+    ok(label + ": and the morning does not mention it",
+      r.state.publicLog.map(function (e) { return e.text; }).join(" ").indexOf("Vic") < 0);
+  });
 })();
 
 section("A Bodyguard who arrives first takes the blow");
@@ -170,15 +365,14 @@ section("A Doctor's shield only covers what arrives after it");
   ok("arriving first saves them", WG.resolver.P(early.state, "p2").alive);
   ok("the Doctor is told it mattered", early.said("p1", "did not get through"));
 
-  var late = room(["Wolf", "Doc", "Vic", "V"]);
-  give(late, { p0: "werewolf", p1: "doctor", p2: "villager", p3: "villager" });
+  var late = room(["Wolf", "Doc", "Vic", "V", "V2", "V3"]);
+  give(late, { p0: "werewolf", p1: "doctor", p2: "villager", p3: "villager", p4: "villager", p5: "villager" });
   night(late);
   late.eng.handle({ type: "ACT", houseId: "p2", actionId: "wolf_vote" }, "p0");
-  late.eng.handle({ type: "KNOCK", houseId: "p2" }, "p1");
+  late.eng.handle({ type: "ACT", houseId: "p2", actionId: "protect" }, "p1");
   ok("arriving second does not", !WG.resolver.P(late.state, "p2").alive);
   ok("the Doctor gets a Doctor's version of it",
-    /Nothing left to treat/i.test(late.lastOffers("p1").discovery.text),
-    late.lastOffers("p1").discovery.text);
+    late.said("p1", "Nothing left to treat"), late.inbox("p1").join(" | "));
 })();
 
 /* ---------------- revival is instant ---------------- */
@@ -247,16 +441,20 @@ section("A Shaman's mark deletes the morning report entry");
   ok("the victim is dead", !WG.resolver.P(r.state, "p2").alive);
   ok("the death is flagged hidden", r.state.night.deaths[0].hidden === true);
 
-  // A villager walking up to that door sees a quiet house, not a crime scene.
-  r.eng.handle({ type: "KNOCK", houseId: "p2" }, "p3");
-  ok("the village cannot see the body", r.lastOffers("p3").discovery === null);
-  // The pack can.
-  r.eng.handle({ type: "KNOCK", houseId: "p2" }, "p0");
-  ok("the pack can", !!r.lastOffers("p0").discovery);
-
   r.eng.advance();
   var report = r.state.publicLog.map(function (e) { return e.text; }).join(" | ");
   ok("no name appears in the morning report", report.indexOf("Vic") < 0, report);
+
+  /* And it stays hidden. A death that is never announced is never known, so the
+   * village goes on counting a player it does not have — which the old build
+   * gave away instantly by greying them out in the roster. */
+  var v = WG.view.build(r.state, "p3");
+  ok("the roster still lists them as standing",
+    v.players.filter(function (p) { return p.id === "p2"; })[0].alive === true);
+  ok("and does not reveal their role",
+    v.players.filter(function (p) { return p.id === "p2"; })[0].role === null);
+  var w = WG.view.build(r.state, "p0");
+  ok("the pack knows", w.players.filter(function (p) { return p.id === "p2"; })[0].alive === false);
 })();
 
 /* ---------------- passives ---------------- */
@@ -414,6 +612,34 @@ section("Voting and the rope");
   r.eng.advance();
   ok("the majority hangs", !WG.resolver.P(r.state, "p0").alive);
   ok("and the village wins", r.ended() && r.ended().team === "village", JSON.stringify(r.ended()));
+})();
+
+section("The village can vote for somebody the Shaman already buried");
+(function () {
+  var r = room(["W", "Shaman", "Vic", "V", "V2", "V3", "V4"]);
+  give(r, {
+    p0: "werewolf", p1: "wolf_shaman", p2: "villager",
+    p3: "villager", p4: "villager", p5: "villager", p6: "villager"
+  });
+  night(r);
+  r.eng.handle({ type: "ACT", houseId: "p2", actionId: "mark" }, "p1");
+  r.eng.handle({ type: "ACT", houseId: "p2", actionId: "wolf_vote" }, "p0");
+  r.eng.handle({ type: "ACT", houseId: "p2", actionId: "wolf_vote" }, "p1");
+  r.eng.advance();                       // dawn, and it is not mentioned
+  WG.clock.enter(r.state, "voting");
+  r.state.votes = {};
+
+  // The ballot has to include them: leaving them off would give it away.
+  var cast = r.eng.handle({ type: "VOTE", targetId: "p2" }, "p3");
+  ok("a villager may vote for the missing player", cast.ok === true);
+  ["p4", "p5", "p6"].forEach(function (v) { r.eng.handle({ type: "VOTE", targetId: "p2" }, v); });
+  r.eng.advance();
+
+  var log = r.state.publicLog.map(function (e) { return e.text; }).join(" | ");
+  ok("the village finds the house empty", /found the house empty/.test(log), log);
+  ok("and now everybody knows", r.state.announcedDead.p2 === true);
+  ok("nobody was hanged for it",
+    r.state.players.filter(function (p) { return !p.alive; }).length === 1);
 })();
 
 section("A Jester who gets the rope wins over the village");

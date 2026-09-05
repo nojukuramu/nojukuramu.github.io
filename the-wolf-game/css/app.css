@@ -272,8 +272,8 @@ p:last-child { margin-bottom: 0; }
  * night, without a media query or a second palette anywhere.
  */
 .ln-field { stroke: none; }
-.ln-field.far  { fill: color-mix(in srgb, #4a6b58 42%, var(--sky-2)); }
-.ln-field.mid  { fill: color-mix(in srgb, #3d6049 58%, var(--sky-2)); }
+.ln-field.far  { fill: color-mix(in srgb, #55735f 48%, var(--sky-2)); }
+.ln-field.mid  { fill: color-mix(in srgb, #446750 60%, var(--sky-2)); }
 .ln-field.near { fill: color-mix(in srgb, #2f5340 70%, var(--sky-3)); }
 
 /* Mist in the gaps between the bands. It costs two rectangles and does more for
@@ -285,7 +285,7 @@ p:last-child { margin-bottom: 0; }
 
 /* Nightfall. `--sky-mix` is the theme's own "how far from noon are we", so the
    valley darkens on exactly the same curve as the interface around it. */
-.ln-dusk { fill: var(--sky-3); opacity: calc(var(--sky-mix) * 0.6); pointer-events: none; }
+.ln-dusk { fill: var(--sky-3); opacity: calc(var(--sky-mix) * 0.52); pointer-events: none; }
 .ln-night { fill: var(--sky-3); opacity: calc(var(--sky-mix) * 0.34); pointer-events: none; }
 .ln-lit { pointer-events: none; }
 
@@ -301,6 +301,9 @@ p:last-child { margin-bottom: 0; }
 .ln-road-edge { fill: none; stroke: color-mix(in srgb, #4c4530 60%, var(--sky-3)); stroke-width: 33; stroke-linecap: round; }
 .ln-road { fill: none; stroke: color-mix(in srgb, #9c8156 56%, var(--sky-3)); stroke-width: 23; stroke-linecap: round; }
 .ln-track { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 5 10; stroke-linecap: round; opacity: 0.55; }
+/* The short track from the road to a door. Every house has one, which is most
+   of what makes the village look built rather than scattered. */
+.ln-drive { fill: none; stroke: color-mix(in srgb, #9c8156 46%, var(--sky-3)); stroke-width: 6; stroke-linecap: round; opacity: 0.55; }
 
 .ln-bridge .deck { stroke: color-mix(in srgb, #6a5638 66%, var(--sky-3)); stroke-width: 9; stroke-linecap: round; }
 .ln-bridge .rail, .ln-bridge .post { stroke: color-mix(in srgb, #6a5638 58%, var(--sky-3)); stroke-width: 3; stroke-linecap: round; fill: none; }
@@ -312,8 +315,8 @@ p:last-child { margin-bottom: 0; }
 .ln-trunk { fill: color-mix(in srgb, #4a3826 62%, var(--sky-3)); }
 .ln-branch { fill: none; stroke: color-mix(in srgb, #4a3826 62%, var(--sky-3)); stroke-width: 2.4; stroke-linecap: round; }
 .ln-crown { stroke: none; }
-.ln-crown.c1 { fill: color-mix(in srgb, #2f5a3f 66%, var(--sky-2)); }
-.ln-crown.c2 { fill: color-mix(in srgb, #24493355 72%, var(--sky-3)); }
+.ln-crown.c1 { fill: color-mix(in srgb, #33684a 62%, var(--sky-2)); }
+.ln-crown.c2 { fill: color-mix(in srgb, #274f37 68%, var(--sky-3)); }
 
 .ln-rock { fill: color-mix(in srgb, #6b6c68 52%, var(--sky-3)); }
 
@@ -337,7 +340,20 @@ p:last-child { margin-bottom: 0; }
 .ln-grass {
   fill: none; stroke: color-mix(in srgb, #24462f 74%, var(--sky-3));
   stroke-width: 3.4; stroke-linecap: round;
+  transform-box: fill-box; transform-origin: 50% 100%;
+  animation: sway 9s ease-in-out infinite alternate;
 }
+@keyframes sway { from { transform: skewX(-1.6deg); } to { transform: skewX(1.6deg); } }
+
+/* The woods breathe too, a half-degree at a time, out of phase with the grass
+   so the whole board never moves as one sheet. The animation is on an inner
+   group: putting a CSS transform on the element that carries the placement
+   `transform` attribute replaces the placement. */
+.ln-tree {
+  transform-box: fill-box; transform-origin: 50% 100%;
+  animation: tree-sway 11s ease-in-out infinite alternate;
+}
+@keyframes tree-sway { from { transform: rotate(-0.7deg); } to { transform: rotate(0.7deg); } }
 
 .ln-fly {
   fill: #ffd98a; opacity: 0;
@@ -386,14 +402,44 @@ p:last-child { margin-bottom: 0; }
 /* The window is the state of the house in one shape. */
 .hs-window { fill: #f2c37c; transition: fill var(--slow) var(--ease); }
 .hs-mullion { stroke: color-mix(in srgb, #000 46%, transparent); stroke-width: 1.5; fill: none; }
-.hs-spill { fill: #f2c37c; opacity: 0.15; }
+.hs-sill { stroke: color-mix(in srgb, #b8ac97 46%, var(--sky-3)); stroke-width: 2.4; stroke-linecap: round; fill: none; }
+.hs-spill { fill: url(#wg-spill); }
+.hs-shingles { stroke: color-mix(in srgb, #000 26%, transparent); stroke-width: 1.4; fill: none; }
+.hs-logs { stroke: color-mix(in srgb, #000 22%, transparent); stroke-width: 1.3; fill: none; }
+.hs-step { fill: color-mix(in srgb, #8e8578 48%, var(--sky-3)); }
+.hs-handle { fill: color-mix(in srgb, #d8c07a 60%, var(--sky-3)); }
+.hs-props { fill: color-mix(in srgb, #55432c 60%, var(--sky-3)); }
+.hs-props-line { stroke: color-mix(in srgb, #000 24%, transparent); stroke-width: 1.4; fill: none; }
+
+/* The lantern by the door. It swings, and its glow is the one light on the
+   outside of the house — which is why a dead house reads instantly: nothing on
+   the porch, nothing in the windows, no smoke. */
+.hs-bracket { stroke: color-mix(in srgb, #3a3128 70%, var(--sky-3)); stroke-width: 1.8; stroke-linecap: round; fill: none; }
+.hs-lamp-body { fill: #f0b459; }
+.hs-lamp-glow { fill: url(#wg-lamp); }
+.hs-lamp-swing {
+  transform-box: fill-box; transform-origin: 50% 0;
+  animation: lamp-sway 5.5s var(--ease) infinite alternate;
+}
+@keyframes lamp-sway {
+  from { transform: rotate(-3.5deg); }
+  to { transform: rotate(3.5deg); }
+}
+
+/* Candlelight: the window brightness breathes, so a lit house is never a flat
+   yellow rectangle. Slow and shallow on purpose — it should be felt, not seen. */
+.hs-window { animation: candle 4.2s ease-in-out infinite alternate; }
+@keyframes candle { from { opacity: 0.86; } to { opacity: 1; } }
+.hs-spill { animation: candle 4.2s ease-in-out infinite alternate; }
 
 .hs.own .hs-wall { stroke: var(--accent); stroke-width: 2.6; }
 .hs.own .hs-window { fill: #ffdca4; }
-.hs.own .hs-spill { opacity: 0.24; }
+.hs.own .hs-spill { opacity: 1.25; }
 
 .hs.dead { opacity: 0.6; }
-.hs.dead .hs-window { fill: #141c24; }
+.hs.dead .hs-window { fill: #141c24; animation: none; opacity: 1; }
+.hs.dead .hs-lamp { display: none; }
+.hs.dead .hs-handle { display: none; }
 .hs.dead .hs-roof { fill: color-mix(in srgb, #5a4a44 44%, var(--sky-3)); }
 .hs.dead .hs-wall { fill: color-mix(in srgb, #8f8a80 40%, var(--sky-3)); }
 .hs.dead .hs-name { fill: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 1px; }
@@ -417,12 +463,14 @@ p:last-child { margin-bottom: 0; }
 .hs.visited .hs-wall { stroke-dasharray: 6 4; }
 
 .hs-name {
-  fill: var(--ink); font-family: var(--sans); font-size: 20px; font-weight: 500;
-  paint-order: stroke; stroke: var(--bg); stroke-width: 4.5px; stroke-linejoin: round;
+  fill: var(--ink); font-family: var(--sans); font-size: 19px; font-weight: 500;
+  paint-order: stroke; stroke: color-mix(in srgb, var(--bg) 72%, transparent);
+  stroke-width: 3px; stroke-linejoin: round;
 }
 .hs-sub {
-  fill: var(--ink-2); font-family: var(--sans); font-size: 15px;
-  paint-order: stroke; stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round;
+  fill: var(--ink-2); font-family: var(--sans); font-size: 14px;
+  paint-order: stroke; stroke: color-mix(in srgb, var(--bg) 62%, transparent);
+  stroke-width: 2.6px; stroke-linejoin: round;
 }
 
 /* ---------------- the door sheet ---------------- */
@@ -646,6 +694,33 @@ button.roster-item { cursor: pointer; }
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 34' preserveAspectRatio='none'%3E%3Cpath d='M0 0h120v10c-6 0-6 12-11 12s-5-7-10-7-4 15-9 15-5-16-10-16-6 9-11 9-4-11-9-11-6 14-11 14-5-13-10-13-5 8-10 8-5-9-10-9-6 6-9 6z' fill='%23000'/%3E%3C/svg%3E");
   -webkit-mask-size: 100% 100%; mask-size: 100% 100%;
 }
+
+/* The turn of a phase, swept across the screen once. Dark going into the
+   night, light coming out of it — the same information the colour is already
+   giving you, delivered fast enough to catch your eye. */
+.sweep {
+  position: fixed; inset: 0; z-index: 3; pointer-events: none; opacity: 0;
+}
+.sweep.to-night {
+  background: linear-gradient(180deg, rgba(6, 10, 16, 0.92), rgba(6, 10, 16, 0));
+  animation: sweep-down 0.85s var(--ease);
+}
+.sweep.to-day {
+  background: linear-gradient(0deg, rgba(255, 236, 208, 0.7), rgba(255, 236, 208, 0));
+  animation: sweep-up 0.85s var(--ease);
+}
+@keyframes sweep-down {
+  0% { opacity: 0; transform: translateY(-100%); }
+  35% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(100%); }
+}
+@keyframes sweep-up {
+  0% { opacity: 0; transform: translateY(100%); }
+  35% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-100%); }
+}
+html[data-motion="off"] .sweep { display: none; }
+@media (prefers-reduced-motion: reduce) { .sweep { display: none; } }
 
 /* A death just landed: one hard flash, then it settles into the stain. */
 body.struck .app { animation: struck 0.5s var(--ease); }

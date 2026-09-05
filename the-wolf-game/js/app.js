@@ -350,6 +350,7 @@
         else if (Date.now() - lastBroadcast > 4000) broadcast({ quiet: true });
       }
       paintClock();
+      updateAudio();
     }, 500);
   }
 
@@ -424,9 +425,12 @@
   }
 
   var privateLog = [];
+  var PRIVATE_SOUND = { death: "death", saved: "saved", revive: "saved", bite: "tap", trap: "tap" };
   function pushPrivate(entry) {
     privateLog.push(entry);
     if (privateLog.length > 120) privateLog.shift();
+    var cue = PRIVATE_SOUND[entry.kind];
+    if (cue) WG.sound.play(cue);
     // Anything with a body in it deserves more than a line in a list.
     toast(entry.text, entry.kind === "death" || entry.kind === "warn" ? "bad" :
       entry.kind === "saved" || entry.kind === "revive" ? "ok" : null);
@@ -460,6 +464,57 @@
     if (out.dock) dock.appendChild(out.dock);
     renderTopbar();
     updateGore();
+    updateAudio();
+  }
+
+  /* Sound and blood both key off the same thing: what changed since the last
+   * render. Nothing here polls, and nothing fires twice for one event. */
+  var lastPhase = null, lastRound = 0, lastLogLen = 0, lastHeart = 0;
+
+  function updateAudio() {
+    var v = currentView();
+    if (!v || !v.phase) { WG.sound.scene("none"); lastPhase = null; return; }
+    var soundOn = !v.config || !v.config.look || v.config.look.sound !== false;
+    WG.sound.setEnabled(soundOn);
+    if (!soundOn) return;
+
+    var dark = v.phase === "night" || v.phase === "verdict" || v.phase === "role_reveal";
+    WG.sound.scene(v.phase === "lobby" || v.phase === "game_over" ? "none" : dark ? "night" : "day");
+
+    if (v.phase !== lastPhase || v.round !== lastRound) {
+      if (v.phase === "night") WG.sound.play("howl");
+      else if (v.phase === "dawn") WG.sound.play(deathsThisRound(v) ? "crow" : "dawn");
+      else if (v.phase === "verdict") WG.sound.play("bell");
+      if (lastPhase) sweep(v.phase);
+      lastPhase = v.phase; lastRound = v.round;
+    }
+
+    // The last ten seconds of a timed phase get a pulse under them.
+    if (v.phaseEndsAt) {
+      var left = v.phaseEndsAt - Date.now();
+      if (left > 0 && left < 10000 && Date.now() - lastHeart > 950) {
+        lastHeart = Date.now();
+        WG.sound.play("heart");
+      }
+    }
+  }
+
+  /* A phase change is the biggest thing that happens without anybody pressing
+   * anything, so it gets a sweep across the screen — dark when the sun is going
+   * down, light when it is coming up. Half a second, once, never on the first
+   * render. */
+  function sweep(phase) {
+    var dark = phase === "night" || phase === "verdict";
+    var el2 = doc.getElementById("sweep");
+    if (!el2) return;
+    el2.className = "sweep " + (dark ? "to-night" : "to-day");
+    el2.style.animation = "none";
+    void el2.offsetWidth;
+    el2.style.animation = "";
+  }
+
+  function deathsThisRound(v) {
+    return v.publicLog.some(function (e) { return e.round === v.round && e.kind === "death"; });
   }
 
   /* How bloody the room is. A death lands as a flash and a spatter; the running
@@ -819,6 +874,7 @@
 
   function openSheet(data) {
     app.sheet = data;
+    WG.sound.play("knock");
     if (WG.screens && WG.screens.doorSheet) openModal(WG.screens.doorSheet(data));
   }
 
@@ -851,6 +907,17 @@
     // One canvas behind everything, painting the hour the clock is already on.
     var canvas = $("sky");
     if (canvas) WG.sky.mount(canvas, liveView);
+
+    // Browsers will not make a sound before a gesture, and a game that starts
+    // howling before you have joined a room deserves the rule.
+    ["pointerdown", "keydown", "touchstart"].forEach(function (ev) {
+      doc.addEventListener(ev, function once() {
+        WG.sound.unlock();
+        ["pointerdown", "keydown", "touchstart"].forEach(function (e2) {
+          doc.removeEventListener(e2, once);
+        });
+      }, { passive: true });
+    });
 
     doc.addEventListener("fullscreenchange", syncFullscreen);
     doc.addEventListener("webkitfullscreenchange", syncFullscreen);

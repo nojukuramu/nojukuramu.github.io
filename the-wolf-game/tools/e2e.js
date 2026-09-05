@@ -113,10 +113,10 @@ function view(page) { return page.evaluate(function () { return WG.app.currentVi
     WG_HELPERS.dispatch({ type: "ROLESET", roles: { werewolf: 1, bodyguard: 1, villager: 2 } });
   });
   await host.evaluate(function () {
-    WG_HELPERS.dispatch({ type: "CONFIG", config: Object.assign(JSON.parse(JSON.stringify(WG.app.currentView().config)), {
-      flow: { preset: "custom", durations: { role_reveal: 600, night: 600, dawn: 600, discussion: 600, voting: 600, verdict: 600 },
-              endNightEarly: false, endVotingEarly: false }
-    }) });
+    var cfg = JSON.parse(JSON.stringify(WG.app.currentView().config));
+    cfg.flow = { preset: "custom", durations: { role_reveal: 600, night: 600, dawn: 600, discussion: 600, voting: 600, verdict: 600 },
+                 endNightEarly: false, endVotingEarly: false };
+    WG_HELPERS.dispatch({ type: "CONFIG", config: cfg });
   });
   await host.click("text=Start the night");
   await host.waitForFunction(function () { return WG.app.currentView().phase === "role_reveal"; }, null, { timeout: 15000 });
@@ -168,26 +168,48 @@ function view(page) { return page.evaluate(function () { return WG.app.currentVi
   await villagers[0].waitForFunction(function () { return WG.app.currentView().me.alive === false; }, null, { timeout: 15000 });
   ok("the kill lands during the night, not at dawn", true);
 
-  // Now the Bodyguard walks up to the same door — late.
+  // The map must give nothing away. Every other phone still sees a lived-in house.
+  var seenByOthers = await villagers[1].evaluate(function (id) {
+    var v = WG.app.currentView();
+    var h = v.houses.filter(function (x) { return x.id === id; })[0];
+    var p = v.players.filter(function (x) { return x.id === id; })[0];
+    return { state: h.state, alive: p.alive };
+  }, victimId);
+  ok("the killing is invisible on the map", seenByOthers.state === "living", seenByOthers.state);
+  ok("and the roster still counts them", seenByOthers.alive === true);
+
+  // The Bodyguard walks up to that same door. Standing there tells him nothing.
   await guard.evaluate(function (id) { WG_HELPERS.dispatch({ type: "KNOCK", houseId: id }); }, victimId);
   await guard.waitForSelector(".sheet", { timeout: 10000 });
-  var disc = await guard.locator(".discovery").count();
-  ok("he is shown a body, not a target list", disc === 1);
-  var text = disc ? await guard.textContent(".discovery") : "";
-  ok("in the Bodyguard's own words", /found them already dead inside/i.test(text), text.slice(0, 120));
-  ok("it names who it was", text.indexOf(victimName) >= 0, text.slice(0, 120));
-
+  ok("the door gives nothing away", (await guard.locator(".discovery").count()) === 0);
   var offerLabels = await guard.locator(".sheet .offer .verb").allTextContents();
-  ok("guarding a corpse is not on the menu", !offerLabels.some(function (t) { return /Stand at the door/i.test(t); }),
-    JSON.stringify(offerLabels));
-  ok("raising the alarm is", offerLabels.some(function (t) { return /Raise the alarm/i.test(t); }),
-    JSON.stringify(offerLabels));
+  ok("guarding is still offered, because he cannot know",
+    offerLabels.some(function (t) { return /Stand at the door/i.test(t); }), JSON.stringify(offerLabels));
 
-  var turnBefore = (await view(guard)).me.turn.spent;
-  ok("finding the body cost him nothing", turnBefore === false);
+  // He commits to it, and that is when the night tells him.
+  await guard.click(".sheet .offer:has-text('Stand at the door')");
+  await guard.waitForTimeout(800);
+  ok("he is told, in the Bodyguard's own words",
+    await guard.evaluate(function () {
+      return WG.app.privateLog().some(function (e) { return /found them already dead inside/i.test(e.text); });
+    }));
+  ok("the attempt cost him nothing", (await view(guard)).me.turn.spent === false);
+
+  // Now he knows — and only he does.
+  var his = await guard.evaluate(function (id) {
+    return WG.app.currentView().houses.filter(function (x) { return x.id === id; })[0].state;
+  }, victimId);
+  ok("the house is a crime scene to him", his === "dead-tonight", his);
+  var stillHidden = await villagers[1].evaluate(function (id) {
+    return WG.app.currentView().houses.filter(function (x) { return x.id === id; })[0].state;
+  }, victimId);
+  ok("and an ordinary house to everyone else", stillHidden === "living", stillHidden);
+
+  await guard.evaluate(function (id) { WG_HELPERS.dispatch({ type: "KNOCK", houseId: id }); }, victimId);
+  await guard.waitForSelector(".sheet .offer", { timeout: 10000 });
   await guard.click(".sheet .offer:has-text('Raise the alarm')");
   await guard.waitForTimeout(600);
-  ok("and neither did reporting it", (await view(guard)).me.turn.spent === false);
+  ok("reporting is free", (await view(guard)).me.turn.spent === false);
 
   // He still has a night to spend, on somebody who is still breathing.
   var otherId = (await view(villagers[1])).me.id;
@@ -197,11 +219,10 @@ function view(page) { return page.evaluate(function () { return WG.app.currentVi
   await guard.waitForFunction(function () { return WG.app.currentView().me.turn.spent === true; }, null, { timeout: 10000 });
   ok("he can still guard somebody living", true);
 
-  section("The village sees a corpse; only the finder knows how");
+  section("Only the finder knows");
   var vv = await view(villagers[1]);
   var deadHouse = vv.houses.filter(function (h) { return h.id === victimId; })[0];
-  ok("everyone can see the house has a body", deadHouse.state === "dead-tonight", deadHouse.state);
-  ok("and that it was reported", deadHouse.reported === true);
+  ok("the village still cannot see it", deadHouse.state === "living", deadHouse.state);
   ok("but the village has been told nothing about it",
     !vv.publicLog.some(function (e) { return e.kind === "death" || e.kind === "report"; }),
     JSON.stringify(vv.publicLog.map(function (e) { return e.kind; })));
@@ -214,6 +235,15 @@ function view(page) { return page.evaluate(function () { return WG.app.currentVi
   var log = (await view(villagers[1])).publicLog.map(function (e) { return e.text; }).join(" | ");
   ok("the morning report names the dead", log.indexOf(victimName) >= 0, log);
   ok("and says who found them", /raised the alarm/.test(log), log);
+  var afterDawn = await villagers[1].evaluate(function (id) {
+    var v = WG.app.currentView();
+    return {
+      house: v.houses.filter(function (h) { return h.id === id; })[0].state,
+      alive: v.players.filter(function (p) { return p.id === id; })[0].alive
+    };
+  }, victimId);
+  ok("and from now on the whole village sees the mark", afterDawn.house === "dead-tonight", afterDawn.house);
+  ok("and the roster greys them out", afterDawn.alive === false);
 
   section("The room's colour actually moved");
   var nightBg = await host.evaluate(function () { return getComputedStyle(document.documentElement).getPropertyValue("--bg").trim(); });

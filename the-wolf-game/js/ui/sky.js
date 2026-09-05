@@ -28,7 +28,7 @@
   var W = 0, H = 0;
   var source = null;            // () => the live view, or null
   var stars = [], clouds = [], hills = null, spatter = [];
-  var raf = null, lastPaint = 0;
+  var raf = null, lastPaint = 0, flyers = [], flyerScene = null;
   var bloodLevel = 0, bloodTarget = 0;
   var reduced = false;
 
@@ -194,6 +194,12 @@
       ctx.beginPath(); ctx.arc(sx, sy, rr, 0, 6.2832); ctx.fill();
     }
 
+    /* --- what is in the air --- 
+     * Birds cross in a loose skein by day and bats flit low at night. They are
+     * four line segments each, and they are most of the difference between a
+     * sky and a picture of a sky. */
+    flock(dark > 0.5 ? "bats" : "birds", T, dark, sky);
+
     /* --- clouds, lit from wherever the sun is --- */
     for (var c = 0; c < clouds.length; c++) {
       var cl = clouds[c];
@@ -288,6 +294,53 @@
       }
       ctx.globalAlpha = 1;
     }
+  }
+
+  /** Birds or bats, seeded once per kind and left to drift across. */
+  function flock(kind, T, dark, sky) {
+    if (kind !== flyerScene) {
+      flyerScene = kind;
+      flyers = [];
+      var rnd = mulberry(kind === "bats" ? 991 : 4242);
+      var n = kind === "bats" ? 9 : 7;
+      for (var i = 0; i < n; i++) {
+        flyers.push({
+          x: rnd(), y: 0.10 + rnd() * (kind === "bats" ? 0.42 : 0.30),
+          vx: (kind === "bats" ? 0.010 : 0.016) * (rnd() < 0.5 ? -1 : 1) * (0.6 + rnd()),
+          amp: (kind === "bats" ? 0.035 : 0.008) * (0.5 + rnd()),
+          rate: (kind === "bats" ? 2.4 : 0.7) * (0.6 + rnd()),
+          size: (kind === "bats" ? 5 : 7) * (0.7 + rnd() * 0.7),
+          ph: rnd() * 6.283
+        });
+      }
+    }
+    if (reduced) return;
+
+    ctx.save();
+    ctx.strokeStyle = hex(kind === "bats" ? "#0b1016" : sky.onSky, kind === "bats" ? 0.7 : 0.34);
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = "round";
+    for (var f = 0; f < flyers.length; f++) {
+      var b = flyers[f];
+      var x = (((b.x + T * b.vx) % 1.2) + 1.2) % 1.2 - 0.1;
+      var y = b.y + Math.sin(T * b.rate + b.ph) * b.amp;
+      var px = x * W, py = y * H;
+      // Wings, opening and closing on their own beat.
+      var beat = Math.sin(T * (kind === "bats" ? 11 : 4.5) + b.ph);
+      var lift = b.size * (0.35 + 0.5 * Math.abs(beat));
+      ctx.beginPath();
+      if (kind === "bats") {
+        ctx.moveTo(px - b.size, py + lift * 0.4);
+        ctx.quadraticCurveTo(px - b.size * 0.4, py - lift, px, py);
+        ctx.quadraticCurveTo(px + b.size * 0.4, py - lift, px + b.size, py + lift * 0.4);
+      } else {
+        ctx.moveTo(px - b.size, py + lift);
+        ctx.lineTo(px, py);
+        ctx.lineTo(px + b.size, py + lift);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function treeline(hill, sky, shade) {

@@ -114,11 +114,80 @@
     };
   }
 
+  /* ---------------- what a player knows ----------------
+   *
+   * Truth and belief are different objects here, and everything the village can
+   * see is built out of belief.
+   *
+   * A death becomes public at dawn, when the village is told. Until then it is
+   * known only to the people who caused it and the people who have been to the
+   * house — and a Shaman-marked death is never announced at all, so for the
+   * rest of the game the village goes on believing that person is at home.
+   *
+   * The map cannot leak this. A house whose occupant was killed an hour ago
+   * looks exactly like every other house: lit window, smoke from the chimney,
+   * nothing to see. Standing at the door tells you nothing either. The only way
+   * to find out is to *do* something there — and then the night tells you why
+   * it did not work.
+   */
+
+  function knowledge(p) { return p.known || (p.known = {}); }
+
+  /** "Don't believe anyone": dawn names nobody, and the only thing the village
+   *  ever learns is what somebody went and reported. */
+  function trustNoone(state) {
+    return !!(state.config && state.config.rules && state.config.rules.trustNoone);
+  }
+
+  /** Record what `viewer` now knows about `target`. Death is permanent news. */
+  function note(state, viewerId, targetId, status) {
+    var v = P(state, viewerId);
+    if (!v || viewerId === targetId) return;
+    var k = knowledge(v);
+    if (status === "dead") k[targetId] = "dead";
+    else if (k[targetId] !== "dead") k[targetId] = "alive:" + state.round;
+  }
+
+  /**
+   * Does `actor` know this player is dead?
+   *
+   * Three ways to know, and no fourth: it is you, the village was told at dawn,
+   * or you went there and found out. Nothing about a killing is public on the
+   * night it happens — which is the point of a night.
+   */
+  function knowsDead(state, actor, occ) {
+    if (!occ || occ.alive) return false;
+    if (occ.id === actor.id) return true;
+    if (state.announcedDead && state.announcedDead[occ.id]) return true;
+    return knowledge(actor)[occ.id] === "dead";
+  }
+
+  /** As far as `actor` can tell, is this player still at home? */
+  function believedAlive(state, actor, occ) {
+    return !knowsDead(state, actor, occ);
+  }
+
+  /** The village is told. From here on everybody knows. */
+  function announceDeath(state, id) {
+    state.announcedDead = state.announcedDead || {};
+    state.announcedDead[id] = true;
+  }
+
+  /** Somebody is back on their feet, and the news travels or it does not. */
+  function forgetDeath(state, id, publicly) {
+    if (state.announcedDead) delete state.announcedDead[id];
+    if (!publicly) return;
+    state.players.forEach(function (p) {
+      if (p.known && p.known[id] === "dead") delete p.known[id];
+    });
+  }
+
   /* ---------------- knocking ---------------- */
 
   /**
-   * Walk up to a door. Free, unrecorded, and repeatable — but if there is a
-   * body behind it you will see it, and seeing it is a thing that happened.
+   * Walk up to a door. Free, unrecorded, repeatable — and completely
+   * uninformative. You are told who lives here and what you could try; you are
+   * not told whether they are going to answer.
    */
   function knock(state, actorId, houseId) {
     var actor = P(state, actorId);
@@ -126,44 +195,29 @@
     if (!actor || !house) return { ok: false, reason: "no-such-house" };
 
     var occupant = P(state, house.ownerId);
-    var out = bag();
-    var discovery = null;
-
-    if (house.body && canSeeBody(state, actor, house)) {
-      var first = house.body.foundBy.indexOf(actorId) < 0;
-      if (first) house.body.foundBy.push(actorId);
-      discovery = {
-        occupant: occupant.name,
-        cause: house.body.cause,
-        first: first && house.body.foundBy.length === 1,
-        text: bodyText(state, actor, occupant, house)
-      };
-    }
-
     return {
       ok: true,
       houseId: houseId,
       occupant: occupant.name,
       state: houseStateLabel(state, actor, house, occupant),
-      discovery: discovery,
+      discovery: null,
       offers: offersAt(state, actor, house, occupant),
-      outcomes: out.list
+      outcomes: []
     };
   }
 
   /** A hidden death is hidden from the village, not from the pack that hid it. */
   function canSeeBody(state, actor, house) {
     if (!house.body) return false;
-    if (!house.body.hidden) return true;
-    return R.isWolf(actor.role);
+    var occ = P(state, house.ownerId);
+    return knowsDead(state, actor, occ);
   }
 
   function houseStateLabel(state, actor, house, occupant) {
-    if (!occupant.alive) {
-      if (house.body && house.body.night === state.round) return "dead-tonight";
-      return "dead";
-    }
     if (house.ownerId === actor.id) return "own";
+    if (knowsDead(state, actor, occupant)) {
+      return (occupant.diedNight === state.round) ? "dead-tonight" : "dead";
+    }
     return "living";
   }
 
@@ -184,28 +238,49 @@
 
   /* ---------------- offers ---------------- */
 
+  /* Selectors are evaluated against what the actor BELIEVES, which is the whole
+   * point: a door only refuses to light up for a reason the actor could
+   * actually know. Roles are still filtered on the truth where the actor knows
+   * the role anyway (their own team), and on belief where they do not.
+   *
+   * `dead-*` selectors light up at houses the actor knows to be dead AND at
+   * houses whose status they cannot know — otherwise a Vet could never reach a
+   * Cat that died an hour ago, and the one genuinely dramatic use of the role
+   * would be impossible by construction. Guessing wrong costs nothing but the
+   * seconds it took, which on this clock is a real price. */
+  function alive(c) { return believedAlive(c.state, c.actor, c.occupant); }
+  function maybeDead(c) { return !c.occupant.alive || !knowsStatus(c.state, c.actor, c.occupant); }
+
+  /** True when the actor could not possibly be wrong about this player. */
+  function knowsStatus(state, actor, occ) {
+    if (occ.id === actor.id) return true;
+    if (knowsDead(state, actor, occ)) return true;
+    return knowledge(actor)[occ.id] === "alive:" + state.round;
+  }
+
   var SELECTORS = {
     "any": function () { return true; },
     "self": function (c) { return c.house.ownerId === c.actor.id; },
-    "living-any": function (c) { return c.occupant.alive; },
-    "living-others": function (c) { return c.occupant.alive && c.occupant.id !== c.actor.id; },
-    "living-not-last": function (c) {
-      return c.occupant.alive && c.actor.lastProtected !== c.occupant.id;
-    },
-    "living-non-wolf": function (c) { return c.occupant.alive && !R.isWolf(c.occupant.role); },
+    "living-any": alive,
+    "living-others": function (c) { return alive(c) && c.occupant.id !== c.actor.id; },
+    "living-not-last": function (c) { return alive(c) && c.actor.lastProtected !== c.occupant.id; },
+    "living-non-wolf": function (c) { return alive(c) && !R.isWolf(c.occupant.role); },
     "living-non-cult": function (c) {
-      return c.occupant.alive && !R.isCult(c.occupant.role) && c.occupant.id !== c.actor.id;
+      return alive(c) && !R.isCult(c.occupant.role) && c.occupant.id !== c.actor.id;
     },
-    "living-cult": function (c) { return c.occupant.alive && R.isCult(c.occupant.role); },
-    "dead-any": function (c) { return !c.occupant.alive; },
-    "dead-tonight": function (c) {
-      return !c.occupant.alive && c.house.body && c.house.body.night === c.state.round;
-    },
-    "dead-wolves": function (c) { return !c.occupant.alive && R.isWolf(c.occupant.role); },
+    "living-cult": function (c) { return alive(c) && R.isCult(c.occupant.role); },
+    "dead-any": function (c) { return maybeDead(c) && c.occupant.id !== c.actor.id; },
+    "dead-wolves": function (c) { return maybeDead(c) && R.isWolf(c.occupant.role); },
     "dead-pets": function (c) {
-      return !c.occupant.alive &&
+      return maybeDead(c) &&
         (c.occupant.role === "cat" || c.occupant.role === "dog") &&
         !c.occupant.hasBeenTreatedByVet;
+    },
+    /* Raising the alarm needs a body you found yourself and that nobody has
+     * reported yet. Never on hearsay. */
+    "found-body": function (c) {
+      if (c.occupant.alive || c.house.reportedBy || !c.house.body) return false;
+      return c.house.body.foundBy.indexOf(c.actor.id) >= 0;
     }
   };
 
@@ -272,8 +347,6 @@
     (def ? def.actions || [] : []).forEach(function (a) { consider(a, "role"); });
     R.universalActions.forEach(function (a) {
       if (a.id === "peek") return;                 // knocking IS peeking
-      if (a.id === "report" && house.reportedBy) return;
-      if (a.id === "report" && !canSeeBody(state, actor, house)) return;
       consider(a, "universal");
     });
 
@@ -303,6 +376,52 @@
     if (!offer.enabled) return { ok: false, reason: offer.reason };
 
     var out = bag();
+
+    /* The only way to learn anything about a house is to try something at it,
+     * and an attempt that cannot be carried out costs nothing but the seconds
+     * it took. That is the whole check mechanic:
+     *
+     *   You go to guard somebody who is already dead — you find the body, you
+     *   are told so in your own role's words, and your night is still yours.
+     *   You go to treat somebody who is perfectly fine — you are told they are
+     *   fine, and your night is still yours.
+     *
+     * Both outcomes are information you did not have, and on a clock where the
+     * pack is moving at the same time, seconds are the price. */
+    var wants = wantsAliveOrDead(action);
+
+    /* A Shaman-marked body has been dealt with. Somebody who goes round finds a
+     * dark house and nobody home, waits, and leaves — and their night is gone,
+     * because they did go. Hiding the body is the Shaman's entire contribution
+     * and it has to survive somebody walking up to the door. */
+    if (wants === "living" && !occupant.alive && occupant.deathHidden && !R.isWolf(actor.role)) {
+      out.say(actorId, "The house is dark and nobody answers. You wait a while, and leave.", "info");
+      turn.spent = true; turn.at = now();
+      return { ok: true, blocked: "quiet", spent: true, outcomes: out.list };
+    }
+
+    if (wants === "living" && !occupant.alive) {
+      var first = house.body && house.body.foundBy.indexOf(actorId) < 0;
+      if (house.body && first) house.body.foundBy.push(actorId);
+      note(state, actorId, occupant.id, "dead");
+      out.say(actorId, bodyText(state, actor, occupant, house), "death",
+        { found: occupant.id, first: !!(first && house.body && house.body.foundBy.length === 1) });
+      return {
+        ok: true, blocked: "dead", spent: false, outcomes: out.list,
+        discovery: {
+          occupant: occupant.name,
+          first: !!(first && house.body && house.body.foundBy.length === 1),
+          text: bodyText(state, actor, occupant, house)
+        }
+      };
+    }
+    if (wants === "dead" && occupant.alive) {
+      note(state, actorId, occupant.id, "alive");
+      out.say(actorId, occupant.name + " is alive and perfectly well. Nothing for you to do here.", "info",
+        { alive: occupant.id });
+      return { ok: true, blocked: "alive", spent: false, outcomes: out.list };
+    }
+
     var ctx = {
       state: state, R: api, roles: R,
       actor: actor, house: house, occupant: occupant,
@@ -316,6 +435,9 @@
 
     var res = fn(ctx) || {};
     if (res.ok === false) return { ok: false, reason: res.reason || "refused", outcomes: out.list };
+
+    // Carrying an action out is itself proof the occupant was there to receive it.
+    if (occupant.id !== actorId) note(state, actorId, occupant.id, occupant.alive ? "alive" : "dead");
 
     // A committed action is a visit, and visits are what the Detective reads
     // and the Engineer's trap catches. Prompts that are still open are not
@@ -332,6 +454,14 @@
       pending: res.pending || null,
       outcomes: out.list
     };
+  }
+
+  /** Does this action need somebody alive behind the door, or a body? */
+  function wantsAliveOrDead(action) {
+    var sel = action.houses || "any";
+    if (sel.indexOf("living-") === 0) return "living";
+    if (sel.indexOf("dead-") === 0) return "dead";
+    return "any";
   }
 
   function findUniversal(id) {
@@ -417,6 +547,7 @@
       if (shaman) out.say(shaman.id, "" + target.name + " died under your mark. Nothing will be announced.", "hidden");
     }
 
+    target.deathHidden = hidden;
     var record = { id: target.id, cause: cause, byId: byId, at: at, night: state.round, hidden: hidden };
     if (state.night) {
       state.night.deaths.push(record);
@@ -431,6 +562,19 @@
     target.diedAt = at;
     target.diedNight = state.round;
     target.diedCause = cause;
+
+    /* Whoever did it knows, and so does the pack when the pack did it. Nobody
+     * else does — not until somebody goes round, or until dawn. */
+    if (byId) note(state, byId, target.id, "dead");
+    if (cause === CAUSE.PACK) {
+      state.players.forEach(function (p) {
+        if (p.alive && R.isWolf(p.role)) note(state, p.id, target.id, "dead");
+      });
+    }
+    if (cause === CAUSE.LYNCH) {
+      // The rope is public by definition.
+      announceDeath(state, target.id);
+    }
 
     out.say(target.id, "You are dead. You can watch. The village cannot hear you.", "death");
 
@@ -467,6 +611,10 @@
     delete target.diedAt;
     delete target.diedNight;
     delete target.diedCause;
+    // A public revival un-tells the village; a quiet one only the reviver knows.
+    delete target.deathHidden;
+    forgetDeath(state, targetId, opts.publicly !== false);
+    if (opts.byId) note(state, opts.byId, targetId, "alive");
 
     if (opts.newRole && opts.newRole !== target.role) {
       var fresh = R.initialState(opts.newRole);
@@ -636,6 +784,13 @@
 
   var api = {
     beginNight: beginNight,
+    knowsDead: knowsDead,
+    trustNoone: trustNoone,
+    believedAlive: believedAlive,
+    knowsStatus: knowsStatus,
+    note: note,
+    announceDeath: announceDeath,
+    forgetDeath: forgetDeath,
     endNight: endNight,
     knock: knock,
     perform: perform,

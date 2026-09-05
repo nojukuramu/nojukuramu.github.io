@@ -127,6 +127,7 @@ function scene(which) {
     WG.resolver.beginNight(st);
     var out = WG.resolver.bag();
     WG.resolver.kill(st, "p3", { cause: "pack", byId: "p1", out: out });
+    if (phase !== "night") WG.resolver.announceDeath(st, "p3");
     st.publicLog = [
       { text: "Dario is dead - torn apart in the night. They were a Villager.", kind: "death", round: 2, at: Date.now() },
       { text: "Aisa found Dario and raised the alarm.", kind: "report", round: 2, at: Date.now() }

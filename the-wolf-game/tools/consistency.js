@@ -156,6 +156,47 @@ console.log("\nNo emoji ship anywhere");
   ok("the data names a glyph for everything", wanted.every(Boolean));
 })();
 
+console.log("\nNo CSS transform sits on top of an SVG transform attribute");
+(function () {
+  /* A CSS `transform` REPLACES a `transform` presentation attribute rather than
+   * composing with it. Animating a class that is also placed with the attribute
+   * stacks every one of those elements at the origin, silently. It happened to
+   * the whole treeline once; this is so it cannot happen again. */
+  var css = read("css/app.css");
+  var animated = {};
+  css.replace(/\.([a-zA-Z-]+)\s*\{[^}]*animation:[^}]*\}/g, function (block, cls) {
+    if (/transform/.test(block) || /animation:\s*(tree-sway|sway|lamp-sway|flicker|alarm|firefly)/.test(block)) {
+      animated[cls] = true;
+    }
+    return block;
+  });
+  // Also anything whose keyframes touch transform.
+  var kf = {};
+  css.replace(/@keyframes\s+([a-zA-Z-]+)\s*\{([\s\S]*?)\n\}/g, function (_, name, body) {
+    if (/transform:/.test(body)) kf[name] = true;
+    return _;
+  });
+  css.replace(/\.([a-zA-Z-]+)[^{]*\{([^}]*)\}/g, function (_, cls, body) {
+    var m = /animation(?:-name)?:\s*([a-zA-Z-]+)/.exec(body);
+    if (m && kf[m[1]]) animated[cls] = true;
+    return _;
+  });
+
+  var js = read("js/ui/village.js") + read("js/ui/screens.js");
+  var clashes = [];
+  // el("g", { class: "x", transform: ... }) — the exact shape that breaks.
+  js.replace(/class:\s*"([^"]+)"[^)]*?transform:/g, function (_, classes) {
+    classes.split(/\s+/).forEach(function (c) { if (animated[c]) clashes.push(c); });
+    return _;
+  });
+  js.replace(/transform:[^)]*?class:\s*"([^"]+)"/g, function (_, classes) {
+    classes.split(/\s+/).forEach(function (c) { if (animated[c]) clashes.push(c); });
+    return _;
+  });
+  ok("no animated class is also placed with a transform attribute",
+    clashes.length === 0, [].concat(new Set(clashes)).join(", "));
+})();
+
 console.log("\nThe flow and the sky refer to each other correctly");
 (function () {
   var flow = JSON.parse(read("data/game_flow.json"));

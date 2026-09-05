@@ -35,7 +35,9 @@
     if (viewer.id === subject.id) return true;
     if (state.winner) return true;                                  // the reveal at the end
     if (viewer.role === "manipulator") return true;
-    if (!subject.alive && state.config.rules.revealRolesOnDeath) return true;
+    // A role is revealed with the body, so only once the viewer knows there is one.
+    if (!subject.alive && state.config.rules.revealRolesOnDeath &&
+        WG.resolver.knowsDead(state, viewer, subject)) return true;
     if (subject.role === "mayor" && R.teamOf(viewer.role) === "village") return true;
 
     var vt = R.teamOf(viewer.role), st = R.teamOf(subject.role);
@@ -46,12 +48,19 @@
   }
 
   function playerCard(state, viewer, p) {
+    /* `alive` here is BELIEF, not truth. Somebody killed an hour ago is still
+     * at home as far as this viewer is concerned, and a Shaman-marked death is
+     * never announced at all — so for the rest of the game the village goes on
+     * counting a player it does not have. Reading `p.alive` straight through
+     * leaked both. */
+    var believed = !viewer || WG.resolver.believedAlive(state, viewer, p);
     var card = {
       id: p.id,
       name: p.name,
       seat: p.seat,
       avatar: p.avatar,
-      alive: p.alive,
+      alive: believed,
+      trulyDead: !p.alive && !believed ? undefined : undefined,
       connected: p.connected,
       cohost: !!state.cohosts[p.id],
       isHost: p.id === state.hostId,
@@ -60,7 +69,7 @@
       isMe: !!viewer && p.id === viewer.id,
       speech: null,
       role: null,
-      diedNight: p.alive ? null : (p.diedNight || null)
+      diedNight: believed ? null : (p.diedNight || null)
     };
     if (state.config.rules.animalSpeech && (p.role === "cat" || p.role === "dog") && knowsRole(state, viewer, p)) {
       card.speech = p.role === "cat" ? "meow" : "bark";
@@ -73,27 +82,30 @@
     return card;
   }
 
-  /** The doors, as the viewer may see them. Never what is behind them. */
+  /**
+   * The doors, as this one viewer may see them.
+   *
+   * A house is drawn from belief and nothing else. Somebody killed ten minutes
+   * ago has a lit window and smoke from the chimney like everyone else, because
+   * nobody has been round yet — and the moment the map says otherwise, the
+   * whole point of a secret night is gone.
+   */
   function houseCards(state, viewer) {
     if (!state.night || !viewer) return [];
     return state.players.map(function (p) {
       var h = state.night.houses[p.id];
-      var body = h && h.body;
-      var visible = body && WG.resolver.canSeeBody(state, viewer, h);
+      var known = WG.resolver.knowsDead(state, viewer, p);
+      var found = !!(h && h.body && h.body.foundBy.indexOf(viewer.id) >= 0);
       return {
         id: p.id,
         ownerName: p.name,
         seat: p.seat,
         avatar: p.avatar,
-        occupantAlive: p.alive,
+        occupantAlive: !known,
         isOwn: p.id === viewer.id,
-        /* "dead-tonight" is the state the whole night model turns on: a door
-         * that will greet a late Bodyguard with a body instead of a charge. */
-        state: !p.alive
-          ? (visible && body.night === state.round ? "dead-tonight" : (visible ? "dead" : "quiet"))
-          : "living",
-        bodyFound: !!(visible && body.foundBy.indexOf(viewer.id) >= 0),
-        reported: !!(h && h.reportedBy && visible),
+        state: !known ? "living" : (p.diedNight === state.round ? "dead-tonight" : "dead"),
+        bodyFound: found,
+        reported: !!(h && h.reportedBy && known),
         visited: !!(h && h.visits.some(function (v) { return v.byId === viewer.id; }))
       };
     });

@@ -9,7 +9,7 @@
   global.WG.roles.define("vet", {
     actions: {
       vet_revive: function (c) {
-        var res = c.R.revive(c.state, c.occupant.id, { out: c.out });
+        var res = c.R.revive(c.state, c.occupant.id, { out: c.out, byId: c.actor.id });
         if (res.result !== "alive") return { ok: false, reason: "Nothing to be done for them." };
         c.actor.hasRevived = true;
         c.occupant.hasBeenTreatedByVet = true;

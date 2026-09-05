@@ -159,30 +159,49 @@
     }
 
     /**
-     * The morning report. Deaths first, then who found them, then everything
-     * that was queued up during the night. Hidden deaths are not in here — a
-     * Shaman-marked victim simply stops being mentioned, and the village has to
-     * notice the empty chair on its own.
+     * The morning report — the one moment the night stops being secret.
+     *
+     * Normally every death is named here whether or not anybody reported it:
+     * the village walks out at dawn and sees the open door. Reporting does not
+     * unlock the news, it adds a name to it — who found them — which is worth
+     * having and occasionally worth lying about.
+     *
+     * With "Don't believe anyone" on, dawn names nobody, and the only bodies
+     * the village ever hears about are the ones somebody went and reported.
+     *
+     * A Shaman-marked body is in neither list. It was never there to find.
      */
     function buildMorningReport() {
       var night = state.lastNight || { deaths: [], reports: [] };
-      var shown = night.deaths.filter(function (d) { return !d.hidden; });
+      var quiet = !!state.config.rules.trustNoone;
+      var reported = {};
+      night.reports.forEach(function (r) { reported[r.houseId] = r.byId; });
+
+      var shown = night.deaths.filter(function (d) {
+        if (d.hidden) return false;
+        return !quiet || reported[d.id];
+      });
 
       if (!shown.length) {
-        publish("Everybody who went to bed got up again.", "morning");
+        publish(quiet
+          ? "Morning. Nobody raised the alarm about anything."
+          : "Everybody who went to bed got up again.", "morning");
       } else {
         shown.forEach(function (d) {
           var p = P(d.id);
           if (!p) return;
+          Res.announceDeath(state, d.id);
           var role = state.config.rules.revealRolesOnDeath
             ? " They were a " + R.get(p.role).name + "." : "";
-          publish("" + p.name + " is dead — " + (WG.protocol.CAUSE_TEXT[d.cause] || "dead") + "." + role, "death");
+          publish(p.name + " is dead - " + (WG.protocol.CAUSE_TEXT[d.cause] || "dead") + "." + role, "death");
         });
       }
+
       night.reports.forEach(function (r) {
         var finder = P(r.byId), victim = P(r.houseId);
         if (!finder || !victim) return;
-        publish("" + finder.name + " found " + victim.name + " and raised the alarm.", "report");
+        if (!state.announcedDead || !state.announcedDead[victim.id]) return;
+        publish(finder.name + " found " + victim.name + " and raised the alarm.", "report");
       });
 
       queuedPublic.forEach(function (o) { publish(o.text, o.kind); });
@@ -225,7 +244,20 @@
         }
       }
 
-      lynch(P(top), high, aliveCount);
+      var chosen = P(top);
+      if (chosen && !chosen.alive) {
+        /* The village went to fetch somebody who was already dead. That is the
+         * Shaman's whole trick coming apart at the worst possible moment for
+         * the pack: nobody hangs, and everyone finds out at once. */
+        Res.announceDeath(state, chosen.id);
+        var role = state.config.rules.revealRolesOnDeath
+          ? " They were a " + R.get(chosen.role).name + "." : "";
+        publish("The village went to fetch " + chosen.name + " and found the house empty. " +
+          "They have been dead for some time." + role, "vote");
+        checkWin();
+        return;
+      }
+      lynch(chosen, high, aliveCount);
     }
 
     function lynch(target, votes, aliveCount) {
@@ -403,7 +435,10 @@
           if (target === fromId && !state.config.rules.allowSelfVote) return refuse(fromId, "You cannot vote for yourself.");
           if (target !== "SKIP") {
             var t = P(target);
-            if (!t || !t.alive) return refuse(fromId, "They are not standing there.");
+            // A Shaman-hidden death is not public, so the village may well vote
+            // for somebody who is already in the ground. That has to be allowed
+            // or the ballot itself gives the secret away.
+            if (!t || Res.knowsDead(state, p, t)) return refuse(fromId, "They are not standing there.");
           }
           if (state.currentEvent && state.currentEvent.id === "festival") {
             var alive = living().map(function (x) { return x.id; });

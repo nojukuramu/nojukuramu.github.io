@@ -199,6 +199,7 @@
   var COPY = {
     "flow.endNightEarly": ["End night early", "Close it once every turn is spent."],
     "flow.endVotingEarly": ["End vote early", "Close it once everyone has voted."],
+    "rules.trustNoone": ["Don't believe anyone", "Dawn names nobody. Only reported bodies are ever announced."],
     "rules.revealRolesOnDeath": ["Reveal roles on death", "The village learns what they were."],
     "rules.firstNightImmunity": ["First night is safe", "Nobody dies on night one."],
     "rules.showVoteCounts": ["Show the tally", "Everyone sees the counts."],

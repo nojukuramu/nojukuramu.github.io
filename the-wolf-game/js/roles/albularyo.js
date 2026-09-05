@@ -9,7 +9,7 @@
   global.WG.roles.define("albularyo", {
     actions: {
       albularyo_revive: function (c) {
-        var res = c.R.revive(c.state, c.occupant.id, { out: c.out });
+        var res = c.R.revive(c.state, c.occupant.id, { out: c.out, byId: c.actor.id, publicly: false });
         if (res.result !== "alive") return { ok: false, reason: "They cannot be called back." };
         c.actor.hasRevived = true;
         c.out.say(c.actor.id,

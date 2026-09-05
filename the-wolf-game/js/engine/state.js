@@ -23,6 +23,19 @@
         endVotingEarly: true     // close the vote once everyone has voted
       },
       rules: {
+        /* "Don't believe anyone."
+         *
+         * Normally the night is secret and the morning is not: a killing is
+         * known only to whoever caused it and whoever went round, and then at
+         * dawn the village is told who died whether or not anybody reported it.
+         * Reporting adds a name to that announcement — who found them — which
+         * is a fact worth having and occasionally worth lying about.
+         *
+         * With this on, dawn names nobody. The village only ever hears about a
+         * body somebody went and reported, so an unreported death stays a
+         * rumour for the rest of the game and the roster keeps counting a
+         * player who is not there. */
+        trustNoone: false,
         revealRolesOnDeath: true,
         firstNightImmunity: false,
         showVoteCounts: true,

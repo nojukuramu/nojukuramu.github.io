@@ -37,6 +37,34 @@ the last living wolf has howled — rather than being deferred to dawn. A pack
 that agrees early kills early, and everything the village does after that is
 too late.
 
+### What a night is allowed to tell you
+
+Truth and belief are separate objects in this engine, and everything the village
+can see is built out of belief.
+
+- **During the night, a killing is secret.** A house whose occupant was killed
+  ten minutes ago has a lit window, smoke from the chimney and a lamp on the
+  porch, exactly like every other house. The roster still counts them. Only the
+  people who caused it — and anybody who has been round — know otherwise.
+- **The way to find out is to do something there.** Standing at a door tells you
+  nothing. Committing an action does: try to guard somebody who is already dead
+  and the night tells you, in your own role's words, why it did not work. That
+  attempt costs you nothing but the seconds it took, and on this clock seconds
+  are the real currency.
+- **At dawn the village is told**, whether or not anybody reported it. Reporting
+  does not unlock the news — it adds a name to it: who found them. Which is
+  worth having, and occasionally worth lying about.
+- **From that morning on the house carries the mark**, for everybody, for the
+  rest of the game.
+- **A Wolf Shaman's marked kill is in none of that.** It is never announced, and
+  somebody who walks up to that door finds a dark house and nobody home. The
+  village goes on counting a player it does not have.
+
+There is one room setting on top of this — **"Don't believe anyone"** — which
+takes the dawn announcement away entirely. With it on, the only bodies the
+village ever hears about are the ones somebody went and reported, so an
+unreported death stays a rumour for the rest of the game.
+
 ### Houses first, actions second
 
 You do not pick an action and then a target. You walk up to a **door**, and are
@@ -63,9 +91,18 @@ from the treeline to the foreground, mist in the gaps, nearer things larger and
 drawn last. Generated from the room code, so it is the same valley every time
 you open that room and a different one for every room.
 
+The geography is laid out *before* anything is placed in it, which is why the
+village looks deliberate: the river, the road and the square are decided first,
+and then houses are darted into each depth band and rejected until they land
+somewhere a person would actually build — off the road, out of the water, clear
+of the square and of each other, and preferably near enough the road to have a
+track running down to the door. The bridge is drawn at the point where the road
+and the river actually cross, not at a hard-coded guess.
+
 Behind it, a drawn sky: a star field that fades in as the sun goes down, the sun
 and the moon on opposite ends of one arc, a warm band along the ridge at sunrise
-and sunset, clouds lit from wherever the sun is.
+and sunset, clouds lit from wherever the sun is, birds crossing by day and bats
+at night.
 
 Both are driven by the same two numbers the phase clock produces — the hour, and
 how much starlight is showing — so the sky, the valley and the interface can
@@ -115,6 +152,12 @@ actually drawn.
   phone, instead of a 70% dice roll.
 - **Fullscreen** and an **install button** (it is a proper PWA, offline shell
   and all).
+- **Sound**, synthesised from nothing. There is not one audio file in the repo
+  and not one request: crickets are a 4.6 kHz sine chopped at 42 Hz, a wolf is a
+  glide on two detuned saws with a long tail, a crow is a bandpassed saw chopped
+  hard. The ambient bed follows the phase clock — crickets and an owl at night,
+  birds by day — and one-shots duck it rather than stacking on it. Nothing plays
+  until you have touched the screen.
 - **Blood.** A death lands as a flash and a spatter across the glass; the
   running stain on the edges of the screen is the fraction of the village that
   is gone, so a game going badly looks like it. A house whose occupant died
@@ -163,6 +206,7 @@ js/
   roles/               one file per role. 35 of them, plus _generic.js
   ui/
     icons.js           every glyph, drawn. no emoji anywhere
+    sound.js           the whole soundtrack, synthesised. no audio files
     theme.js           light/dark, and the time-of-day blend
     sky.js             the drawn sky: stars, sun, moon, hills, blood
     village.js         the valley: river, road, woods, houses at depth
@@ -215,10 +259,11 @@ no pack tally reaches a phone that should not have it.
 ## Tests
 
 ```
-node tools/engine-test.js    # 109 assertions, no browser, no network
-node tools/consistency.js    #  21 checks for drift between files that must agree
+node tools/engine-test.js    # 158 assertions, no browser, no network
+node tools/consistency.js    #  22 checks for drift between files that must agree
 node tools/fit-test.js       #   9 viewport sizes, nothing may scroll
-node tools/e2e.js            #  38 assertions: four real browsers, one real room
+node tools/sound-test.js     #  13 checks: every voice renders real audio
+node tools/e2e.js            #  41 assertions: four real browsers, one real room
 node tools/shots.js          # a screenshot of every screen in both themes
 node tools/icon-sheet.js     # every glyph at every size, to look at
 node tools/make-icons.py     # regenerate the app icon

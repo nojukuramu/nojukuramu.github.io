@@ -9,12 +9,10 @@
     "",
     "The game is house-first: you pick a HOUSE and are then offered the actions your",
     "role can perform there. So every action carries a `houses` selector (which doors",
-    "it lights up) rather than a flat list of legal targets.",
     "",
-    "`icon` names a glyph in js/ui/icons.js. Never an emoji: they render as a different",
-    "picture on every platform and they are the loudest possible signal that a thing is",
-    "a web page rather than a game. Copy is kept short for the same reason - a player",
-    "reading a paragraph is a player not playing."
+    "Selectors are evaluated against what the actor BELIEVES, never against the",
+    "truth. A house whose occupant was killed an hour ago looks like every other",
+    "house until somebody tries something there and finds out the hard way."
   ],
   "teams": {
     "village": {
@@ -66,13 +64,13 @@
     "living-any": "Houses of living players, your own included.",
     "living-not-last": "Living players, except the one you chose last night.",
     "self": "Your own house only.",
-    "dead-any": "Houses whose occupant is dead.",
-    "dead-wolves": "Dead players who were on the werewolf team.",
-    "dead-pets": "Dead Cats and Dogs who have not been treated before.",
-    "dead-tonight": "Houses whose occupant died during the current night.",
+    "dead-any": "Houses you know to be empty, and houses you cannot know either way.",
+    "dead-wolves": "Werewolves you know or suspect to be dead.",
+    "dead-pets": "Cats and Dogs, untreated, that you know or suspect to be dead.",
     "living-non-cult": "Living players not already on the cult team.",
     "living-cult": "Living players on the cult team.",
-    "living-non-wolf": "Living players not on the werewolf team."
+    "living-non-wolf": "Living players not on the werewolf team.",
+    "found-body": "A body you have personally found, that nobody has reported yet."
   },
   "chargeModes": {
     "used": "The player field counts actions SPENT; charges left is `charges` minus it. The default.",
@@ -1534,8 +1532,8 @@
       "label": "Report the body",
       "houseVerb": "Raise the alarm",
       "icon": "alarm",
-      "description": "Free. The village learns at dawn who found them - killers included.",
-      "houses": "dead-tonight",
+      "description": "Only for a body you found yourself. The village learns at dawn who found them.",
+      "houses": "found-body",
       "spendsTurn": false,
       "availableTo": "all",
       "resolvesAt": "immediate"
