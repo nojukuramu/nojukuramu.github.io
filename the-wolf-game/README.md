@@ -290,6 +290,12 @@ no pack tally reaches a phone that should not have it.
 ## Tests
 
 ```
+node tools/test.js           # every suite below, one summary, non-zero on failure
+node tools/test.js --fast    #   just the four that need no browser
+node tools/test.js --only e2e
+```
+
+```
 node tools/engine-test.js    # 168 assertions, no browser, no network
 node tools/role-interaction-test.js
                              # 296 assertions across 96 role-interaction cases;
