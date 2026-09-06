@@ -194,12 +194,17 @@ testCase("ST-01", "Seer investigates their own house");
   var mine = r.doors("p0", "p0");
   var res = r.eng.handle({ type: "ACT", houseId: "p0", actionId: "investigate" }, "p0");
 
-  ok("the engine accepts it (current behaviour, pinned)", res.ok === true);
-  ok("and tells the Seer what they already knew", r.said("p0", "Seer is a Seer"));
-  ok("and the whole night is gone for it", r.state.night.turns.p0.spent === true);
+  ok("their own door does not offer it", mine.indexOf("investigate") < 0, mine);
+  ok("and the engine refuses it if the phone asks anyway", res.ok === false, JSON.stringify(res));
+  ok("so the night is still theirs to spend", r.state.night.turns.p0.spent === false);
+  // The role still works on everybody else.
+  var on = r.eng.handle({ type: "ACT", houseId: "p1", actionId: "investigate" }, "p0");
+  ok("reading somebody else still works", on.ok === true, JSON.stringify(on));
+  ok("and says what they are", r.said("p0", "Werewolf"));
   finding("BUG-01",
     "the Seer can read their own role and burn their entire night on it",
-    mine.indexOf("investigate") >= 0 && res.ok === true,
+    mine.indexOf("investigate") >= 0 || res.ok === true,
+    "FIXED: seer.investigate is houses=\"living-others\" now. " +
     "data/list_of_roles.json seer.investigate houses=\"living-any\"; " +
     "js/engine/resolver.js:264 (\"living-any\" is `alive`, which never excludes the actor)");
 })();
@@ -430,11 +435,17 @@ testCase("REP-01", "The Doctor's no-repeat never expires");
 
   r.eng.advance(); night(r);
   var stillShut = !r.offered("p0", "p1", "protect");
-  ok("night three: still closed (current behaviour, pinned)", stillShut);
+  ok("night three: open again, because a night passed", !stillShut);
+  // And the rule itself still bites on consecutive nights.
+  r.eng.handle({ type: "ACT", houseId: "p1", actionId: "protect" }, "p0");
+  r.eng.advance(); night(r);
+  ok("night four: closed again, having just been used", !r.offered("p0", "p1", "protect"));
   finding("BUG-02",
     "\"except the one you chose last night\" is implemented as \"except the last one you ever chose\" — " +
     "a Doctor who takes a night off can never return to that house for the rest of the game",
     stillShut,
+    "FIXED: the Doctor records the round alongside the name, and the selector bars it only " +
+    "when that round was last night. " +
     "js/engine/resolver.js:266 (\"living-not-last\" reads actor.lastProtected) and " +
     "js/roles/doctor.js:15, which sets it and nothing ever clears it");
 })();
@@ -825,13 +836,22 @@ testCase("CONV-02", "A Doppelgänger copying the Assassin gets a knifeless Assas
   r.eng.handle({ type: "ACT", houseId: "p1", actionId: "copy" }, "p0");
   ok("the copy is an Assassin", roleOf(r, "p0") === "assassin");
   var noKnives = P(r.state, "p0").killCharges === 0;
-  ok("with zero charges (current behaviour, pinned)", noKnives);
+  ok("armed with one knife per leader dealt, like the original", !noKnives,
+    String(P(r.state, "p0").killCharges));
   r.eng.advance(); night(r);
-  ok("so assassinate is dark forever", r.doors("p0", "p3").indexOf("assassinate!") >= 0);
+  ok("so assassinate is a live offer", r.doors("p0", "p3").indexOf("assassinate!") < 0,
+    r.doors("p0", "p3"));
+  // Spending the last knife must not look like never having had one.
+  P(r.state, "p0").killCharges = 0;
+  WG.win.check(r.state);
+  ok("and a spent Assassin is not re-armed by the sweep",
+    P(r.state, "p0").killCharges === 0);
   finding("BUG-04",
     "any Assassin created after setup — copied, swapped or otherwise — has killCharges 0 and " +
     "can never assassinate anything, because charges are only ever handed out in noteLeaders()",
     noKnives,
+    "FIXED: Win.armAssassins() hands knives to anybody holding the card who has not been armed " +
+    "yet, and runs on every win check. " +
     "js/engine/win.js:123-131 (noteLeaders runs once, at deal time); " +
     "data/list_of_roles.json assassin.state.killCharges = 0");
 })();
@@ -895,15 +915,19 @@ testCase("CONV-05", "A swap moves a role without moving the bookkeeping");
   r.eng.handle({ type: "ACT", houseId: "p1", actionId: "swap_roles" }, "p0");
   r.eng.handle({ type: "ACT", houseId: "p2", actionId: "swap_roles" }, "p0");
   ok("the Seer's card has moved", roleOf(r, "p2") === "seer" && roleOf(r, "p1") === "villager");
-  var stale = r.state.leadersAlive.join() === "p1";
-  ok("the leader list has not (current behaviour, pinned)", stale);
+  var stale = WG.win.livingLeaders(r.state).join() === "p1";
+  ok("and the leader list moved with it", !stale,
+    WG.win.livingLeaders(r.state).join());
+  ok("it names whoever holds the card now", WG.win.livingLeaders(r.state).join() === "p2");
   slay(r, "p2", "poison", "p4");
-  ok("killing the real Seer does not clear the list", r.state.leadersAlive.join() === "p1");
+  ok("killing the real Seer clears the list", WG.win.livingLeaders(r.state).length === 0);
   finding("BUG-07",
     "state.leadersAlive tracks player ids fixed at deal time. Any role change — swap, promotion, " +
     "Doppelgänger, Archangel revival — desynchronises it, so the Assassin's win condition then " +
     "points at people who are not leaders and misses people who are",
     stale,
+    "FIXED: Win.livingLeaders() derives the list from who holds a leader's card right now, so " +
+    "no role change can desynchronise it. " +
     "js/engine/win.js:123-131 noteLeaders(); js/engine/resolver.js:651-654 noteLeaderDeath() " +
     "filters on the CURRENT role, so a demoted leader is never removed");
 })();
@@ -934,8 +958,10 @@ testCase("CONV-07", "A dead player can accept a recruitment, in any phase");
   var pid = Object.keys(r.state.night.prompts)[0];
   slay(r, "p1", "pack", "p2");
   var res = r.eng.handle({ type: "CONSENT", offerId: pid, ok: true }, "p1");
-  var corpseConverted = res.ok === true && roleOf(r, "p1") === "cultist" && !alive(r, "p1");
-  ok("a corpse joins the cult (current behaviour, pinned)", corpseConverted);
+  var corpseConverted = roleOf(r, "p1") === "cultist";
+  ok("a corpse does not join the cult", !corpseConverted, roleOf(r, "p1"));
+  ok("and the offer is discarded rather than left standing",
+    !(r.state.night.prompts || {})[pid]);
 
   var r2 = room(["CL", "V", "W", "V2", "V3", "V4"]);
   give(r2, { p0: "cult_leader", p1: "villager", p2: "werewolf", p3: "villager", p4: "villager", p5: "villager" });
@@ -944,13 +970,24 @@ testCase("CONV-07", "A dead player can accept a recruitment, in any phase");
   var pid2 = Object.keys(r2.state.night.prompts)[0];
   WG.clock.enter(r2.state, "discussion");
   var res2 = r2.eng.handle({ type: "CONSENT", offerId: pid2, ok: true }, "p1");
-  var dayConverted = res2.ok === true && roleOf(r2.state && r2, "p1") === "cultist";
-  ok("so does a living player, in broad daylight (current behaviour, pinned)", dayConverted);
+  var dayConverted = roleOf(r2, "p1") === "cultist";
+  ok("nor does a living player in broad daylight", !dayConverted, roleOf(r2, "p1"));
+  ok("they are told why", res2.ok === false, JSON.stringify(res2));
+
+  // The window that IS open: alive, at night, before the offer expires.
+  var r3 = room(["CL", "V", "W", "V2", "V3", "V4"]);
+  give(r3, { p0: "cult_leader", p1: "villager", p2: "werewolf", p3: "villager", p4: "villager", p5: "villager" });
+  night(r3);
+  r3.eng.handle({ type: "ACT", houseId: "p1", actionId: "recruit" }, "p0");
+  var pid3 = Object.keys(r3.state.night.prompts)[0];
+  r3.eng.handle({ type: "CONSENT", offerId: pid3, ok: true }, "p1");
+  ok("a living player at night still joins", roleOf(r3, "p1") === "cultist", roleOf(r3, "p1"));
   finding("BUG-08",
     "CMD.CONSENT has no phase check, no aliveness check and never honours the prompt's own " +
     "expiresAt — a recruitment offer can be accepted the next afternoon, or from the grave",
-    corpseConverted && dayConverted,
-    "js/engine/engine.js:473-487; the expiry written at js/roles/cult_leader.js:21 is read nowhere");
+    corpseConverted || dayConverted,
+    "FIXED: CMD.CONSENT now requires the night phase, a living answerer, and an unexpired " +
+    "prompt. js/engine/engine.js:473-487; the expiry written at js/roles/cult_leader.js:21 is read nowhere");
 })();
 
 testCase("CONV-08", "A Trickster is what it wears, to readers only");
@@ -1148,13 +1185,21 @@ testCase("WIN-01", "Everybody dead is announced as a Village win");
   r.state.players.forEach(function (p) { p.alive = false; });
   var res = WG.win.check(r.state);
   var wrong = !!res && res.team === "village";
-  ok("the win check answers 'village' over an empty village (current behaviour, pinned)", wrong,
-     JSON.stringify(res));
+  ok("the win check does not answer 'village' over an empty village", !wrong, JSON.stringify(res));
+  ok("it answers 'nobody'", !!res && res.team === "nobody", JSON.stringify(res));
+  // And a real village win is still a village win.
+  var q = room(["W", "V", "V2"]);
+  give(q, { p0: "werewolf", p1: "villager", p2: "villager" });
+  P(q.state, "p0").alive = false;
+  var won = WG.win.check(q.state);
+  ok("one wolf dead, two villagers standing, still a Village win",
+    !!won && won.team === "village", JSON.stringify(won));
   finding("BUG-10",
     "the \"Everybody is dead. Nobody wins a village with nobody in it.\" branch is unreachable: " +
     "the wolves-are-zero test above it already matches an empty board, so a total wipe is " +
     "announced as a Village victory",
     wrong,
+    "FIXED: the empty-board test now runs before the wolves-are-zero one. " +
     "js/engine/win.js:68-70 shadows js/engine/win.js:76-78");
 })();
 
@@ -1164,15 +1209,23 @@ testCase("WIN-02", "An Assassin with no leaders in the bag wins before the deal"
   var r = room(["A", "B", "C", "D", "E", "F"]);
   r.state.roster = { assassin: 1, werewolf: 1 };
   var s = r.eng.handle({ type: "START" }, "p0");
-  var unplayable = min === 0 && s.ok === false;
-  ok("the roster is refused outright (current behaviour, pinned)", unplayable, JSON.stringify(s));
-  ok("with a message that explains nothing", /no game in it/.test(s.reason || ""), s.reason);
+  var unplayable = min === 0 || s.ok === false;
+  ok("the roster is a perfectly ordinary game", !unplayable, JSON.stringify(s) + " min=" + min);
+  ok("and it has a smallest playable table", min >= 2, String(min));
+  // The Assassin has nothing to hunt, so they cannot win — but they must not
+  // have won already, and they must not block anybody else from winning.
+  var q = room(["Ass", "W", "V", "V2"]);
+  give(q, { p0: "assassin", p1: "werewolf", p2: "villager", p3: "villager" });
+  ok("an Assassin with no leaders has not already won", WG.win.check(q.state) === null,
+    JSON.stringify(WG.win.check(q.state)));
   finding("BUG-11",
     "leadersAllDead() reads an EMPTY leader list as \"every leader is dead\", so an Assassin in " +
     "a bag with no Alpha, Cult Leader, Mayor or Seer has already won at deal time. " +
     "minimumSeats therefore finds no playable table and the host is told \"That mix has no game " +
     "in it\" for a perfectly ordinary roster",
     unplayable,
+    "FIXED: leadersAllDead() requires that a leader was actually dealt (state.leadersDealt), " +
+    "so an empty bag is no longer a bag of corpses. " +
     "js/engine/win.js:116-120 leadersAllDead() — `state.leadersAlive != null` is true for []");
 })();
 
@@ -1185,14 +1238,20 @@ testCase("WIN-03", "An Assassin wins even when a new leader has taken the title"
   slay(r, "p1", "poison", null);
   var res = WG.win.check(r.state);
   var wrong = !!res && res.team === "assassin";
-  ok("the Assassin is declared the winner (current behaviour, pinned)", wrong, JSON.stringify(res));
-  ok("with a living Seer standing in the village",
+  ok("the Assassin is not declared the winner", !wrong, JSON.stringify(res));
+  ok("because a living Seer is standing in the village",
     r.state.players.some(function (p) { return p.alive && p.role === "seer"; }));
+  ok("and the new leader is on the list", WG.win.livingLeaders(r.state).join() === "p3");
+  // Kill the one who actually holds the title, and the hunt is over.
+  slay(r, "p3", "poison", null);
+  var done = WG.win.check(r.state);
+  ok("killing them wins it", !!done && done.team === "assassin", JSON.stringify(done));
   finding("BUG-12",
     "leadersAlive is a list of player ids frozen at deal time; a leader created afterwards is " +
     "invisible to the Assassin's win condition, and a leader who stops being one is never " +
     "removed from it",
     wrong,
+    "FIXED with BUG-07 — the same derived list. " +
     "js/engine/win.js:96-99 and js/engine/win.js:116-120; js/engine/resolver.js:651-654");
 })();
 
@@ -1389,13 +1448,13 @@ testCase("FLOW-06", "Curfew locks the village in without locking the night open"
   });
   r.eng.handle({ type: "ACT", houseId: "p3", actionId: "wolf_vote" }, "p2");
   ok("and the night closes under curfew", WG.resolver.allTurnsSpent(r.state) === true);
-  ok("except that a Seer may still read themselves through a curfew",
+  ok("and a Seer cannot read themselves through a curfew either",
     (function () {
       var r2 = room(["Seer", "W", "V", "V2"]);
       give(r2, { p0: "seer", p1: "werewolf", p2: "villager", p3: "villager" });
       night(r2);
       WG.events.trigger(r2.state, "curfew");
-      return r2.offered("p0", "p0", "investigate");
+      return !r2.offered("p0", "p0", "investigate");
     })());
 })();
 
@@ -1406,22 +1465,45 @@ testCase("FLOW-07", "Under a Festival, ending your night is a dice roll");
   night(r);
   WG.events.trigger(r.state, "festival");
   // Force the redirect onto somebody else's door every time.
-  var refusals = withRandom([0.5, 0.5, 0.5, 0.5], function () {
-    var n = 0;
-    for (var i = 0; i < 4; i++) {
-      if (r.eng.handle({ type: "ACT", houseId: "p0", actionId: "stay_in" }, "p0").ok === false) n++;
-    }
-    return n;
+  // One tap each, in four separate rooms, so a spent turn is never what
+  // refuses the second one. Before the fix all four were "not offered here".
+  var refusals = 0;
+  [0.1, 0.35, 0.6, 0.9].forEach(function (roll) {
+    var q = room(["A", "B", "C", "D", "E"]);
+    give(q, { p0: "villager", p1: "villager", p2: "villager", p3: "villager", p4: "villager" });
+    night(q);
+    WG.events.trigger(q.state, "festival");
+    withRandom([roll], function () {
+      if (q.eng.handle({ type: "ACT", houseId: "p0", actionId: "stay_in" }, "p0").ok === false) refusals++;
+    });
   });
-  ok("staying home is refused when the drink sends you elsewhere (current behaviour, pinned)",
-    refusals === 4, String(refusals));
-  ok("so the turn is still unspent", r.state.night.turns.p0.spent === false);
+  ok("staying home works however the dice land", refusals === 0, String(refusals));
+  withRandom([0.5], function () {
+    r.eng.handle({ type: "ACT", houseId: "p0", actionId: "stay_in" }, "p0");
+  });
+  ok("so the turn is spent and the night can close", r.state.night.turns.p0.spent === true);
+
+  // What the Festival is FOR still happens: a real action lands elsewhere.
+  var q = room(["Doc", "B", "C", "D", "E"]);
+  give(q, { p0: "doctor", p1: "villager", p2: "villager", p3: "villager", p4: "villager" });
+  night(q);
+  WG.events.trigger(q.state, "festival");
+  withRandom([0.5, 0.5], function () {
+    q.eng.handle({ type: "ACT", houseId: "p1", actionId: "protect" }, "p0");
+  });
+  var shielded = Object.keys(q.state.night.houses).filter(function (h) {
+    return q.state.night.houses[h].shields.length > 0;
+  });
+  ok("but a shield still lands on a house the Doctor did not aim at",
+    shielded.length === 1 && shielded[0] !== "p1", shielded.join(","));
   finding("BUG-13",
     "the Festival redirects EVERY action, including stay_in and report. Since stay_in only " +
     "exists at your own door and report only at a body you found, both are simply refused " +
     "until the random redirect happens to land back where you aimed — a player can be unable " +
     "to end their night at all",
     refusals === 4,
+    "FIXED: the redirect now skips actions declared at houses:\"self\" or \"found-body\" and " +
+    "actions that do not spend a turn. " +
     "js/engine/engine.js:420-424 redirects before Res.perform, with no exemption for " +
     "houses=\"self\" or free actions");
 })();
@@ -1546,12 +1628,40 @@ testCase("VOTE-05", "Ties: nobody, and the coin toss");
     withRandom([0], function () { r.eng.advance(); });
     return r;
   }
-  ok("'nobody' hangs nobody", /Tied 2 ways/.test(tied("nobody").log()));
+  var non = tied("nobody");
+  ok("'nobody' hangs nobody", /Tied 2 ways\. Nobody hangs/.test(non.log()), non.log());
+  ok("and moves on to the verdict", non.state.phase !== "voting", non.state.phase);
   var rnd = tied("random");
   ok("'random' draws a straw", /broken by the drawing of a straw/.test(rnd.log()), rnd.log());
+
   var run = tied("runoff");
-  var silent = /Tied 2 ways/.test(run.log());
-  ok("'runoff' behaves exactly like 'nobody' (current behaviour, pinned)", silent, run.log());
+  var silent = /Tied 2 ways\. Nobody hangs/.test(run.log());
+  ok("'runoff' does not quietly hang nobody", !silent, run.log());
+  ok("it calls a second vote between the tied names",
+    /A second vote, between/.test(run.log()), run.log());
+  ok("and the village is back in the voting phase", run.state.phase === "voting", run.state.phase);
+  ok("with the ballot cut down to the two of them",
+    run.state.runoff && run.state.runoff.candidates.sort().join() === "p0,p1",
+    JSON.stringify(run.state.runoff));
+  ok("a vote for anybody else is refused",
+    run.eng.handle({ type: "VOTE", targetId: "p2" }, "p3").ok === false);
+
+  // The runoff resolves, and one of the two is hanged.
+  run.eng.handle({ type: "VOTE", targetId: "p0" }, "p1");
+  run.eng.handle({ type: "VOTE", targetId: "p0" }, "p2");
+  run.eng.handle({ type: "VOTE", targetId: "p0" }, "p3");
+  withRandom([0], function () { run.eng.advance(); });
+  ok("and the runoff hangs somebody", !alive(run, "p0"), run.log());
+  ok("the runoff is cleared afterwards", !run.state.runoff);
+
+  // A runoff that ties again is a village that has decided not to decide.
+  var twice = tied("runoff");
+  twice.state.votes = {};
+  twice.eng.handle({ type: "VOTE", targetId: "p0" }, "p1");
+  twice.eng.handle({ type: "VOTE", targetId: "p1" }, "p2");
+  withRandom([0], function () { twice.eng.advance(); });
+  ok("a second tie falls through to nobody rather than looping",
+    /Nobody hangs/.test(twice.log()) && twice.state.phase !== "voting", twice.state.phase);
   finding("BUG-14",
     "tieBehaviour offers three values in the room state and the engine implements two: " +
     "\"runoff\" silently falls through to \"nobody hangs\"",
@@ -1848,13 +1958,14 @@ testCase("EV-01", "Blood Moon's second throat is lost whenever the pack finishes
   ok("the event asks for one extra kill", WG.events.extraKills(
     (function () { var s = { currentEvent: null }; WG.events.trigger(s, "blood_moon"); return s; })()) === 1);
   var whenAgreed = run(true), whenNot = run(false);
-  ok("a pack that agrees kills once (current behaviour, pinned)", whenAgreed === 1, String(whenAgreed));
-  ok("a pack that never finishes voting kills twice", whenNot === 2, String(whenNot));
+  ok("a pack that agrees kills twice, as the event says", whenAgreed === 2, String(whenAgreed));
+  ok("and so does a pack that never finishes voting", whenNot === 2, String(whenNot));
   finding("BUG-19",
     "Blood Moon's extra kill only happens when the pack FAILS to finish voting. " +
     "The live path — the last wolf howls, packVote settles it immediately — calls " +
     "resolvePack without the extraKills option, so the event does nothing in the normal case",
-    whenAgreed === 1 && whenNot === 2,
+    whenAgreed !== 2,
+    "FIXED: packVote() passes the event's extraKills on the live path too. " +
     "js/engine/resolver.js:673 `resolvePack(state, out)` with no opts, vs " +
     "js/engine/engine.js:152-153 which does pass them");
 })();
@@ -1908,12 +2019,25 @@ testCase("CFG-01", "First night is safe");
   night(r);
   r.eng.handle({ type: "ACT", houseId: "p1", actionId: "wolf_vote" }, "p0");
   var died = !alive(r, "p1") && r.state.round === 1;
-  ok("somebody dies on night one anyway (current behaviour, pinned)", died);
+  ok("nobody dies on night one", !died);
+  // It covers the night, not the rope, and it lifts on night two.
+  r.eng.advance(); while (r.state.phase !== "night") r.eng.advance();
+  r.eng.handle({ type: "ACT", houseId: "p1", actionId: "wolf_vote" }, "p0");
+  ok("and night two is an ordinary night", !alive(r, "p1") && r.state.round === 2,
+    "round " + r.state.round);
+
+  var q = room(["W", "V", "V2", "V3"]);
+  q.state.config.rules.firstNightImmunity = false;
+  give(q, { p0: "werewolf", p1: "villager", p2: "villager", p3: "villager" });
+  night(q);
+  q.eng.handle({ type: "ACT", houseId: "p1", actionId: "wolf_vote" }, "p0");
+  ok("with the setting off, night one kills as it always did", !alive(q, "p1"));
   finding("BUG-20",
     "rules.firstNightImmunity is in the default config, has a labelled toggle in the settings " +
     "screen and is named in game_flow.json as \"a room setting, not a phase change\" — and is " +
     "read by nothing in the engine",
     died,
+    "FIXED: kill() honours it on round 1 at night, for every cause but the rope. " +
     "js/engine/state.js:40 declares it, js/ui/screens.js:215 offers it, " +
     "data/game_flow.json firstRound.notes promises it; no reader anywhere in js/engine/");
 })();
@@ -1928,8 +2052,16 @@ testCase("CFG-02", "Villagers can be promoted");
   r.eng.handle({ type: "ACT", houseId: "p1", actionId: "wolf_vote" }, "p1");
   r.eng.advance();
   var promoted = roleOf(r, "p0") !== "villager";
-  ok("the villager is promoted with the setting off (current behaviour, pinned)", promoted,
-     roleOf(r, "p0"));
+  ok("the villager is not promoted with the setting off", !promoted, roleOf(r, "p0"));
+
+  var q = room(["V", "W", "V2", "V3"]);
+  give(q, { p0: "villager", p1: "werewolf", p2: "villager", p3: "villager" });
+  q.state.config.rules.villagerPromotion = true;
+  P(q.state, "p0").totalScore = 1200;
+  night(q);
+  q.eng.handle({ type: "ACT", houseId: "p1", actionId: "wolf_vote" }, "p1");
+  q.eng.advance();
+  ok("and is promoted with it on", roleOf(q, "p0") !== "villager", roleOf(q, "p0"));
   finding("BUG-21",
     "rules.villagerPromotion is offered as a toggle and never consulted: the Villager's " +
     "onPhaseEnd promotes on score alone",
@@ -1975,12 +2107,10 @@ testCase("CFG-04", "Every rule the room can set has a reader in the engine");
     return all.split(k).length - 1 === 0;
   });
   console.log("    rules nothing reads: " + (orphans.join(", ") || "none"));
-  ok("exactly two rules are wired to nothing",
-    orphans.length === 2 &&
-    orphans.indexOf("firstNightImmunity") >= 0 &&
-    orphans.indexOf("villagerPromotion") >= 0,
-    orphans.join(", "));
-  ok("and state.js is where both are promised", 
+  // This is the audit that keeps the last two honest: every rule the room can
+  // set now has a reader, and a new one that arrives without one fails here.
+  ok("no rule is wired to nothing", orphans.length === 0, orphans.join(", "));
+  ok("and state.js is still where they are declared",
     /firstNightImmunity/.test(stateSrc) && /villagerPromotion/.test(stateSrc));
 })();
 
@@ -2000,14 +2130,26 @@ testCase("SEE-01", "The Mayor's own card promises more than the redaction gives"
   }
   ok("a villager sees the Mayor", seen("p2", "p0") === "mayor");
   var wolfSees = seen("p1", "p0");
-  ok("a wolf does not (current behaviour, pinned)", wolfSees === null);
+  ok("a wolf does not", wolfSees === null);
   ok("the Masons see each other", seen("p3", "p4") === "mason");
   ok("and nothing else", seen("p3", "p1") === null);
+
+  /* The bug was never in the redaction — it was the role card telling the
+   * Mayor the pack could see them, which is a whole day's argument built on
+   * nothing. Read the card the player is actually shown and hold it to what
+   * the code and the data both say. */
+  var card = WG.roles.hook("mayor", "brief", { state: r.state, self: P(r.state, "p0") });
+  var promise = (card && card.lines || []).join(" ");
+  var contradicts = /so can the ones who are not/i.test(promise);
+  ok("and the Mayor's card does not promise otherwise", !contradicts, promise);
+  ok("the card still says the village can see them",
+    /village/i.test(promise), promise);
   finding("BUG-22",
     "the Mayor's own night briefing says \"Every village-team player can see that you are the " +
     "Mayor. So can the ones who are not\", and the redaction shows the Mayor to the village team " +
     "only. The role card tells the player they are exposed to the pack when they are not",
-    wolfSees === null,
+    contradicts,
+    "FIXED: the card now matches view.js and list_of_roles.json, which already agreed. " +
     "js/roles/mayor.js:12 (the brief) vs js/engine/view.js:41 (village team only); " +
     "data/list_of_roles.json mayor.passives.known agrees with the code, not the brief");
 })();

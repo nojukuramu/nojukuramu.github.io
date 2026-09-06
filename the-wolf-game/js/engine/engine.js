@@ -122,6 +122,7 @@
       state.pandemic = null;
       state.pandemicWon = false;
       state.currentEvent = null;
+      state.runoff = null;
       assignRoles();
       publish(seats.length + " houses. Not all of them are what they look like.", "start");
       enter("role_reveal");
@@ -153,7 +154,12 @@
     function advance() {
       var from = state.phase;
       if (from === "night") closeNight();
-      else if (from === "voting") closeVoting();
+      else if (from === "voting") {
+        // A runoff is the one thing that can send the village back to the same
+        // phase it just left, so closeVoting says so rather than falling
+        // through to the verdict.
+        if (closeVoting() === "runoff") { enter("voting"); return; }
+      }
       else if (from === "role_reveal" || from === "dawn" || from === "verdict" || from === "discussion") { /* nothing to settle */ }
 
       if (state.winner) return;
@@ -245,6 +251,7 @@
 
       if ((counts.SKIP || 0) >= majority) {
         publish("The village hanged nobody. " + counts.SKIP + " of " + aliveCount + ".", "vote");
+        state.runoff = null;
         return;
       }
       delete counts.SKIP;
@@ -255,16 +262,27 @@
         else if (counts[id] === high) tied.push(id);
       });
 
-      if (!top) { publish("Nobody voted. Nobody hangs.", "vote"); return; }
+      if (!top) { publish("Nobody voted. Nobody hangs.", "vote"); state.runoff = null; return; }
       if (tied.length > 1) {
-        if (state.config.rules.tieBehaviour === "random") {
+        var behaviour = state.config.rules.tieBehaviour;
+        if (behaviour === "random") {
           top = tied[Math.floor(Math.random() * tied.length)];
           publish("A tie, broken by the drawing of a straw.", "vote");
+        } else if (behaviour === "runoff" && !state.runoff) {
+          /* One more round, between the tied names only. A runoff that ties
+           * again is a village that has made up its mind not to decide, so the
+           * second one falls through to "nobody" rather than looping. */
+          state.runoff = { candidates: tied.slice(), round: state.round };
+          publish("Tied " + tied.length + " ways. A second vote, between " +
+            tied.map(function (id) { return (P(id) || {}).name || "?"; }).join(" and ") + ".", "vote");
+          return "runoff";
         } else {
           publish("Tied " + tied.length + " ways. Nobody hangs.", "vote");
+          state.runoff = null;
           return;
         }
       }
+      state.runoff = null;
 
       var chosen = P(top);
       if (chosen && !chosen.alive) {
@@ -432,9 +450,20 @@
           if (turn && turn.blocked === "quiz") return refuse(fromId, "Answer the call first.");
 
           var houseId = cmd.houseId;
-          // Festival: what you aimed at is not what you hit.
-          if (state.currentEvent && state.currentEvent.id === "festival") {
-            var pool = state.players.filter(function (x) { return x.alive; }).map(function (x) { return x.id; });
+          /* Festival: what you aimed at is not what you hit.
+           *
+           * Except at your own door. Drunkenness scrambles what you do to other
+           * people; it does not take away your ability to go to bed. `stay_in`
+           * is only ever offered at houses:"self" and `report` only at a body,
+           * so redirecting those meant both were refused as "not offered here"
+           * until the dice happened to land back where the player aimed — and a
+           * player who cannot end their night holds the whole room on the
+           * clock, because endNightEarly waits for every turn. */
+          var aimed = Res.actionSpec(state, fromId, cmd.actionId);
+          var scrambles = !aimed || (aimed.spendsTurn !== false && aimed.houses !== "self" &&
+                                     aimed.houses !== "found-body");
+          if (scrambles && state.currentEvent && state.currentEvent.id === "festival") {
+            var pool = living().map(function (x) { return x.id; });
             houseId = Events.redirect(state, fromId, houseId, pool);
           }
 
@@ -455,6 +484,10 @@
           var target = cmd.targetId;
           if (target === "SKIP" && !state.config.rules.allowSkipVote) return refuse(fromId, "Skipping is off in this room.");
           if (target === fromId && !state.config.rules.allowSelfVote) return refuse(fromId, "You cannot vote for yourself.");
+          if (state.runoff && target !== "SKIP" &&
+              state.runoff.candidates.indexOf(target) < 0) {
+            return refuse(fromId, "This is a runoff. It is one of the two.");
+          }
           if (target !== "SKIP") {
             var t = P(target);
             // A Shaman-hidden death is not public, so the village may well vote
@@ -488,6 +521,16 @@
         case CMD.CONSENT: {
           var pr = state.night && state.night.prompts[cmd.offerId];
           if (!pr || pr.to !== fromId) return { ok: false };
+          /* An offer is a thing said at a door in the dark. It does not keep
+           * until the afternoon, and it is not answerable by a corpse — both of
+           * which used to be accepted, because nothing checked the phase, the
+           * answerer, or the expiresAt the prompt has always carried. */
+          if (state.phase !== "night") { delete state.night.prompts[cmd.offerId]; return refuse(fromId, "That was last night."); }
+          if (!p || !p.alive) { delete state.night.prompts[cmd.offerId]; return { ok: false }; }
+          if (pr.expiresAt && Date.now() > pr.expiresAt) {
+            delete state.night.prompts[cmd.offerId];
+            return refuse(fromId, "You took too long. They have gone.");
+          }
           delete state.night.prompts[cmd.offerId];
           var out = Res.bag();
           var from = P(pr.from);

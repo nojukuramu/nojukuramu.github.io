@@ -365,7 +365,7 @@
           "houseVerb": "Look through the window and read what is inside",
           "icon": "eye",
           "description": "Their role, at once. A Lycan reads as a Werewolf.",
-          "houses": "living-any",
+          "houses": "living-others",
           "spendsTurn": true,
           "resolvesAt": "immediate",
           "private": true

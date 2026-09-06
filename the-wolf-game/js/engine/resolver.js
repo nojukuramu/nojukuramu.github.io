@@ -298,7 +298,12 @@
     "self": function (c) { return c.house.ownerId === c.actor.id; },
     "living-any": alive,
     "living-others": function (c) { return alive(c) && c.occupant.id !== c.actor.id; },
-    "living-not-last": function (c) { return alive(c) && c.actor.lastProtected !== c.occupant.id; },
+    "living-not-last": function (c) {
+      if (!alive(c)) return false;
+      if (c.actor.lastProtected !== c.occupant.id) return true;
+      // Only last night's choice is barred. A gap of a night clears it.
+      return c.actor.lastProtectedRound !== c.state.round - 1;
+    },
     "living-non-wolf": function (c) { return alive(c) && !R.isWolf(c.occupant.role); },
     "living-non-cult": function (c) {
       return alive(c) && !R.isCult(c.occupant.role) && c.occupant.id !== c.actor.id;
@@ -389,6 +394,17 @@
   }
 
   /* ---------------- performing ---------------- */
+
+  /** The declared shape of an action, before any house is involved. Callers
+   *  outside the resolver need this to reason about an action without
+   *  committing to one — the Festival asks it whether an action is the kind
+   *  that can sensibly be redirected somewhere else. */
+  function actionSpec(state, actorId, actionId) {
+    var actor = P(state, actorId);
+    if (!actor) return null;
+    var def = R.get(actor.role);
+    return (def && def.actionById[actionId]) || findUniversal(actionId) || null;
+  }
 
   function perform(state, actorId, houseId, actionId, payload) {
     var actor = P(state, actorId);
@@ -537,6 +553,17 @@
     var cause = opts.cause || CAUSE.PACK;
     var byId = opts.byId || null;
     var house = state.night ? state.night.houses[targetId] : null;
+
+    /* "First night is safe" — a labelled room setting that game_flow.json
+     * promises in as many words ("immunity is a room setting, not a phase
+     * change") and that nothing in the engine read. It covers the night, not
+     * the rope: a village that votes somebody out on day one meant to. */
+    if (state.config && state.config.rules && state.config.rules.firstNightImmunity &&
+        state.round === 1 && state.phase === "night" && cause !== CAUSE.LYNCH) {
+      out.say(target.id, "Something came for you on the first night. It is too early for that.", "saved");
+      if (byId) out.say(byId, "Not tonight. The village is still finding its feet.", "info");
+      return { result: "saved", byId: null };
+    }
 
     // The victim's own passive gets first refusal. Diwata's ward lives here.
     var veto = R.hook(target.role, "onKilled", {
@@ -697,9 +724,16 @@
     return true;
   }
 
+  /* Kept so state.leadersAlive stays readable, but it is no longer what the win
+   * check reads — Win.livingLeaders derives that from who is holding a leader's
+   * card right now. This used to filter on the victim's CURRENT role, so a
+   * leader whose card had been swapped away was never removed from the list. */
   function noteLeaderDeath(state, target) {
-    if (R.LEADER_ROLES.indexOf(target.role) < 0) return;
-    state.leadersAlive = (state.leadersAlive || []).filter(function (id) { return id !== target.id; });
+    if (!state.leadersAlive) return;
+    state.leadersAlive = state.leadersAlive.filter(function (id) {
+      var p = P(state, id);
+      return p && p.alive && R.LEADER_ROLES.indexOf(p.role) >= 0;
+    });
   }
 
   /* ---------------- the pack ----------------
@@ -721,8 +755,18 @@
       out.say(w.id, caller.name + " howls for " + quarry.name + ".", "pack", packTally(state));
     });
     var allIn = names.every(function (id) { return state.night.packVotes[id]; });
-    if (allIn) resolvePack(state, out);
+    /* The live path is the normal one — the last wolf howls and the pack moves
+     * immediately — and it used to resolve with no options at all, so Blood
+     * Moon's second throat only ever happened when the pack FAILED to finish
+     * voting and the dawn fallback picked it up instead. The event's headline
+     * effect fired exactly when the pack was asleep at the wheel. */
+    if (allIn) resolvePack(state, out, { extraKills: extraKills(state) });
     return { allIn: allIn };
+  }
+
+  /** What an active event adds to tonight's pack kill, if events are loaded. */
+  function extraKills(state) {
+    return (WG.events && WG.events.extraKills) ? WG.events.extraKills(state) : 0;
   }
 
   function packTally(state) {
@@ -839,6 +883,7 @@
 
   var api = {
     beginNight: beginNight,
+    actionSpec: actionSpec,
     knowsDead: knowsDead,
     trustNoone: trustNoone,
     believedAlive: believedAlive,

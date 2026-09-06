@@ -6,55 +6,62 @@ What happens when two roles, a corpse and a clock meet in the same doorway.
 an assertion — `node tools/role-interaction-test.js`, no browser, no network,
 same harness as `tools/engine-test.js`.
 
-**Nothing in this audit changed any game logic.** Where the engine is wrong,
-the test pins the *current* behaviour so the suite stays green and reports the
-bug separately. That keeps the exit code meaningful (it goes red only if
-something that works today stops working) while making sure a bug cannot be
-quietly fixed, or quietly re-broken, without the suite noticing.
+**All twenty-three bugs below are fixed.** The audit was written first and
+changed no game logic: where the engine was wrong, the test pinned the *current*
+behaviour and reported the bug separately, so the suite stayed green while
+refusing to let the bug disappear quietly. The fixes came after, and every one
+of them was made by flipping the assertion that pinned it — which is why each
+case below still names the bug it was written for, and why re-breaking any of
+them turns the suite red.
+
+Each entry keeps its original finding for the record and adds a **Fixed** line
+saying what changed. The twenty-two **UNSPEC** questions are untouched: they are
+design calls, not defects, and somebody has to decide them.
 
 Each case is marked:
 
 | Mark | Meaning |
 | --- | --- |
 | **PASS** | The engine does the right thing, and the test holds it there. |
-| **FAIL** | A real bug. Numbered `BUG-nn`, cross-referenced from the test output. |
+| **FIXED** | A real bug, since fixed. Numbered `BUG-nn`, cross-referenced from the test output; the case that found it now asserts the fix. |
 | **UNSPEC** | Neither the data, the README nor the code comments say what should happen. The engine picked an answer by accident. Numbered `SPEC-nn` — somebody has to decide. |
 
-Totals: **96 cases, 296 assertions, 23 bugs, 22 unspecified questions.**
+Totals: **96 cases, 337 assertions, 23 bugs — all fixed — and 22 unspecified
+questions still open.**
 
 ---
 
-## The short list, worst first
+## The short list, worst first — all fixed
 
-| # | Bug | Where |
-| --- | --- | --- |
-| 1 | **BUG-23** An unannounced death crashes the host on the following night | `js/engine/resolver.js:229-236`, `:403-408`, `:51-58` |
-| 2 | **BUG-16** Kicking a player mid-night orphans their house and crashes the host | `js/app.js:289` × `js/engine/resolver.js:197` |
-| 3 | **BUG-17** A second game in the same room makes every repeat death instantly public | `js/engine/engine.js:103-110` |
-| 4 | **BUG-15** Spectators get houses, turns, and a place in the win arithmetic | `js/engine/resolver.js:50-63`, `js/engine/win.js:16-21` |
-| 5 | **BUG-03** The Archangel will raise a corpse as an Alpha Wolf if the phone asks | `js/roles/archangel.js:23-28` |
-| 6 | **BUG-11** An Assassin in a bag with no leaders has already won at deal time | `js/engine/win.js:116-120` |
-| 7 | **BUG-12 / BUG-07** `leadersAlive` is frozen at deal time and desynchronises | `js/engine/win.js:123-131`, `js/engine/resolver.js:651-654` |
-| 8 | **BUG-06** A swap completed against a corpse deletes a live role from the game | `js/roles/naughty_boy.js:23-25` |
-| 9 | **BUG-13** The Festival can leave a player unable to end their night at all | `js/engine/engine.js:420-424` |
-| 10 | **BUG-19** Blood Moon's second kill never happens in normal play | `js/engine/resolver.js:673` |
-| 11 | **BUG-01** The Seer can read their own role and burn their night on it | `data/list_of_roles.json` seer + `js/engine/resolver.js:264` |
-| 12 | **BUG-08** A recruitment offer can be accepted from the grave, the next afternoon | `js/engine/engine.js:473-487` |
-| 13 | **BUG-10** Everybody dead is announced as a Village win | `js/engine/win.js:68-70` shadows `:76-78` |
-| 14 | **BUG-05** An abandoned half-swap survives into the next night | `js/roles/naughty_boy.js:13-22` |
-| 15 | **BUG-04** Any Assassin created after setup has zero knives, forever | `js/engine/win.js:123-131` |
-| 16 | **BUG-02** The Doctor's "not last night" means "not ever again" | `js/engine/resolver.js:266`, `js/roles/doctor.js:15` |
-| 17 | **BUG-20 / BUG-21** Two settings toggles are wired to nothing | `js/engine/state.js:40,46` |
-| 18 | **BUG-14** `tieBehaviour: "runoff"` is declared and not implemented | `js/engine/engine.js:244-252` |
-| 19 | **BUG-22** The Mayor's card says the pack can see them. It cannot | `js/roles/mayor.js:12` vs `js/engine/view.js:41` |
-| 20 | **BUG-09** A Diwata demoted by the rope keeps her old state | `js/roles/diwata.js:46-47` |
-| 21 | **BUG-18** Daytime deaths write into the already-closed night | `js/engine/resolver.js:551-560` |
+| # | Bug | Where | Fixed by |
+| --- | --- | --- | --- |
+| 1 | **BUG-23** An unannounced death crashes the host on the following night | `js/engine/resolver.js:229-236`, `:403-408`, `:51-58` | `endNight` marks the night closed, `beginNight` carries a corpse's body forward, `bodyText` survives a missing one, and a death in daylight is announced |
+| 2 | **BUG-16** Kicking a player mid-night orphans their house and crashes the host | `js/app.js:289` × `js/engine/resolver.js:197` | a kick below the lobby keeps the seat; knock/perform/packVote/allTurnsSpent refuse an unoccupied house |
+| 3 | **BUG-17** A second game in the same room makes every repeat death instantly public | `js/engine/engine.js:103-110` | `assignRoles` clears `announcedDead` and every player's death bookkeeping |
+| 4 | **BUG-15** Spectators get houses, turns, and a place in the win arithmetic | `js/engine/resolver.js:50-63`, `js/engine/win.js:16-21` | `living()`, `beginNight` and `Win.count` all skip spectators |
+| 5 | **BUG-03** The Archangel will raise a corpse as an Alpha Wolf if the phone asks | `js/roles/archangel.js:23-28` | the manual branch picks from the same village-only pool as the random one |
+| 6 | **BUG-11** An Assassin in a bag with no leaders has already won at deal time | `js/engine/win.js:116-120` | `leadersAllDead` requires that a leader was actually dealt (`state.leadersDealt`) |
+| 7 | **BUG-12 / BUG-07** `leadersAlive` is frozen at deal time and desynchronises | `js/engine/win.js:123-131`, `js/engine/resolver.js:651-654` | `Win.livingLeaders` derives the list from who holds the card now |
+| 8 | **BUG-06** A swap completed against a corpse deletes a live role from the game | `js/roles/naughty_boy.js:23-25` | `swap()` re-checks both halves are living and seated before moving anything |
+| 9 | **BUG-13** The Festival can leave a player unable to end their night at all | `js/engine/engine.js:420-424` | the redirect skips `houses:"self"`, `found-body` and free actions |
+| 10 | **BUG-19** Blood Moon's second kill never happens in normal play | `js/engine/resolver.js:673` | `packVote` passes `extraKills` on the live path too |
+| 11 | **BUG-01** The Seer can read their own role and burn their night on it | `data/list_of_roles.json` seer + `js/engine/resolver.js:264` | `seer.investigate` is `living-others` |
+| 12 | **BUG-08** A recruitment offer can be accepted from the grave, the next afternoon | `js/engine/engine.js:473-487` | `CMD.CONSENT` requires the night phase, a living answerer and an unexpired prompt |
+| 13 | **BUG-10** Everybody dead is announced as a Village win | `js/engine/win.js:68-70` shadows `:76-78` | the empty-board test runs before the wolves-are-zero one |
+| 14 | **BUG-05** An abandoned half-swap survives into the next night | `js/roles/naughty_boy.js:13-22` | `beginNight` clears `_swapFirst`, matching what the phone already does |
+| 15 | **BUG-04** Any Assassin created after setup has zero knives, forever | `js/engine/win.js:123-131` | `Win.armAssassins` arms anybody holding the card, on every win check |
+| 16 | **BUG-02** The Doctor's "not last night" means "not ever again" | `js/engine/resolver.js:266`, `js/roles/doctor.js:15` | the Doctor records the round beside the name; the bar lasts one night |
+| 17 | **BUG-20 / BUG-21** Two settings toggles are wired to nothing | `js/engine/state.js:40,46` | `kill()` honours `firstNightImmunity`; the Villager's promotion consults `villagerPromotion` |
+| 18 | **BUG-14** `tieBehaviour: "runoff"` is declared and not implemented | `js/engine/engine.js:244-252` | one runoff between the tied names, a restricted ballot, and a settings control for all three values |
+| 19 | **BUG-22** The Mayor's card says the pack can see them. It cannot | `js/roles/mayor.js:12` vs `js/engine/view.js:41` | the card now matches `view.js` and the data, which already agreed |
+| 20 | **BUG-09** A Diwata demoted by the rope keeps her old state | `js/roles/diwata.js:46-47` | the rope's demotion applies `initialState("villager")` like the other one |
+| 21 | **BUG-18** Daytime deaths write into the already-closed night | `js/engine/resolver.js:551-560` | `die()` refuses to file into a closed night |
 
 ---
 
 ## 1. Pointing an ability at your own front door
 
-### ST-01 — Seer investigates their own house · **FAIL (BUG-01)**
+### ST-01 — Seer investigates their own house · **FIXED (BUG-01)**
 
 - **Roles** Seer.
 - **Setup** Any night. The Seer knocks on their own door.
@@ -72,6 +79,8 @@ Totals: **96 cases, 296 assertions, 23 bugs, 22 unspecified questions.**
   the selector's.
 - **Fix shape** `seer.investigate` wants `living-others`, not `living-any`. Same
   question for `detective.detect` — see SPEC-02.
+
+- **Fixed** `seer.investigate` is `houses: "living-others"`. The Seer's own door no longer offers it, and the engine refuses it if a phone asks anyway. Reading anybody else is unchanged.
 
 ### ST-02 — Which roles can reach their own door at all · **PASS + UNSPEC (SPEC-01, SPEC-02)**
 
@@ -168,7 +177,7 @@ which by design includes living ones. Guessing wrong costs nothing.
 
 ## 3. Not the same house two nights running
 
-### REP-01 — The Doctor's no-repeat never expires · **FAIL (BUG-02)**
+### REP-01 — The Doctor's no-repeat never expires · **FIXED (BUG-02)**
 
 - **Setup** Doctor protects A on night 1. Takes night 2 off (`stay_in`).
 - **Action** Night 3: knock on A.
@@ -181,6 +190,8 @@ which by design includes living ones. Guessing wrong costs nothing.
   "the last person I protected", not "the person I protected last night".
 - **Fix shape** either clear `lastProtected` in `beginNight`, or store the round
   it was set and compare `=== state.round - 1`.
+
+- **Fixed** the Doctor writes `lastProtectedRound` beside `lastProtected`, and `living-not-last` bars the house only when that round was last night. A night off clears it; two nights running is still refused.
 
 ### REP-02 — Fanatic+ enforces the same rule somewhere else · **PASS + UNSPEC (SPEC-04)**
 
@@ -299,7 +310,7 @@ Shields live on the *house*, not the player, so a shield laid before the death
 is still there after the revival and still turns the pack away. That is a
 genuinely subtle interaction and it comes out right.
 
-### REV-03 — The Archangel will raise anybody as anything · **FAIL (BUG-03)**
+### REV-03 — The Archangel will raise anybody as anything · **FIXED (BUG-03)**
 
 - **Setup** A village Archangel, one corpse.
 - **Action** `ACT { actionId: "revive", payload: { assignment: "manual",
@@ -318,6 +329,8 @@ genuinely subtle interaction and it comes out right.
   section of the README.
 - **Fix shape** apply the same `team === "village"` filter to the manual branch
   that the random branch already uses two lines above it.
+
+- **Fixed** the manual branch filters against the same village-only pool the random branch builds, and an ask from outside it falls back to that pool rather than failing — so the raise still happens, it just cannot be steered out of the village.
 
 ### REV-04 — A quiet revival leaves stale beliefs behind · **UNSPEC (SPEC-09)**
 
@@ -343,7 +356,7 @@ Becomes a Doppelgänger whose one copy is already spent. `js/roles/doppelganger.
 sets `hasCopied` twice around the `Object.assign` for exactly this reason — a
 small, correct piece of defensive code.
 
-### CONV-02 — Doppelgänger copying the Assassin · **FAIL (BUG-04)**
+### CONV-02 — Doppelgänger copying the Assassin · **FIXED (BUG-04)**
 
 - **Setup** Assassin (one leader dealt, so one knife) and a Doppelgänger.
 - **Action** Copy the Assassin.
@@ -358,7 +371,9 @@ small, correct piece of defensive code.
   Villager promoted into a leader role, a swapped Assassin, and an
   Archangel-revived one.
 
-### CONV-03 — An abandoned half-swap survives the night · **FAIL (BUG-05)**
+- **Fixed** `Win.armAssassins()` hands one knife per leader dealt to anybody holding the card who has not been armed yet, and runs on every win check. A spent Assassin is not re-armed.
+
+### CONV-03 — An abandoned half-swap survives the night · **FIXED (BUG-05)**
 
 - **Setup** Naughty Boy taps house A to start a two-house swap, then does
   nothing else. The night ends.
@@ -374,7 +389,9 @@ small, correct piece of defensive code.
 - **Fix shape** clear `_swapFirst` in `beginNight`, next to where turns are
   reset.
 
-### CONV-04 — A swap completed against a corpse · **FAIL (BUG-06)**
+- **Fixed** `beginNight` clears `_swapFirst` on every player, which is what the phone has always done to its own copy on repaint.
+
+### CONV-04 — A swap completed against a corpse · **FIXED (BUG-06)**
 
 - **Setup** Crazy Naughty Boy taps house A. A is killed before the second tap.
 - **Action** Tap house B.
@@ -388,7 +405,9 @@ small, correct piece of defensive code.
   half is `if (!a || !b)` — "does this player object still exist". The selector
   was evaluated when the *first* house was picked and is never re-evaluated.
 
-### CONV-05 — A swap moves a role without moving the bookkeeping · **FAIL (BUG-07)**
+- **Fixed** `swap()` re-checks that both halves are still living, seated players before it moves anything, and clears the parked half on refusal.
+
+### CONV-05 — A swap moves a role without moving the bookkeeping · **FIXED (BUG-07)**
 
 The Seer's card moves from p1 to p2. `state.leadersAlive` still says `["p1"]`.
 Killing the real Seer does not clear the list, because
@@ -401,13 +420,15 @@ Everything that changes a role hits this: swaps, Villager promotion, the
 Doppelgänger, an Archangel's revival with a new role, and every demotion
 (Pulis, Archangel, Diwata).
 
+- **Fixed** `Win.livingLeaders()` derives the list from whoever is holding a leader's card right now, so no swap, promotion, copy or revival can desynchronise it. `noteLeaderDeath` re-derives rather than filtering by id.
+
 ### CONV-06 — The Cult can convert a solo out of its own win condition · **UNSPEC (SPEC-11)**
 
 A recruited Jester or Manipulator becomes a Cultist and is told *"You are a
 Cultist. Everything but the loyalty is unchanged."* For a solo, the loyalty was
 the entire role.
 
-### CONV-07 — Consent from the grave, in the afternoon · **FAIL (BUG-08)**
+### CONV-07 — Consent from the grave, in the afternoon · **FIXED (BUG-08)**
 
 - **Setup** Cult Leader makes an offer. The target is killed by the pack before
   answering.
@@ -422,6 +443,8 @@ the entire role.
   `prompts` in `beginNight`, so the window is exactly "until the next night
   begins".
 
+- **Fixed** `CMD.CONSENT` requires the night phase, a living answerer, and a prompt that has not passed its `expiresAt` — which was written all along and read nowhere. The offer is discarded on every refusal.
+
 ### CONV-08 — A Trickster is what it wears, to readers only · **PASS**
 
 The Seer reads the worn role; the true role and team are untouched; a Trickster
@@ -434,7 +457,7 @@ so a disgraced Pulis is on the promotion track again and can be handed a real
 role — possibly Pulis. Consistent across Pulis, Archangel and (killed) Diwata,
 so at least it is consistently undecided.
 
-### CONV-10 — A Diwata demoted by the rope · **FAIL (BUG-09)**
+### CONV-10 — A Diwata demoted by the rope · **FIXED (BUG-09)**
 
 `js/roles/diwata.js:46-47` sets `role = "villager"` and `isDemoted = true` and
 stops there, where the *other* demotion path fourteen lines above it
@@ -446,6 +469,8 @@ becomes a bug the moment anything reads `hasUpgraded`.
 ---
 
 ## 8. What happens because somebody died
+
+- **Fixed** the rope's demotion applies `initialState("villager")`, exactly as the path fourteen lines above it already did.
 
 ### TRIG-01 — Two Avengers sworn at each other · **PASS**
 
@@ -487,7 +512,7 @@ spent, and the Assassin survives (only a *wrong* guess is fatal).
 
 ## 9. Who won, and when the answer is wrong
 
-### WIN-01 — Everybody dead · **FAIL (BUG-10)**
+### WIN-01 — Everybody dead · **FIXED (BUG-10)**
 
 `js/engine/win.js:76-78` contains a branch for "Everybody is dead. Nobody wins a
 village with nobody in it." It is unreachable: the test at line 68
@@ -495,7 +520,9 @@ village with nobody in it." It is unreachable: the test at line 68
 solos to block it, and returns *"The Village wins. Every wolf is dead and
 nothing else was hiding in here."* over an empty village.
 
-### WIN-02 — An Assassin with no leaders in the bag · **FAIL (BUG-11)**
+- **Fixed** the everybody-dead test now runs before the wolves-are-zero one, so it is reachable. A real village win is still a village win.
+
+### WIN-02 — An Assassin with no leaders in the bag · **FIXED (BUG-11)**
 
 - **Setup** Roster `{ assassin: 1, werewolf: 1 }`, padded with villagers.
 - **Expected** A perfectly ordinary game.
@@ -512,11 +539,15 @@ nothing else was hiding in here."* over an empty village.
 - **Fix shape** `leadersAllDead` should require that at least one leader ever
   existed — record the deal-time count, not just the survivors.
 
-### WIN-03 — An Assassin wins with a Seer still standing · **FAIL (BUG-12)**
+- **Fixed** `leadersAllDead()` requires `state.leadersDealt` to be non-zero — an empty bag is not a bag of corpses. `{assassin, werewolf}` is an ordinary roster again; the Assassin simply has nothing to hunt and cannot win by that route.
+
+### WIN-03 — An Assassin wins with a Seer still standing · **FIXED (BUG-12)**
 
 A second Seer created after the deal (promotion, revival, swap) is invisible to
 `leadersAlive`. Kill the original and the Assassin is declared the winner while
 a living Seer sits in the village. Same root cause as BUG-07.
+
+- **Fixed** same derived list as BUG-07. A leader created after the deal is counted, and the Assassin wins only when nobody holds a leader's card.
 
 ### WIN-04 / WIN-05 / WIN-06 — The Jester · **PASS + UNSPEC (SPEC-14)**
 
@@ -567,14 +598,16 @@ A Vet in a village with no Cat and no Dog is offered `vet_revive` at exactly
 zero doors, and still ends its night on the universal `stay_in`. The night
 closes normally.
 
-### FLOW-06 — Curfew · **PASS + (BUG-01 again)**
+### FLOW-06 — Curfew · **PASS (BUG-01 fixed here too)**
 
 Villagers are locked out of other houses, the pack is not, everybody can still
 `stay_in`, and the night closes. Worth noting: a Seer can still read *themselves*
 through a curfew, because the curfew test exempts your own house and BUG-01 puts
 `investigate` there.
 
-### FLOW-07 — Under a Festival, ending your night is a dice roll · **FAIL (BUG-13)**
+- **Fixed** `seer.investigate` is `houses: "living-others"`. The Seer's own door no longer offers it, and the engine refuses it if a phone asks anyway. Reading anybody else is unchanged.
+
+### FLOW-07 — Under a Festival, ending your night is a dice roll · **FIXED (BUG-13)**
 
 - **Setup** Festival active. A player wants to end their night.
 - **Action** `ACT { houseId: <self>, actionId: "stay_in" }`.
@@ -590,6 +623,8 @@ through a curfew, because the curfew test exempts your own house and BUG-01 puts
   which — combined with `endNightEarly` — holds the entire room on the clock.
 - **Fix shape** exempt `spendsTurn: false` actions and `houses: "self"` from the
   redirect, or redirect only actions whose selector is not `self`.
+
+- **Fixed** the Festival redirect skips actions declared at `houses: "self"` or `"found-body"`, and any action that does not spend a turn. Ending your night always works; a real action still lands somewhere you did not aim.
 
 ### FLOW-08 / FLOW-09 — Disconnection · **PASS**
 
@@ -625,7 +660,7 @@ nobody is hanged. This is one of the best-implemented interactions in the game.
 
 Refused.
 
-### VOTE-05 — Ties · **FAIL (BUG-14)**
+### VOTE-05 — Ties · **FIXED (BUG-14)**
 
 `nobody` and `random` both work. `runoff` — the third value
 `js/engine/state.js:45` declares — falls through the `if` at
@@ -633,6 +668,8 @@ Refused.
 ways. Nobody hangs." There is also no control for `tieBehaviour` anywhere in
 `js/ui/screens.js`, so the setting is currently reachable only by sending a
 raw `CONFIG` command.
+
+- **Fixed** `closeVoting()` runs one runoff between the tied names, the ballot is restricted to them, and a second tie falls through to "nobody" rather than looping. The settings screen now has a control for all three values (this also closes UI-4).
 
 ### VOTE-06 — Skipping needs a majority of its own · **UNSPEC (SPEC-19)**
 
@@ -651,7 +688,7 @@ only visibility. (Contrast `wolf_vote`, which *does* carry a `weight` field and
 
 ## 12. Seats that are not players, rooms that remember too much
 
-### ROOM-01 — A spectator is a player everywhere but the deal · **FAIL (BUG-15)**
+### ROOM-01 — A spectator is a player everywhere but the deal · **FIXED (BUG-15)**
 
 `js/engine/engine.js:67` and `:91` filter spectators out of the deal. Nothing
 else does.
@@ -667,7 +704,9 @@ else does.
 - The pack can **howl for a spectator's house and kill them**: `wolf_vote`'s
   `living-others` selector only asks whether the occupant is believed alive.
 
-### ROOM-02 — Kicking a player mid-night crashes the host · **FAIL (BUG-16)**
+- **Fixed** `living()`, `beginNight()` and `Win.count()` all skip spectators, and knock/perform/packVote refuse a house whose occupant is not seated. A watcher has no house, no turn, no place in the arithmetic and is not a door the pack can howl for.
+
+### ROOM-02 — Kicking a player mid-night crashes the host · **FIXED (BUG-16)**
 
 - **Setup** A game in progress, night phase.
 - **Action** The host kicks somebody.
@@ -688,7 +727,9 @@ else does.
 - **Fix shape** either refuse a kick outside the lobby, or mark the player
   `alive = false, connected = false` and leave the seat in place.
 
-### ROOM-03 — A second game leaks the first game's deaths · **FAIL (BUG-17)**
+- **Fixed** `kick()` keeps the seat below the lobby — marking them kicked and disconnected and spending their turn — and `knock`, `perform`, `packVote` and `allTurnsSpent` no longer assume a house has an occupant.
+
+### ROOM-03 — A second game leaks the first game's deaths · **FIXED (BUG-17)**
 
 - **Setup** Play a game in a room. Somebody dies and is announced at dawn. Start
   a second game with the same players.
@@ -706,7 +747,9 @@ else does.
 - **Fix shape** clear `state.announcedDead` and delete `p.known`, `p.diedNight`,
   `p.diedAt`, `p.diedCause`, `p.deathHidden` in `assignRoles`.
 
-### ROOM-04 — Daytime deaths write into a closed night · **FAIL (BUG-18)**
+- **Fixed** `assignRoles()` clears `state.announcedDead` and each player's `known`, `diedNight`, `diedAt`, `diedCause`, `deathHidden` and `markedByShaman`.
+
+### ROOM-04 — Daytime deaths write into a closed night · **FIXED (BUG-18)**
 
 `state.night` is not cleared at dawn, so the rope, an Avenger's oath and a
 Diwata's curse all push death records and bodies into a night object that was
@@ -715,7 +758,9 @@ unconditionally; `:760-765` snapshots and leaves the object in place). Nothing
 reads it before `beginNight` rebuilds it — which is the only reason this is not
 worse. It is also the mechanism behind BUG-23.
 
-### ROOM-05 — An unannounced death crashes the host next night · **FAIL (BUG-23) — the worst one**
+- **Fixed** `endNight()` marks the night closed and `die()` refuses to file a record or a body into a closed one. Daylight deaths are announced instead, which is where they belong.
+
+### ROOM-05 — An unannounced death crashes the host next night · **FIXED (BUG-23) — was the worst one**
 
 - **Setup, route A (no settings changed):** an Avenger swears an oath, and is
   hanged the following day. The oath fires during the verdict.
@@ -750,7 +795,9 @@ worse. It is also the mechanism behind BUG-23.
 
 ## 13. Events
 
-### EV-01 — Blood Moon's second throat · **FAIL (BUG-19)**
+- **Fixed** three things, because there were three ways in. `endNight` marks the night closed so a daylight death stops filing into a snapshot nobody reads; `beginNight` carries a dead occupant's body forward instead of rebuilding the house with `body: null`; `bodyText` answers plainly when there is no record at all rather than handing a null to twenty-five hooks. And a death in daylight is announced, so the village stops believing a corpse answers its door. The random-play sweep crashed roughly one room in eight before this and none in four hundred after.
+
+### EV-01 — Blood Moon's second throat · **FIXED (BUG-19)**
 
 - **Expected** The pack kills twice. `Events.extraKills` correctly returns 1.
 - **Actual** It kills twice only when the pack **fails** to finish voting.
@@ -762,6 +809,8 @@ worse. It is also the mechanism behind BUG-23.
   the dawn call from re-running.
 - **Result** the event's headline effect fires only when the pack is asleep at
   the wheel. The test pins both halves: agreed → 1 death, unfinished → 2.
+
+- **Fixed** `packVote()` passes the event's `extraKills` on the live path, the same way the dawn fallback always did.
 
 ### EV-02 — A Festival vote redirected onto yourself · **UNSPEC (SPEC-20)**
 
@@ -778,7 +827,7 @@ the sickness if it takes everyone. The one event with a life of its own works.
 
 ## 14. Knobs wired to nothing
 
-### CFG-01 — "First night is safe" · **FAIL (BUG-20)**
+### CFG-01 — "First night is safe" · **FIXED (BUG-20)**
 
 `rules.firstNightImmunity` is declared in `js/engine/state.js:40`, has a
 labelled toggle at `js/ui/screens.js:215` ("First night is safe / Nobody dies on
@@ -786,12 +835,16 @@ night one"), and `data/game_flow.json` `firstRound.notes` says *"The first night
 is a full night; immunity is a room setting, not a phase change."* No file under
 `js/engine/` or `js/roles/` reads it. Turn it on and somebody dies on night one.
 
-### CFG-02 — "Villagers can be promoted" · **FAIL (BUG-21)**
+- **Fixed** `kill()` honours `firstNightImmunity` on round one at night, for every cause but the rope — a village that votes somebody out on day one meant to.
+
+### CFG-02 — "Villagers can be promoted" · **FIXED (BUG-21)**
 
 `rules.villagerPromotion` is declared and offered the same way.
 `js/roles/villager.js:13-32` checks `alive`, `hasUpgraded` and `totalScore` and
 never the config, so a Villager with 1000 points is promoted with the setting
 off.
+
+- **Fixed** the Villager's `onPhaseEnd` consults `rules.villagerPromotion` before promoting.
 
 ### CFG-03 — "Show the tally" hands out more than a tally · **UNSPEC (SPEC-21)**
 
@@ -812,7 +865,7 @@ Scans `js/engine/*.js` and every `js/roles/*.js` for each key in
 
 ## 15. Who is allowed to see whom
 
-### SEE-01 — The Mayor's card overpromises · **FAIL (BUG-22)**
+### SEE-01 — The Mayor's card overpromises · **FIXED (BUG-22)**
 
 `js/roles/mayor.js:12` tells the Mayor: *"Every village-team player can see that
 you are the Mayor. **So can the ones who are not.**"* `js/engine/view.js:41`
@@ -824,6 +877,8 @@ player builds a whole day's argument on.
 
 Which of the two is wrong is a design call. The sentence and the code cannot
 both stand.
+
+- **Fixed** the card now matches `view.js` and `list_of_roles.json`, which already agreed with each other: the village sees the Mayor, and nobody else does.
 
 ### SEE-02 / SEE-03 / SEE-04 / SEE-05 — Redaction · **PASS**
 
@@ -851,9 +906,10 @@ answers, random votes, events at 40%, and every player's redacted view rebuilt
 on every phase. Runs to a winner or 120 phases.
 
 It is a reporter rather than an assertion because a randomised sweep that fails
-the build one run in eight gets muted rather than fixed. Roughly one run in
-eight produces a crash; every signature it has ever produced has been BUG-23,
-whose deterministic reproduction is ROOM-05.
+the build one run in eight gets muted rather than fixed. It used to crash
+roughly one room in eight, and every signature it ever produced was BUG-23,
+whose deterministic reproduction is ROOM-05. Since that fix it has run four
+hundred rooms without a throw.
 
 ---
 
@@ -862,15 +918,18 @@ whose deterministic reproduction is ROOM-05.
 | # | Case | Where the gap is |
 | --- | --- | --- |
 | UI-1 | The village screen makes **every** house a tappable button — your own included, dead ones included — and sends `KNOCK` for all of them. There is no client-side notion of "this door is not for me"; the whole decision is the server's offer list. That is the right architecture, and it is also why BUG-01 reaches the player rather than being caught on the phone. | `js/ui/screens.js:384` (`onPick: function (id) { knock(id); }`), `js/ui/village.js:366-376` (every house gets `role="button"` and `tabindex`) |
-| UI-2 | The Archangel's revive sheet builds a **village-only** role list, so the honest client can never send the payload BUG-03 exploits. Nothing on the host repeats the filter. Verifying that the sheet and the host agree needs a DOM. | `js/ui/screens.js:568-570` vs `js/roles/archangel.js:23-28` |
-| UI-3 | The two-house swap keeps its first pick in **client** state (`WG_APP.pendingSwap`) as well as on the host (`actor._swapFirst`). The client's copy is cleared by a repaint or the Cancel button; the host's is not. So a player can cancel on their phone and still be mid-swap on the host — the invisible half of BUG-05. | `js/ui/screens.js:375-380` (the Cancel button) and `:489` vs `js/roles/naughty_boy.js:13` |
-| UI-4 | `tieBehaviour` has no control anywhere in the settings screen, so `random` and the unimplemented `runoff` are unreachable without sending a raw `CONFIG` command. | `js/ui/screens.js:210-226` (the whole toggle table) |
-| UI-5 | A kicked player's phone is sent `BYE` and banned at the transport, but their house is still drawn on everybody else's village until the next snapshot, and tapping it is what triggers BUG-16. Reproducing the race needs two real peers. | `js/app.js:277-292`; `tools/e2e.js` would be the place |
+| UI-2 | ~~Nothing on the host repeats the sheet's village-only filter.~~ **Closed by the BUG-03 fix** — the host now builds the same pool and checks against it. The remaining gap is only that Verifying that the sheet and the host agree needs a DOM. | `js/ui/screens.js:568-570` vs `js/roles/archangel.js:23-28` |
+| UI-3 | ~~The host's copy of a half-swap outlives the client's.~~ **Closed by the BUG-05 fix** — `beginNight` clears `_swapFirst`, so the two agree overnight. Within a single night they still differ: So a player can cancel on their phone and still be mid-swap on the host — the invisible half of BUG-05. | `js/ui/screens.js:375-380` (the Cancel button) and `:489` vs `js/roles/naughty_boy.js:13` |
+| UI-4 | ~~`tieBehaviour` has no control anywhere in the settings screen.~~ **Closed by the BUG-14 fix** — the Rules tab now offers all three values, and `runoff` does something. | `js/ui/screens.js:210-226` (the whole toggle table) |
+| UI-5 | A kicked player's phone is sent `BYE` and banned at the transport, but their house is still drawn on everybody else's village until the next snapshot. Tapping it used to trigger BUG-16; it is now refused rather than fatal, so what is left is cosmetic. Reproducing the race needs two real peers. | `js/app.js:277-292`; `tools/e2e.js` would be the place |
 | UI-6 | Cat and Dog speech is enforced on the host *and* hinted in the view (`card.speech`). Whether the composer visibly warns the player before they type a paragraph that will become "meow meow meow" is a UI question. | `js/engine/view.js:74-76`, `js/ui/screens.js` chat panel |
 
 ---
 
 ## Cross-reference
+
+Every bug below is fixed, and the case named beside it is what holds the fix in
+place: re-break any one of them and that case fails.
 
 | Case | Bug | Case | Bug |
 | --- | --- | --- | --- |

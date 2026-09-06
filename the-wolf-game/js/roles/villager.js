@@ -12,6 +12,11 @@
       /** Promotion is checked between phases, not during one. */
       onPhaseEnd: function (c) {
         if (!c.self.alive || c.self.hasUpgraded) return null;
+        // The room can turn this off. It has always had a labelled toggle and
+        // nothing that read it, so a Villager with 1000 points was promoted
+        // whatever the host had chosen.
+        if (c.state.config && c.state.config.rules &&
+            c.state.config.rules.villagerPromotion === false) return null;
         if ((c.self.totalScore || 0) < 1000) return null;
         var pool = global.WG.roles.all().filter(function (r) {
           if (r.team !== "village") return false;

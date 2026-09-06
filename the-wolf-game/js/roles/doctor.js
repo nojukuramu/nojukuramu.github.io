@@ -13,6 +13,10 @@
       protect: function (c) {
         c.R.shield(c.state, c.house.ownerId, "shield", c.actor.id, c.out);
         c.actor.lastProtected = c.occupant.id;
+        // The selector reads "except the one you chose LAST NIGHT". Without the
+        // round beside it the field means "the last person I ever protected",
+        // and a Doctor who takes a night off is barred from that house forever.
+        c.actor.lastProtectedRound = c.state.round;
         c.out.say(c.actor.id,
           "Sitting up with " + c.occupant.name + ". Nothing gets in from now on.", "act");
         return { ok: true };

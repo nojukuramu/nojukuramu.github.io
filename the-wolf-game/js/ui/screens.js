@@ -291,6 +291,22 @@
       Object.keys(cfg[cur]).forEach(function (k) {
         if (typeof cfg[cur][k] === "boolean") body.appendChild(toggle(cur + "." + k, cfg, manage, patch));
       });
+      if (cur === "rules") {
+        /* tieBehaviour is the one rule that is not a boolean, so the generic
+         * toggle loop above skips it — which left "random" and "runoff"
+         * reachable only by sending a raw CONFIG command. */
+        var TIES = [["nobody", "Nobody hangs"], ["random", "Draw a straw"], ["runoff", "Vote again"]];
+        body.appendChild(el("div", { class: "field", style: "margin-top:8px" }, [
+          el("span", { text: "When the vote ties" }),
+          el("div", { class: "spread" }, TIES.map(function (t) {
+            return el("button", {
+              class: "btn small grow" + (cfg.rules.tieBehaviour === t[0] ? " on" : ""),
+              disabled: !manage,
+              onclick: function () { patch("rules", { tieBehaviour: t[0] }); }
+            }, [t[1]]);
+          }))
+        ]));
+      }
       if (cur === "room") {
         body.appendChild(el("label", { class: "field", style: "margin-top:8px" }, [
           el("span", { text: "Maximum players" }),
