@@ -291,6 +291,9 @@ no pack tally reaches a phone that should not have it.
 
 ```
 node tools/engine-test.js    # 168 assertions, no browser, no network
+node tools/role-interaction-test.js
+                             # 296 assertions across 96 role-interaction cases;
+                             #   an audit as much as a test — see tools/ROLE-INTERACTIONS.md
 node tools/consistency.js    #  22 checks for drift between files that must agree
 node tools/fit-test.js       #  12 viewport sizes, nothing may scroll or overflow
 node tools/render-test.js    #   9 checks: a repaint keeps the reader's place
