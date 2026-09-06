@@ -1,201 +1,257 @@
 /* ============================================================
-   nojukuramu — homepage interactions
-   Renders the project grid, the theme toggle and the search palette.
+   nojukuramu — the page itself
+   Wires the sky, the projects, the sound and the search palette to each
+   other. Everything here is optional: if any one module fails to load the
+   page is still a readable list of projects on a dark background.
    ============================================================ */
-(function () {
+(function (global) {
   "use strict";
 
-  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var NJ = (global.NJ = global.NJ || {});
+  var reduced = global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var $ = function (s) { return document.querySelector(s); };
 
-  /* Ask the browser to keep this origin's storage (theme, high score) out
-   * of eviction — Chrome under disk pressure, Safari's ~7-day ITP wipe of
-   * sites with no recent visit. It's a heuristic grant, not a promise, so
-   * log a denial rather than silently assuming it worked. */
+  /* Ask the browser to keep this origin's storage (the sound and location
+     choices) out of eviction. A heuristic grant, not a promise, so a denial
+     is logged rather than silently assumed away. */
   if (navigator.storage && navigator.storage.persist) {
     navigator.storage.persisted().then(function (already) {
-      if (already) return true;
-      return navigator.storage.persist();
+      return already || navigator.storage.persist();
     }).then(function (granted) {
-      if (!granted) console.warn("[home] persistent storage was not granted; saved preferences may be evicted by the browser");
+      if (!granted) console.warn("[home] persistent storage was not granted; saved preferences may be evicted");
     }).catch(function () {});
   }
 
-  /* ---------- theme ---------- */
-  function setTheme(theme) {
-    document.documentElement.setAttribute("data-theme", theme);
-    try { localStorage.setItem("theme", theme); } catch (e) {}
-  }
-  function toggleTheme() {
-    var cur = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
-    setTheme(cur === "dark" ? "light" : "dark");
-  }
-  document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
-  var tt2 = document.getElementById("theme-toggle-2");
-  if (tt2) tt2.addEventListener("click", toggleTheme);
-
-  /* ---------- header hairline on scroll ---------- */
-  var header = document.querySelector(".site-header");
-  function onScroll() { header.classList.toggle("stuck", window.scrollY > 8); }
-  window.addEventListener("scroll", onScroll, { passive: true });
-  onScroll();
-
-  /* ---------- year ---------- */
-  var yr = document.getElementById("year");
+  var yr = $("#year");
   if (yr) yr.textContent = new Date().getFullYear();
 
-  /* ---------- icons ---------- */
-  function svg(paths) {
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
-           'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
-  }
-  var ICONS = {
-    notes:  svg('<path d="M5 4h9l5 5v11H5z"/><path d="M14 4v5h5"/><path d="M9 13h6M9 17h4"/>'),
-    sigil:  svg('<circle cx="12" cy="12" r="9"/><polygon points="12,5 19,17.5 5,17.5"/><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/>'),
-    spark:  svg('<path d="M12 3v5M12 16v5M3 12h5M16 12h5M6.3 6.3l3 3M14.7 14.7l3 3M17.7 6.3l-3 3M9.3 14.7l-3 3"/>'),
-    tiles:  svg('<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="8" y="13" width="8" height="8" rx="2"/>'),
-    eye:    svg('<path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.8"/>'),
-    tower:  svg('<path d="M12 2.5l3 3-3 3-3-3z"/><path d="M7.5 8.5h9l1 4.5H6.5z"/><path d="M6.5 13h11l1.4 8H5.1z"/><path d="M10.5 21v-4M13.5 21v-4"/>'),
-    camera: svg('<path d="M3 8h3.2L7.7 6h8.6L17.8 8H21v11H3z"/><circle cx="12" cy="13" r="3.2"/>'),
-    city:   svg('<path d="M3 21h18"/><path d="M5.5 21V9.5l4-2.5V21"/><path d="M13.5 21V5.5l4-2V21"/><path d="M9.5 12h.01M9.5 15h.01M17.5 9h.01M17.5 12h.01"/>'),
-    spore:  svg('<path d="M4 10.5c0-3.6 3.6-6 8-6s8 2.4 8 6z"/><path d="M10 10.5V17a2 2 0 0 0 4 0v-6.5"/><path d="M2.5 21h19"/>'),
-    arc:    svg('<path d="M3 21A18 18 0 0 1 21 3"/><path d="M3 21A12 12 0 0 1 15 9"/><path d="M3 21a6 6 0 0 1 6-6"/><circle cx="3.4" cy="20.6" r="1.4" fill="currentColor" stroke="none"/>'),
-    mic:    svg('<rect x="9" y="2.5" width="6" height="10.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21M9 21h6"/>'),
-    route:  svg('<path d="M6.5 20.5c-2 0-3.5-1.4-3.5-3.2S4.5 14 6.5 14h11c2 0 3.5-1.4 3.5-3.2S19.5 7.5 17.5 7.5H9"/><path d="M6 3.5c1.7 0 3 1.3 3 2.9C9 8 6 11 6 11S3 8 3 6.4c0-1.6 1.3-2.9 3-2.9z"/><circle cx="18.5" cy="18.5" r="2.5"/>'),
-    arrow:  svg('<path d="M5 12h13M13 6.5l5.5 5.5L13 17.5"/>'),
-    sun:    svg('<circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>'),
-    code:   svg('<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>'),
-    play:   svg('<circle cx="12" cy="12" r="9"/><path d="M10 8.5l6 3.5-6 3.5z"/>'),
-    moon:   svg('<path d="M20.5 14.2A8.6 8.6 0 0 1 9.8 3.5a8.6 8.6 0 1 0 10.7 10.7z"/><path d="M15.5 3.2l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7z"/>')
-  };
+  /* ---------- the sky, and the curtain in front of it ----------
+     The splash owns the first two seconds: it measures the device with a
+     short burst of real rendering, writes the logo while the main thread is
+     quiet, and only then lets the scene start. Without the splash module the
+     scene simply starts at once. */
+  var sky = NJ.sky;
+  if (sky) sky.mount($("#sky"));
 
-  /* ---------- projects (add new ones here) ---------- */
-  var PROJECTS = [
-    {
-      name: "Magic Circles", href: "magic_circles/", icon: ICONS.sigil, badge: "RPG",
-      desc: "A magic-based RPG where spells are drawn, not picked from a menu. Trace polygons into elements, wrap them in circles, stack the layers, and cast.",
-      tags: ["Phaser", "canvas", "procedural"]
-    },
-    {
-      name: "Magic Sandbox", href: "magic_sandbox/", icon: ICONS.tower, badge: "3D roguelite",
-      desc: "The Loom Tower — a top-down spell-crafting roguelite. Weave runes into elemental circles in the Spellforge, then ascend the tower floor by floor.",
-      tags: ["Three.js", "WebGL", "roguelite"]
-    },
-    {
-      name: "Task Notes", href: "task-notes/", icon: ICONS.notes, badge: "PWA",
-      desc: "A notebook with a real alarm clock inside it. Markdown notes, repeating alarms that ring until you answer them, notebooks, tags and five views — all offline.",
-      tags: ["PWA", "offline", "IndexedDB"]
-    },
-    {
-      name: "Pinoy Word Games", href: "pwg/", icon: ICONS.tiles, badge: "Word game",
-      desc: "Hulaan ang dalawang salita. Dagdag, bawas, kislap, o banat ng letra — 100 cozy levels in Filipino, with progress saved on your device.",
-      tags: ["Filipino", "puzzle", "100 levels"]
-    },
-    {
-      name: "Anti-AFK", href: "antiafk/", icon: ICONS.eye, badge: "Utility",
-      desc: "Keep a screen awake without touching it. A decoy video player holds a Screen Wake Lock open — works in Chromium and Firefox 126 and up.",
-      tags: ["Wake Lock", "utility"]
-    },
-    {
-      name: "Burst//Dump", href: "burst_dump/", icon: ICONS.camera, badge: "Video",
-      desc: "Drop in a folder of photos and it cuts them into a fast, seeded photo-dump reel — rhythms, styles, effects, music — then records straight to MP4 or WebM.",
-      tags: ["canvas", "MediaRecorder", "reels"]
-    },
-    {
-      name: "SkyLine", href: "citybuilder/", icon: ICONS.city, badge: "City builder",
-      desc: "A pocket-sized city sim. Terraform the ground, lay roads, zone a skyline that grows itself, and watch day turn to night as the rain rolls in.",
-      tags: ["Three.js", "procedural", "mobile"]
-    },
-    {
-      name: "VELL", href: "3dtd/", icon: ICONS.spore, badge: "Tower defense",
-      desc: "A drowned moor, procedurally grown. Root the Bloom around a Heartspore, shape the route with towers, walls and walkable traps, and hold the line against the Rust.",
-      tags: ["Three.js", "procedural", "endless"]
-    },
-    {
-      name: "KaraokeNatin", href: "karaokenatin/", icon: ICONS.mic, badge: "Party",
-      desc: "Turn any screen into a karaoke machine. Guests scan a code and their phone becomes the remote — search, queue, skip. Peer-to-peer over WebRTC, so no server of mine is involved.",
-      tags: ["WebRTC", "P2P", "PWA"]
-    },
-    {
-      name: "The Wolf Game", href: "the-wolf-game/", icon: ICONS.moon, badge: "Party game",
-      desc: "Werewolf for a room full of phones. The night runs for everyone at once, first come first served \u2014 you pick a house, then decide what to do at its door, and a bodyguard who arrives late finds a body instead of a charge. 35 roles, peer-to-peer over WebRTC.",
-      tags: ["WebRTC", "P2P", "35 roles"]
-    },
-    {
-      name: "RouteCast", href: "routecast/", icon: ICONS.route, badge: "Navigation",
-      desc: "Plan a drive or a ride, then see the weather waiting for you at every stretch of it — each checkpoint forecast for the hour you will actually arrive there, with gear advice for a bike and a nudge if leaving an hour later dodges the rain.",
-      tags: ["Leaflet", "OpenStreetMap", "forecast"]
-    },
-    {
-      name: "ARCO", href: "arco/", icon: ICONS.arc, badge: "Instrument",
-      desc: "A two-thumb instrument for a phone held sideways. One thumb sweeps the scale, the other plucks or bows four modelled strings, and tilt shapes the tone. Learn a melody once and it plays in all twelve keys.",
-      tags: ["AudioWorklet", "waveguide", "offline"]
-    }
-  ];
-
-  function esc(s) {
-    return String(s).replace(/[&<>"]/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+  if (NJ.splash) {
+    NJ.splash.run({
+      probe: function () { return sky ? sky.probe() : Promise.resolve(null); },
+      reveal: function () { if (sky) sky.start(); }
     });
+  } else if (sky) {
+    sky.start();
   }
 
-  function card(p) {
-    return (
-      '<article class="card">' +
-        '<div class="card-top">' +
-          '<div class="card-icon">' + p.icon + '</div>' +
-          '<span class="card-badge">' + esc(p.badge) + '</span>' +
-        '</div>' +
-        '<h3 class="card-title">' + esc(p.name) + '</h3>' +
-        '<p class="card-desc">' + esc(p.desc) + '</p>' +
-        '<div class="card-tags">' +
-          p.tags.map(function (t) { return '<span class="card-tag">' + esc(t) + '</span>'; }).join("") +
-        '</div>' +
-        '<span class="card-cta">Open' + ICONS.arrow + '</span>' +
-        '<a class="stretch" href="' + esc(p.href) + '" aria-label="Open ' + esc(p.name) + '"></a>' +
-      '</article>'
-    );
+  function scrollProgress() {
+    var max = Math.max(1, document.body.scrollHeight - global.innerHeight);
+    return Math.min(1, Math.max(0, global.scrollY / max));
   }
 
-  function soonCard() {
-    return (
-      '<article class="card soon">' +
-        '<div class="card-top"><div class="card-icon">' + ICONS.spark + '</div></div>' +
-        '<h3 class="card-title">Something next</h3>' +
-        '<p class="card-desc">New experiments land here when they are finished enough to be useful. The workshop is never quite empty.</p>' +
-      '</article>'
-    );
+  var header = $(".site-header");
+  function onScroll() {
+    if (sky) sky.setScroll(scrollProgress());
+    header.classList.toggle("stuck", global.scrollY > 8);
+    if (sky && !sky.dialled()) dialRange.value = Math.round(sky.auto() * 1000);
+  }
+  global.addEventListener("scroll", onScroll, { passive: true });
+  global.addEventListener("resize", onScroll);
+
+  if (sky && !reduced) {
+    global.addEventListener("pointermove", function (e) {
+      sky.pointer((e.clientX / global.innerWidth - 0.5) * 2, (e.clientY / global.innerHeight - 0.5) * 2);
+    }, { passive: true });
   }
 
-  var grid = document.getElementById("app-grid");
-  if (grid) grid.innerHTML = PROJECTS.map(card).join("") + soonCard();
+  /* Click the sky itself and something happens. */
+  document.addEventListener("click", function (e) {
+    if (!sky) return;
+    if (e.target.closest("a,button,input,label,.slide,.palette,.sky-bar")) return;
+    sky.poke(e.clientX, e.clientY);
+  });
+
+  /* ---------- the dial ---------- */
+  var dialRange = $("#dial-range");
+  var dialTime = $("#dial-time");
+  var dialPhase = $("#dial-phase");
+  var bar = $("#sky-bar");
+  var lastLabel = -1;
+
+  var PHASES = [[0.20, "golden hour"], [0.40, "sunset"], [0.60, "dusk"], [0.80, "twilight"], [1.01, "night"]];
+
+  function label() {
+    if (!sky) return;
+    var v = sky.t();
+    var mins = Math.round((17 * 60 + 40) + v * 245);       /* 17:40 → 21:45 */
+    var q = Math.round(mins / 5) * 5;
+    if (q !== lastLabel) {
+      lastLabel = q;
+      dialTime.textContent = String((q / 60) | 0).padStart(2, "0") + ":" + String(q % 60).padStart(2, "0");
+      for (var i = 0; i < PHASES.length; i++) {
+        if (v < PHASES[i][0]) { dialPhase.textContent = PHASES[i][1]; break; }
+      }
+    }
+    if (NJ.ambience && NJ.ambience.on) {
+      var w = sky.weather();
+      NJ.ambience.setScene({ t: v, wind: w.wind, rain: w.rain, storm: w.storm });
+    }
+    requestAnimationFrame(label);
+  }
+  requestAnimationFrame(label);
+
+  dialRange.addEventListener("input", function () {
+    if (sky) sky.setDial(+dialRange.value / 1000);
+    bar.classList.remove("auto");
+  });
+  $("#dial-reset").addEventListener("click", function () {
+    if (!sky) return;
+    sky.setDial(null);
+    bar.classList.add("auto");
+    dialRange.value = Math.round(sky.auto() * 1000);
+  });
+
+  /* ---------- sound ---------- */
+  var soundBtn = $("#sound-toggle");
+  if (NJ.ambience && NJ.ambience.available) {
+    soundBtn.hidden = false;
+    soundBtn.addEventListener("click", function () { NJ.ambience.toggle(); });
+    NJ.ambience.onchange(function (on) {
+      soundBtn.classList.toggle("on", on);
+      soundBtn.setAttribute("aria-pressed", on ? "true" : "false");
+      soundBtn.title = on ? "Silence the evening" : "Listen to the evening";
+    });
+    if (sky) sky.onlightning(function () { NJ.ambience.thunder(); });
+    /* A remembered "on" still waits for a click — browsers will not start
+       audio any other way, and a page that talks the moment it loads is
+       rude even when it is allowed. */
+    if (NJ.ambience.remembered()) soundBtn.classList.add("hint");
+  }
+
+  /* ---------- the real sky ---------- */
+  var wxChip = $("#wx-chip");
+  var wxText = $("#wx-text");
+  var locBtn = $("#locate");
+
+  function showWeather(s) {
+    if (!s) {
+      wxChip.hidden = true;
+      locBtn.hidden = false;
+      return;
+    }
+    if (sky) {
+      sky.setWeather(s);
+      if (s.dayT != null && !sky.dialled()) {
+        sky.setBase(s.dayT);
+        dialRange.value = Math.round(sky.auto() * 1000);
+      }
+      if (s.moon) sky.setMoonPhase(s.moon.phase);
+    }
+    var bits = [s.text];
+    if (s.temp != null) bits.push(Math.round(s.temp) + "°");
+    if (s.moon && sky && sky.t() > 0.5) bits.push(s.moon.name.toLowerCase());
+    wxText.textContent = bits.join(" · ");
+    wxChip.hidden = false;
+    wxChip.title = "Your sky, from Open-Meteo — " + s.place + ", read at " +
+                   s.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    locBtn.hidden = true;
+  }
+
+  if (NJ.weather) {
+    NJ.weather.onchange(showWeather);
+    NJ.weather.load().catch(function () {});
+
+    locBtn.addEventListener("click", function () {
+      locBtn.classList.add("busy");
+      locBtn.disabled = true;
+      NJ.weather.request()
+        .catch(function (err) {
+          locBtn.classList.remove("busy");
+          locBtn.disabled = false;
+          locBtn.title = (err && err.code === 1)
+            ? "Location was declined — the sky will keep running off the scroll"
+            : "Could not reach the forecast just now";
+          locBtn.classList.add("failed");
+          setTimeout(function () { locBtn.classList.remove("failed"); }, 4000);
+        });
+    });
+
+    wxChip.addEventListener("click", function () {
+      NJ.weather.forget();
+      if (sky) { sky.setWeather(null); sky.setBase(0); }
+    });
+  } else {
+    locBtn.hidden = true;
+  }
+
+  /* ---------- projects ---------- */
+  if (NJ.projects) NJ.projects.mount($("#carousel"));
+
+  /* ---------- reveal ---------- */
+  if ("IntersectionObserver" in global) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); }
+      });
+    }, { rootMargin: "-8% 0px -8% 0px" });
+    document.querySelectorAll(".reveal").forEach(function (el) { io.observe(el); });
+  } else {
+    document.querySelectorAll(".reveal").forEach(function (el) { el.classList.add("in"); });
+  }
 
   /* ---------- search palette ---------- */
-  var palette = document.getElementById("palette");
-  var pInput = document.getElementById("palette-input");
-  var pList = document.getElementById("palette-list");
-  var activeIdx = 0;
-  var curItems = [];
+  var palette = $("#palette");
+  var pInput = $("#palette-input");
+  var pList = $("#palette-list");
+  var activeIdx = 0, curItems = [];
 
-  var COMMANDS = PROJECTS.map(function (p) {
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
+  }
+  function icon(p) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + "</svg>";
+  }
+  var I = {
+    open: icon('<path d="M5 12h13M13 6.5l5.5 5.5L13 17.5"/>'),
+    sun: icon('<circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>'),
+    moon: icon('<path d="M20.5 14.2A8.6 8.6 0 0 1 9.8 3.5a8.6 8.6 0 1 0 10.7 10.7z"/>'),
+    rain: icon('<path d="M6 14.5A4.5 4.5 0 0 1 7 5.6a5.2 5.2 0 0 1 9.8.9A3.8 3.8 0 0 1 18 14"/><path d="M8 17l-1 3M12 17l-1 3M16 17l-1 3"/>'),
+    bolt: icon('<path d="M6 14.5A4.5 4.5 0 0 1 7 5.6a5.2 5.2 0 0 1 9.8.9A3.8 3.8 0 0 1 18 14"/><path d="M13 12l-3 5h3l-1 4"/>'),
+    pin: icon('<path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/>'),
+    ear: icon('<path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18 6.5a7.6 7.6 0 0 1 0 11"/>'),
+    code: icon('<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>'),
+    dice: icon('<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="9" cy="9" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.3" fill="currentColor" stroke="none"/>')
+  };
+
+  function skyTo(v) {
+    if (sky) sky.setDial(v);
+    bar.classList.remove("auto");
+    dialRange.value = Math.round(v * 1000);
+    closePalette();
+  }
+  function pretend(code, cloud, wind) {
+    if (!NJ.weather) return;
+    NJ.weather.pretend({ code: code, cloud: cloud, wind: wind, precip: code >= 60 ? 3 : 0 });
+    closePalette();
+  }
+
+  var COMMANDS = (NJ.projects ? NJ.projects.projects : []).map(function (p, i) {
     return {
-      icon: p.icon, label: p.name, sub: "project", keywords: p.tags.join(" ") + " " + p.badge,
-      run: function () { location.href = p.href; }
+      icon: I.open, label: p.name, sub: "project", keywords: p.tags.join(" ") + " " + p.badge + " " + p.kind,
+      run: function () { global.location.href = p.href; }
     };
   }).concat([
-    {
-      icon: ICONS.play, label: "Play Elemental Echo", sub: "game", keywords: "minigame memory simon",
-      run: function () {
-        closePalette();
-        document.getElementById("play").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
-        var s = document.getElementById("echo-start");
-        if (s) setTimeout(function () { s.focus(); }, reduceMotion ? 0 : 500);
-      }
-    },
-    { icon: ICONS.sun, label: "Toggle theme", sub: "light / dark", keywords: "dark light mode appearance", run: toggleTheme },
-    {
-      icon: ICONS.code, label: "Source on GitHub", sub: "repository", keywords: "code repo git",
-      run: function () { window.open("https://github.com/nojukuramu/nojukuramu.github.io", "_blank", "noopener"); }
-    }
+    { icon: I.dice, label: "Surprise me", sub: "project", keywords: "random shuffle any",
+      run: function () { closePalette(); var n = NJ.projects.projects.length; document.getElementById("work").scrollIntoView({ behavior: reduced ? "auto" : "smooth" }); NJ.projects.goToIndex((Math.random() * n) | 0, true); } },
+    { icon: I.pin, label: "Use my real sky", sub: "weather", keywords: "location gps weather forecast now",
+      run: function () { closePalette(); locBtn.click(); } },
+    { icon: I.ear, label: "Listen to the evening", sub: "sound", keywords: "audio ambient crickets birds wind mute",
+      run: function () { closePalette(); if (NJ.ambience) NJ.ambience.toggle(); } },
+    { icon: I.sun, label: "Bring back the sun", sub: "sky", keywords: "day golden hour light morning", run: function () { skyTo(0); } },
+    { icon: I.moon, label: "Make it night", sub: "sky", keywords: "dark stars night moon", run: function () { skyTo(1); } },
+    { icon: I.rain, label: "Pretend it is raining", sub: "sky", keywords: "rain wet shower weather demo", run: function () { pretend(63, 0.9, 22); } },
+    { icon: I.bolt, label: "Pretend there is a storm", sub: "sky", keywords: "thunder lightning storm demo", run: function () { pretend(95, 1, 42); } },
+    { icon: I.sun, label: "Pretend the sky is clear", sub: "sky", keywords: "clear clean fine demo", run: function () { pretend(0, 0.08, 7); } },
+    { icon: I.code, label: "Source on GitHub", sub: "repository", keywords: "code repo git",
+      run: function () { global.open("https://github.com/nojukuramu/nojukuramu.github.io", "_blank", "noopener"); } }
   ]);
 
   function renderPalette(q) {
@@ -204,27 +260,16 @@
       if (!q) return true;
       return (c.label + " " + c.sub + " " + (c.keywords || "")).toLowerCase().indexOf(q) !== -1;
     });
-    curItems = items;
-    activeIdx = 0;
-
-    if (!items.length) {
-      pList.innerHTML = '<li class="palette-empty">Nothing matches that.</li>';
-      return;
-    }
+    curItems = items; activeIdx = 0;
+    if (!items.length) { pList.innerHTML = '<li class="palette-empty">Nothing matches that.</li>'; return; }
     pList.innerHTML = items.map(function (c, i) {
-      return '<li class="' + (i === 0 ? "active" : "") + '" data-i="' + i + '">' +
-             '<span class="pi">' + c.icon + '</span>' +
-             '<span>' + esc(c.label) + '</span>' +
-             '<span class="ps">' + esc(c.sub) + '</span></li>';
+      return '<li class="' + (i === 0 ? "active" : "") + '" data-i="' + i + '"><span class="pi">' + c.icon +
+             "</span><span>" + esc(c.label) + '</span><span class="ps">' + esc(c.sub) + "</span></li>";
     }).join("");
     pList.querySelectorAll("li[data-i]").forEach(function (li) {
-      li.addEventListener("click", function () {
-        var c = curItems[+li.dataset.i];
-        if (c) c.run();
-      });
+      li.addEventListener("click", function () { var c = curItems[+li.dataset.i]; if (c) c.run(); });
     });
   }
-
   function move(d) {
     if (!curItems.length) return;
     activeIdx = (activeIdx + d + curItems.length) % curItems.length;
@@ -232,34 +277,28 @@
     nodes.forEach(function (li, i) { li.classList.toggle("active", i === activeIdx); });
     if (nodes[activeIdx]) nodes[activeIdx].scrollIntoView({ block: "nearest" });
   }
-
   function openPalette() {
-    palette.hidden = false;
-    pInput.value = "";
-    renderPalette("");
+    palette.hidden = false; pInput.value = ""; renderPalette("");
     setTimeout(function () { pInput.focus(); }, 0);
   }
   function closePalette() { palette.hidden = true; }
 
-  document.getElementById("open-palette").addEventListener("click", openPalette);
+  $("#open-palette").addEventListener("click", openPalette);
   pInput.addEventListener("input", function () { renderPalette(pInput.value); });
   pInput.addEventListener("keydown", function (e) {
     if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
-    else if (e.key === "Enter") {
-      e.preventDefault();
-      if (curItems[activeIdx]) curItems[activeIdx].run();
-    } else if (e.key === "Escape") { closePalette(); }
+    else if (e.key === "Enter") { e.preventDefault(); if (curItems[activeIdx]) curItems[activeIdx].run(); }
+    else if (e.key === "Escape") { closePalette(); }
   });
   palette.addEventListener("click", function (e) { if (e.target === palette) closePalette(); });
-
   document.addEventListener("keydown", function (e) {
     var typing = /^(input|textarea|select)$/i.test(e.target.tagName || "") || e.target.isContentEditable;
     if ((e.key === "/" && !typing) || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k")) {
       e.preventDefault();
       if (palette.hidden) openPalette(); else closePalette();
-    } else if (e.key === "Escape" && !palette.hidden) {
-      closePalette();
-    }
+    } else if (e.key === "Escape" && !palette.hidden) { closePalette(); }
   });
-})();
+
+  onScroll();
+})(window);
