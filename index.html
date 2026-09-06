@@ -1,13 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>nojukuramu — hand-made browser things</title>
-  <meta name="description" content="A small workshop of finished, hand-built browser projects — a spell-drawing RPG, a notebook with a real alarm clock, a karaoke room over WebRTC, and more. Plain HTML, CSS and JS." />
-  <meta name="theme-color" content="#F4F2EC" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#1B1A18" media="(prefers-color-scheme: dark)" />
-  <meta name="color-scheme" content="light dark" />
+  <meta name="description" content="A small workshop of finished, hand-built browser projects — a spell-drawing RPG, a notebook with a real alarm clock, a karaoke room over WebRTC, and more. Plain HTML, CSS and JS, on a sky that follows your own weather." />
+  <meta name="theme-color" content="#0B1226" />
+  <meta name="color-scheme" content="dark" />
 
   <meta property="og:title" content="nojukuramu — hand-made browser things" />
   <meta property="og:description" content="A small workshop of finished, hand-built browser projects. No accounts, no tracking, no build step." />
@@ -17,25 +16,18 @@
 
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23C1613F'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='19' fill='%23fff' text-anchor='middle'%3En%3C/text%3E%3C/svg%3E" />
 
-  <!-- Set theme before paint to avoid a flash -->
-  <script>
-    (function () {
-      try {
-        var saved = localStorage.getItem('theme');
-        var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-        document.documentElement.setAttribute('data-theme', theme);
-      } catch (e) { /* default light */ }
-    })();
-  </script>
-
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&family=Inter:wght@400;500;600&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Sans+Condensed:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&display=swap" />
   <link rel="stylesheet" href="static/home/css/home.css" />
+  <link rel="preconnect" href="https://api.open-meteo.com" />
 </head>
 
 <body>
   <a class="skip-link" href="#work">Skip to projects</a>
+
+  <canvas id="sky" aria-hidden="true"></canvas>
+  <div id="grain" aria-hidden="true"></div>
 
   <header class="site-header" id="top">
     <div class="header-inner">
@@ -43,21 +35,15 @@
         <span class="brand-mark" aria-hidden="true">n</span>
         <span class="brand-name">nojukuramu</span>
       </a>
-
       <nav class="site-nav" aria-label="Primary">
         <a href="#work">Projects</a>
-        <a href="#play">Play</a>
         <a href="#about">About</a>
+        <a href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">Source</a>
       </nav>
-
       <div class="header-actions">
-        <button class="ghost-btn cmd-hint" id="open-palette" aria-label="Search projects and commands" title="Search — press /">
+        <button class="ghost-btn" id="open-palette" aria-label="Search projects and commands" title="Search — press /">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="width:14px;height:14px"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
           <span class="cmd-hint-text">Search</span> <kbd>/</kbd>
-        </button>
-        <button class="ghost-btn icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle theme">
-          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M19.1 4.9l-1.5 1.5M6.4 17.6l-1.5 1.5"/></svg>
-          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
         </button>
       </div>
     </div>
@@ -78,67 +64,45 @@
           <a class="btn btn-primary" href="#work">Browse the projects</a>
           <a class="btn btn-ghost" href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">Read the source</a>
         </div>
-
         <div class="hero-meta">
-          <span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
-            Plain HTML, CSS &amp; JS
-          </span>
-          <span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-            Local-first, nothing tracked
-          </span>
-          <span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg>
-            Built for phones too
-          </span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>Plain HTML, CSS &amp; JS</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Local-first, nothing tracked</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg>Built for phones too</span>
         </div>
       </div>
+      <div class="scroll-cue" aria-hidden="true"><i></i>Scroll — the sun goes down</div>
     </section>
 
     <!-- Projects -->
     <section class="section" id="work">
       <div class="wrap">
-        <div class="section-head">
+        <div class="section-head reveal">
           <p class="section-label">Projects</p>
-          <h2>Eleven things I made and actually finished.</h2>
-          <p class="section-sub">Each is self-contained and opens in its own page. Nothing here phones home.</p>
-        </div>
-        <div class="card-grid" id="app-grid">
-          <!-- cards injected by home.js -->
+          <h2>Twelve things I made and actually finished.</h2>
+          <p class="section-sub">Every card draws what the thing does. Drag, swipe, or use the arrow keys.</p>
         </div>
       </div>
-    </section>
 
-    <!-- Minigame -->
-    <section class="section" id="play">
-      <div class="wrap">
-        <div class="section-head">
-          <p class="section-label">Interlude</p>
-          <h2>Elemental Echo</h2>
-          <p class="section-sub">A small memory game, in the same four elements the RPG runs on. Watch the sequence, repeat it, watch it grow.</p>
+      <div class="carousel" id="carousel">
+        <div class="carousel-glow" data-glow aria-hidden="true"></div>
+        <div class="wrap">
+          <div class="filters" data-filters role="group" aria-label="Filter projects"></div>
         </div>
-
-        <div class="echo-layout" id="echo-game">
-          <div class="echo-board" id="echo-pads" role="group" aria-label="Element pads">
-            <button class="pad pad-air"   data-element="Air"   aria-label="Air">Air</button>
-            <button class="pad pad-fire"  data-element="Fire"  aria-label="Fire">Fire</button>
-            <button class="pad pad-earth" data-element="Earth" aria-label="Earth">Earth</button>
-            <button class="pad pad-water" data-element="Water" aria-label="Water">Water</button>
-            <div class="echo-center">
-              <button class="btn btn-primary" id="echo-start">Begin</button>
-              <div class="echo-status" id="echo-status" aria-live="polite">ready</div>
-            </div>
-          </div>
-
-          <div class="echo-side">
-            <h3>How it goes</h3>
-            <p>The board plays a sequence of elements. Play it back in order. Every clean round adds one more step and speeds things up a little.</p>
-            <div class="echo-stats">
-              <div class="stat"><span class="stat-num" id="echo-round">0</span><span class="stat-label">round</span></div>
-              <div class="stat"><span class="stat-num" id="echo-best">0</span><span class="stat-label">best</span></div>
-            </div>
-          </div>
+        <div class="carousel-viewport" data-viewport>
+          <div class="carousel-track" data-track><!-- cards drawn by projects.js --></div>
+        </div>
+        <div class="carousel-controls">
+          <button class="car-btn" data-prev aria-label="Previous project">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          </button>
+          <div class="car-dots" data-dots></div>
+          <span class="car-count" data-count><b>01</b> / 12</span>
+          <button class="car-btn" data-next aria-label="Next project">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+          </button>
+          <button class="car-btn" data-shuffle aria-label="Show me a random project" title="Surprise me">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="9" cy="9" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="9" r="1.4" fill="currentColor" stroke="none"/></svg>
+          </button>
         </div>
       </div>
     </section>
@@ -147,41 +111,18 @@
     <section class="section" id="about">
       <div class="wrap">
         <div class="about-grid">
-          <div class="about-body">
+          <div class="about-body reveal">
             <p class="section-label">About</p>
             <h2 class="about-title">I build small tools, then leave them running.</h2>
-            <p>
-              I'm <strong>nojukuramu</strong>. This is where I keep the experiments that made it all the
-              way to done — the kind you can open and immediately use, rather than clone and configure.
-            </p>
-            <p>
-              Everything is written by hand in plain HTML, CSS and JavaScript. There's no bundler, no
-              framework, no analytics script. Whatever you make inside these apps — notes, cities, spells,
-              high scores — is stored in your own browser and never leaves the device.
-            </p>
-            <p>
-              It's all readable source, so if something here is useful to you, take it apart.
-              <a class="inline" href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">The repository is on GitHub</a>.
-            </p>
+            <p>I'm <strong>nojukuramu</strong>. This is where I keep the experiments that made it all the way to done — the kind you can open and immediately use, rather than clone and configure.</p>
+            <p>Everything is written by hand in plain HTML, CSS and JavaScript. There's no bundler, no framework, no analytics script. Whatever you make inside these apps — notes, cities, spells, high scores — is stored in your own browser and never leaves the device.</p>
+            <p>The sky behind this page is the same idea: one canvas, no libraries, and a forecast only if you ask for one. <a class="inline" href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">The repository is on GitHub</a>.</p>
           </div>
-
-          <ul class="principles">
-            <li>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
-              <div><strong>No build step</strong><span>View source and you're reading the same thing the browser is.</span></div>
-            </li>
-            <li>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-              <div><strong>Local-first</strong><span>Your data lives in localStorage or IndexedDB. There is no account to make.</span></div>
-            </li>
-            <li>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg>
-              <div><strong>Offline where it counts</strong><span>The PWAs cache their shell and keep working with no connection.</span></div>
-            </li>
-            <li>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg>
-              <div><strong>Keyboard and touch</strong><span>Designed for a phone held one-handed and a laptop with no mouse.</span></div>
-            </li>
+          <ul class="principles reveal">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg><div><strong>No build step</strong><span>View source and you're reading the same thing the browser is.</span></div></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><div><strong>Local-first</strong><span>Your data lives in localStorage or IndexedDB. There is no account to make.</span></div></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg><div><strong>Offline where it counts</strong><span>The PWAs cache their shell and keep working with no connection.</span></div></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg><div><strong>Keyboard and touch</strong><span>Designed for a phone held one-handed and a laptop with no mouse.</span></div></li>
           </ul>
         </div>
       </div>
@@ -191,20 +132,37 @@
   <footer class="site-footer">
     <div class="wrap">
       <div class="footer-row">
-        <a class="brand" href="#top">
-          <span class="brand-mark" aria-hidden="true">n</span>
-          <span class="brand-name">nojukuramu</span>
-        </a>
+        <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true">n</span><span class="brand-name">nojukuramu</span></a>
         <div class="footer-links">
           <a href="#work">Projects</a>
           <a href="#about">About</a>
           <a href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">GitHub</a>
-          <button class="linklike" id="theme-toggle-2">Theme</button>
         </div>
       </div>
-      <p class="footer-fine">© <span id="year"></span> nojukuramu · Built by hand, hosted on GitHub Pages.</p>
+      <p class="footer-fine">
+        © <span id="year"></span> nojukuramu · Built by hand, hosted on GitHub Pages.
+        The sky is one canvas and no libraries; the sound is synthesised, not sampled.
+        Weather by <a class="inline" href="https://open-meteo.com/" rel="noopener">Open-Meteo</a>, only once you ask for it.
+      </p>
     </div>
   </footer>
+
+  <!-- The sky bar: what time the scene thinks it is, and who is deciding -->
+  <div class="sky-bar auto" id="sky-bar">
+    <button class="bar-btn" id="locate" aria-label="Use my real sky" title="Use my real sky — weather from where you are">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
+    </button>
+    <button class="wx-chip" id="wx-chip" hidden title="Your sky"><span id="wx-text"></span></button>
+    <span class="bar-sep" aria-hidden="true"></span>
+    <div class="dial-read"><b id="dial-time">17:40</b> <span id="dial-phase">golden hour</span></div>
+    <input type="range" id="dial-range" min="0" max="1000" value="0" aria-label="Scrub the time of day" />
+    <button class="bar-btn" id="dial-reset" data-reset aria-label="Give the sky back to the scroll" title="Back to the scroll">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+    </button>
+    <button class="bar-btn" id="sound-toggle" hidden aria-pressed="false" aria-label="Listen to the evening" title="Listen to the evening">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18 6.5a7.6 7.6 0 0 1 0 11"/></svg>
+    </button>
+  </div>
 
   <!-- Command palette -->
   <div class="palette-backdrop" id="palette" hidden>
@@ -215,7 +173,10 @@
     </div>
   </div>
 
+  <script defer src="static/home/js/sky.js"></script>
+  <script defer src="static/home/js/weather.js"></script>
+  <script defer src="static/home/js/ambience.js"></script>
+  <script defer src="static/home/js/projects.js"></script>
   <script defer src="static/home/js/home.js"></script>
-  <script defer src="static/home/js/minigame.js"></script>
 </body>
 </html>

@@ -3,12 +3,36 @@
 Personal GitHub Pages site. Each sub-folder is a self-contained static project that can be
 visited directly at `https://nojukuramu.github.io/<folder>/`.
 
-The root (`index.html`) is the landing page that ties the projects together: a warm, paper-toned
-layout with light/dark themes, a search palette (`/` or `Ctrl`/`Cmd`+`K`), and an *Elemental Echo*
-memory minigame. Its styles and scripts live in [`static/home/`](static/home/); the project grid
-and the palette are both driven by the `PROJECTS` array at the top of
-[`static/home/js/home.js`](static/home/js/home.js), so adding a project means adding one object
-there.
+The root (`index.html`) is the landing page that ties the projects together. It sits on a drawn
+sunset: one canvas, no libraries, where a single number — how far through the evening we are —
+paints the sky, the sun, tonight's real moon phase, the clouds, four mountain ridges and the lake
+under them. Scrolling runs that number forward, so the top of the page is golden hour and the
+bottom is a starry night; the dial in the corner can take it over instead.
+
+Its styles and scripts live in [`static/home/`](static/home/):
+
+| File | What it is |
+|------|------------|
+| [`js/sky.js`](static/home/js/sky.js) | the scene — sky, sun, moon, cloud, birds, ridges, lake, rain, snow, fog, lightning |
+| [`js/weather.js`](static/home/js/weather.js) | [Open-Meteo](https://open-meteo.com/) and the moon, so the drawn sky can follow the real one |
+| [`js/ambience.js`](static/home/js/ambience.js) | wind, crickets, birds, rain and thunder, synthesised — there are no audio files |
+| [`js/projects.js`](static/home/js/projects.js) | the carousel, and the small drawn scene on every card |
+| [`js/home.js`](static/home/js/home.js) | the glue: scroll, dial, sound, search palette |
+
+Adding a project means adding one object to the `PROJECTS` array in
+[`static/home/js/projects.js`](static/home/js/projects.js) — the carousel, the filters and the
+search palette are all driven from it. A card's `motif` names one of the drawing functions at the
+top of that file.
+
+**On the weather.** Nothing is sent anywhere until the visitor asks. The location pin in the
+corner is the only thing that prompts; coordinates are rounded to two decimals (~1 km) before they
+leave the page, the answer is cached in `localStorage` for twenty minutes, and clicking the
+reading forgets all of it. A visit that never touches the pin makes no network request at all, and
+every failure is silent — the sky just keeps running off the scroll. The moon phase is computed
+locally from the date rather than fetched, and is accurate to within half a day.
+
+**On the sound.** Off until asked, remembered afterwards, and it still waits for a click on every
+visit, because a page that talks the moment it loads is rude even where browsers allow it.
 
 ## Projects
 
