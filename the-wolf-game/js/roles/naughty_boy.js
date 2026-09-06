@@ -22,7 +22,13 @@
     }
     var a = c.P(pending), b = c.occupant;
     c.actor._swapFirst = null;
-    if (!a || !b) return { ok: false, reason: "One of those houses is gone." };
+    /* The selector was evaluated when the FIRST house was picked, and the night
+     * has moved since. If that player has died in between, going through with
+     * it buries a live role in a corpse and deletes it from the game for good.
+     * Re-check both ends against the rule the action actually declares. */
+    if (!a || !b || !a.alive || !b.alive || a.spectator || b.spectator) {
+      return { ok: false, reason: "One of those houses is gone. Start again." };
+    }
 
     var ra = a.role, rb = b.role;
     a.role = rb; Object.assign(a, WG.roles.initialState(rb));

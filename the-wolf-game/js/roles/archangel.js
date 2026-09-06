@@ -20,13 +20,18 @@
   WG.roles.define("archangel", {
     actions: {
       revive: function (c) {
+        var pool = WG.roles.all().filter(function (r) {
+          return r.team === "village" && ["archangel", "mayor", "villager"].indexOf(r.id) < 0;
+        });
+        /* The phone picks from this list and the host must check the same one.
+         * Trusting payload.newRole meant an Archangel could raise a corpse as
+         * an Alpha Wolf and hand the pack a player — the one place in the
+         * engine that ever took a client's word for a rule. */
         var role = c.payload.newRole;
-        if (c.payload.assignment !== "manual" || !WG.roles.get(role)) {
-          var pool = WG.roles.all().filter(function (r) {
-            return r.team === "village" && ["archangel", "mayor", "villager"].indexOf(r.id) < 0;
-          });
-          role = pool[Math.floor(Math.random() * pool.length)].id;
-        }
+        var chosen = c.payload.assignment === "manual" && pool.filter(function (r) {
+          return r.id === role;
+        })[0];
+        if (!chosen) role = pool[Math.floor(Math.random() * pool.length)].id;
         var res = c.R.revive(c.state, c.occupant.id, {
           newRole: role, out: c.out, byId: c.actor.id, publicly: c.payload.reveal !== false
         });

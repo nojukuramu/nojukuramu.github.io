@@ -44,6 +44,7 @@
           return { prevent: true, message: c.self.name + " was voted out and the rope would not hold. They walked home." };
         }
         c.self.role = "villager";
+        Object.assign(c.self, WG.roles.initialState("villager"));
         c.self.isDemoted = true;
         return null;
       },

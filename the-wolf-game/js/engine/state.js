@@ -137,6 +137,7 @@
 
       votes: {},            // voterId -> targetId | "SKIP"
       voteHistory: [],
+      runoff: null,          // { candidates, round } while a tie is being re-run
       leadersAlive: [],
       jesterWasLynched: null,
       currentEvent: null,
