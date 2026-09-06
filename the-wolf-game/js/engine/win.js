@@ -14,7 +14,9 @@
   function count(state) {
     var c = { village: 0, werewolf: 0, cult: 0, solo: [] };
     state.players.forEach(function (p) {
-      if (!p.alive) return;
+      // A spectator arrived after the deal and holds no side. teamOf(null)
+      // answers "village", so counting them puts every side's arithmetic out.
+      if (!p.alive || p.spectator) return;
       var t = R.teamOf(p.role);
       if (t === "solo") c.solo.push(p);
       else c[t]++;

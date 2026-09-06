@@ -39,7 +39,14 @@
     }
     return null;
   }
-  function living(state) { return state.players.filter(function (p) { return p.alive; }); }
+  /* Somebody who arrived after the deal is watching, not playing. They hold no
+   * house, take no turn, are not a legal target, and are counted by nobody. The
+   * lobby is the only place that distinction is made anywhere else, which is
+   * how a watcher used to end up eaten by the pack. */
+  function isSeated(p) { return !!p && !p.spectator; }
+  function living(state) {
+    return state.players.filter(function (p) { return p.alive && !p.spectator; });
+  }
   function now() { return Date.now(); }
 
   /* ---------------- night lifecycle ---------------- */
@@ -48,12 +55,26 @@
     var houses = {};
     var turns = {};
     state.players.forEach(function (p) {
+      if (p.spectator) return;
       houses[p.id] = {
         ownerId: p.id,
         shields: [],       // newest last; consumed newest first
         visits: [],        // committed actions only — knocking is not a visit
         trap: null,        // { byId }
-        body: null,        // set the moment the occupant dies tonight
+        /* Set the moment the occupant dies tonight — and carried forward for
+         * somebody who was already dead when this night began. A corpse does
+         * not stop being findable because the sun came up: whoever still
+         * believes they are at home has to be able to walk up and learn
+         * otherwise, and everything downstream of a body discovery reads this
+         * object. */
+        body: p.alive ? null : {
+          night: p.diedNight != null ? p.diedNight : state.round,
+          at: p.diedAt || null,
+          cause: p.diedCause || null,
+          byId: null,
+          hidden: !!p.deathHidden,
+          foundBy: []
+        },
         reportedBy: null
       };
       // A dead player's house still stands, and some of them still act.
@@ -78,6 +99,12 @@
       visitsLastNight: state.night ? snapshotVisits(state.night) : {}
     };
     state.pendingQuizzes = {};
+
+    /* A two-house swap parks its first pick on the actor, and the phone throws
+     * its own copy away on the next repaint. Left standing overnight the two
+     * disagree: the player taps what they think is a first house and completes
+     * last night's pairing instead, having never seen the other half. */
+    state.players.forEach(function (p) { if (p._swapFirst) p._swapFirst = null; });
 
     // A quiz written last night comes due now, before its target may do a thing.
     Object.keys(state.night.quizzes).forEach(function (pid) {
@@ -195,6 +222,10 @@
     if (!actor || !house) return { ok: false, reason: "no-such-house" };
 
     var occupant = P(state, house.ownerId);
+    /* A house outlives its occupant's death, but not the seat itself. If the
+     * player record is gone the house is a dangling key and every reader below
+     * would dereference null. */
+    if (!isSeated(occupant)) return { ok: false, reason: "no-such-house" };
     return {
       ok: true,
       houseId: houseId,
@@ -227,6 +258,10 @@
    * same, because they are not the same mistake.
    */
   function bodyText(state, actor, occupant, house) {
+    /* No body record means nobody can say anything useful about how this
+     * happened — and every onFindBody hook in js/roles/ reads the body on its
+     * first line. Answer plainly rather than handing them a null. */
+    if (!house.body) return "Nobody answers. The house has been empty for a while.";
     var custom = R.hook(actor.role, "onFindBody", {
       state: state, actor: actor, occupant: occupant, house: house, body: house.body
     });
@@ -360,6 +395,7 @@
     var house = state.night && state.night.houses[houseId];
     if (!actor || !house) return { ok: false, reason: "no-such-house" };
     var occupant = P(state, house.ownerId);
+    if (!isSeated(occupant)) return { ok: false, reason: "no-such-house" };
     var turn = state.night.turns[actorId];
     if (!turn) return { ok: false, reason: "not-playing" };
 
@@ -549,7 +585,11 @@
 
     target.deathHidden = hidden;
     var record = { id: target.id, cause: cause, byId: byId, at: at, night: state.round, hidden: hidden };
-    if (state.night) {
+    /* Once the night is closed its records have already been snapshotted into
+     * state.lastNight, so a death that happens in daylight must not be filed
+     * there — the morning report has been and gone and nobody would ever read
+     * it. It is announced below instead. */
+    if (state.night && !state.night.closed) {
       state.night.deaths.push(record);
       var house = state.night.houses[target.id];
       if (house) {
@@ -571,9 +611,18 @@
         if (p.alive && R.isWolf(p.role)) note(state, p.id, target.id, "dead");
       });
     }
-    if (cause === CAUSE.LYNCH) {
-      // The rope is public by definition.
+    /* Daylight has no secrets. The rope is the obvious case, but an Avenger's
+     * oath and a Diwata's curse also fire during the verdict, and a death that
+     * happens once the night is closed can never reach the morning report. Left
+     * unannounced it becomes a house the whole village still believes is
+     * occupied, which is both a lie and the thing that used to take the host
+     * down the following night. */
+    if (cause === CAUSE.LYNCH || !state.night || state.night.closed) {
       announceDeath(state, target.id);
+      if (cause !== CAUSE.LYNCH) {
+        out.say("all", target.name + " is dead - " +
+          (WG.protocol.CAUSE_TEXT[cause] || "dead") + ".", "death");
+      }
     }
 
     out.say(target.id, "You are dead. You can watch. The village cannot hear you.", "death");
@@ -663,11 +712,13 @@
    * that is too late.
    */
   function packVote(state, wolfId, houseId, out) {
+    var caller = P(state, wolfId), quarry = P(state, houseId);
+    if (!isSeated(caller) || !isSeated(quarry)) return;
     state.night.packVotes[wolfId] = houseId;
     var wolves = living(state).filter(function (p) { return R.isWolf(p.role); });
     var names = wolves.map(function (w) { return w.id; });
     wolves.forEach(function (w) {
-      out.say(w.id, P(state, wolfId).name + " howls for " + P(state, houseId).name + ".", "pack", packTally(state));
+      out.say(w.id, caller.name + " howls for " + quarry.name + ".", "pack", packTally(state));
     });
     var allIn = names.every(function (id) { return state.night.packVotes[id]; });
     if (allIn) resolvePack(state, out);
@@ -757,6 +808,7 @@
     // Traps and quizzes are one-night things.
     Object.keys(state.night.houses).forEach(function (hid) { state.night.houses[hid].trap = null; });
 
+    state.night.closed = true;
     state.lastNight = {
       n: state.round,
       deaths: state.night.deaths.slice(),
@@ -778,6 +830,9 @@
   function allTurnsSpent(state) {
     if (!state.night) return false;
     return Object.keys(state.night.turns).every(function (id) {
+      // A turn whose player is no longer seated belongs to nobody and can
+      // never be spent. It must not be what keeps the whole room on the clock.
+      if (!isSeated(P(state, id))) return true;
       return state.night.turns[id].spent;
     });
   }

@@ -738,11 +738,26 @@ testCase("REV-03", "The Archangel will raise anybody as anything the client asks
   var res = r.eng.handle({ type: "ACT", houseId: "p1", actionId: "revive",
                            payload: { assignment: "manual", newRole: "alpha_wolf" } }, "p0");
   var handedToThePack = res.ok === true && roleOf(r, "p1") === "alpha_wolf";
-  ok("the host accepts it (current behaviour, pinned)", handedToThePack);
+  ok("the host does not hand the pack a player", !handedToThePack, roleOf(r, "p1"));
+  ok("they come back on the village's side",
+    WG.roles.teamOf(roleOf(r, "p1")) === "village", roleOf(r, "p1"));
+  // Every off-pool ask falls back to a random village role rather than failing,
+  // so the raise still happens — it just cannot be steered out of the village.
+  ["cult_leader", "jester", "assassin", "manipulator", "werewolf"].forEach(function (bad) {
+    var q = room(["Arch", "Vic", "W", "V", "V2", "V3"]);
+    give(q, { p0: "archangel", p1: "villager", p2: "werewolf", p3: "villager", p4: "villager", p5: "villager" });
+    night(q);
+    slay(q, "p1", "pack", "p2");
+    q.eng.handle({ type: "ACT", houseId: "p1", actionId: "revive",
+                   payload: { assignment: "manual", newRole: bad } }, "p0");
+    ok("  and not as a " + bad, WG.roles.teamOf(roleOf(q, "p1")) === "village", roleOf(q, "p1"));
+  });
   finding("BUG-03",
     "a village Archangel can raise a corpse as an Alpha Wolf, a Cult Leader or a Jester — " +
     "the host never re-checks the client's newRole against the village-only pool the UI shows",
     handedToThePack,
+    "FIXED: the manual branch now picks from the same village-only pool the random branch " +
+    "uses, and an ask outside it falls back to that pool. " +
     "js/roles/archangel.js:23-28 (only `WG.roles.get(role)` is checked); the UI's own list is " +
     "village-only at js/ui/screens.js:568-570, so the host is trusting the phone");
 })();
@@ -833,15 +848,17 @@ testCase("CONV-03", "The Naughty Boy leaves half a swap lying around between nig
 
   r.eng.advance(); night(r);
   var stale = P(r.state, "p0")._swapFirst === "p1";
-  ok("it is still there a night later (current behaviour, pinned)", stale);
+  ok("it is gone by the next night", !stale);
   r.eng.handle({ type: "ACT", houseId: "p3", actionId: "swap_roles" }, "p0");
   var swapped = roleOf(r, "p1") === "villager" && roleOf(r, "p3") === "seer";
-  ok("so one tap swaps two houses the player never paired", swapped);
+  ok("so that tap starts a fresh pairing instead of completing last night's", !swapped);
+  ok("and it is parked as the new first half", P(r.state, "p0")._swapFirst === "p3");
   finding("BUG-05",
     "an abandoned two-house swap survives into the following night: the Naughty Boy's next " +
     "single tap completes last night's pairing without ever showing the first house",
-    stale && swapped,
-    "js/roles/naughty_boy.js:13-22 (_swapFirst lives on the player and is only cleared on " +
+    stale || swapped,
+    "FIXED: beginNight() clears _swapFirst, matching the phone, which throws its own copy away " +
+    "on every repaint. js/roles/naughty_boy.js:13-22 (_swapFirst lives on the player and is only cleared on " +
     "completion); js/engine/resolver.js:47-87 beginNight rebuilds the night but not the actor");
 })();
 
@@ -854,15 +871,19 @@ testCase("CONV-04", "A swap completed against somebody who died in between");
   slay(r, "p1", "poison", "p4");
   ok("the first house is now a corpse", !alive(r, "p1"));
   var res = r.eng.handle({ type: "ACT", houseId: "p2", actionId: "swap_roles" }, "p0");
-  var buried = res.ok === true && roleOf(r, "p1") === "doctor" && roleOf(r, "p2") === "seer";
-  ok("the swap goes through anyway (current behaviour, pinned)", buried);
-  ok("so the Doctor is now buried in a corpse and gone from the game",
-    !r.state.players.some(function (p) { return p.alive && p.role === "doctor"; }));
+  var buried = roleOf(r, "p1") === "doctor" && roleOf(r, "p2") === "seer";
+  ok("the swap is refused", res.ok === false, JSON.stringify(res));
+  ok("so nothing was buried in the corpse", !buried);
+  ok("and the Doctor is still in the game, alive and a Doctor",
+    r.state.players.some(function (p) { return p.alive && p.role === "doctor"; }));
+  ok("the half-swap is cleared, so the next tap starts over",
+    P(r.state, "p0")._swapFirst === null);
   finding("BUG-06",
     "the second half of a swap is not re-validated: if the first house dies in between, a live " +
     "role is swapped into the corpse and removed from the game for good",
     buried,
-    "js/roles/naughty_boy.js:23-25 — the only check is that c.P(pending) still returns an object");
+    "FIXED: swap() re-checks that both halves are still living, seated players before moving " +
+    "anything. js/roles/naughty_boy.js:23-25 — the only check is that c.P(pending) still returns an object");
 })();
 
 testCase("CONV-05", "A swap moves a role without moving the bookkeeping");
@@ -985,13 +1006,14 @@ testCase("CONV-10", "A Diwata demoted by the rope keeps her old state");
   ok("and she is announced as a Villager", /They were a Villager/.test(r.log()), r.log());
   var noReset = P(r.state, "p0").hasUsedImmunity === true &&
                 P(r.state, "p0").hasUpgraded === undefined;
-  ok("her Diwata state came with her (current behaviour, pinned)", noReset,
+  ok("her Diwata state did not come with her", !noReset,
      JSON.stringify({ imm: P(r.state, "p0").hasUsedImmunity, up: P(r.state, "p0").hasUpgraded }));
   finding("BUG-09",
     "Diwata.onLynch demotes by assigning role = \"villager\" without applying the Villager's " +
     "initial state, unlike every other demotion in the game — the seat ends up a Villager with " +
     "no totalScore, no hasUpgraded and a leftover hasUsedImmunity",
     noReset,
+    "FIXED: the rope's demotion now applies initialState(\"villager\") like the other one. " +
     "js/roles/diwata.js:46-47 vs js/roles/diwata.js:22-24, which does it correctly");
 })();
 
@@ -1587,14 +1609,16 @@ testCase("ROOM-01", "A spectator is dealt a house, a turn, and a place in the wi
 
   var hasHouse = !!r.state.night.houses.p3;
   var hasTurn = r.state.night.turns.p3 && r.state.night.turns.p3.spent === false;
-  ok("the spectator has a house (current behaviour, pinned)", hasHouse);
-  ok("and an unspendable turn (current behaviour, pinned)", !!hasTurn);
+  ok("the spectator gets no house", !hasHouse);
+  ok("and no turn", !hasTurn);
   ["p0", "p1", "p2"].forEach(function (id) {
     r.eng.handle({ type: "ACT", houseId: id, actionId: "stay_in" }, id);
   });
-  ok("so allTurnsSpent can never be true", WG.resolver.allTurnsSpent(r.state) === false);
+  ok("so the three players who are playing can close the night",
+    WG.resolver.allTurnsSpent(r.state) === true);
   var counted = WG.win.count(r.state).village === 3;
-  ok("and the win check counts them as a villager (current behaviour, pinned)", counted);
+  ok("and the win check counts the two villagers, not the watcher", !counted,
+    JSON.stringify(WG.win.count(r.state)));
 
   var r2 = room(["W", "V", "V2", "Spec"]);
   give(r2, { p0: "werewolf", p1: "villager", p2: "villager" });
@@ -1602,7 +1626,7 @@ testCase("ROOM-01", "A spectator is dealt a house, a turn, and a place in the wi
   night(r2);
   var eaten = r2.eng.handle({ type: "ACT", houseId: "p3", actionId: "wolf_vote" }, "p0");
   var dead = eaten.ok === true && !alive(r2, "p3");
-  ok("and the pack can eat them (current behaviour, pinned)", dead);
+  ok("and the pack cannot eat them", !dead, JSON.stringify(eaten));
 
   finding("BUG-15",
     "spectators are treated as players by everything below the lobby: beginNight builds them a " +
@@ -1624,16 +1648,30 @@ testCase("ROOM-02", "Kicking a player mid-night orphans their house and crashes 
 
   ok("the house outlives the player", !!r.state.night.houses.p2);
   ok("so does the turn, unspendable", r.state.night.turns.p2.spent === false);
-  ok("so the night can never close early", WG.resolver.allTurnsSpent(r.state) === false);
+  function stillHolding(st) {
+    return Object.keys(st.night.turns).filter(function (id) {
+      return !st.night.turns[id].spent && st.players.some(function (p) { return p.id === id; });
+    });
+  }
+  // Before the fix the orphan turn was counted, so allTurnsSpent was false
+  // forever and endNightEarly could never fire in a room anybody was kicked from.
+  ok("the orphan turn is not one of the turns still being waited on",
+    stillHolding(r.state).indexOf("p2") < 0, stillHolding(r.state).join(","));
 
   // The engine runs inside a vm context, so its TypeError is not this realm's.
   function throws(fn) { try { fn(); return false; } catch (e) { return !!e && e.name === "TypeError"; } }
   var knockDies = throws(function () { r.eng.handle({ type: "KNOCK", houseId: "p2" }, "p4"); });
   var actDies = throws(function () { r.eng.handle({ type: "ACT", houseId: "p2", actionId: "investigate" }, "p4"); });
   var howlDies = throws(function () { r.eng.handle({ type: "ACT", houseId: "p2", actionId: "wolf_vote" }, "p0"); });
-  ok("knocking at the orphan door throws (current behaviour, pinned)", knockDies);
-  ok("acting there throws (current behaviour, pinned)", actDies);
-  ok("howling there throws (current behaviour, pinned)", howlDies);
+  ok("knocking at the orphan door is refused, not fatal", !knockDies);
+  ok("acting there is refused, not fatal", !actDies);
+  ok("howling there is refused, not fatal", !howlDies);
+  // Everybody who is actually seated goes to bed; the night must then close.
+  ["p0", "p1", "p3", "p4"].forEach(function (id) {
+    r.eng.handle({ type: "ACT", houseId: id, actionId: "stay_in" }, id);
+  });
+  ok("and with every seated player done, the night can close early",
+    WG.resolver.allTurnsSpent(r.state) === true, stillHolding(r.state).join(","));
   ok("the redacted view still builds, so nothing warns anybody",
     (function () { try { WG.view.build(r.state, "p0"); return true; } catch (e) { return false; } })());
 
@@ -1641,7 +1679,10 @@ testCase("ROOM-02", "Kicking a player mid-night orphans their house and crashes 
     "kick() splices a player out of state.players in ANY phase. Their house and turn stay in " +
     "state.night, and the first knock, action or pack vote aimed at that door throws a " +
     "TypeError inside the host's message handler — the room's single source of truth",
-    knockDies && actDies && howlDies,
+    knockDies || actDies || howlDies,
+    "FIXED both ends: kick() keeps the seat below the lobby (marking them kicked and " +
+    "disconnected, and spending their turn), and knock/perform/packVote/allTurnsSpent now " +
+    "refuse a house whose occupant is not seated. " +
     "js/app.js:289 (kick has no phase guard) meeting js/engine/resolver.js:197 " +
     "(`occupant.name`), :372 (offersAt on a null occupant) and :670 (`P(state, houseId).name`)");
 })();
@@ -1660,19 +1701,21 @@ testCase("ROOM-03", "A second game in the same room leaks the first game's death
 
   r.state.phase = "lobby";
   ok("a second game starts cleanly", r.eng.startGame().ok === true);
-  var remembered = r.state.announcedDead && r.state.announcedDead.p1 === true;
-  ok("but the announcement register survives it (current behaviour, pinned)", remembered);
-  ok("as does everybody's private knowledge",
-    r.state.players.some(function (p) { return p.known && p.known.p1 === "dead"; }));
+  var remembered = !!(r.state.announcedDead && r.state.announcedDead.p1);
+  ok("the announcement register does not survive it", !remembered);
+  ok("nor does anybody's private knowledge",
+    !r.state.players.some(function (p) { return p.known && p.known.p1 === "dead"; }));
+  ok("nor the old death bookkeeping",
+    !r.state.players.some(function (p) { return p.diedNight != null || p.deathHidden; }));
 
   r.eng.enter("night");
   var wolf = r.state.players.filter(function (p) { return p.role === "werewolf"; })[0];
   slay(r, "p1", "pack", wolf.id);
   var bystander = r.state.players.filter(function (p) { return p.alive && p.id !== wolf.id; })[0];
   var leaked = WG.resolver.knowsDead(r.state, bystander, P(r.state, "p1"));
-  ok("so the moment they die again, the whole village knows (current behaviour, pinned)", leaked);
-  ok("and their house lights up on everybody's map mid-night",
-    WG.view.build(r.state, bystander.id).houses.filter(function (h) { return h.id === "p1"; })[0].state === "dead-tonight");
+  ok("so a repeat death stays secret until dawn, like any other", !leaked);
+  ok("and their house still reads as occupied on everybody's map",
+    WG.view.build(r.state, bystander.id).houses.filter(function (h) { return h.id === "p1"; })[0].state === "living");
   ok("with nothing published yet", r.state.publicLog.filter(function (e) { return e.kind === "death"; }).length === 0);
 
   finding("BUG-17",
@@ -1680,7 +1723,9 @@ testCase("ROOM-03", "A second game in the same room leaks the first game's death
     "the second game played in a room, anybody who died in the first is publicly dead the " +
     "instant they die again — the map lights their house for every phone in the middle of the " +
     "night, which is the one thing the whole belief model exists to prevent",
-    remembered && leaked,
+    remembered || leaked,
+    "FIXED: assignRoles() now clears announcedDead and every player's known/diedNight/diedAt/" +
+    "diedCause/deathHidden/markedByShaman. " +
     "js/engine/engine.js:103-110 startGame() resets round/winner/publicLog and nothing else; " +
     "js/engine/resolver.js:158-163 knowsDead() reads the stale register");
 })();
@@ -1696,13 +1741,15 @@ testCase("ROOM-04", "A hanging writes a phantom body into last night's houses");
   WG.clock.enter(r.state, "voting"); r.state.votes = {};
   ["p2", "p3", "p4"].forEach(function (v) { r.eng.handle({ type: "VOTE", targetId: "p0" }, v); });
   r.eng.advance();
-  var polluted = r.state.night.deaths.length === 2 && !!r.state.night.houses.p0.body;
-  ok("the rope appends to the closed night's record (current behaviour, pinned)", polluted);
+  var polluted = r.state.night.deaths.length === 2 || !!r.state.night.houses.p0.body;
+  ok("the rope does not append to the closed night's record", !polluted);
+  ok("the hanged player is announced", !!(r.state.announcedDead || {}).p0);
   finding("BUG-18",
     "state.night is not cleared at dawn, so every daytime death — the rope, an Avenger's oath, " +
     "a Diwata's curse — writes a death record and a body into the night object that has already " +
     "been snapshotted. Harmless only because beginNight rebuilds it before anything reads it",
     polluted,
+    "FIXED: endNight() marks the night closed and die() refuses to file into a closed one; " +
     "js/engine/resolver.js:551-560 die() writes to state.night unconditionally; " +
     "js/engine/resolver.js:760-765 endNight() snapshots and leaves the object in place");
 })();
@@ -1726,20 +1773,20 @@ testCase("ROOM-05", "A death nobody announced crashes the host on the following 
 
   ok("the sworn target is dead", !alive(r, "p2"));
   var silent = !(r.state.announcedDead || {}).p2;
-  ok("and nobody was ever told (current behaviour, pinned)", silent);
-  ok("the morning report said nothing about them", r.log().indexOf("Vic") < 0, r.log());
+  ok("a death in daylight is announced to the village", !silent);
+  ok("and it is named in the log", r.log().indexOf("Vic") >= 0, r.log());
 
   while (r.state.phase !== "night") r.eng.advance();
-  ok("the next night rebuilds their house with no body in it",
-    r.state.night.houses.p2.body === null);
-  ok("so the door still lights up for a Doctor who cannot know",
-    r.offered("p3", "p2", "protect"));
+  ok("the next night carries their body forward",
+    !!r.state.night.houses.p2.body);
+  ok("so the door is dark to a Doctor who now knows",
+    !r.offered("p3", "p2", "protect"));
 
   function throws(fn) { try { fn(); return false; } catch (e) { return !!e && e.name === "TypeError"; } }
   var crash = throws(function () {
     r.eng.handle({ type: "ACT", houseId: "p2", actionId: "protect" }, "p3");
   });
-  ok("and acting on it throws inside the host (current behaviour, pinned)", crash);
+  ok("and acting on it does not throw inside the host", !crash);
 
   // The same hole, reached by the room setting the README puts its name to.
   var q = room(["W", "Doc", "Vic", "V", "V2", "V3"]);
@@ -1751,10 +1798,17 @@ testCase("ROOM-05", "A death nobody announced crashes the host on the following 
   ok("\"Don't believe anyone\" leaves an unreported body unannounced",
     q.log().indexOf("Vic") < 0, q.log());
   night(q);
+  var found = null;
   var crash2 = throws(function () {
-    q.eng.handle({ type: "ACT", houseId: "p2", actionId: "protect" }, "p1");
+    found = q.eng.handle({ type: "ACT", houseId: "p2", actionId: "protect" }, "p1");
   });
-  ok("and the same second-night attempt throws (current behaviour, pinned)", crash2);
+  ok("and the same second-night attempt does not throw", !crash2);
+  // Walking up to an unannounced body is how the Doctor finds out, and finding
+  // out is free — the knock is spent on nothing, the night is not.
+  ok("it is a body discovery, and it costs the Doctor nothing",
+    !!found && found.ok === true && q.state.night.turns.p1.spent === false,
+    JSON.stringify(found) + " spent=" + q.state.night.turns.p1.spent);
+  ok("and the Doctor now privately knows", (q.state.players[1].known || {}).p2 === "dead");
 
   finding("BUG-23",
     "beginNight rebuilds every house with body:null, but a player who died on an earlier night " +
@@ -1765,6 +1819,8 @@ testCase("ROOM-05", "A death nobody announced crashes the host on the following 
     "every role that can reach it. Two ordinary routes in: an Avenger's revenge fired by the " +
     "rope (never announced at all), and the \"Don't believe anyone\" setting",
     silent && crash && crash2,
+    "FIXED three ways: beginNight() carries a dead occupant's body forward, bodyText() answers " +
+    "plainly when there is no body record at all, and a death in daylight is announced. " +
     "js/engine/resolver.js:403-408 (the branch) and :229-236 bodyText(); " +
     "js/engine/resolver.js:51-58 beginNight() resets house.body every night; " +
     "js/engine/resolver.js:574-577 die() only announces the rope");

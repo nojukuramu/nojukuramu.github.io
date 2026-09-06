@@ -286,9 +286,28 @@
       // this, so use it rather than destroying the link and hoping.
       setTimeout(function () { if (app.net && app.net.kick) app.net.kick(id); else link.destroy("kicked"); }, 250);
     }
-    s.players = s.players.filter(function (x) { return x.id !== id; });
+    /* Below the lobby a seat is load-bearing. The night is keyed by player id —
+     * houses, turns, shields, pack votes, the win arithmetic — so removing the
+     * row mid-game leaves every one of those pointing at nobody. The
+     * disconnect path above already knows this and keeps the seat; a kick is a
+     * disconnect the host chose, and is handled the same way. */
+    if (s.phase === "lobby") {
+      s.players = s.players.filter(function (x) { return x.id !== id; });
+      reseat();
+    } else {
+      var p = playerOf(id);
+      if (p) {
+        p.connected = false;
+        p.kicked = true;
+        // Their phone is gone; their turn must not hold the room on the clock.
+        if (s.night && s.night.turns[id] && !s.night.turns[id].spent) {
+          s.night.turns[id].spent = true;
+          s.night.turns[id].at = Date.now();
+        }
+      }
+      toast("They are out of the room. Their seat stays until the game ends.", "info");
+    }
     s.pending = s.pending.filter(function (x) { return x.id !== id; });
-    reseat();
     broadcast();
   }
 

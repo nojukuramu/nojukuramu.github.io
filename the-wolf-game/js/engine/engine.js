@@ -74,6 +74,21 @@
         Object.assign(p, R.initialState(bag[i]));
         p.totalScore = 0;
       });
+
+      /* A room is reused; a game is not. Everything the village learned last
+       * game has to go, or the first repeat death is public the instant it
+       * happens — knowsDead reads the old register and every door in the
+       * village goes dark at that house while the night is still running. */
+      state.announcedDead = {};
+      state.players.forEach(function (p) {
+        delete p.known;
+        delete p.diedNight;
+        delete p.diedAt;
+        delete p.diedCause;
+        delete p.deathHidden;
+        delete p.markedByShaman;
+      });
+
       Win.noteLeaders(state);
       return seats;
     }
