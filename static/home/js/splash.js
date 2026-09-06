@@ -52,7 +52,7 @@
   /* --- the writing --- */
   function write() {
     if (!glyphs.length || reduced) {
-      splash.classList.add("writing", "filling", "still");
+      splash.classList.add("writing", "filling", "still", "plated");
       return 0;
     }
     /* Set the starting offset with transitions OFF. Naming a transition in
@@ -72,6 +72,9 @@
     /* Read something layout-dependent to force the style flush; without it
        the two writes are coalesced and there is nothing to transition from. */
     void ink.getBoundingClientRect().width;
+
+    /* the square arrives first, then the word is written inside it */
+    splash.classList.add("plated");
 
     glyphs.forEach(function (g, i) {
       g.style.transition = "stroke-dashoffset " + DRAW + "ms cubic-bezier(.62,.03,.32,1) " + (i * STAGGER) + "ms";

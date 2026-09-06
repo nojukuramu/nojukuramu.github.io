@@ -35,9 +35,14 @@ locally from the date rather than fetched, and is accurate to within half a day.
 **On the sound.** Off until asked, remembered afterwards, and it still waits for a click on every
 visit, because a page that talks the moment it loads is rude even where browsers allow it.
 
-**On the splash.** The mark is "noju" in Poppins SemiBold, but no webfont is involved: the four
-glyphs are committed as SVG outlines, so the splash draws instantly, offline, and identically
-everywhere. It is stroked on letter by letter, then flooded.
+**On the logo.** A 1:1 rounded square, black, with "noju" in Poppins SemiBold centred in it. No
+webfont is involved: the four glyphs are committed as SVG outlines, and one geometry — the same
+`viewBox`, plate and transform — is used by the header, the footer, the favicon and the splash,
+so the mark cannot drift between them. The word is centred by the transform rather than by
+padding, which is why it lands identically at 30 px and at 512.
+
+**On the splash.** It draws that same square: the plate outlines itself, then the word is
+stroked on letter by letter inside it, then flooded.
 
 The order it does things in matters. `stroke-dashoffset` is a main-thread property, so a scene
 repainting behind the black would starve the one thing anybody can see. So the sequence is:

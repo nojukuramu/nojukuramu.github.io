@@ -104,16 +104,19 @@ a{ color:inherit; }
 }
 .header-inner{ max-width:var(--maxw); margin-inline:auto; padding:14px var(--gutter); display:flex; align-items:center; gap:18px; }
 .brand{ display:flex; align-items:center; gap:10px; text-decoration:none; }
-.brand-mark{
-  display:grid; place-items:center;
-  padding:8px 11px; border-radius:10px;
-  background:#000; color:var(--cream);
-  border:1px solid rgba(255,226,189,.16);
-  box-shadow:0 2px 14px -4px rgba(0,0,0,.9);
-  transition:border-color .25s;
+.brand-mark{ display:block; line-height:0; }
+/* 1:1, and the word is centred inside the square in the SVG itself rather
+   than by padding, so the mark is identical at every size and in the
+   favicon. */
+.brand-mark svg{ display:block; width:34px; height:34px; }
+.mark-plate{
+  fill:#000;
+  stroke:rgba(255,226,189,.18); stroke-width:8;
+  transition:stroke .25s;
 }
-.brand-mark svg{ display:block; height:13px; width:auto; }
-.brand:hover .brand-mark{ border-color:var(--edge-lit); }
+.mark-word{ fill:var(--cream); }
+.brand:hover .mark-plate{ stroke:var(--edge-lit); }
+@media (max-width:420px){ .brand-mark svg{ width:30px; height:30px; } }
 .brand-name{ font-weight:600; letter-spacing:.045em; font-size:18px; }
 .site-nav{ margin-left:auto; display:flex; gap:6px; }
 .site-nav a{
@@ -415,12 +418,22 @@ a.inline{ color:var(--gold-lit); text-decoration:underline; text-underline-offse
   opacity:1;
   animation:splash-failsafe 600ms linear 5200ms forwards;
 }
-.splash-inner{ display:grid; justify-items:center; gap:26px; width:min(360px, 62vw); }
+.splash-inner{ display:grid; justify-items:center; gap:26px; width:min(268px, 56vw); }
 
 .splash-mark{
-  width:100%; height:auto; overflow:visible;
-  filter:drop-shadow(0 0 26px rgba(245,168,60,.30));
+  width:100%; height:auto; display:block;
+  filter:drop-shadow(0 0 26px rgba(245,168,60,.26));
 }
+/* The plate, drawn as an outline first — the same 1:1 square the header
+   mark is, so the splash is the logo rather than a picture of the word. */
+.splash-plate{
+  fill:#000;
+  stroke:rgba(255,209,143,.34);
+  stroke-width:6;
+  opacity:0;
+  transition:opacity 520ms cubic-bezier(.22,1,.36,1);
+}
+.splash.plated .splash-plate{ opacity:1; }
 .splash-ink path{
   fill:var(--gold-lit);
   fill-opacity:0;
