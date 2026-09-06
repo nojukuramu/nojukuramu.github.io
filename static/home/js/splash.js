@@ -31,6 +31,7 @@
   /* How long each letter takes, and how far apart they start. */
   var DRAW = reduced ? 0 : 540;
   var STAGGER = reduced ? 0 : 140;
+  var PLATE = reduced ? 0 : 190;         /* the square lands before the first letter */
   var MIN_SHOW = reduced ? 400 : 1150;   /* never blink past too fast to read */
   var MAX_SHOW = 4200;                   /* never hold the page hostage */
 
@@ -76,12 +77,24 @@
     /* the square arrives first, then the word is written inside it */
     splash.classList.add("plated");
 
+    /* The cue comes off this same schedule rather than its own timers, so
+       a bell can never land on a letter that has not arrived. */
+    if (NJ.ambience && NJ.ambience.logo) {
+      var letters = glyphs.map(function (_, i) { return PLATE + i * STAGGER; });
+      NJ.ambience.logo({
+        plate: 0,
+        letters: letters,
+        draw: DRAW,
+        flood: PLATE + (glyphs.length - 1) * STAGGER + DRAW * 0.55
+      });
+    }
+
     glyphs.forEach(function (g, i) {
-      g.style.transition = "stroke-dashoffset " + DRAW + "ms cubic-bezier(.62,.03,.32,1) " + (i * STAGGER) + "ms";
+      g.style.transition = "stroke-dashoffset " + DRAW + "ms cubic-bezier(.62,.03,.32,1) " + (PLATE + i * STAGGER) + "ms";
       g.style.strokeDashoffset = "0";
     });
     splash.classList.add("writing");
-    var full = (glyphs.length - 1) * STAGGER + DRAW;
+    var full = PLATE + (glyphs.length - 1) * STAGGER + DRAW;
     setTimeout(function () { splash.classList.add("filling"); }, full - DRAW * 0.45);
     return full;
   }
@@ -91,6 +104,19 @@
   function run(hooks) {
     hooks = hooks || {};
     started = performance.now();
+
+    /* Try to bring the audio clock up now. On a cold load browsers will
+       refuse — no gesture has happened — and the cue simply does not play;
+       nothing is faked and nothing is queued up to startle anyone later. A
+       visitor who moves, scrolls or types before the letters start hands us
+       the gesture in time, so these listeners try again, once. */
+    if (NJ.ambience && NJ.ambience.ensure) {
+      NJ.ambience.ensure();
+      var unlock = function () { if (NJ.ambience.ensure) NJ.ambience.ensure(); };
+      ["pointermove", "pointerdown", "wheel", "touchstart", "keydown"].forEach(function (ev) {
+        document.addEventListener(ev, unlock, { once: true, passive: true });
+      });
+    }
 
     if (gauge && !reduced) {
       gauge.style.transition = "transform 420ms cubic-bezier(.3,.7,.3,1)";

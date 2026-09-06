@@ -44,6 +44,19 @@ padding, which is why it lands identically at 30 px and at 512.
 **On the splash.** It draws that same square: the plate outlines itself, then the word is
 stroked on letter by letter inside it, then flooded.
 
+It has a sound, synthesised like everything else here — a low swell as the square lands, a nib on
+paper for the length of each stroke, a small bell the instant each letter arrives (four notes up a
+major pentatonic, so there is no wrong interval to land on), and an open fifth with a shimmer over
+it as the fill floods in. The cue is scheduled from the same plan the drawing uses and against a
+single audio timestamp, so a bell can never land on a letter that has not arrived, even if the
+main thread stalls mid-animation. Rendered offline and measured, it peaks around -10 dBFS.
+
+Two things it will not do. It never plays if the visitor has muted the site — that is their
+choice, and it is checked before anything else. And on a cold load browsers refuse to start audio
+without a gesture, so most first visits are silent: nothing is faked, and nothing is queued to
+startle anyone later. Moving, scrolling or typing before the letters begin hands it the gesture in
+time. Under `prefers-reduced-motion` there is no write to sync to, so there is no cue at all.
+
 The order it does things in matters. `stroke-dashoffset` is a main-thread property, so a scene
 repainting behind the black would starve the one thing anybody can see. So the sequence is:
 measure first with a short burst of the real rendering (`NJ.sky.probe()`, capped at eighteen

@@ -26,7 +26,7 @@
   var KEY = "sky.sound";
 
   var AC = global.AudioContext || global.webkitAudioContext;
-  var ctx = null, master = null, started = false;
+  var ctx = null, master = null, started = false, buffers = null;
   var nodes = {};
   var scene = { t: 0, wind: 8, rain: 0, storm: 0 };
   var timer = null, chirpTimer = null;
@@ -53,6 +53,14 @@
     return buf;
   }
 
+  /* Made once and shared. The logo cue needs noise before the ambience bed
+     has ever been built, and rebuilding four seconds of it per voice would
+     be an audible hitch. */
+  function stock() {
+    if (!buffers) buffers = { white: noiseBuffer(4, 0), brown: noiseBuffer(4, 0.06) };
+    return buffers;
+  }
+
   function looper(buf) {
     var src = ctx.createBufferSource();
     src.buffer = buf; src.loop = true; src.start();
@@ -72,8 +80,8 @@
     master = gain(0);
     master.connect(ctx.destination);
 
-    var brown = noiseBuffer(4, 0.06);
-    var white = noiseBuffer(4, 0);
+    var brown = stock().brown;
+    var white = stock().white;
 
     /* --- wind: brown noise under a lowpass that breathes --- */
     var windSrc = looper(brown);
@@ -117,7 +125,17 @@
     rainSrc.connect(rainHi); rainHi.connect(rainBand); rainBand.connect(rainGain); rainGain.connect(master);
 
     nodes = { windGain: windGain, windFilter: windFilter, rainGain: rainGain,
-              rainBand: rainBand, lakeGain: lakeGain, white: white, brown: brown };
+              rainBand: rainBand, lakeGain: lakeGain };
+  }
+
+  /* Bring the audio clock up without building or starting the ambience bed.
+     Browsers will not let this run before a gesture on a cold load, which is
+     fine — everything that uses it checks `ready()` and stays quiet. */
+  function ensure() {
+    if (!AC) return null;
+    if (!ctx) { try { ctx = new AC(); } catch (e) { return null; } }
+    if (ctx.state === "suspended") { try { ctx.resume(); } catch (e) {} }
+    return ctx;
   }
 
   /* --- crickets: a chirp is a high sine chopped by a fast gate --- */
@@ -175,7 +193,7 @@
     if (!started || !ctx) return;
     var when = ctx.currentTime + 0.35 + Math.random() * 1.6;   /* the sound is behind the light */
     var src = ctx.createBufferSource();
-    src.buffer = nodes.brown; src.loop = true;
+    src.buffer = stock().brown; src.loop = true;
     var lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
     lp.frequency.setValueAtTime(320, when);
@@ -216,6 +234,130 @@
     ramp(nodes.rainGain.gain, scene.rain * 0.14, 2.5);
     ramp(nodes.rainBand.frequency, 3800 + scene.rain * 3000, 2.5);
     ramp(nodes.lakeGain.gain, 0.04 + windLevel * 0.05, 2.5);
+  }
+
+  /* ============================================================
+     The logo cue
+
+     Three layers, all synthesised, all hung off the same schedule the
+     drawing uses so the sound cannot drift from the picture:
+
+       the plate   a low swell as the square outlines itself
+       each letter a nib on paper for the length of the stroke, and a small
+                   bell the instant it lands - four notes up a pentatonic,
+                   so there is no wrong interval to land on
+       the flood   an open fifth with a shimmer over it as the fill arrives
+
+     Quiet on purpose. Rendered offline and measured, it peaks around
+     -10 dBFS with an RMS near -29: a cue, not a fanfare. Skipped outright
+     if the visitor has muted the site.
+     ============================================================ */
+
+  /* C5 D5 E5 G5 — a major pentatonic, so any order of these is consonant. */
+  var LETTER_NOTES = [523.25, 587.33, 659.25, 783.99];
+
+  /* nib on paper: noise through a narrow band that opens as the stroke runs */
+  function nib(at, dur, level) {
+    var src = ctx.createBufferSource();
+    src.buffer = stock().white;
+    src.loop = true;
+    src.playbackRate.value = 0.85 + Math.random() * 0.3;
+
+    var bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(1500, at);
+    bp.frequency.linearRampToValueAtTime(3400, at + dur);
+    bp.Q.value = 0.8;
+
+    var hp = ctx.createBiquadFilter();
+    hp.type = "highpass"; hp.frequency.value = 900;
+
+    var g = gain(0);
+    src.connect(bp); bp.connect(hp); hp.connect(g); g.connect(ctx.destination);
+
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(level, at + 0.045);
+    g.gain.setValueAtTime(level, at + dur * 0.72);
+    g.gain.exponentialRampToValueAtTime(0.0005, at + dur);
+
+    /* a little tremble, so it is a nib and not a hiss */
+    var wob = ctx.createOscillator();
+    wob.type = "triangle";
+    wob.frequency.value = 11 + Math.random() * 7;
+    var wobAmt = gain(level * 0.45);
+    wob.connect(wobAmt); wobAmt.connect(g.gain);
+    wob.start(at); wob.stop(at + dur + 0.05);
+
+    src.start(at); src.stop(at + dur + 0.05);
+  }
+
+  /* the bell a letter lands on */
+  function bell(at, freq, level) {
+    [[1, level], [2.01, level * 0.30], [3.02, level * 0.12]].forEach(function (p) {
+      var osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq * p[0];
+      var g = gain(0);
+      osc.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0, at);
+      g.gain.linearRampToValueAtTime(p[1], at + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0004, at + 0.75 / p[0]);
+      osc.start(at); osc.stop(at + 0.8);
+    });
+  }
+
+  /* the square arriving */
+  function swell(at, level) {
+    var src = ctx.createBufferSource();
+    src.buffer = stock().brown; src.loop = true;
+    var lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.setValueAtTime(200, at);
+    lp.frequency.exponentialRampToValueAtTime(1200, at + 0.34);
+    var g = gain(0);
+    src.connect(lp); lp.connect(g); g.connect(ctx.destination);
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(level, at + 0.16);
+    g.gain.exponentialRampToValueAtTime(0.0005, at + 0.5);
+    src.start(at); src.stop(at + 0.55);
+
+    var sub = ctx.createOscillator();
+    sub.type = "sine";
+    sub.frequency.setValueAtTime(150, at);
+    sub.frequency.exponentialRampToValueAtTime(72, at + 0.32);
+    var sg = gain(0);
+    sub.connect(sg); sg.connect(ctx.destination);
+    sg.gain.setValueAtTime(0, at);
+    sg.gain.linearRampToValueAtTime(level * 1.3, at + 0.02);
+    sg.gain.exponentialRampToValueAtTime(0.0004, at + 0.45);
+    sub.start(at); sub.stop(at + 0.5);
+  }
+
+  /* the fill flooding in: an open fifth, and a shimmer over the top */
+  function flood(at, level) {
+    [261.63, 392.00, 523.25].forEach(function (f, i) {
+      var osc = ctx.createOscillator();
+      osc.type = i === 2 ? "triangle" : "sine";
+      osc.frequency.value = f;
+      var g = gain(0);
+      osc.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0, at);
+      g.gain.linearRampToValueAtTime(level * (i === 0 ? 1 : 0.6), at + 0.13);
+      g.gain.exponentialRampToValueAtTime(0.0004, at + 1.5);
+      osc.start(at); osc.stop(at + 1.6);
+    });
+    bell(at + 0.02, 1046.50, level * 0.55);
+
+    var sh = ctx.createBufferSource();
+    sh.buffer = stock().white; sh.loop = true;
+    var bp = ctx.createBiquadFilter();
+    bp.type = "bandpass"; bp.frequency.value = 6200; bp.Q.value = 1.4;
+    var g2 = gain(0);
+    sh.connect(bp); bp.connect(g2); g2.connect(ctx.destination);
+    g2.gain.setValueAtTime(0, at);
+    g2.gain.linearRampToValueAtTime(level * 0.30, at + 0.10);
+    g2.gain.exponentialRampToValueAtTime(0.0004, at + 0.9);
+    sh.start(at); sh.stop(at + 1.0);
   }
 
   var api = {
@@ -261,7 +403,38 @@
     },
 
     thunder: thunder,
-    onchange: function (fn) { listeners.push(fn); }
+    onchange: function (fn) { listeners.push(fn); },
+
+    /* Bring the clock up without starting the ambience bed. Returns null
+       where there is no Web Audio at all. */
+    ensure: ensure,
+    ready: function () { return !!ctx && ctx.state === "running"; },
+
+    /* Play the logo cue against a plan the drawing hands us, in
+       milliseconds from now:
+         { plate: 0, letters: [0, 140, 280, 420], draw: 540, flood: 830 }
+       Everything is scheduled against one audio timestamp taken here, so
+       the notes cannot drift apart from each other even if the main thread
+       stalls mid-animation. Returns false when it did not play. */
+    logo: function (plan) {
+      /* An explicit mute is an explicit mute. Never has anything to do with
+         autoplay policy — this is the visitor's own choice. */
+      try { if (localStorage.getItem(KEY) === "off") return false; } catch (e) {}
+      if (!ensure() || ctx.state !== "running") return false;
+
+      var t0 = ctx.currentTime + 0.02;
+      var ms = function (v) { return t0 + v / 1000; };
+
+      if (plan.plate != null) swell(ms(plan.plate), 0.040);
+
+      (plan.letters || []).forEach(function (at, i) {
+        nib(ms(at), plan.draw / 1000, 0.015);
+        bell(ms(at + plan.draw), LETTER_NOTES[i % LETTER_NOTES.length], 0.062);
+      });
+
+      if (plan.flood != null) flood(ms(plan.flood), 0.044);
+      return true;
+    }
   };
 
   function emit() { for (var i = 0; i < listeners.length; i++) { try { listeners[i](api.on); } catch (e) {} } }
