@@ -724,16 +724,41 @@
   /* A rolling look at how long frames are taking. Judged on the median of a
      window rather than the mean, so one long garbage collection or a
      backgrounded tab does not permanently demote the scene. */
-  var window60 = [], lastTune = 0, lastPainted = -1;
+  var window60 = [], lastTune = 0, lastPainted = -1, calibrated = false, running = false;
+
+  /* The first verdict is a calibration, not a nudge: it happens early, while
+     the splash is still up, and it jumps straight to a level rather than
+     creeping down one step per second in front of the visitor. Everything
+     after it is the gentle version, because by then the only thing that
+     changes is how busy the device is. */
+  var settleResolve;
+  var settled = new Promise(function (res) { settleResolve = res; });
+
+  function calibrate(median) {
+    calibrated = true;
+    quality = median > 40 ? 0.35
+            : median > 30 ? 0.50
+            : median > 23 ? 0.70
+            : median > 18 ? 0.85
+            : 1;
+    resize();
+    settleResolve(quality);
+  }
 
   function tune(now, dt) {
     window60.push(dt * 16.667);
-    if (window60.length < 45) return;
-    if (now - lastTune < 1200) { if (window60.length > 90) window60.shift(); return; }
+
+    var need = calibrated ? 45 : 22;
+    var gap = calibrated ? 1200 : 480;
+    if (window60.length < need) return;
+    if (now - lastTune < gap) { if (window60.length > 90) window60.shift(); return; }
     lastTune = now;
+
     var sorted = window60.slice().sort(function (a, b) { return a - b; });
     var median = sorted[sorted.length >> 1];
     window60.length = 0;
+
+    if (!calibrated) { calibrate(median); return; }
 
     var before = quality;
     if (median > 22 && quality > 0.35) quality = Math.max(0.35, quality - 0.15);
@@ -786,14 +811,49 @@
   var sky = {
     HORIZON: HORIZON,
 
+    /* Set up, but do not start drawing. Whoever mounts the scene decides
+       when it begins — during the splash the main thread belongs to the
+       logo, and a canvas repainting behind an opaque black rectangle would
+       only stutter the one thing anybody can see. */
     mount: function (el) {
       canvas = el;
       ctx = canvas.getContext("2d");
       seedScene();
       resize();
+      if (reduced) { calibrated = true; settleResolve(quality); }
       global.addEventListener("resize", resize);
+      return sky;
+    },
+
+    start: function () {
+      if (running) return sky;
+      running = true;
       requestAnimationFrame(step);
       return sky;
+    },
+
+    /* A bounded burst of the real thing: the actual paint, at the actual
+       size, on the actual device — not a synthetic benchmark that resembles
+       it. Runs behind the splash, where a dropped frame costs nothing, and
+       stops at eighteen frames or 600 ms, whichever comes first, so a slow
+       phone is not punished with a long one. */
+    probe: function () {
+      if (reduced) return Promise.resolve(quality);
+      return new Promise(function (resolve) {
+        var frames = [], began = performance.now(), prev = began;
+        function burst(now) {
+          paint(now);
+          frames.push(now - prev);
+          prev = now;
+          if (frames.length < 18 && now - began < 600) { requestAnimationFrame(burst); return; }
+          /* the first frame includes one-time setup; it is not the device */
+          frames.shift();
+          frames.sort(function (a, b) { return a - b; });
+          calibrate(frames.length ? frames[frames.length >> 1] : 16);
+          resolve(quality);
+        }
+        requestAnimationFrame(burst);
+      });
     },
 
     /* 0 = golden hour, 1 = deep night. `base` is where the real sky starts
@@ -810,8 +870,10 @@
 
     setMoonPhase: function (p) { moonPhase = p; dirty = true; },
 
-    /* what the scene decided it could afford — read by the tests */
+    /* what the scene decided it could afford — read by the splash and the tests */
     quality: function () { return quality; },
+    /* resolves once the first measurement has been made */
+    tuned: function () { return settled; },
 
     /* The forecast, reduced to what a canvas can draw. */
     setWeather: function (s) {

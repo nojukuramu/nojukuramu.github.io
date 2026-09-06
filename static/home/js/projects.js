@@ -19,6 +19,26 @@
 
   function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
+  /* roundRect is Safari 16.4 and Firefox 127; two of the motifs draw with it,
+     and a browser a year or two behind would show those two cards blank.
+     Cheaper to carry the four arcs than to redraw the motifs without it. */
+  if (typeof CanvasRenderingContext2D !== "undefined" && !CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+      var k = typeof r === "number" ? r : (r && r[0]) || 0;
+      k = Math.min(k, Math.abs(w) / 2, Math.abs(h) / 2);
+      this.moveTo(x + k, y);
+      this.lineTo(x + w - k, y);
+      this.arcTo(x + w, y, x + w, y + k, k);
+      this.lineTo(x + w, y + h - k);
+      this.arcTo(x + w, y + h, x + w - k, y + h, k);
+      this.lineTo(x + k, y + h);
+      this.arcTo(x, y + h, x, y + h - k, k);
+      this.lineTo(x, y + k);
+      this.arcTo(x, y, x + k, y, k);
+      return this;
+    };
+  }
+
   /* ---------- the motifs ----------
      Each is (ctx, w, h, phase, accent) and draws one frame. `phase` is
      seconds since the card took the spotlight. */
@@ -433,7 +453,9 @@
         var idx = +best.dataset.i;
         slides.forEach(function (s) { s.classList.toggle("is-active", s === best); });
         if (idx !== carousel.current) {
+          var leaving = carousel.current;
           carousel.current = idx;
+          if (leaving !== idx) drawScene(leaving, 1.4);
           var p = PROJECTS[idx];
           countEl.innerHTML = "<b>" + String(vis.indexOf(best) + 1).padStart(2, "0") + "</b> / " + String(vis.length).padStart(2, "0");
           Array.prototype.forEach.call(dotsEl.children, function (d) { d.classList.toggle("on", +d.dataset.i === idx); });
@@ -538,8 +560,11 @@
         markActive();
         countEl.innerHTML = "<b>01</b> / " + String(PROJECTS.length).padStart(2, "0");
         glowEl.style.background = "radial-gradient(60% 70% at 50% 50%, " + tint(PROJECTS[0].accent, 0.30) + " 0%, transparent 70%)";
-        if (reduced) { scenes.forEach(function (s, i) { drawScene(i, 1.4); }); }
-        else requestAnimationFrame(frame);
+        /* One frame for every card, once. Only the spotlit one goes on
+           animating, but the neighbours peeking in from the sides have to
+           show their scene rather than an empty band. */
+        scenes.forEach(function (s, i) { drawScene(i, 1.4); });
+        if (!reduced) requestAnimationFrame(frame);
       });
 
       return carousel;

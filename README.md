@@ -17,6 +17,7 @@ Its styles and scripts live in [`static/home/`](static/home/):
 | [`js/weather.js`](static/home/js/weather.js) | [Open-Meteo](https://open-meteo.com/) and the moon, so the drawn sky can follow the real one |
 | [`js/ambience.js`](static/home/js/ambience.js) | wind, crickets, birds, rain and thunder, synthesised — there are no audio files |
 | [`js/projects.js`](static/home/js/projects.js) | the carousel, and the small drawn scene on every card |
+| [`js/splash.js`](static/home/js/splash.js) | the logo writing itself, and the moment the device is measured |
 | [`js/home.js`](static/home/js/home.js) | the glue: scroll, dial, sound, search palette |
 
 Adding a project means adding one object to the `PROJECTS` array in
@@ -33,6 +34,34 @@ locally from the date rather than fetched, and is accurate to within half a day.
 
 **On the sound.** Off until asked, remembered afterwards, and it still waits for a click on every
 visit, because a page that talks the moment it loads is rude even where browsers allow it.
+
+**On the splash.** The mark is "noju" in Poppins SemiBold, but no webfont is involved: the four
+glyphs are committed as SVG outlines, so the splash draws instantly, offline, and identically
+everywhere. It is stroked on letter by letter, then flooded.
+
+The order it does things in matters. `stroke-dashoffset` is a main-thread property, so a scene
+repainting behind the black would starve the one thing anybody can see. So the sequence is:
+measure first with a short burst of the real rendering (`NJ.sky.probe()`, capped at eighteen
+frames or 600 ms), let the verdict pick how much drawing this device can afford, write the logo
+while the main thread is quiet, and start the scene as the curtain lifts. The hairline under the
+mark is that measurement, not a fake progress bar.
+
+If `splash.js` never loads, a CSS animation clears the overlay on its own a few seconds in — a
+broken script can never leave a black page.
+
+**On other browsers.** The layout is checked for horizontal overflow at fourteen widths from
+320 px up, with `overflow-x` neutralised so nothing is masked, and again with every modern
+feature forced back to its fallback: no `svh`, no `overflow: clip`, no `backdrop-filter`, no
+canvas `roundRect`, no Permissions API, no `StereoPannerNode`. That last pass is what an older
+WebKit or Gecko actually gets, and the page survives all of it at once. Two notes for anyone
+editing this:
+
+- `body` must not carry a background. Once `html` has one, `body`'s stops propagating to the root
+  and becomes an ordinary block background — and block backgrounds paint *above* negative
+  z-index children, which buries the sky canvas completely.
+- Don't put `vector-effect: non-scaling-stroke` on the splash glyphs. It puts the dash pattern in
+  screen space while `getTotalLength()` reports user units, so the dash cycles exactly one period
+  and the letters only ever look finished.
 
 ## Projects
 

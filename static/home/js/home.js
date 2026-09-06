@@ -25,9 +25,22 @@
   var yr = $("#year");
   if (yr) yr.textContent = new Date().getFullYear();
 
-  /* ---------- the sky ---------- */
+  /* ---------- the sky, and the curtain in front of it ----------
+     The splash owns the first two seconds: it measures the device with a
+     short burst of real rendering, writes the logo while the main thread is
+     quiet, and only then lets the scene start. Without the splash module the
+     scene simply starts at once. */
   var sky = NJ.sky;
   if (sky) sky.mount($("#sky"));
+
+  if (NJ.splash) {
+    NJ.splash.run({
+      probe: function () { return sky ? sky.probe() : Promise.resolve(null); },
+      reveal: function () { if (sky) sky.start(); }
+    });
+  } else if (sky) {
+    sky.start();
+  }
 
   function scrollProgress() {
     var max = Math.max(1, document.body.scrollHeight - global.innerHeight);
