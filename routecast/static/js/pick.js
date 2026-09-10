@@ -17,6 +17,7 @@ RC.pick = (function () {
 
   var moveStartHandler = null;
   var moveEndHandler = null;
+  var moveHandler = null;
   var debouncedReverse = null;
 
   function fmtCoord(lat, lon) {
@@ -28,13 +29,31 @@ RC.pick = (function () {
     if (els.sub) els.sub.textContent = sub || "";
   }
 
+  /* The coordinate readout is not decoration. It is the contract: whatever
+     name the reverse geocoder settles on, THIS pair of numbers is what gets
+     saved and routed to. Showing it is how the rider can tell the picker
+     apart from a search box that quietly snaps to a landmark. */
+  function setCoord(center) {
+    if (!els.coord) return;
+    els.coord.textContent = center ? fmtCoord(center.lat, center.lon) : "";
+  }
+
+  function setTitle(text) {
+    if (els.title && text) els.title.textContent = text;
+  }
+
+  /* The pin and its card are separate elements in separate stacking contexts
+     — the pin has to sit inside the map to be centred on it, the card has to
+     sit outside the map to be above the panel — so both are shown and hidden
+     together here rather than by nesting. */
   function show(visible) {
-    if (!els.root) return;
-    els.root.hidden = !visible;
-    if (els.root.classList) {
-      if (visible) els.root.classList.add("is-active");
-      else els.root.classList.remove("is-active");
-    }
+    [els.root, els.card].forEach(function (el) {
+      if (!el) return;
+      el.hidden = !visible;
+      if (!el.classList) return;
+      if (visible) el.classList.add("is-active");
+      else el.classList.remove("is-active");
+    });
   }
 
   // Leaflet's LatLng exposes .lng; the rest of the app speaks {lat, lon}.
@@ -50,13 +69,16 @@ RC.pick = (function () {
     var name = (geocoded && geocoded.name) ? geocoded.name : fmtCoord(center.lat, center.lon);
     var address = (geocoded && geocoded.address) ? geocoded.address : "";
     var kind = (geocoded && geocoded.kind) ? geocoded.kind : "";
-    return { name: name, address: address, lat: center.lat, lon: center.lon, kind: kind };
+    // precise: this came from a coordinate the user aimed at, not from a
+    // geocoder's opinion about where an address is.
+    return { name: name, address: address, lat: center.lat, lon: center.lon, kind: kind, precise: true };
   }
 
   function doReverse() {
     if (!active || !map) return;
     var mySeq = ++seq;
     var c = mapCenter();
+    setCoord(c);
 
     RC.geocode.reverse(c.lat, c.lon).then(function (place) {
       if (!active || mySeq !== seq) return; // superseded by a later move — discard
@@ -72,11 +94,20 @@ RC.pick = (function () {
   function onMoveStart() {
     if (els.pin && els.pin.classList) els.pin.classList.add("is-moving");
     setLabel("Locating…", "");
+    if (map) setCoord(mapCenter());
   }
 
   function onMoveEnd() {
     if (els.pin && els.pin.classList) els.pin.classList.remove("is-moving");
+    if (map) setCoord(mapCenter());
     if (debouncedReverse) debouncedReverse();
+  }
+
+  // The numbers track the pin continuously; only the NAME waits for the
+  // debounced network call, because Nominatim is rate limited and the
+  // coordinate is not.
+  function onMove() {
+    if (map) setCoord(mapCenter());
   }
 
   function onKeyDown(e) {
@@ -98,8 +129,10 @@ RC.pick = (function () {
       if (moveStartHandler) map.off("movestart", moveStartHandler);
       if (moveEndHandler) map.off("moveend", moveEndHandler);
     }
+    if (map && moveHandler) map.off("move", moveHandler);
     moveStartHandler = null;
     moveEndHandler = null;
+    moveHandler = null;
 
     try { document.removeEventListener("keydown", onKeyDown); } catch (e) {}
     if (els.confirm && els.confirm.removeEventListener) els.confirm.removeEventListener("click", onConfirmClick);
@@ -152,12 +185,16 @@ RC.pick = (function () {
 
     active = true;
     show(true);
-    setLabel(opts.title || "Locating…", "");
+    setTitle(opts.title);
+    setLabel("Locating…", "");
+    setCoord(mapCenter());
 
     moveStartHandler = onMoveStart;
     moveEndHandler = onMoveEnd;
+    moveHandler = onMove;
     map.on("movestart", moveStartHandler);
     map.on("moveend", moveEndHandler);
+    map.on("move", moveHandler);
 
     document.addEventListener("keydown", onKeyDown);
     if (els.confirm && els.confirm.addEventListener) els.confirm.addEventListener("click", onConfirmClick);

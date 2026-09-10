@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>RouteCast — weather along your route</title>
-  <meta name="description" content="Plan a drive or ride and see the weather waiting for you at every checkpoint along the way — rain, wind and risk, timed to your ETA." />
-  <meta name="theme-color" content="#F4F2EC" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#1B1A18" media="(prefers-color-scheme: dark)" />
+  <meta name="description" content="Plan a drive or ride and see the weather waiting for you at every checkpoint along the way — rain, wind and risk, timed to an ETA calibrated against your own rides." />
+  <meta name="theme-color" content="#F3F5EE" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#12160F" media="(prefers-color-scheme: dark)" />
   <meta name="color-scheme" content="light dark" />
 
   <meta property="og:title" content="RouteCast — weather along your route" />
@@ -15,7 +15,7 @@
   <meta property="og:url" content="https://nojukuramu.github.io/routecast/" />
   <link rel="canonical" href="https://nojukuramu.github.io/routecast/" />
 
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23C1613F'/%3E%3Cpath d='M8 20c0-6 4-11 8-11s8 5 8 11' stroke='%23fff' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='22.5' r='2.4' fill='%23fff'/%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234F7A38'/%3E%3Cpath d='M8 20c0-6 4-11 8-11s8 5 8 11' stroke='%23fff' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='22.5' r='2.4' fill='%23fff'/%3E%3C/svg%3E" />
   <link rel="apple-touch-icon" href="static/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -35,7 +35,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&family=Inter:wght@400;500;600&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="static/css/app.css" />
@@ -68,60 +68,122 @@
     </header>
 
     <div class="rc-body">
+      <!-- Every overlay that has to line up with the MAP lives inside the map
+           wrapper, not beside it. The centre-pin picker is the reason: its pin
+           is drawn at 50%/50% of its own box, and while the panel is a side
+           drawer (desktop, landscape) the centre of the body is not the centre
+           of the map — the pin would sit a couple of hundred pixels right of
+           the coordinate it claimed to be over. The same applies to the map
+           controls and the HUD, which used to overlap the panel entirely. -->
       <div id="map-wrap" class="rc-map-wrap">
         <div id="map" class="rc-map"></div>
-      </div>
 
-      <div id="pick-root" class="rc-pick" hidden>
-        <div id="pick-pin" class="rc-pick-pin" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21.5s-6.8-6.3-6.8-11.3a6.8 6.8 0 1 1 13.6 0c0 5-6.8 11.3-6.8 11.3Z"/><circle cx="12" cy="10.2" r="2.3"/></svg>
-          <span class="rc-pick-shadow"></span>
-        </div>
-        <div class="rc-pick-card">
-          <p id="pick-title" class="rc-pick-title">Set your start</p>
-          <p id="pick-label" class="rc-pick-label">Locating…</p>
-          <p id="pick-sub" class="rc-pick-sub"></p>
-          <div class="rc-pick-actions">
-            <button type="button" class="rc-textbtn" id="pick-cancel">Cancel</button>
-            <button type="button" class="rc-btn-primary" id="pick-confirm">Set this location</button>
+        <!-- The pin, and only the pin, belongs inside the map: it is drawn at
+             50%/50% of its box and that box has to be the map, or it points at
+             a coordinate it is not over. Its card lives outside, next to the
+             panel — see below. -->
+        <div id="pick-root" class="rc-pick" hidden>
+          <div id="pick-pin" class="rc-pick-pin" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21.5s-6.8-6.3-6.8-11.3a6.8 6.8 0 1 1 13.6 0c0 5-6.8 11.3-6.8 11.3Z"/><circle cx="12" cy="10.2" r="2.3"/></svg>
+            <span class="rc-pick-shadow"></span>
           </div>
         </div>
-      </div>
 
-      <div id="map-controls" class="rc-map-controls">
-        <button type="button" class="rc-mapbtn" id="ctl-locate" aria-label="Use my location" title="Use my location">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3"/><circle cx="12" cy="12" r="4.6"/></svg>
-        </button>
-        <button type="button" class="rc-mapbtn" id="ctl-nav" aria-label="Start navigation" title="Start navigation" hidden>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 19.5 19 12 15.3 4.5 19 12 2.5Z"/></svg>
-        </button>
-        <button type="button" class="rc-mapbtn rc-compassbtn" id="ctl-compass" aria-label="North is up — tap to follow your heading" title="North is up — tap to follow your heading" data-mode="north">
-          <svg class="rc-compass-needle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><path d="M12 5.2 15 12H9l3-6.8Z" fill="currentColor" stroke="none"/><path d="M9 12h6l-3 6.8L9 12Z" class="rc-compass-tail"/></svg>
-        </button>
-        <button type="button" class="rc-mapbtn" id="ctl-recenter" aria-label="Fit route" title="Fit route" hidden>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
-        </button>
-      </div>
-
-      <div id="nav-hud" class="rc-nav-hud" hidden>
-        <div class="rc-nav-top">
-          <div class="rc-nav-stats">
-            <span id="nav-remaining" class="rc-nav-remaining"></span>
-            <span id="nav-eta" class="rc-nav-eta"></span>
-          </div>
-          <button type="button" class="rc-nav-stop" id="nav-stop" aria-label="End navigation">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        <div id="map-controls" class="rc-map-controls">
+          <button type="button" class="rc-mapbtn rc-mapbtn-sm" id="ctl-zoom-in" aria-label="Zoom in" title="Zoom in">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg>
+          </button>
+          <button type="button" class="rc-mapbtn rc-mapbtn-sm" id="ctl-zoom-out" aria-label="Zoom out" title="Zoom out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg>
+          </button>
+          <button type="button" class="rc-mapbtn rc-compassbtn" id="ctl-compass" aria-label="North is up — tap to follow your heading" title="North is up — tap to follow your heading" data-mode="north">
+            <svg class="rc-compass-needle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><path d="M12 5.2 15 12H9l3-6.8Z" fill="currentColor" stroke="none"/><path d="M9 12h6l-3 6.8L9 12Z" class="rc-compass-tail"/></svg>
+          </button>
+          <button type="button" class="rc-mapbtn" id="ctl-locate" aria-label="Use my location" title="Use my location">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3"/><circle cx="12" cy="12" r="4.6"/></svg>
+          </button>
+          <button type="button" class="rc-mapbtn" id="ctl-overview" aria-label="Fit the whole route" title="Fit the whole route" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          </button>
+          <button type="button" class="rc-mapbtn rc-mapbtn-go" id="ctl-nav" aria-label="Start navigation" title="Start navigation" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 19.5 19 12 15.3 4.5 19 12 2.5Z"/></svg>
           </button>
         </div>
-        <div id="nav-next" class="rc-nav-next"></div>
-        <div id="nav-progress" class="rc-nav-progress">
-          <div id="nav-progress-fill" class="rc-nav-progress-fill"></div>
+
+        <div id="nav-hud" class="rc-nav-hud" hidden>
+          <div class="rc-nav-top">
+            <div id="nav-step" class="rc-nav-step">
+              <span class="rc-nav-step-dist" id="nav-step-dist"></span>
+              <span class="rc-nav-step-text" id="nav-step-text"></span>
+            </div>
+            <button type="button" class="rc-nav-stop" id="nav-stop" aria-label="End navigation" title="End navigation">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+            </button>
+          </div>
+
+          <div class="rc-nav-mid">
+            <div class="rc-nav-speedo">
+              <span class="rc-nav-speed" id="nav-speed">—</span>
+              <span class="rc-nav-speed-unit" id="nav-speed-unit">km/h</span>
+            </div>
+            <div class="rc-nav-stats">
+              <span id="nav-remaining" class="rc-nav-remaining"></span>
+              <span id="nav-eta" class="rc-nav-eta"></span>
+              <span id="nav-next" class="rc-nav-next"></span>
+            </div>
+          </div>
+
+          <div class="rc-nav-tiles" id="nav-tiles">
+            <div class="rc-nav-tile">
+              <span class="rc-nav-tile-k">Average</span>
+              <span class="rc-nav-tile-v" id="nav-avg">—</span>
+            </div>
+            <div class="rc-nav-tile">
+              <span class="rc-nav-tile-k">Elevation</span>
+              <span class="rc-nav-tile-v" id="nav-elev">—</span>
+            </div>
+            <div class="rc-nav-tile">
+              <span class="rc-nav-tile-k">Grade</span>
+              <span class="rc-nav-tile-v" id="nav-grade">—</span>
+            </div>
+            <div class="rc-nav-tile">
+              <span class="rc-nav-tile-k">Elapsed</span>
+              <span class="rc-nav-tile-v" id="nav-elapsed">—</span>
+            </div>
+            <div class="rc-nav-tile">
+              <span class="rc-nav-tile-k">Traffic</span>
+              <span class="rc-nav-tile-v" id="nav-traffic">—</span>
+            </div>
+            <div class="rc-nav-tile">
+              <span class="rc-nav-tile-k">GPS</span>
+              <span class="rc-nav-tile-v" id="nav-accuracy">—</span>
+            </div>
+          </div>
+
+          <div id="nav-progress" class="rc-nav-progress">
+            <div id="nav-progress-fill" class="rc-nav-progress-fill"></div>
+          </div>
+          <div id="nav-alert" class="rc-nav-alert" hidden></div>
         </div>
-        <div id="nav-alert" class="rc-nav-alert" hidden></div>
+      </div>
+
+      <!-- The picker's card is a sibling of the panel rather than a child of
+           the map, because the panel is painted above the map wrapper: a card
+           inside the map would be buried under the bottom sheet, and its
+           Confirm button unclickable. -->
+      <div id="pick-card" class="rc-pick-card" hidden>
+        <p id="pick-title" class="rc-pick-title">Set your start</p>
+        <p id="pick-label" class="rc-pick-label">Locating…</p>
+        <p id="pick-sub" class="rc-pick-sub"></p>
+        <p id="pick-coord" class="rc-pick-coord"></p>
+        <div class="rc-pick-actions">
+          <button type="button" class="rc-textbtn" id="pick-cancel">Cancel</button>
+          <button type="button" class="rc-btn-primary" id="pick-confirm">Set this exact point</button>
+        </div>
       </div>
 
       <aside id="panel" class="rc-panel" data-sheet="peek">
-        <button class="rc-sheet-handle" id="sheet-handle" type="button" aria-label="Expand or collapse panel"></button>
+        <button class="rc-sheet-handle" id="sheet-handle" type="button" aria-label="Expand or collapse the panel"></button>
 
         <button type="button" id="peek-bar" class="rc-peek-bar">
           <span class="rc-peek-bar-text">
@@ -149,9 +211,19 @@
               </div>
               <span id="summary-verdict" class="rc-badge"></span>
             </div>
+            <p id="summary-eta-note" class="rc-summary-note"></p>
             <p id="summary-rain" class="rc-summary-rain"></p>
+            <div id="trip-facts" class="rc-facts"></div>
             <ul id="summary-advice" class="rc-advice-list"></ul>
+            <div class="rc-summary-actions">
+              <button type="button" class="rc-textbtn" id="save-route">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-4-6.5 4v-16a1 1 0 0 1 1-1Z"/></svg>
+                Save this route
+              </button>
+            </div>
           </div>
+
+          <div id="elev-profile" class="rc-elev" hidden></div>
 
           <div id="timeline" class="rc-timeline"></div>
 
@@ -161,15 +233,23 @@
 
           <div id="details" class="rc-details" hidden></div>
 
+          <section id="saved-routes" class="rc-saved" hidden>
+            <h2 class="rc-section-h">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-4-6.5 4v-16a1 1 0 0 1 1-1Z"/></svg>
+              Saved routes
+            </h2>
+            <div id="saved-list" class="rc-saved-list"></div>
+          </section>
+
           <form id="plan-form" class="rc-form" autocomplete="off">
             <div class="rc-field-group">
               <label class="rc-label" for="from-input">From</label>
               <div class="rc-input-row">
                 <input type="text" id="from-input" class="rc-input" placeholder="Starting point" />
-                <button type="button" class="rc-inputbtn rc-stop-pick" id="from-pick" aria-label="Pick on map" title="Pick on map">
+                <button type="button" class="rc-inputbtn rc-stop-pick" id="from-pick" aria-label="Drop an exact pin on the map" title="Drop an exact pin on the map">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21.5s-6.8-6.3-6.8-11.3a6.8 6.8 0 1 1 13.6 0c0 5-6.8 11.3-6.8 11.3Z"/><circle cx="12" cy="10.2" r="2.3"/></svg>
                 </button>
-                <button type="button" class="rc-inputbtn" id="use-location" aria-label="Use my location" title="Use my location">
+                <button type="button" class="rc-inputbtn" id="use-location" aria-label="Use my exact location" title="Use my exact location">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3"/><circle cx="12" cy="12" r="4.6"/></svg>
                 </button>
               </div>
@@ -186,7 +266,7 @@
               <label class="rc-label" for="to-input">To</label>
               <div class="rc-input-row">
                 <input type="text" id="to-input" class="rc-input" placeholder="Destination" />
-                <button type="button" class="rc-inputbtn rc-stop-pick" id="to-pick" aria-label="Pick on map" title="Pick on map">
+                <button type="button" class="rc-inputbtn rc-stop-pick" id="to-pick" aria-label="Drop an exact pin on the map" title="Drop an exact pin on the map">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21.5s-6.8-6.3-6.8-11.3a6.8 6.8 0 1 1 13.6 0c0 5-6.8 11.3-6.8 11.3Z"/><circle cx="12" cy="10.2" r="2.3"/></svg>
                 </button>
               </div>
@@ -212,6 +292,7 @@
                   Motorcycle
                 </button>
               </div>
+              <p class="rc-field-hint" id="vehicle-hint"></p>
             </div>
 
             <div class="rc-field-row">
@@ -244,6 +325,17 @@
             </div>
           </form>
 
+          <section id="history-panel" class="rc-history">
+            <h2 class="rc-section-h">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.2 4.6v3.8H7"/><path d="M12 7.6V12l3 1.9"/></svg>
+              Your roads
+            </h2>
+            <div id="history-summary" class="rc-history-summary"></div>
+            <div class="rc-history-actions">
+              <button type="button" class="rc-textbtn rc-textbtn-quiet" id="history-clear">Forget my recorded roads</button>
+            </div>
+          </section>
+
           <div id="legend" class="rc-legend">
             <span class="rc-legend-item"><i class="rc-legend-dot" data-level="clear"></i>Clear</span>
             <span class="rc-legend-item"><i class="rc-legend-dot" data-level="watch"></i>Watch</span>
@@ -255,7 +347,7 @@
             Map data &copy; <a href="https://www.openstreetmap.org/copyright" rel="noopener" target="_blank">OpenStreetMap</a> contributors ·
             Routing by <a href="https://project-osrm.org/" rel="noopener" target="_blank">OSRM</a> ·
             Search by <a href="https://nominatim.org/" rel="noopener" target="_blank">Nominatim</a> ·
-            Forecasts by <a href="https://open-meteo.com/" rel="noopener" target="_blank">Open-Meteo</a>
+            Forecasts and terrain by <a href="https://open-meteo.com/" rel="noopener" target="_blank">Open-Meteo</a>
           </p>
         </div>
       </aside>
@@ -278,10 +370,15 @@
   <script src="vendor/leaflet/leaflet.js"></script>
   <script src="static/js/util.js"></script>
   <script src="static/js/icons.js"></script>
+  <script src="static/js/history.js"></script>
+  <script src="static/js/traffic.js"></script>
+  <script src="static/js/eta.js"></script>
+  <script src="static/js/routes.js"></script>
   <script src="static/js/geocode.js"></script>
   <script src="static/js/router.js"></script>
   <script src="static/js/sampler.js"></script>
   <script src="static/js/weather.js"></script>
+  <script src="static/js/elevation.js"></script>
   <script src="static/js/risk.js"></script>
   <script src="static/js/pick.js"></script>
   <script src="static/js/nav.js"></script>
