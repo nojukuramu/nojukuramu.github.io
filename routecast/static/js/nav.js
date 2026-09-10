@@ -131,6 +131,52 @@ RC.nav = (function () {
     return (deg + 360) % 360;
   }
 
+  /* ---------- turn-by-turn steps ---------- */
+
+  /* OSRM's steps arrive per leg, in order, each with its own length. Their
+     prefix sums are therefore the distance along the whole route at which
+     each step BEGINS — which is all we need to say which instruction the
+     rider is currently working on and how far away the next one is. Built
+     once per route rather than per fix. */
+  function buildStepIndex(route) {
+    var steps = (route && route.steps) || [];
+    var starts = new Array(steps.length);
+    var acc = 0;
+    for (var i = 0; i < steps.length; i++) {
+      starts[i] = acc;
+      acc += steps[i].distance || 0;
+    }
+    return starts;
+  }
+
+  function nextStepAt(route, starts, distanceAlong) {
+    var steps = (route && route.steps) || [];
+    for (var i = 0; i < steps.length; i++) {
+      // A step whose start is still ahead is the next instruction. The very
+      // last step is "arrive", which has zero length and starts exactly at
+      // the end, so it falls out of this naturally.
+      if (starts[i] > distanceAlong + 1) {
+        return { text: steps[i].text, distanceM: starts[i] - distanceAlong, index: i };
+      }
+    }
+    return null;
+  }
+
+  /* ---------- speed ---------- */
+
+  /* A phone's reported speed is jumpy, and a dashboard that flickers between
+     41 and 67 is unreadable. One exponential smoother, weighted so a genuine
+     acceleration still shows up within a couple of fixes. Nothing that
+     depends on the number (history, the average) uses the smoothed value —
+     it is for the eye only. */
+  var SPEED_SMOOTHING = 0.45;
+
+  function smoothSpeed(prev, next) {
+    if (next == null) return prev;
+    if (prev == null) return next;
+    return prev + (next - prev) * SPEED_SMOOTHING;
+  }
+
   /* ---------- wake lock ---------- */
 
   function releaseWakeLock() {
@@ -277,6 +323,7 @@ RC.nav = (function () {
     if (!st || !st.active) return false;
     if (!route || !route.coords || route.coords.length < 2) return false;
     st.route = route;
+    st.stepStarts = buildStepIndex(route);
     st.checkpoints = checkpoints || [];
     if (series !== undefined) st.series = series;
     st.lastMatchIndex = 0;
@@ -327,6 +374,11 @@ RC.nav = (function () {
         st.startExpectedS = proj.expectedS;
         st.navStartWallClock = fixNow.getTime();
       }
+      // navStartWallClock is re-baselined by every reroute (it anchors the
+      // checkpoint re-timing against the CURRENT route). The ride clock must
+      // not be: elapsed time and the completion check that decides whether
+      // this ride teaches the ETA both have to survive a missed turn.
+      if (!st.rideStartedAt) st.rideStartedAt = fixNow.getTime();
 
       var elapsedRealS = (fixNow.getTime() - st.startTime.getTime()) / 1000;
       var deltaExpectedS = proj.expectedS - st.startExpectedS;
@@ -354,13 +406,53 @@ RC.nav = (function () {
 
       var nextInfo = buildNextCheckpointInfo(proj.distanceAlong, proj.expectedS, st.ratio);
 
-      var speedKmh = (typeof coords.speed === "number" && coords.speed != null) ? coords.speed * 3.6 : null;
+      var speedKmh = (typeof coords.speed === "number" && coords.speed != null && !isNaN(coords.speed))
+        ? Math.max(0, coords.speed * 3.6) : null;
       var headingDeg = (typeof coords.heading === "number" && !isNaN(coords.heading)) ? coords.heading : null;
+
+      /* A chipset that never reports speed is common enough on cheap phones
+         and on desktop. Derive it from consecutive fixes rather than showing
+         a dashboard that reads nothing all ride. */
+      if (speedKmh == null && st.lastFix) {
+        var dtS = (fixNow.getTime() - st.lastFix.t) / 1000;
+        if (dtS > 0.4 && dtS < 30) {
+          var dM = RC.haversine({ lat: st.lastFix.lat, lon: st.lastFix.lon }, { lat: lat, lon: lon });
+          speedKmh = (dM / dtS) * 3.6;
+        }
+      }
+      st.lastFix = { lat: lat, lon: lon, t: fixNow.getTime() };
+
+      st.smoothedSpeedKmh = smoothSpeed(st.smoothedSpeedKmh, speedKmh);
+      if (speedKmh != null && speedKmh > st.maxSpeedKmh && speedKmh < 400) st.maxSpeedKmh = speedKmh;
+
+      var elapsedS = (fixNow.getTime() - st.rideStartedAt) / 1000;
+      // Average speed over what has actually been covered, which is the
+      // number that matters on a long ride — not the instantaneous one.
+      var avgKmh = elapsedS > 30 ? (proj.distanceAlong / elapsedS) * 3.6 : null;
+
+      // Terrain: the DEM profile is steadier than a phone's GPS altitude, so
+      // it wins where we have one. The GPS figure is still reported so the
+      // HUD can fall back to it rather than showing an empty tile.
+      var terrain = null;
+      if (st.profile && typeof st.profile.at === "function") {
+        try { terrain = st.profile.at(proj.distanceAlong); } catch (e) { terrain = null; }
+      }
+      var gpsAltitudeM = (typeof coords.altitude === "number" && !isNaN(coords.altitude)) ? coords.altitude : null;
+
+      var step = nextStepAt(st.route, st.stepStarts, proj.distanceAlong);
 
       var state = {
         lat: lat, lon: lon, accuracy: coords.accuracy == null ? null : coords.accuracy,
         headingDeg: headingDeg, speedKmh: speedKmh,
+        displaySpeedKmh: st.smoothedSpeedKmh,
+        maxSpeedKmh: st.maxSpeedKmh || null,
+        avgSpeedKmh: avgKmh,
+        elapsedS: elapsedS,
         courseDeg: headingDeg == null ? segmentBearing(st.route, proj.index) : headingDeg,
+        elevationM: terrain ? terrain.elevationM : gpsAltitudeM,
+        elevationSource: terrain ? "dem" : (gpsAltitudeM == null ? null : "gps"),
+        gradePct: terrain ? terrain.gradePct : null,
+        nextStep: step,
         distanceAlong: proj.distanceAlong, remainingM: remainingM, remainingS: remainingS,
         etaDate: etaDate, progress: progress,
         nextCheckpoint: nextInfo ? nextInfo.checkpoint : null,
@@ -368,6 +460,16 @@ RC.nav = (function () {
         secondsToNext: nextInfo ? nextInfo.secondsToNext : 0,
         passedCount: passedCount, offRoute: st.offRoute, offRouteM: proj.offRouteM
       };
+
+      /* The ride recorder. This is the only place the actual travelled line
+         is written down, and it is deliberately fed the RAW fix rather than
+         the projected one: the point of a history is where you went, not
+         where the route said you would go. */
+      if (st.recordHistory && RC.history) {
+        try {
+          RC.history.record({ lat: lat, lon: lon, t: fixNow.getTime(), speedKmh: speedKmh });
+        } catch (e) {}
+      }
 
       fireDueCheckpoints(proj.distanceAlong, state);
 
@@ -469,6 +571,15 @@ RC.nav = (function () {
         watchId: null,
         wakeLock: null,
         visListenerAttached: false,
+        stepStarts: buildStepIndex(route),
+        profile: opts.profile || null,
+        recordHistory: opts.recordHistory !== false,
+        departedAt: opts.departedAt instanceof Date ? opts.departedAt : new Date(),
+        plannedDurationS: route.cumDur[route.cumDur.length - 1] || 0,
+        rideStartedAt: 0,
+        lastFix: null,
+        smoothedSpeedKmh: null,
+        maxSpeedKmh: 0,
         lastMatchIndex: 0,
         offRouteStreak: 0,
         offRoute: false,
@@ -505,6 +616,10 @@ RC.nav = (function () {
         return;
       }
 
+      if (st.recordHistory && RC.history) {
+        try { RC.history.startSession(st.vehicle); } catch (e) {}
+      }
+
       acquireWakeLock();
       try {
         document.addEventListener("visibilitychange", onVisibilityChange);
@@ -513,10 +628,40 @@ RC.nav = (function () {
     });
   }
 
+  /* Ending a ride is what teaches the ETA. The record is only written when
+     the rider actually got most of the way there: a route abandoned after
+     two turns says nothing useful about how long that road takes, and
+     letting it into the average would poison every later estimate. */
+  var MIN_COMPLETION = 0.7;
+
   function stop() {
     if (!st) return;
+    var summary = null;
+    if (st.recordHistory && RC.history) {
+      var elapsedS = st.rideStartedAt ? (Date.now() - st.rideStartedAt) / 1000 : 0;
+      var covered = 0;
+      try {
+        var s2 = RC.history.sessionStats();
+        covered = s2 ? s2.distanceM : 0;
+      } catch (e) {}
+      var totalM = st.route.cumDist[st.route.cumDist.length - 1] || 0;
+      var completion = totalM > 0 ? covered / totalM : 0;
+      summary = (completion >= MIN_COMPLETION)
+        ? { plannedS: st.plannedDurationS, actualS: elapsedS, distanceM: covered, departedAt: st.departedAt }
+        : null;
+      try { RC.history.endSession(summary); } catch (e) {}
+    }
     cleanup();
     st = null;
+    return summary;
+  }
+
+  /* Hand navigation an elevation profile after the fact — it is fetched in
+     parallel with the first fixes and should not hold the ride up. */
+  function setProfile(profile) {
+    if (!st) return false;
+    st.profile = profile || null;
+    return true;
   }
 
   function isActive() {
@@ -527,6 +672,7 @@ RC.nav = (function () {
     start: start,
     stop: stop,
     setRoute: setRoute,
+    setProfile: setProfile,
     isActive: isActive,
     onUpdate: null,
     onArrive: null,

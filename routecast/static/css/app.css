@@ -1,115 +1,131 @@
 /* ============================================================
    RouteCast — app shell + injected-content styles
-   Extends the parent site's warm paper palette. Light is default;
-   [data-theme="dark"] is the alternate. Same design tokens as
-   static/home/css/home.css, scoped locally so this file stands alone.
+   Matcha palette: a warm tea-paper light theme and a deep steeped-leaf dark
+   theme, both built from one accent (--matcha). Light is the default;
+   [data-theme="dark"] is the alternate and the system preference is honoured
+   in between. Poppins carries every weight; there is no second family.
    ============================================================ */
 
 :root {
-  --bg:          #F4F2EC;
-  --bg-tint:     #EFECE3;
-  --surface:     #FAF9F5;
-  --surface-2:   #F2F0E9;
-  --ink:         #1B1A18;
-  --ink-soft:    #3D3B36;
-  --muted:       #6E6A61;
-  --faint:       #97938A;
-  --line:        #E0DCD1;
-  --line-strong: #CFCABC;
+  --bg:          #F3F5EE;
+  --bg-tint:     #E9EEE1;
+  --surface:     #FBFCF7;
+  --surface-2:   #EFF3E8;
+  --ink:         #1A2018;
+  --ink-soft:    #384033;
+  --muted:       #66705E;
+  --faint:       #939C8A;
+  --line:        #DDE3D3;
+  --line-strong: #C6D0B8;
 
-  --clay:        #C1613F;
-  --clay-hover:  #A94F31;
-  --clay-soft:   #F3E4DC;
-  --clay-ink:    #FFFFFF;
+  --matcha:       #4F7A38;
+  --matcha-hover: #3E6329;
+  --matcha-soft:  #E3EED8;
+  --matcha-ink:   #FFFFFF;
 
-  --shadow-sm: 0 1px 2px rgba(31, 30, 28, .05);
-  --shadow:    0 4px 16px -6px rgba(31, 30, 28, .16);
-  --shadow-lg: 0 20px 50px -18px rgba(31, 30, 28, .30);
+  --shadow-sm: 0 1px 2px rgba(26, 32, 24, .05);
+  --shadow:    0 4px 16px -6px rgba(26, 32, 24, .16);
+  --shadow-lg: 0 20px 50px -18px rgba(26, 32, 24, .28);
 
   --radius:    12px;
   --radius-sm: 8px;
   --radius-lg: 20px;
   --ease:      cubic-bezier(.22, 1, .36, 1);
 
-  --serif: "Newsreader", ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
-  --sans:  "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* One family, every weight. --display is Poppins too; it exists so the
+     numeric readouts can be tuned (tighter tracking, tabular figures)
+     without touching body copy. */
+  --sans:    "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --display: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --serif:   var(--display);
+  --mono:    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
-  /* risk levels */
-  --rc-clear:      #4E8C6A;
-  --rc-clear-soft: #E4EEE7;
-  --rc-watch:      #C79A2E;
-  --rc-watch-soft: #F4EBD3;
-  --rc-caution:    #C1613F;
-  --rc-caution-soft: #F3E4DC;
-  --rc-danger:     #A63232;
-  --rc-danger-soft: #F2DEDE;
+  /* Risk levels. Deliberately off the brand hue: --matcha is a yellow-green,
+     so "clear" is pushed blue-green to stay a separate signal from it. */
+  --rc-clear:        #3F8F63;
+  --rc-clear-soft:   #E0F0E6;
+  --rc-watch:        #B8892A;
+  --rc-watch-soft:   #F5ECD5;
+  --rc-caution:      #C9702F;
+  --rc-caution-soft: #F7E6D7;
+  --rc-danger:       #B03434;
+  --rc-danger-soft:  #F5DEDE;
 
   --map-filter: none;
 
   color-scheme: light;
 }
 
+/* The dark palette, written once and applied from both the system preference
+   and the explicit toggle. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg:          #1B1A18;
-    --bg-tint:     #201F1C;
-    --surface:     #262522;
-    --surface-2:   #2E2D29;
-    --ink:         #F3F1EA;
-    --ink-soft:    #D8D4C9;
-    --muted:       #A19C90;
-    --faint:       #7A756B;
-    --line:        #383630;
-    --line-strong: #4A4740;
+    --bg:          #12160F;
+    --bg-tint:     #171C13;
+    --surface:     #1D2318;
+    --surface-2:   #262D1F;
+    --ink:         #EDF2E5;
+    --ink-soft:    #D1DAC6;
+    --muted:       #9AA48E;
+    --faint:       #737C68;
+    --line:        #313826;
+    --line-strong: #454D37;
 
-    --clay:        #D9825F;
-    --clay-hover:  #E89A79;
-    --clay-soft:   #3A2B23;
-    --clay-ink:    #1B1A18;
+    --matcha:       #A9CA7B;
+    --matcha-hover: #C2DE97;
+    --matcha-soft:  #26301A;
+    --matcha-ink:   #12160F;
 
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .35);
-    --shadow:    0 4px 20px -6px rgba(0, 0, 0, .55);
-    --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, .6);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+    --shadow:    0 4px 20px -6px rgba(0, 0, 0, .6);
+    --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, .65);
 
-    --rc-clear-soft:   #223229;
-    --rc-watch-soft:   #362E1B;
-    --rc-caution-soft: #3A2B23;
-    --rc-danger-soft:  #3A2222;
+    --rc-clear:        #6DBB8C;
+    --rc-clear-soft:   #1B2C21;
+    --rc-watch:        #D9AE4E;
+    --rc-watch-soft:   #302716;
+    --rc-caution:      #E08C4C;
+    --rc-caution-soft: #332315;
+    --rc-danger:       #DE6A6A;
+    --rc-danger-soft:  #331B1B;
 
-    --map-filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88) saturate(.6);
+    --map-filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.86) saturate(.55);
 
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg:          #1B1A18;
-  --bg-tint:     #201F1C;
-  --surface:     #262522;
-  --surface-2:   #2E2D29;
-  --ink:         #F3F1EA;
-  --ink-soft:    #D8D4C9;
-  --muted:       #A19C90;
-  --faint:       #7A756B;
-  --line:        #383630;
-  --line-strong: #4A4740;
+  --bg:          #12160F;
+  --bg-tint:     #171C13;
+  --surface:     #1D2318;
+  --surface-2:   #262D1F;
+  --ink:         #EDF2E5;
+  --ink-soft:    #D1DAC6;
+  --muted:       #9AA48E;
+  --faint:       #737C68;
+  --line:        #313826;
+  --line-strong: #454D37;
 
-  --clay:        #D9825F;
-  --clay-hover:  #E89A79;
-  --clay-soft:   #3A2B23;
-  --clay-ink:    #1B1A18;
+  --matcha:       #A9CA7B;
+  --matcha-hover: #C2DE97;
+  --matcha-soft:  #26301A;
+  --matcha-ink:   #12160F;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .35);
-  --shadow:    0 4px 20px -6px rgba(0, 0, 0, .55);
-  --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, .6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow:    0 4px 20px -6px rgba(0, 0, 0, .6);
+  --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, .65);
 
-  --rc-clear-soft:   #223229;
-  --rc-watch-soft:   #362E1B;
-  --rc-caution-soft: #3A2B23;
-  --rc-danger-soft:  #3A2222;
+  --rc-clear:        #6DBB8C;
+  --rc-clear-soft:   #1B2C21;
+  --rc-watch:        #D9AE4E;
+  --rc-watch-soft:   #302716;
+  --rc-caution:      #E08C4C;
+  --rc-caution-soft: #332315;
+  --rc-danger:       #DE6A6A;
+  --rc-danger-soft:  #331B1B;
 
-  --map-filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88) saturate(.6);
+  --map-filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.86) saturate(.55);
 
   color-scheme: dark;
 }
@@ -127,7 +143,11 @@ body {
   color: var(--ink);
   font-family: var(--sans);
   font-size: 15px;
-  line-height: 1.55;
+  /* Poppins runs large for its point size and its default tracking is loose
+     at UI scale, so the whole app is pulled in a touch. Without this every
+     label reads a size bigger than it is and the sheet stops fitting. */
+  letter-spacing: -.005em;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -135,10 +155,10 @@ body {
 a { color: inherit; }
 button { font: inherit; }
 
-::selection { background: var(--clay); color: var(--clay-ink); }
+::selection { background: var(--matcha); color: var(--matcha-ink); }
 
 :focus-visible {
-  outline: 2px solid var(--clay);
+  outline: 2px solid var(--matcha);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -183,8 +203,8 @@ button { font: inherit; }
   display: grid; place-items: center;
   width: 26px; height: 26px;
   border-radius: 8px;
-  background: var(--clay);
-  color: var(--clay-ink);
+  background: var(--matcha);
+  color: var(--matcha-ink);
 }
 .rc-wordmark-mark svg { width: 15px; height: 15px; }
 
@@ -219,8 +239,8 @@ button { font: inherit; }
   display: inline-flex; align-items: center; gap: 6px;
   height: 34px;
   padding: 0 14px 0 11px;
-  background: var(--clay);
-  color: var(--clay-ink);
+  background: var(--matcha);
+  color: var(--matcha-ink);
   border: none;
   border-radius: 999px;
   cursor: pointer;
@@ -228,7 +248,7 @@ button { font: inherit; }
   white-space: nowrap;
   transition: background-color .18s var(--ease), transform .18s var(--ease);
 }
-.rc-btn-install:hover { background: var(--clay-hover); }
+.rc-btn-install:hover { background: var(--matcha-hover); }
 .rc-btn-install:active { transform: translateY(1px); }
 .rc-btn-install svg { width: 16px; height: 16px; flex: none; }
 .rc-btn-install[hidden] { display: none; }
@@ -388,8 +408,14 @@ html[data-rotate="on"] .rc-marker-pin {
 #peek-bar-badge { flex: none; max-width: 42%; }
 #peek-bar-badge:empty { display: none; }
 
+/* On a real desktop sidebar the peek bar has no job: the panel is always
+   open and the summary is right there. It comes back on a short landscape
+   screen, where the panel is a drawer and the bar is what collapses it. */
 @media (min-width: 821px) {
   .rc-peek-bar { display: none; }
+}
+@media (orientation: landscape) and (max-height: 560px) {
+  .rc-peek-bar { display: flex; }
 }
 
 .rc-empty {
@@ -425,7 +451,7 @@ html[data-rotate="on"] .rc-marker-pin {
   width: 13px; height: 13px;
   border-radius: 50%;
   border: 2px solid var(--line-strong);
-  border-top-color: var(--clay);
+  border-top-color: var(--matcha);
   animation: rc-spin .7s linear infinite;
   flex: none;
 }
@@ -483,7 +509,7 @@ html[data-rotate="on"] .rc-marker-pin {
   transition: border-color .16s var(--ease), background-color .16s var(--ease);
 }
 .rc-input::placeholder { color: var(--faint); }
-.rc-input:focus, .rc-select:focus { border-color: var(--clay); outline: none; }
+.rc-input:focus, .rc-select:focus { border-color: var(--matcha); outline: none; }
 .rc-select { cursor: pointer; }
 
 .rc-inputbtn {
@@ -497,7 +523,7 @@ html[data-rotate="on"] .rc-marker-pin {
   cursor: pointer;
   transition: color .16s var(--ease), border-color .16s var(--ease);
 }
-.rc-inputbtn:hover { color: var(--clay); border-color: var(--line-strong); }
+.rc-inputbtn:hover { color: var(--matcha); border-color: var(--line-strong); }
 .rc-inputbtn svg { width: 16px; height: 16px; }
 
 .rc-swap-row { display: flex; justify-content: flex-end; margin: -6px 0; }
@@ -560,7 +586,7 @@ html[data-rotate="on"] .rc-marker-pin {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
 }
-.rc-stop-row input:focus { border-color: var(--clay); outline: none; }
+.rc-stop-row input:focus { border-color: var(--matcha); outline: none; }
 .rc-stop-remove {
   flex: none;
   display: grid; place-items: center;
@@ -579,12 +605,12 @@ html[data-rotate="on"] .rc-marker-pin {
   align-self: flex-start;
   display: inline-flex; align-items: center; gap: 6px;
   background: none; border: none;
-  color: var(--clay);
+  color: var(--matcha);
   font-size: .85rem; font-weight: 500;
   cursor: pointer;
   padding: 2px 0;
 }
-.rc-textbtn:hover { color: var(--clay-hover); }
+.rc-textbtn:hover { color: var(--matcha-hover); }
 .rc-textbtn svg { width: 14px; height: 14px; }
 
 /* segmented control */
@@ -612,7 +638,7 @@ html[data-rotate="on"] .rc-marker-pin {
 .rc-seg-btn:hover { color: var(--ink); }
 .rc-seg-btn[aria-pressed="true"] {
   background: var(--surface);
-  color: var(--clay);
+  color: var(--matcha);
   box-shadow: var(--shadow-sm);
 }
 
@@ -623,14 +649,14 @@ html[data-rotate="on"] .rc-marker-pin {
 .rc-btn-primary {
   font: inherit; font-size: .92rem; font-weight: 500;
   padding: 10px 22px;
-  background: var(--clay);
-  color: var(--clay-ink);
+  background: var(--matcha);
+  color: var(--matcha-ink);
   border: none;
   border-radius: 999px;
   cursor: pointer;
   transition: background-color .18s var(--ease), transform .18s var(--ease);
 }
-.rc-btn-primary:hover { background: var(--clay-hover); }
+.rc-btn-primary:hover { background: var(--matcha-hover); }
 .rc-btn-primary:active { transform: translateY(1px); }
 .rc-btn-primary:disabled { opacity: .55; cursor: default; }
 
@@ -651,6 +677,16 @@ html[data-rotate="on"] .rc-marker-pin {
 .rc-summary-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .rc-summary-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; min-width: 0; }
 .rc-summary-top .rc-badge { flex: 1 1 100%; min-width: 0; max-width: 100%; }
+/* Every live number — speed, distance, ETA, grade — is tabular so the digits
+   do not shuffle sideways as they change. Poppins ships the feature; without
+   it a speedometer counting 88 -> 89 visibly twitches. */
+.rc-nav-speed, .rc-nav-remaining, .rc-nav-eta, .rc-nav-tile-v,
+.rc-summary-stat, .rc-fact-v, .rc-chip-temp, .rc-chip-time, .rc-marker-temp,
+.rc-pick-coord, .rc-nav-step-dist {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
 .rc-summary-stat {
   font-family: var(--serif);
   font-size: 1.05rem;
@@ -670,7 +706,7 @@ html[data-rotate="on"] .rc-marker-pin {
   width: 5px; height: 5px;
   margin-top: 7px;
   border-radius: 50%;
-  background: var(--clay);
+  background: var(--matcha);
 }
 
 .rc-reason {
@@ -738,8 +774,8 @@ html[data-rotate="on"] .rc-marker-pin {
 }
 .rc-alt:hover { border-color: var(--line-strong); }
 .rc-alt.is-active {
-  border-color: var(--clay);
-  background: var(--clay-soft);
+  border-color: var(--matcha);
+  background: var(--matcha-soft);
 }
 .rc-alt-name { display: block; font-size: .85rem; font-weight: 500; color: var(--ink); }
 .rc-alt-meta { display: block; font-size: .76rem; color: var(--muted); margin-top: 2px; }
@@ -766,10 +802,17 @@ html[data-rotate="on"] .rc-marker-pin {
   transition: border-color .16s var(--ease), background-color .16s var(--ease);
 }
 .rc-offset:hover { border-color: var(--line-strong); }
-.rc-offset.is-active { border-color: var(--clay); background: var(--clay-soft); }
+.rc-offset.is-active { border-color: var(--matcha); background: var(--matcha-soft); }
 .rc-offset.is-best { box-shadow: 0 0 0 1.5px var(--rc-clear) inset; }
 .rc-offset-h { font-size: .76rem; font-weight: 500; color: var(--ink-soft); }
-.rc-offset-dot { width: 7px; height: 7px; border-radius: 50%; }
+.rc-offset-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); }
+/* The dot IS the answer — it is what makes a row of departure times readable
+   at a glance. It had no colour rule at all, so every option showed the same
+   blank circle and the planner said nothing. */
+.rc-offset.is-clear   .rc-offset-dot { background: var(--rc-clear); }
+.rc-offset.is-watch   .rc-offset-dot { background: var(--rc-watch); }
+.rc-offset.is-caution .rc-offset-dot { background: var(--rc-caution); }
+.rc-offset.is-danger  .rc-offset-dot { background: var(--rc-danger); }
 
 .rc-planner-label {
   font-family: var(--mono);
@@ -831,7 +874,7 @@ html[data-rotate="on"] .rc-marker-pin {
 
 .rc-chip-day  { font-family: var(--mono); font-size: .64rem; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
 .rc-chip-time { font-size: .82rem; font-weight: 600; color: var(--ink); }
-.rc-chip-icon { width: 22px; height: 22px; color: var(--clay); margin: 1px 0; }
+.rc-chip-icon { width: 22px; height: 22px; color: var(--matcha); margin: 1px 0; }
 .rc-chip-icon svg { width: 100%; height: 100%; }
 .rc-chip-temp { font-family: var(--serif); font-size: 1.15rem; color: var(--ink); line-height: 1; }
 .rc-chip-place {
@@ -899,7 +942,7 @@ html[data-rotate="on"] .rc-marker-pin {
   padding-top: 12px;
 }
 .rc-attrib a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
-.rc-attrib a:hover { color: var(--clay); }
+.rc-attrib a:hover { color: var(--matcha); }
 
 /* ============================================================
    Leaflet chrome overrides
@@ -1019,15 +1062,15 @@ html[data-rotate="on"] .rc-marker-pin {
 
 .rc-marker-start, .rc-marker-end,
 .rc-marker-pin.rc-marker-start, .rc-marker-pin.rc-marker-end {
-  background: var(--clay);
-  color: var(--clay-ink);
-  border-color: var(--clay);
+  background: var(--matcha);
+  color: var(--matcha-ink);
+  border-color: var(--matcha);
 }
 .rc-marker-start .rc-marker-icon,
-.rc-marker-end .rc-marker-icon { color: var(--clay-ink); }
+.rc-marker-end .rc-marker-icon { color: var(--matcha-ink); }
 .rc-marker-start .rc-marker-stem, .rc-marker-end .rc-marker-stem {
-  background: var(--clay);
-  border-color: var(--clay);
+  background: var(--matcha);
+  border-color: var(--matcha);
 }
 
 /* .rc-rider — you, on the map. The arrow points at your course in MAP space,
@@ -1036,7 +1079,7 @@ html[data-rotate="on"] .rc-marker-pin {
 .rc-rider {
   display: block;
   width: 26px; height: 26px;
-  color: var(--clay);
+  color: var(--matcha);
   filter: drop-shadow(0 1px 2px rgba(20, 18, 15, .5));
   transform-origin: 50% 50%;
 }
@@ -1053,8 +1096,8 @@ html[data-rotate="on"] .rc-marker-pin {
   width: 30px; height: 30px;
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
-  background: var(--clay);
-  color: var(--clay-ink);
+  background: var(--matcha);
+  color: var(--matcha-ink);
   border: 2px solid var(--surface);
   box-shadow: 0 3px 8px -2px rgba(20, 18, 15, .4);
 }
@@ -1066,19 +1109,41 @@ html[data-rotate="on"] .rc-marker-pin {
 .rc-map-controls {
   position: absolute;
   right: calc(12px + env(safe-area-inset-right));
-  bottom: calc(var(--sheet-h, 150px) + 12px);
-  z-index: 25;
+  /* These overlays are children of the map wrapper, which is its own stacking
+     context, so they compete with Leaflet's panes (up to 700) and controls
+     (800) rather than with the page. Everything RouteCast draws over the map
+     sits above all of it. */
+  z-index: 900;
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
   transition: bottom .28s var(--ease);
+  padding: 2px;
+
+  /* The stack wants to sit just above the sheet — but "just above the sheet"
+     stops being a place once the sheet is open over 92% of the screen: the
+     buttons were pushed clean off the map and behind the header, where they
+     were unclickable while still reporting themselves as visible. The clamp
+     keeps that intent as the PREFERRED value while guaranteeing the top of
+     the stack never rises past the top of the map. --rc-controls-h is the
+     stack's real rendered height, kept current by updateSheetVars in app.js;
+     the fallback covers the first paint before it is written. */
+  bottom: clamp(
+    calc(12px + env(safe-area-inset-bottom)),
+    calc(var(--sheet-h, 150px) + 12px),
+    calc(100% - 12px - var(--rc-controls-h, 260px))
+  );
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  scrollbar-width: none;
 }
+.rc-map-controls::-webkit-scrollbar { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .rc-map-controls { transition: none; }
 }
-@media (min-width: 821px) {
-  .rc-map-controls { bottom: calc(16px + env(safe-area-inset-bottom)); }
-}
+/* On desktop the panel is a sidebar, so --sheet-h is 0 and the clamp above
+   already resolves to the bottom-right corner. Nothing to override. */
 
 .rc-mapbtn {
   display: grid; place-items: center;
@@ -1091,7 +1156,7 @@ html[data-rotate="on"] .rc-marker-pin {
   cursor: pointer;
   transition: color .16s var(--ease), border-color .16s var(--ease), background-color .16s var(--ease);
 }
-.rc-mapbtn:hover { color: var(--clay); border-color: var(--line-strong); }
+.rc-mapbtn:hover { color: var(--matcha); border-color: var(--line-strong); }
 .rc-mapbtn:active { transform: translateY(1px); }
 .rc-mapbtn svg { width: 19px; height: 19px; }
 .rc-mapbtn[hidden] { display: none; }
@@ -1099,38 +1164,45 @@ html[data-rotate="on"] .rc-marker-pin {
 .rc-compass-needle { transform: rotate(var(--rc-bearing, 0deg)); }
 .rc-compass-tail { opacity: .45; }
 #ctl-compass[data-mode="course"] {
-  color: var(--clay);
-  border-color: var(--clay);
+  color: var(--matcha);
+  border-color: var(--matcha);
 }
 @media (prefers-reduced-motion: reduce) {
   html[data-rotate="on"] .rc-map { transition: none; }
 }
 
-#ctl-nav { color: var(--clay-ink); background: var(--clay); border-color: var(--clay); }
-#ctl-nav:hover { background: var(--clay-hover); color: var(--clay-ink); }
+/* Zoom is a pair, so it reads as one control: shorter buttons, joined into a
+   single pill, sitting above the round ones. */
+.rc-mapbtn-sm { height: 36px; border-radius: var(--radius); }
+#ctl-zoom-in {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-width: 0;
+}
+#ctl-zoom-out {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.rc-map-controls #ctl-zoom-in + #ctl-zoom-out { margin-top: -8px; }
+.rc-mapbtn-sm svg { width: 17px; height: 17px; }
 
-/* keep Leaflet's own zoom control in the same right-hand column, above the stack.
-   --rc-controls-h is kept current by app.js (the map-controls stack's rendered
-   height); it falls back to room for all three buttons. */
-.leaflet-bottom.leaflet-right {
-  margin-right: calc(12px + env(safe-area-inset-right));
-  margin-bottom: calc(var(--sheet-h, 150px) + 12px + var(--rc-controls-h, 164px));
-  transition: margin-bottom .28s var(--ease);
-}
-@media (prefers-reduced-motion: reduce) {
-  .leaflet-bottom.leaflet-right { transition: none; }
-}
-@media (min-width: 821px) {
-  .leaflet-bottom.leaflet-right {
-    margin-bottom: calc(16px + env(safe-area-inset-bottom) + var(--rc-controls-h, 164px));
-  }
-}
+/* The one button that starts something. */
+.rc-mapbtn-go,
+#ctl-nav { color: var(--matcha-ink); background: var(--matcha); border-color: var(--matcha); }
+.rc-mapbtn-go:hover,
+#ctl-nav:hover { background: var(--matcha-hover); color: var(--matcha-ink); border-color: var(--matcha-hover); }
+
+/* Leaflet's own zoom control is no longer created (see initMap in app.js):
+   it lives inside the rotated map element, so course-up left it tilted and
+   pushed off screen. RouteCast's buttons in #map-controls sit outside that
+   element and work in both modes. Belt and braces in case a plugin adds one. */
+.leaflet-control-zoom { display: none !important; }
 
 /* ============================================================
    Centre-pin place picker
    ============================================================ */
-.rc-pick { position: absolute; inset: 0; z-index: 40; pointer-events: none; }
-.rc-pick[hidden] { display: none; }
+.rc-pick { position: absolute; inset: 0; z-index: 920; pointer-events: none; }
+.rc-pick[hidden], .rc-pick-card[hidden] { display: none; }
 
 .rc-pick-pin {
   position: absolute;
@@ -1140,7 +1212,7 @@ html[data-rotate="on"] .rc-marker-pin {
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: var(--clay);
+  color: var(--matcha);
   pointer-events: none;
   transition: transform .12s var(--ease);
 }
@@ -1173,6 +1245,9 @@ html[data-rotate="on"] .rc-marker-pin {
 .rc-pick-card {
   position: absolute;
   left: 0; right: 0; bottom: 0;
+  /* Above the bottom sheet (z-index 20), which it deliberately covers while
+     a point is being placed. */
+  z-index: 45;
   pointer-events: auto;
   margin: 0 auto;
   max-width: 480px;
@@ -1222,82 +1297,197 @@ html[data-rotate="on"] .rc-marker-pin {
    ============================================================ */
 .rc-nav-hud {
   position: absolute;
-  left: 0; right: 0; top: 0;
-  z-index: 22;
-  margin: calc(12px + env(safe-area-inset-top)) 12px 0;
-  padding: 12px 14px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(6px);
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 910;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 10px;
+  padding: 12px 14px 14px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  max-width: 460px;
+  margin: 0 auto;
+}
+/* color-mix is widely supported but not universally; a browser that skips
+   the declaration above still gets a solid, readable panel. */
+@supports not (background: color-mix(in srgb, red 50%, transparent)) {
+  .rc-nav-hud { background: var(--surface); }
 }
 .rc-nav-hud[hidden] { display: none; }
 
+/* ---- next instruction ---- */
 .rc-nav-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.rc-nav-stats { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.rc-nav-remaining {
-  font-family: var(--serif);
-  font-size: 1.25rem;
-  font-weight: 500;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+
+.rc-nav-step {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
-.rc-nav-eta { font-size: .8rem; color: var(--muted); }
+.rc-nav-step-dist {
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--matcha);
+}
+.rc-nav-step-dist:empty { display: none; }
+.rc-nav-step-text {
+  font-size: 1.02rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--ink);
+  overflow-wrap: break-word;
+}
+/* Inside 150 m the turn is now, not soon. */
+.rc-nav-step[data-soon="yes"] .rc-nav-step-dist { color: var(--rc-caution); }
+.rc-nav-step[data-soon="yes"] .rc-nav-step-text { font-weight: 600; }
 
 .rc-nav-stop {
   flex: none;
   display: grid; place-items: center;
-  width: 36px; height: 36px;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: 50%;
   cursor: pointer;
 }
 .rc-nav-stop:hover { color: var(--rc-danger); border-color: var(--rc-danger); }
 .rc-nav-stop svg { width: 15px; height: 15px; }
 
+/* ---- speedometer + remaining ---- */
+.rc-nav-mid {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-top: 2px;
+  border-top: 1px solid var(--line);
+}
+.rc-nav-speedo {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding-top: 8px;
+}
+/* Before the first fix reports a speed (and on the many phones that never
+   report one at all) the readout is a placeholder, not a measurement — so it
+   is drawn like one instead of as a heavy 40px dash. */
+.rc-nav-speed[data-empty="yes"] { font-size: 1.5rem; color: var(--faint); font-weight: 400; }
+.rc-nav-speed {
+  font-size: 2.5rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -.03em;
+  color: var(--ink);
+}
+.rc-nav-speed-unit { font-size: .72rem; color: var(--muted); font-weight: 500; }
+
+.rc-nav-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding-top: 8px;
+  margin-left: auto;
+  text-align: right;
+}
+.rc-nav-remaining {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.rc-nav-eta { font-size: .8rem; color: var(--muted); }
+
 .rc-nav-next {
-  display: flex; align-items: center; gap: 8px;
-  font-size: .86rem;
-  color: var(--ink-soft);
-  min-height: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-content: flex-end;
+  font-size: .78rem;
+  color: var(--muted);
 }
 .rc-nav-next:empty { display: none; }
-.rc-nav-next-icon { width: 20px; height: 20px; flex: none; color: var(--clay); }
+.rc-nav-next-icon { width: 17px; height: 17px; flex: none; color: var(--matcha); }
 .rc-nav-next-icon svg { width: 100%; height: 100%; }
 
+/* ---- the tile row: everything you read while stopped ---- */
+.rc-nav-tiles {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+.rc-nav-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 6px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.rc-nav-tile-k {
+  font-size: .58rem;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rc-nav-tile-v {
+  font-size: .82rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rc-nav-tile-v[data-sign="up"]   { color: var(--rc-caution); }
+.rc-nav-tile-v[data-sign="down"] { color: var(--rc-clear); }
+.rc-nav-tile-v[data-level="watch"]   { color: var(--rc-watch); }
+.rc-nav-tile-v[data-level="caution"] { color: var(--rc-caution); }
+.rc-nav-tile-v[data-level="danger"]  { color: var(--rc-danger); }
+
+@media (max-width: 560px) {
+  .rc-nav-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* ---- progress ---- */
 .rc-nav-progress {
   position: relative;
-  height: 6px;
-  background: var(--surface-2);
+  height: 5px;
   border-radius: 999px;
-  overflow: visible;
+  background: var(--surface-2);
+  overflow: hidden;
 }
 .rc-nav-progress-fill {
   height: 100%;
-  width: 0%;
-  background: var(--clay);
+  width: 0;
   border-radius: 999px;
-  transition: width .3s var(--ease);
+  background: var(--matcha);
+  transition: width .4s var(--ease);
 }
 @media (prefers-reduced-motion: reduce) {
   .rc-nav-progress-fill { transition: none; }
 }
 .rc-nav-tick {
   position: absolute;
-  top: 50%;
-  width: 5px; height: 5px;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  background: var(--rc-clear);
-  border: 1px solid var(--surface);
+  top: 0;
+  width: 2px;
+  height: 100%;
+  transform: translateX(-1px);
+  opacity: .85;
 }
 .rc-nav-tick.is-clear   { background: var(--rc-clear); }
 .rc-nav-tick.is-watch   { background: var(--rc-watch); }
@@ -1305,26 +1495,24 @@ html[data-rotate="on"] .rc-marker-pin {
 .rc-nav-tick.is-danger  { background: var(--rc-danger); }
 
 .rc-nav-alert {
-  display: flex; align-items: center; gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 10px;
+  border-radius: var(--radius-sm);
   background: var(--rc-caution-soft);
   color: var(--rc-caution);
-  border: 1px solid color-mix(in srgb, var(--rc-caution) 35%, var(--line));
-  border-radius: var(--radius-sm);
   font-size: .82rem;
-  font-weight: 500;
 }
 .rc-nav-alert[hidden] { display: none; }
 .rc-nav-alert[data-level="danger"] {
   background: var(--rc-danger-soft);
   color: var(--rc-danger);
-  border-color: color-mix(in srgb, var(--rc-danger) 35%, var(--line));
 }
 .rc-nav-alert svg { width: 15px; height: 15px; flex: none; }
 
-/* while navigating: sheet drops to peek, HUD owns the top of the map */
 html[data-nav="on"] .rc-panel { pointer-events: auto; }
-html[data-nav="on"] .rc-peek-bar-primary { color: var(--clay); }
+html[data-nav="on"] .rc-peek-bar-primary { color: var(--matcha); }
 
 /* ============================================================
    "Pin on map" button — in the From/To rows via .rc-inputbtn,
@@ -1335,25 +1523,34 @@ html[data-nav="on"] .rc-peek-bar-primary { color: var(--clay); }
   display: grid; place-items: center;
   width: 30px; height: 30px;
   background: transparent;
-  color: var(--clay);
+  color: var(--matcha);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: color .16s var(--ease), border-color .16s var(--ease), background-color .16s var(--ease);
 }
 .rc-stop-pick svg { width: 14px; height: 14px; }
-.rc-stop-pick:hover { border-color: var(--clay); }
+.rc-stop-pick:hover { border-color: var(--matcha); }
 .rc-stop-pick.is-active,
 .rc-inputbtn.is-active {
-  background: var(--clay-soft);
-  border-color: var(--clay);
-  color: var(--clay);
+  background: var(--matcha-soft);
+  border-color: var(--matcha);
+  color: var(--matcha);
 }
 
 /* ============================================================
    Responsive: bottom sheet under 820px
    ============================================================ */
-@media (max-width: 820px) {
+/* ============================================================
+   Panel as a bottom sheet — narrow PORTRAIT screens only.
+
+   Scoped to portrait deliberately. A landscape phone has the width for a
+   side drawer and nowhere near the height for a sheet: at "half" the sheet
+   covered the map entirely and at "peek" it showed a single line of text.
+   The landscape block further down takes those screens instead, and this
+   one keeps its hands off them.
+   ============================================================ */
+@media (max-width: 820px) and (orientation: portrait) {
   body { overflow: hidden; }
 
   .rc-body { flex-direction: column; }
@@ -1433,7 +1630,13 @@ html[data-nav="on"] .rc-peek-bar-primary { color: var(--clay); }
   .rc-sheet-handle { display: none; }
 }
 
-@media (max-width: 380px) {
+/* Landscape phones and tablets never get the drag handle: the panel is a
+   drawer or a sidebar there, and neither snaps. */
+@media (orientation: landscape) {
+  .rc-sheet-handle { display: none; }
+}
+
+@media (max-width: 380px) and (orientation: portrait) {
   .rc-btn-install-label { display: none; }
   .rc-btn-install { padding: 0; width: 34px; min-width: 44px; justify-content: center; }
   .rc-wordmark-mark { display: none; }
@@ -1443,6 +1646,256 @@ html[data-nav="on"] .rc-peek-bar-primary { color: var(--clay); }
   .rc-wordmark { font-size: .88rem; }
   .rc-header { gap: 5px; }
   .rc-header-actions { gap: 3px; }
+}
+
+/* ============================================================
+   Trip facts, terrain, saved routes, your roads
+   ============================================================ */
+.rc-section-h {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 10px;
+}
+.rc-section-h svg { width: 14px; height: 14px; flex: none; }
+
+.rc-summary-note {
+  font-size: .78rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.rc-summary-note:empty { display: none; }
+
+.rc-summary-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
+.rc-field-hint { font-size: .74rem; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+.rc-field-hint:empty { display: none; }
+
+/* ---- facts grid ---- */
+.rc-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 7px;
+}
+.rc-facts:empty { display: none; }
+.rc-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.rc-fact-k {
+  font-size: .6rem;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.rc-fact-v { font-size: .95rem; font-weight: 500; color: var(--ink); }
+.rc-fact-sub { font-size: .68rem; color: var(--muted); }
+.rc-fact.is-watch   { border-color: var(--rc-watch); }
+.rc-fact.is-caution { border-color: var(--rc-caution); }
+.rc-fact.is-danger  { border-color: var(--rc-danger); }
+.rc-fact.is-watch   .rc-fact-v { color: var(--rc-watch); }
+.rc-fact.is-caution .rc-fact-v { color: var(--rc-caution); }
+.rc-fact.is-danger  .rc-fact-v { color: var(--rc-danger); }
+
+/* ---- elevation profile ---- */
+.rc-elev {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 12px 12px 8px;
+}
+.rc-elev[hidden] { display: none; }
+.rc-elev-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.rc-elev-title {
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.rc-elev-meta { font-size: .74rem; color: var(--muted); }
+.rc-elev-svg { display: block; width: 100%; height: 72px; }
+.rc-elev-area { fill: var(--matcha-soft); stroke: none; }
+.rc-elev-line { fill: none; stroke: var(--matcha); stroke-width: 1.6; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.rc-elev-here { stroke: var(--rc-caution); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+
+/* ---- saved routes ---- */
+.rc-saved[hidden] { display: none; }
+.rc-saved-list { display: flex; flex-direction: column; gap: 6px; }
+.rc-saved-row { display: flex; gap: 6px; align-items: stretch; }
+.rc-saved-load {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  color: inherit;
+  transition: border-color .16s var(--ease);
+}
+.rc-saved-load:hover { border-color: var(--matcha); }
+.rc-saved-name {
+  font-size: .88rem;
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rc-saved-meta { font-size: .72rem; color: var(--muted); }
+.rc-saved-del {
+  flex: none;
+  display: grid; place-items: center;
+  width: 36px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+.rc-saved-del:hover { color: var(--rc-danger); border-color: var(--rc-danger); }
+.rc-saved-del svg { width: 14px; height: 14px; }
+
+/* ---- your roads ---- */
+.rc-history-summary { margin-bottom: 10px; }
+.rc-history-empty { font-size: .8rem; line-height: 1.5; color: var(--muted); }
+.rc-history-actions { display: flex; }
+.rc-textbtn-quiet { color: var(--muted); font-size: .78rem; }
+.rc-textbtn-quiet:hover { color: var(--rc-danger); }
+
+/* ---- alternatives: familiarity and expressway tags ---- */
+.rc-alt-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.rc-alt-tag {
+  font-size: .64rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--matcha-soft);
+  color: var(--matcha);
+}
+.rc-alt-tag.is-danger { background: var(--rc-danger-soft); color: var(--rc-danger); }
+
+/* ---- picker coordinate readout ---- */
+.rc-pick-coord {
+  font-family: var(--mono);
+  font-size: .74rem;
+  color: var(--matcha);
+  letter-spacing: .01em;
+}
+.rc-pick-coord:empty { display: none; }
+
+/* ============================================================
+   Landscape — a short, wide screen is a different machine.
+
+   Below 560px of height the bottom sheet is hopeless: at "half" it eats the
+   map, at "peek" it shows one line. So in landscape the panel becomes a side
+   drawer instead — full height, fixed width, its own scroll — and the peek
+   bar collapses it to a strip when the map needs the whole screen. The HUD
+   moves to the top-left column so it never sits over the drawer, and the
+   tiles run in one row because there is width to spare and no height at all.
+   ============================================================ */
+@media (orientation: landscape) and (max-height: 560px) {
+  .rc-header { padding-top: 4px; padding-bottom: 4px; min-height: 0; }
+  .rc-wordmark { font-size: .92rem; }
+
+  .rc-body { flex-direction: row; }
+
+  .rc-map-wrap { position: relative; inset: auto; flex: 1 1 auto; height: 100%; }
+
+  .rc-panel {
+    position: relative;
+    inset: auto;
+    flex: none;
+    width: min(360px, 44vw);
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border-left: 1px solid var(--line);
+    border-top: none;
+    border-radius: 0;
+    padding-bottom: 0;
+    padding-right: env(safe-area-inset-right);
+    transition: width .28s var(--ease);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rc-panel { transition: none; }
+  }
+  /* Collapsed: the peek bar alone, rotated out of the way of the map. */
+  .rc-panel.is-collapsed { width: 54px; }
+  .rc-panel.is-collapsed .rc-panel-scroll { display: none; }
+  .rc-panel.is-collapsed .rc-peek-bar-text,
+  .rc-panel.is-collapsed .rc-badge { display: none; }
+  .rc-panel.is-collapsed .rc-peek-bar::after {
+    content: "";
+    width: 4px;
+    height: 40px;
+    border-radius: 999px;
+    background: var(--line-strong);
+    margin: 0 auto;
+  }
+
+  /* The drawer never snaps, so the grab handle would be a lie. */
+  .rc-sheet-handle { display: none; }
+
+  .rc-peek-bar { padding: 10px 14px; min-height: 48px; }
+  .rc-panel-scroll { padding: 12px 14px 18px; gap: 14px; }
+
+  /* HUD: left column, clear of the drawer, tiles in one row. */
+  .rc-nav-hud {
+    right: auto;
+    left: calc(10px + env(safe-area-inset-left));
+    top: 8px;
+    margin: 0;
+    width: min(420px, 52vw);
+    max-width: none;
+    padding: 10px 12px 12px;
+    gap: 8px;
+  }
+  .rc-nav-speed { font-size: 2rem; }
+  .rc-nav-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .rc-nav-tile { padding: 4px 6px; }
+
+  /* Controls hug the map's own bottom-right, not the sheet's. */
+  .rc-map-controls {
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    right: 10px;
+    gap: 6px;
+  }
+  .rc-mapbtn { width: 40px; height: 40px; }
+  .rc-mapbtn-sm { width: 40px; height: 32px; }
+
+  .rc-pick-card { left: 14px; right: auto; width: min(340px, 46vw); bottom: 14px; }
+  .rc-elev-svg { height: 56px; }
+}
+
+/* A landscape tablet has the height for the normal sidebar; only the short
+   screens above get the drawer treatment. */
+@media (orientation: landscape) and (min-height: 561px) and (max-width: 820px) {
+  .rc-panel { max-height: 82dvh; }
 }
 
 /* ============================================================
@@ -1505,7 +1958,7 @@ html[data-nav="on"] .rc-peek-bar-primary { color: var(--clay); }
   width: 17px; height: 17px;
   vertical-align: -3px;
   margin: 0 2px;
-  color: var(--clay);
+  color: var(--matcha);
 }
 
 #ios-install-close {

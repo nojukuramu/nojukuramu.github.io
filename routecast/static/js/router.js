@@ -51,6 +51,65 @@ RC.router = (function () {
     TooBig: "That route has too many points for the demo server."
   };
 
+  /* Philippine expressways, by the names OSM actually carries in `ref` and
+     `name` and that OSRM echoes back in its step names. Riders are barred
+     from all of them, so this list is the second line of defence behind
+     `exclude=motorway`: when the routing server cannot honour the exclusion
+     (see EXCLUDE_RETRY_CODES) we still want to know whether the line it gave
+     us puts a motorcycle somewhere it is not allowed to be — and to prefer,
+     among the alternatives on offer, the one that does so least.
+
+     Matching is on whole words, with a negative lookahead for the suffixes
+     that mark an ordinary street — "Skyway" is the expressway, "Skyway
+     Avenue" is a road in a subdivision named after it. It remains a
+     heuristic over free text, not a classification: it can miss an unnamed
+     motorway segment and it can still be fooled by an unusual name, so a
+     clean result is reported as "nothing found", never as a guarantee that
+     the route is legal for a motorcycle. */
+  var EXPRESSWAY_RE = new RegExp(
+    "\\b(" + [
+      "NLEX", "SLEX", "SCTEX", "TPLEX", "STAR ?Tollway", "CAVITEX", "CALAX",
+      "NAIAX", "Skyway", "C-?5 ?Link", "CCLEX", "TPLEx", "MCX", "SLEx",
+      "Subic[- ]Clark[- ]Tarlac Expressway", "North Luzon Expressway",
+      "South Luzon Expressway", "Manila[- ]Cavite Expressway",
+      "Tarlac[- ]Pangasinan[- ]La Union Expressway",
+      "Cavite[- ]Laguna Expressway", "Cebu[- ]Cordova Link Expressway",
+      "Muntinlupa[- ]Cavite Expressway", "Expressway", "Tollway"
+    ].join("|") + ")\\b(?! ?(Avenue|Ave|Street|St|Road|Rd|Drive|Lane|Alley|Barangay|Village|Subdivision|Hall)\\b)", "i");
+
+  /* The distinct expressway-looking road names a route's own steps mention,
+     in order, deduplicated. Empty means nothing was found — which is not the
+     same as proof there is nothing there. */
+  function expresswayNames(route) {
+    var seen = {}, out = [];
+    var steps = route.steps || [];
+    for (var i = 0; i < steps.length; i++) {
+      var name = steps[i].text || "";
+      var m = name.match(EXPRESSWAY_RE);
+      if (!m) continue;
+      // Report the road, not the instruction: "Take the ramp onto Skyway"
+      // should surface as the road name after "onto" when there is one.
+      var onto = name.split(" onto ");
+      var road = (onto.length > 1 ? onto[onto.length - 1] : m[0]).trim();
+      if (seen[road]) continue;
+      seen[road] = true;
+      out.push(road);
+    }
+    return out;
+  }
+
+  /* Metres of a route spent on steps whose name looks like an expressway.
+     Used to choose between alternatives when the exclusion could not be
+     applied at all: least illegal beats first-returned. */
+  function expresswayMeters(route) {
+    var steps = route.steps || [];
+    var m = 0;
+    for (var i = 0; i < steps.length; i++) {
+      if (EXPRESSWAY_RE.test(steps[i].text || "")) m += steps[i].distance || 0;
+    }
+    return m;
+  }
+
   // OSRM `bearings=deg,range;...` — one entry per waypoint, empty for any
   // waypoint we have no heading for. Used when rerouting mid-ride so the
   // router starts you facing the way you are actually pointing instead of
@@ -216,9 +275,9 @@ RC.router = (function () {
       if (bstr) baseUrl += "&bearings=" + bstr;
     }
 
-    // attempt(useExclude) fires one OSRM request, with or without
-    // exclude=motorway. On a code that indicates the exclusion itself is
-    // the problem, it retries exactly once without it and flags the
+    // attempt(useExclude, forceAlternatives) fires one OSRM request, with or
+    // without exclude=motorway. On a code that indicates the exclusion itself
+    // is the problem, it retries exactly once without it and flags the
     // returned routes as an honest fallback rather than pretending the
     // avoidance worked. A network/timeout/abort error (rejected promise,
     // no OSRM `code` at all) is never retried here — RC.jsonGet already
@@ -226,28 +285,47 @@ RC.router = (function () {
     function handleFailure(useExclude, code, data) {
       if (useExclude && EXCLUDE_RETRY_CODES.hasOwnProperty(code)) {
         var reason = EXCLUDE_RETRY_CODES[code];
-        return attempt(false).then(function (routes) {
+        // Ask for alternatives on the fallback even when the caller did not
+        // want them: if we cannot make the server keep a motorcycle off an
+        // expressway, the least we can do is pick the offered line that
+        // spends the fewest metres on one.
+        return attempt(false, true).then(function (routes) {
+          routes.sort(function (a, b) {
+            var ea = expresswayMeters(a), eb = expresswayMeters(b);
+            if (ea !== eb) return ea - eb;
+            return a.duration - b.duration;
+          });
           for (var i = 0; i < routes.length; i++) {
             routes[i].motorwayAvoidanceFailed = true;
             routes[i].motorwayAvoidanceReason = reason; // "unsupported" | "no-route"
           }
-          return routes;
+          // The caller asked for one route; give it the least-illegal one.
+          return alternatives ? routes : routes.slice(0, 1);
         });
       }
       var msg = OSRM_ERROR_MESSAGES[code] || (data && data.message) || "Could not calculate a route.";
       throw RC.error(msg, "route");
     }
 
-    function attempt(useExclude) {
-      var url = baseUrl + (useExclude ? "&exclude=motorway" : "");
+    function attempt(useExclude, forceAlternatives) {
+      var url = baseUrl;
+      if (forceAlternatives && !alternatives) {
+        url = url.replace("&alternatives=false", "&alternatives=true");
+      }
+      url += (useExclude ? "&exclude=motorway" : "");
       return RC.jsonGet(url, { signal: opts.signal }).then(function (data) {
         // OSRM only ever resolves here with code "Ok" — any error code comes
         // back as an HTTP 400 (see the .catch below) — but guard anyway in
         // case a future response shape slips an error through as 200.
         if (!data || data.code !== "Ok") return handleFailure(useExclude, data && data.code, data);
         var routes = (data.routes || []).map(function (r) { return parseRoute(r, vehicle.factor); });
-        if (useExclude) {
-          for (var j = 0; j < routes.length; j++) { routes[j].avoidedMotorways = true; }
+        for (var j = 0; j < routes.length; j++) {
+          if (useExclude) routes[j].avoidedMotorways = true;
+          // Annotate every route, excluded or not: an exclusion that the
+          // server accepted can still leave a toll expressway in the line
+          // if OSM has it tagged as trunk rather than motorway, and the
+          // rider would rather be told than find out at the toll gate.
+          routes[j].expresswayNames = expresswayNames(routes[j]);
         }
         return routes;
       }, function (err) {
@@ -264,5 +342,11 @@ RC.router = (function () {
     return attempt(!!vehicle.avoidMotorways);
   }
 
-  return { route: route, VEHICLE: VEHICLE };
+  return {
+    route: route,
+    VEHICLE: VEHICLE,
+    expresswayNames: expresswayNames,
+    expresswayMeters: expresswayMeters,
+    EXPRESSWAY_RE: EXPRESSWAY_RE
+  };
 })();
