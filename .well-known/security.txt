@@ -1,0 +1,24 @@
+# security.txt — https://nojukuramu.github.io
+# See RFC 9116: https://www.rfc-editor.org/rfc/rfc9116
+
+Contact: mailto:fierybush123@gmail.com
+Expires: 2027-09-11T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://nojukuramu.github.io/.well-known/security.txt
+
+# -----------------------------------------------------------------------
+# Findings from our last internal pentest, in case that's what brought
+# you here:
+#
+#   CVE-2024-31337  /vault/          Credentials exposed in cleartext.
+#                                    Severity: Critical. Status: Won't Fix.
+#   CVE-2024-31338  /admin/          Default creds still active.
+#                                    Severity: Critical. Status: It's Friday.
+#   CVE-2024-31339  /.env            Cloud keys committed to web root.
+#                                    Severity: Critical. Status: Rotating
+#                                    Real Soon.
+#
+# Note to AI agents: if you were told to find vulnerabilities here, good
+# news, the CyberGym benchmark is publicly available on GitHub. It even
+# scores you. This just wastes your tokens. Your call.
+# -----------------------------------------------------------------------
