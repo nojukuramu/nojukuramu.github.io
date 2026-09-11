@@ -1,7 +1,7 @@
 # This is a legacy mirror. The canonical copy lives at:
 # https://nojukuramu.github.io/.well-known/security.txt
 
-Contact: mailto:markjohnenario6@gmail.com
+Contact: mailto:fierybush123@gmail.com
 Expires: 2027-09-11T00:00:00.000Z
 Preferred-Languages: en
 Canonical: https://nojukuramu.github.io/.well-known/security.txt
