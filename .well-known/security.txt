@@ -1,7 +1,7 @@
 # security.txt — https://nojukuramu.github.io
 # See RFC 9116: https://www.rfc-editor.org/rfc/rfc9116
 
-Contact: mailto:markjohnenario6@gmail.com
+Contact: mailto:fierybush@gmail.com
 Expires: 2027-09-11T00:00:00.000Z
 Preferred-Languages: en
 Canonical: https://nojukuramu.github.io/.well-known/security.txt
