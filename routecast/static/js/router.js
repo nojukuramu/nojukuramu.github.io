@@ -31,11 +31,24 @@ RC.router = (function () {
   var BASE = "https://router.project-osrm.org";
 
   var VEHICLE = {
-    car:        { label: "Car",        factor: 1.00 },
+    car:        { label: "Car",        factor: 1.00, exclude: [null] },
     // Filters traffic (approximation) and, being under 400cc territory in
     // practice, legally banned from PH expressways (NLEX/SLEX/SCTEX/
     // CAVITEX/Skyway etc, all OSM `motorway` class) — see avoidMotorways.
-    motorcycle: { label: "Motorcycle", factor: 0.93, avoidMotorways: true }
+    //
+    // `exclude` is a LADDER, not a flag. OSRM's stock car profile declares
+    // three excludable classes — motorway, toll and ferry — and accepts them
+    // combined. Every Philippine expressway a motorcycle is barred from is
+    // also a toll road, and a handful of them (the older CAVITEX segments,
+    // parts of the C-5 Link) are tagged `trunk` rather than `motorway` in
+    // OSM, so `motorway,toll` catches roads that `motorway` alone leaves in
+    // the line. It is also the request most likely to be refused, which is
+    // why it is the FIRST rung and not the only one: each rung is tried in
+    // turn and the first the server honours wins, so a demo instance that
+    // cannot combine classes still gets the plain exclusion rather than
+    // nothing at all.
+    motorcycle: { label: "Motorcycle", factor: 0.93, avoidMotorways: true,
+                  exclude: ["motorway,toll", "motorway", null] }
   };
 
   // OSRM codes that mean "the exclude=motorway parameter itself is why this
@@ -77,35 +90,52 @@ RC.router = (function () {
       "Muntinlupa[- ]Cavite Expressway", "Expressway", "Tollway"
     ].join("|") + ")\\b(?! ?(Avenue|Ave|Street|St|Road|Rd|Drive|Lane|Alley|Barangay|Village|Subdivision|Hall)\\b)", "i");
 
+  /* The expressway-looking road a single step is on, or null.
+
+     Two fields are read, not one. OSRM echoes the street NAME in its
+     instruction text, but Philippine expressways are signed by their
+     reference — a step on the North Luzon Expressway routinely comes back
+     named "Governor's Drive" with `ref: "NLEX"`, and reading only the
+     instruction misses it entirely. The instruction is checked first
+     because it produces the more readable label; the ref is the safety
+     net under it. */
+  function stepRoad(step) {
+    var text = (step && step.text) || "";
+    var m = text.match(EXPRESSWAY_RE);
+    if (m) {
+      // Report the road, not the instruction: "Take the ramp onto Skyway"
+      // should surface as the road name after "onto" when there is one.
+      var onto = text.split(" onto ");
+      return (onto.length > 1 ? onto[onto.length - 1] : m[0]).trim();
+    }
+    var ref = (step && step.ref) || "";
+    var m2 = ref.match(EXPRESSWAY_RE);
+    return m2 ? m2[0].trim() : null;
+  }
+
   /* The distinct expressway-looking road names a route's own steps mention,
      in order, deduplicated. Empty means nothing was found — which is not the
      same as proof there is nothing there. */
   function expresswayNames(route) {
     var seen = {}, out = [];
-    var steps = route.steps || [];
+    var steps = (route && route.steps) || [];
     for (var i = 0; i < steps.length; i++) {
-      var name = steps[i].text || "";
-      var m = name.match(EXPRESSWAY_RE);
-      if (!m) continue;
-      // Report the road, not the instruction: "Take the ramp onto Skyway"
-      // should surface as the road name after "onto" when there is one.
-      var onto = name.split(" onto ");
-      var road = (onto.length > 1 ? onto[onto.length - 1] : m[0]).trim();
-      if (seen[road]) continue;
+      var road = stepRoad(steps[i]);
+      if (!road || seen[road]) continue;
       seen[road] = true;
       out.push(road);
     }
     return out;
   }
 
-  /* Metres of a route spent on steps whose name looks like an expressway.
-     Used to choose between alternatives when the exclusion could not be
-     applied at all: least illegal beats first-returned. */
+  /* Metres of a route spent on steps whose name or ref looks like an
+     expressway. Used to choose between alternatives: least illegal beats
+     first-returned, whether or not the exclusion was honoured. */
   function expresswayMeters(route) {
-    var steps = route.steps || [];
+    var steps = (route && route.steps) || [];
     var m = 0;
     for (var i = 0; i < steps.length; i++) {
-      if (EXPRESSWAY_RE.test(steps[i].text || "")) m += steps[i].distance || 0;
+      if (stepRoad(steps[i])) m += steps[i].distance || 0;
     }
     return m;
   }
@@ -234,6 +264,8 @@ RC.router = (function () {
         var loc = (st.maneuver && st.maneuver.location) || [0, 0];
         steps.push({
           text: stepText(st),
+          name: st.name || "",
+          ref: st.ref || "",
           distance: st.distance || 0,
           duration: (st.duration || 0) * factor,
           lat: loc[1],
@@ -256,7 +288,69 @@ RC.router = (function () {
     };
   }
 
-  // RC.router.route(waypoints, {vehicle, alternatives, signal, bearings}) -> Promise<Route[]>
+  /* An in-memory, short-lived cache of finished route responses.
+
+     Planning fires on a good many things that are not a new question: a
+     vehicle toggled to look at the difference and toggled straight back, a
+     spacing changed and changed again, a saved route tapped twice. Each of
+     those used to be a fresh round trip to a public demo server for an
+     answer we had thirty seconds ago. The key is the exact request, so a
+     hit is always the same road; the TTL is short because traffic-free
+     geometry still ages, and the cache is memory only, so a reload is a
+     clean slate. An in-flight request is shared rather than duplicated —
+     two identical plans a second apart cost one request, not two. */
+  var CACHE_TTL_MS = 90 * 1000;
+  var CACHE_MAX = 24;
+  var cache = new Map();
+
+  function cacheGet(key) {
+    var hit = cache.get(key);
+    if (!hit) return null;
+    if (Date.now() - hit.t > CACHE_TTL_MS) { cache.delete(key); return null; }
+    return hit.p;
+  }
+
+  function cachePut(key, promise) {
+    cache.set(key, { t: Date.now(), p: promise });
+    // Never leave a rejection cached: the next attempt deserves the network.
+    promise.catch(function () { cache.delete(key); });
+    while (cache.size > CACHE_MAX) {
+      var oldest = null, oldestT = Infinity;
+      cache.forEach(function (v, k) { if (v.t < oldestT) { oldestT = v.t; oldest = k; } });
+      if (oldest == null) break;
+      cache.delete(oldest);
+    }
+  }
+
+  function clearCache() { cache.clear(); }
+
+  /* Cloning matters: callers mutate what they get back (eta.js writes a
+     calibration onto the route, history.js writes a familiarity score), and
+     a cache that handed out the same objects twice would serve the second
+     rider the first one's annotations. */
+  function cloneRoutes(routes) {
+    return routes.map(function (r) {
+      var copy = {};
+      for (var k in r) if (Object.prototype.hasOwnProperty.call(r, k)) copy[k] = r[k];
+      return copy;
+    });
+  }
+
+  // Least illegal first, then quickest. Applied to every motorcycle result,
+  // not only to the ones where the exclusion was refused: an exclusion the
+  // server accepted still cannot catch a tollway OSM has tagged `trunk`.
+  function rankByLegality(routes) {
+    return routes.slice().sort(function (a, b) {
+      var ea = a.expresswayM, eb = b.expresswayM;
+      // Under a couple of hundred metres the difference is a ramp shared
+      // with a legal road, not a stretch of expressway; do not trade real
+      // minutes for it.
+      if (Math.abs(ea - eb) > 200) return ea - eb;
+      return a.duration - b.duration;
+    });
+  }
+
+  // RC.router.route(waypoints, {vehicle, alternatives, signal, bearings, avoidMotorways}) -> Promise<Route[]>
   function route(waypoints, opts) {
     opts = opts || {};
     if (!waypoints || waypoints.length < 2) {
@@ -265,67 +359,54 @@ RC.router = (function () {
     var vehicleKey = opts.vehicle || "car";
     var vehicle = VEHICLE[vehicleKey] || VEHICLE.car;
     var alternatives = opts.alternatives == null ? true : opts.alternatives;
+    var avoid = opts.avoidMotorways == null ? !!vehicle.avoidMotorways : !!opts.avoidMotorways;
+
+    // Ask for three rather than "as many as you feel like". More lines to
+    // choose from is the single cheapest way to find one that stays off the
+    // expressway, and it costs the same request.
+    var altParam = alternatives ? "3" : "false";
 
     var baseUrl = BASE + "/route/v1/driving/" + buildCoordString(waypoints) +
       "?overview=full&geometries=geojson&steps=true&annotations=duration,distance" +
-      "&alternatives=" + (alternatives ? "true" : "false");
+      "&alternatives=" + altParam;
 
     if (opts.bearings) {
       var bstr = buildBearingString(opts.bearings, waypoints.length);
       if (bstr) baseUrl += "&bearings=" + bstr;
     }
 
-    // attempt(useExclude, forceAlternatives) fires one OSRM request, with or
-    // without exclude=motorway. On a code that indicates the exclusion itself
-    // is the problem, it retries exactly once without it and flags the
-    // returned routes as an honest fallback rather than pretending the
-    // avoidance worked. A network/timeout/abort error (rejected promise,
-    // no OSRM `code` at all) is never retried here — RC.jsonGet already
-    // owns its own retry policy for those.
-    function handleFailure(useExclude, code, data) {
-      if (useExclude && EXCLUDE_RETRY_CODES.hasOwnProperty(code)) {
-        var reason = EXCLUDE_RETRY_CODES[code];
-        // Ask for alternatives on the fallback even when the caller did not
-        // want them: if we cannot make the server keep a motorcycle off an
-        // expressway, the least we can do is pick the offered line that
-        // spends the fewest metres on one.
-        return attempt(false, true).then(function (routes) {
-          routes.sort(function (a, b) {
-            var ea = expresswayMeters(a), eb = expresswayMeters(b);
-            if (ea !== eb) return ea - eb;
-            return a.duration - b.duration;
-          });
-          for (var i = 0; i < routes.length; i++) {
-            routes[i].motorwayAvoidanceFailed = true;
-            routes[i].motorwayAvoidanceReason = reason; // "unsupported" | "no-route"
-          }
-          // The caller asked for one route; give it the least-illegal one.
-          return alternatives ? routes : routes.slice(0, 1);
-        });
-      }
-      var msg = OSRM_ERROR_MESSAGES[code] || (data && data.message) || "Could not calculate a route.";
-      throw RC.error(msg, "route");
-    }
-
-    function attempt(useExclude, forceAlternatives) {
+    /* One OSRM request at one rung of the exclusion ladder. `exclude` is the
+       class string for this rung, or null for "ask for nothing special".
+       forceAlternatives widens a single-route request when we are hunting
+       for a legal line and the first answer was not one. */
+    function attempt(exclude, forceAlternatives) {
       var url = baseUrl;
-      if (forceAlternatives && !alternatives) {
-        url = url.replace("&alternatives=false", "&alternatives=true");
-      }
-      url += (useExclude ? "&exclude=motorway" : "");
-      return RC.jsonGet(url, { signal: opts.signal }).then(function (data) {
+      if (forceAlternatives && !alternatives) url = url.replace("&alternatives=false", "&alternatives=3");
+      if (exclude) url += "&exclude=" + encodeURIComponent(exclude);
+
+      var key = url;
+      var cached = cacheGet(key);
+      if (cached) return cached.then(cloneRoutes);
+
+      var p = RC.jsonGet(url, { signal: opts.signal }).then(function (data) {
         // OSRM only ever resolves here with code "Ok" — any error code comes
         // back as an HTTP 400 (see the .catch below) — but guard anyway in
         // case a future response shape slips an error through as 200.
-        if (!data || data.code !== "Ok") return handleFailure(useExclude, data && data.code, data);
+        if (!data || data.code !== "Ok") {
+          throw RC.error(OSRM_ERROR_MESSAGES[data && data.code] || "Could not calculate a route.",
+                         "route", null, data && data.code);
+        }
         var routes = (data.routes || []).map(function (r) { return parseRoute(r, vehicle.factor); });
+        if (!routes.length) throw RC.error(OSRM_ERROR_MESSAGES.NoRoute, "route", null, "NoRoute");
         for (var j = 0; j < routes.length; j++) {
-          if (useExclude) routes[j].avoidedMotorways = true;
-          // Annotate every route, excluded or not: an exclusion that the
-          // server accepted can still leave a toll expressway in the line
-          // if OSM has it tagged as trunk rather than motorway, and the
-          // rider would rather be told than find out at the toll gate.
+          // Annotate every route, excluded or not: an exclusion the server
+          // accepted can still leave a toll expressway in the line if OSM
+          // has it tagged as trunk rather than motorway, and the rider would
+          // rather be told than find out at the toll gate.
           routes[j].expresswayNames = expresswayNames(routes[j]);
+          routes[j].expresswayM = expresswayMeters(routes[j]);
+          routes[j].excludeApplied = exclude || null;
+          routes[j].avoidedMotorways = !!exclude;
         }
         return routes;
       }, function (err) {
@@ -333,17 +414,79 @@ RC.router = (function () {
         // arrive as HTTP 400 with a JSON body, not a resolved payload — see
         // RC.jsonGet, which attaches that body as err.body.
         if (err && err.status === 400 && err.body && err.body.code) {
-          return handleFailure(useExclude, err.body.code, err.body);
+          throw RC.error(OSRM_ERROR_MESSAGES[err.body.code] || err.body.message || "Could not calculate a route.",
+                         "route", 400, err.body.code);
+        }
+        throw err;
+      });
+
+      cachePut(key, p);
+      return p.then(cloneRoutes);
+    }
+
+    /* Walk the ladder. A failure that names the exclusion itself
+       (InvalidValue / NotImplemented from a server that cannot honour the
+       class, NoRoute because there genuinely is no expressway-free way
+       through) drops to the next rung; anything else is a real error and
+       stops here, because retrying a bad waypoint with fewer constraints
+       just produces a wrong answer more slowly. */
+    var ladder = avoid ? vehicle.exclude.slice() : [null];
+    var lastReason = null;
+
+    function walk(i) {
+      var exclude = ladder[i];
+      return attempt(exclude, avoid && !alternatives).then(function (routes) {
+        if (exclude) return finish(routes, null);
+        // The bottom rung: nothing was excluded, so say why, and pick the
+        // offered line that spends the fewest metres on an expressway
+        // rather than whatever came back first.
+        return finish(routes, avoid ? (lastReason || "unsupported") : null);
+      }, function (err) {
+        var code = err && err.code;
+        if (i + 1 < ladder.length && (!code || EXCLUDE_RETRY_CODES.hasOwnProperty(code))) {
+          if (code) lastReason = EXCLUDE_RETRY_CODES[code];
+          return walk(i + 1);
         }
         throw err;
       });
     }
 
-    return attempt(!!vehicle.avoidMotorways);
+    /* One last look at what came back. When the exclusion was honoured but
+       the winning line still runs a serious distance on something named like
+       an expressway — a tollway OSM tagged `trunk`, which no exclusion class
+       can catch — spend one more request with alternatives to see whether a
+       clean line exists. Only once, only for a rider who is actually barred,
+       and only when the offence is big enough to be a road rather than a
+       shared ramp. */
+    var RECHECK_M = 800;
+
+    function finish(routes, failedReason) {
+      var ranked = avoid ? rankByLegality(routes) : routes;
+      for (var i = 0; i < ranked.length; i++) {
+        ranked[i].motorwayAvoidanceFailed = !!failedReason;
+        if (failedReason) ranked[i].motorwayAvoidanceReason = failedReason;
+      }
+      var best = ranked[0];
+      if (avoid && !failedReason && !alternatives && best && best.expresswayM > RECHECK_M) {
+        return attempt(best.excludeApplied, true).then(function (more) {
+          var wider = rankByLegality(more);
+          for (var k = 0; k < wider.length; k++) wider[k].motorwayAvoidanceFailed = false;
+          // Only take the wider answer if it is actually cleaner; a second
+          // opinion that agrees is not a reason to change the route.
+          if (wider[0] && wider[0].expresswayM < best.expresswayM - 200) return [wider[0]];
+          return ranked.slice(0, 1);
+        }, function () { return ranked.slice(0, 1); });
+      }
+      return alternatives ? ranked : ranked.slice(0, 1);
+    }
+
+    return walk(0);
   }
 
   return {
     route: route,
+    clearCache: clearCache,
+    stepRoad: stepRoad,
     VEHICLE: VEHICLE,
     expresswayNames: expresswayNames,
     expresswayMeters: expresswayMeters,

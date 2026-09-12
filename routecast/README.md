@@ -7,6 +7,9 @@ Plan a route, and RouteCast breaks it into checkpoints, works out roughly when y
 will reach each one, and fetches the forecast for that place **at that hour** — not
 the forecast for right now, and not the forecast for your destination only.
 
+Or skip the planning entirely and hit **Free drive**: the dashboard, the recorder and
+the local forecast, with no destination and nothing to count down to.
+
 Live at <https://nojukuramu.github.io/routecast/>.
 
 ## What it does
@@ -61,10 +64,40 @@ Live at <https://nojukuramu.github.io/routecast/>.
 - **Terrain.** One elevation request per route draws the profile of the ride before
   you set off — total climb, total descent, and the shape of it — with a marker
   showing where you are on that profile while you ride.
-- **Landscape.** A short, wide screen is a different machine: the bottom sheet becomes
-  a side drawer with its own scroll, the HUD moves to the top-left column, and the
-  tiles run in one row. The sheet was never usable there — at half height it covered
-  the map entirely.
+- **Free driving.** Navigation without a destination. Speed, distance covered, moving
+  and stopped time, average and top speed, climb, the sky where you actually are — and
+  the same ride recorder that runs during navigation, so a road you rode without
+  planning it is still a road RouteCast knows. It records the roads and deliberately
+  does *not* touch the pace model: that learns from a ride against a prediction, and a
+  free ride has none. The travelled line is drawn behind you as you go.
+- **The map owns the screen.** Every other surface is a thin overlay with its own
+  gutter, and none of them is allowed into the middle of the display. A rail of
+  buttons across the top — buttons, with map in the gaps between them. One line for
+  the next turn. A compact HUD strip along the bottom carrying speed and a scrolling
+  row of stat pods, which in landscape becomes the same pods as a narrow column down
+  the left edge, because a 380px-tall screen cannot spare 80px at the bottom and can
+  easily spare 96px at the side. Nothing reflows the map when it appears.
+- **A planner with two states.** Open and closed, each with a button. The old sheet
+  snapped between three heights on a drag that lived on a 4px handle, and a pointer
+  the browser dropped mid-gesture left it stranded half way up until a reload. Now it
+  is a bottom sheet in portrait and a left drawer in landscape and on desktop, it
+  opens and closes on named controls, a flick down dismisses it, and the gesture is
+  bound to the window so it always finishes. Inside, four tabs — Route, Trip, Marks,
+  You — instead of one endless scroll.
+- **A field takes whatever you have.** Start, destination and every stop accept a
+  coordinate (`14.5995, 120.9842`, hemisphere letters, degrees/minutes/seconds, a
+  `geo:` URI, or a pasted Google Maps or OpenStreetMap link), one of your saved marks,
+  or a place to search for. A coordinate is used *exactly as written* and costs no
+  request at all — nothing is snapped to a nearby landmark. Free text that matches
+  several places is shown as a list and stops there rather than silently resolving to
+  the first hit, which is how a rider ends up at the wrong Poblacion.
+- **Saved marks.** A mark is a coordinate you named yourself — a gate, a fork, a shed,
+  home. Mark the centre of the map, mark where you are, or save the pin you are
+  already aiming. Marks appear above the search results as you type, sit on the map as
+  quiet pins you can tap, and go exactly where you put them every time. Re-saving the
+  same spot renames it instead of stacking a duplicate, and a pin dropped within 40 m
+  of a mark is labelled with your name for it rather than the geocoder's. It never
+  leaves the device.
 - **Drop a pin on the exact point, not the nearest landmark.** Start, destination and every stop can be set with the
   classic centre-pin picker: the pin stays fixed, you move the map under it, and the address
   updates as you settle. **The confirmed coordinate is always the exact centre**, to five
@@ -91,15 +124,49 @@ Live at <https://nojukuramu.github.io/routecast/>.
   comes from your GPS course while you are moving and from the phone's magnetometer when you are
   stopped, which is what you want at a junction. Reaching for the map to look around drops you
   back to north-up.
-- **Motorcycles avoid expressways, three ways.** Riders are barred from NLEX, SLEX, CAVITEX,
-  Skyway and most Philippine expressways. First, motorcycle routes send OSRM `exclude=motorway`,
-  which is a documented parameter of the route service and which the demo server's stock
-  profile supports. Second, when the server cannot honour it, RouteCast no longer just takes
-  whatever came back: it asks for the alternatives and picks the one that spends the fewest
-  kilometres on an expressway. Third — and independently of both — the returned line's own
-  step names are checked against the expressway list, because an accepted exclusion still
-  cannot catch a toll road that OSM has tagged `trunk` rather than `motorway`. Anything found
-  is named in the summary. None of the three is presented as a guarantee.
+- **The map does not fight you.** Who owns the view while you are riding used to be
+  settled by whoever moved it last, which meant reaching over to check the junction
+  ahead ended with the next fix yanking the view back a heartbeat after your thumb
+  left the glass. There is now one piece of state for it, and it is decided by intent:
+  a **drag** means "let me look elsewhere", so following stops, a Re-centre control
+  appears, and nothing moves the map until you ask or until you have been done looking
+  for twelve seconds; a **zoom** means "let me look closer at the same thing", so
+  following continues and the zoom you chose becomes the zoom it follows at. The app's
+  own pans are flagged before they are made and can never be mistaken for yours. A fix
+  arriving mid-drag is ignored — a pointer on the glass always wins; the camera does
+  nothing at all while the page is hidden, and re-seats in one move when you come back;
+  a long jump is a cut rather than a hundred-kilometre slideshow; and the whole-route
+  overview and a tapped checkpoint stand down until Re-centre rather than being undone
+  by the next fix, because those are decisions, not stray pans.
+- **Motorcycles avoid expressways, four ways.** Riders are barred from NLEX, SLEX,
+  CAVITEX, Skyway and most Philippine expressways.
+  1. **An exclusion ladder, strictest first.** OSRM's stock car profile declares three
+     excludable classes and accepts them combined, so the first request sends
+     `exclude=motorway,toll`. Every PH expressway a motorcycle is barred from is also
+     tolled, and a few of them are tagged `trunk` rather than `motorway` in OSM, so the
+     combined exclusion catches roads the plain one leaves in the line. It is also the
+     request most likely to be refused — which is why it is a rung and not the only
+     one: a refusal drops to plain `exclude=motorway`, and a refusal of *that* drops to
+     no exclusion, each rung tried in turn and the first the server honours winning.
+  2. **Alternatives, ranked by legality.** Every routing request asks for three lines
+     rather than one, and for a rider they are sorted by metres spent on an expressway
+     before they are sorted by time — with a 200 m dead band so a shared on-ramp never
+     costs real minutes. This now happens whether or not the exclusion was accepted;
+     it used to be a fallback only.
+  3. **The line's own names AND refs are read back.** An expressway step routinely
+     comes back named after the surface road it parallels, with the expressway only in
+     OSRM's `ref` field: reading the instruction alone missed NLEX entirely. Both are
+     checked, on every route, excluded or not.
+  4. **One second opinion.** If the exclusion was honoured and the winning line *still*
+     spends more than 800 m on something named like an expressway, RouteCast spends one
+     more request with alternatives to see whether a clean line exists, and takes it
+     only if it is genuinely cleaner. The panel names the metres and the road either
+     way. None of the four is presented as a guarantee.
+- **Planning is cheaper than it was.** Finished route responses are cached in memory
+  for 90 seconds, keyed by the exact request, and an in-flight request is shared rather
+  than duplicated — so toggling the vehicle to look at the difference and toggling it
+  back, or tapping a saved route twice, costs one round trip to a public demo server
+  instead of four. Failures are never cached; a reload is a clean slate.
 - **Stops, alternative routes, swap, and long-press on the map** to drop a point.
 - **Built for a phone.** The map owns the screen and everything else lives in a bottom sheet you
   drag between three heights. Safe-area aware, dynamic viewport heights so nothing jumps when the
@@ -232,6 +299,11 @@ arc and written only when the angle has actually moved more than a degree and a 
 - **The expressway check reads names.** It is a heuristic over free text: it can miss an unnamed
   motorway segment and be fooled by an unusual one. It is a second opinion on top of
   `exclude=motorway`, never a substitute for reading the signs.
+- **A free ride teaches roads, not timings.** There was no estimate for it to be right
+  or wrong about, so it is recorded as roads travelled and nothing else. Its elevation
+  comes from the phone's GPS altitude with a three-metre deadband rather than from the
+  terrain model — there is no route to fetch a profile for — so treat the climb figure
+  as a shape, not a survey.
 - **DEM elevation is not your altimeter.** The terrain model is 90 m resolution and steadier
   than a phone's GPS altitude, which is why the dashboard prefers it — but on a bridge or in a
   cutting it reports the ground, not the road. The tile says which source it is using.
@@ -255,7 +327,9 @@ routecast/
     history.js              RC.history  — the roads you actually rode, and how long they took
     traffic.js              RC.traffic  — time-of-week congestion, grounded in your own rides
     eta.js                  RC.eta      — per-edge ETA calibration; everything downstream reads it
+    coords.js               RC.coords   — coordinate parsing: decimals, DMS, geo:, map links
     routes.js               RC.routes   — saved routes, kept as points rather than geometry
+    marks.js                RC.marks    — saved marks: coordinates you named yourself
     geocode.js              RC.geocode  — Nominatim search + reverse, throttled and cached
     router.js               RC.router   — OSRM routing, cumulative arrays, expressway detection
     sampler.js              RC.sampler  — walks the route, emits checkpoints with ETAs
@@ -265,6 +339,8 @@ routecast/
     pick.js                 RC.pick     — the centre-pin place picker
     nav.js                  RC.nav      — live navigation: route projection, live ETA, wake lock,
                                           reroute and forecast-refresh gating, ride recording
+    free.js                 RC.free     — free driving: the dashboard and the recorder, no route
+    follow.js               RC.follow   — the camera: who owns the map, you or the app
     compass.js              RC.compass  — heading sources, north-up / course-up map rotation
     app.js                  the glue: map, form, the render pipeline, the draggable sheet
     pwa.js                  install prompt, iOS fallback, full-screen toggle
@@ -289,7 +365,12 @@ familiar and one never ridden does not, that familiarity never buys a route that
 genuinely slow, that the relative traffic curve averages exactly 1 over a week, that
 a calibrated ETA is slower than the router's and that leaving at 3am beats leaving at
 5pm by more than a flat multiplier could manage, that a ride too short to mean anything
-is thrown away, and that a road named "Skyway Avenue" is not mistaken for the Skyway.
+is thrown away, that a road named "Skyway Avenue" is not mistaken for the Skyway and one
+carrying NLEX only in its `ref` still is, that `14.5995N` reads as a decimal coordinate
+rather than as one degree four minutes in the Gulf of Guinea while a street address reads
+as neither, that a mark re-saved on the same spot renames rather than duplicates, and that
+a free ride's odometer refuses a parked phone's jitter, a step inside its own error circle
+and a teleport alike.
 
 Nothing is sent anywhere but those services. Your last trip, your saved routes and the
 record of the roads you have ridden all live in `localStorage` and never leave the device —

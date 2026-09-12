@@ -1,9 +1,27 @@
 /* ============================================================
    RouteCast — app shell + injected-content styles
+
    Matcha palette: a warm tea-paper light theme and a deep steeped-leaf dark
    theme, both built from one accent (--matcha). Light is the default;
    [data-theme="dark"] is the alternate and the system preference is honoured
    in between. Poppins carries every weight; there is no second family.
+
+   The layout rule, and it is the only one that matters
+   ----------------------------------------------------
+   THE MAP IS THE SCREEN. Every other surface is a thin overlay with its own
+   gutter, and none of them is ever allowed to grow into the middle of the
+   viewport. There is no panel that owns half the display, no card sitting
+   over the road ahead, and nothing that reflows the map when it appears.
+
+   * A rail of buttons across the top — buttons, not a bar. The map is
+     draggable in the gaps between them.
+   * One line for the next turn, when there is one.
+   * A HUD strip along the bottom in portrait; the same pods as a narrow
+     column down the left edge in landscape, because a short wide screen has
+     no vertical room to spare and plenty of horizontal.
+   * The planner is a sheet with exactly two states, open and closed, opened
+     and closed by named buttons. Nothing snaps, nothing is half open, and
+     nothing is left mid-air by a gesture the browser dropped.
    ============================================================ */
 
 :root {
@@ -23,9 +41,18 @@
   --matcha-soft:  #E3EED8;
   --matcha-ink:   #FFFFFF;
 
+  /* The floating layer. Everything that sits over the map is drawn from
+     these three so the whole overlay set reads as one material, and so a
+     theme change never leaves half of it in the wrong skin. */
+  --glass:        rgba(251, 252, 247, .86);
+  --glass-strong: rgba(251, 252, 247, .96);
+  --glass-line:   rgba(26, 32, 24, .10);
+  --glass-ink:    #1A2018;
+
   --shadow-sm: 0 1px 2px rgba(26, 32, 24, .05);
   --shadow:    0 4px 16px -6px rgba(26, 32, 24, .16);
   --shadow-lg: 0 20px 50px -18px rgba(26, 32, 24, .28);
+  --shadow-float: 0 6px 20px -8px rgba(26, 32, 24, .3);
 
   --radius:    12px;
   --radius-sm: 8px;
@@ -53,6 +80,18 @@
 
   --map-filter: none;
 
+  /* Geometry. --rc-bottom-h is the height the bottom overlay currently
+     occupies; app.js keeps it honest so the map controls and Leaflet's own
+     chrome always clear whatever is down there, in every mode. */
+  --gut: 10px;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --rc-bottom-h: 96px;
+  --rc-side-w: 0px;
+  --rail-h: 40px;
+
   color-scheme: light;
 }
 
@@ -76,9 +115,15 @@
     --matcha-soft:  #26301A;
     --matcha-ink:   #12160F;
 
+    --glass:        rgba(23, 28, 19, .84);
+    --glass-strong: rgba(23, 28, 19, .95);
+    --glass-line:   rgba(237, 242, 229, .12);
+    --glass-ink:    #EDF2E5;
+
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
     --shadow:    0 4px 20px -6px rgba(0, 0, 0, .6);
     --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, .65);
+    --shadow-float: 0 6px 22px -8px rgba(0, 0, 0, .7);
 
     --rc-clear:        #6DBB8C;
     --rc-clear-soft:   #1B2C21;
@@ -112,9 +157,15 @@
   --matcha-soft:  #26301A;
   --matcha-ink:   #12160F;
 
+  --glass:        rgba(23, 28, 19, .84);
+  --glass-strong: rgba(23, 28, 19, .95);
+  --glass-line:   rgba(237, 242, 229, .12);
+  --glass-ink:    #EDF2E5;
+
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
   --shadow:    0 4px 20px -6px rgba(0, 0, 0, .6);
   --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, .65);
+  --shadow-float: 0 6px 22px -8px rgba(0, 0, 0, .7);
 
   --rc-clear:        #6DBB8C;
   --rc-clear-soft:   #1B2C21;
@@ -132,6 +183,12 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* Almost every overlay in here sets its own `display`, which beats the UA
+   rule for [hidden] and leaves a "hidden" banner sitting over the map. One
+   line, applied once, rather than a matching [hidden] rule per component
+   and a bug every time a new one is added. */
+[hidden] { display: none !important; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
 }
@@ -144,16 +201,17 @@ body {
   font-family: var(--sans);
   font-size: 15px;
   /* Poppins runs large for its point size and its default tracking is loose
-     at UI scale, so the whole app is pulled in a touch. Without this every
-     label reads a size bigger than it is and the sheet stops fitting. */
+     at UI scale, so the whole app is pulled in a touch. */
   letter-spacing: -.005em;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 a { color: inherit; }
-button { font: inherit; }
+button { font: inherit; color: inherit; }
+code { font-family: var(--mono); font-size: .92em; }
 
 ::selection { background: var(--matcha); color: var(--matcha-ink); }
 
@@ -164,1804 +222,1378 @@ button { font: inherit; }
 }
 
 /* ============================================================
-   Shell
+   Shell + map
    ============================================================ */
 .rc-app {
-  /* Fixed to the window rather than sized with vh/dvh: on an installed app the
-     status bar makes 100dvh taller than the area actually on screen, which
-     pushed the bottom sheet off the bottom of the display. */
+  /* Fixed to the window rather than sized with vh/dvh: on an installed app
+     the URL bar is not there to collapse, and a fixed box never jumps. */
   position: fixed;
   inset: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.rc-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  padding-top: calc(10px + env(safe-area-inset-top));
-  padding-left: calc(16px + env(safe-area-inset-left));
-  padding-right: calc(16px + env(safe-area-inset-right));
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
-  flex: none;
-  z-index: 30;
-}
-
-[data-fullscreen="on"] .rc-header { display: none; }
-
-.rc-wordmark {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: 1.15rem;
-  letter-spacing: -.01em;
-}
-.rc-wordmark-mark {
-  display: grid; place-items: center;
-  width: 26px; height: 26px;
-  border-radius: 8px;
-  background: var(--matcha);
-  color: var(--matcha-ink);
-}
-.rc-wordmark-mark svg { width: 15px; height: 15px; }
-
-.rc-header-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-
-.rc-iconbtn {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 34px; height: 34px;
-  padding: 0 9px;
-  background: var(--surface-2);
-  color: var(--ink-soft);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: .8rem; font-weight: 600;
-  transition: color .18s var(--ease), border-color .18s var(--ease), background-color .18s var(--ease);
-}
-.rc-iconbtn:hover { color: var(--ink); border-color: var(--line-strong); }
-.rc-iconbtn svg { width: 16px; height: 16px; }
-
-.rc-theme-icon { width: 15px; height: 15px; display: block; }
-[data-theme="dark"] .rc-theme-icon-sun { display: none; }
-:root:not([data-theme="dark"]) .rc-theme-icon-moon { display: none; }
-
-/* full-screen toggle: expand/contract icon swap, mirrors the theme sun/moon swap */
-.rc-fs-icon { width: 16px; height: 16px; display: block; }
-#fullscreen-btn[aria-pressed="true"] .rc-fs-icon-expand { display: none; }
-#fullscreen-btn[aria-pressed="false"] .rc-fs-icon-contract { display: none; }
-
-/* install button: filled clay pill, the primary header action when visible */
-.rc-btn-install {
-  display: inline-flex; align-items: center; gap: 6px;
-  height: 34px;
-  padding: 0 14px 0 11px;
-  background: var(--matcha);
-  color: var(--matcha-ink);
-  border: none;
-  border-radius: 999px;
-  cursor: pointer;
-  font-size: .82rem; font-weight: 600;
-  white-space: nowrap;
-  transition: background-color .18s var(--ease), transform .18s var(--ease);
-}
-.rc-btn-install:hover { background: var(--matcha-hover); }
-.rc-btn-install:active { transform: translateY(1px); }
-.rc-btn-install svg { width: 16px; height: 16px; flex: none; }
-.rc-btn-install[hidden] { display: none; }
-
-.rc-body {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
   overflow: hidden;
 }
 
-/* ============================================================
-   Map
-   ============================================================ */
-/* The map lives inside a wrapper that owns the layout slot and the clip.
-   Course-up rotation grows #map past the wrapper's edges (see compass.js);
-   the wrapper's overflow:hidden is what keeps that off the rest of the UI. */
-.rc-map-wrap {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 100%;
-  background: var(--surface-2);
-  /* Leaflet's own panes run z-index 200-800. Without a stacking context of its
-     own the map paints straight over the panel (z-index 20), which left the
-     bottom sheet invisible underneath the tiles while still swallowing every
-     touch meant for the map. isolate keeps those panes contained. */
-  position: relative;
-  overflow: hidden;
-  z-index: 0;
-  isolation: isolate;
-}
+.rc-map-wrap { position: absolute; inset: 0; overflow: hidden; }
+
 .rc-map {
   position: absolute;
-  top: 0; right: 0; bottom: 0; left: 0;
-  background: var(--surface-2);
-}
-.rc-map .leaflet-tile-pane { filter: var(--map-filter); }
-
-/* ---- course-up rotation ------------------------------------------------
-   One transform on the map element: composited, no reflow, and Leaflet's
-   own projection never learns about it. Everything that carries text or
-   points at a place counter-rotates about its own anchor so it stays
-   upright and stays put. --rc-bearing is written by compass.js. */
-html[data-rotate="on"] .rc-map {
-  transform: rotate(var(--rc-bearing, 0deg));
+  inset: 0;
+  background: var(--bg-tint);
+  /* Course-up rotation grows #map past the wrapper's edges (see compass.js),
+     which is why the wrapper clips and the map itself is what moves. */
   transform-origin: 50% 50%;
+  transition: transform .18s linear;
   will-change: transform;
 }
-html[data-rotate="on"] .rc-marker {
-  transform: rotate(calc(-1 * var(--rc-bearing, 0deg)));
-  transform-origin: 50% calc(100% + 7px); /* the stem tip, which sits on the coordinate */
-}
-/* Leaflet's own controls sit inside the map element, so under rotation they
-   are both tilted and pushed out past the visible area. Hide them; the app's
-   own map buttons live outside the rotated element, and pinch/scroll zoom
-   (anchored to the centre by compass.js) still works. */
-html[data-rotate="on"] .rc-map .leaflet-control-container { display: none; }
-html[data-rotate="on"] .rc-marker-pin {
-  transform: rotate(calc(-1 * var(--rc-bearing, 0deg))) rotate(-45deg);
-  transform-origin: 50% 28px;             /* the pin's point, matching iconAnchor */
-}
+
+:root[data-rotate="on"] .rc-map { transition: transform .16s linear; }
+
+.rc-map .leaflet-tile-pane { filter: var(--map-filter); }
+
+.leaflet-container { background: var(--bg-tint); font-family: var(--sans); }
+.leaflet-control-attribution { display: none; }
+.leaflet-control-zoom { display: none; }
 
 /* ============================================================
-   Panel (desktop sidebar / mobile bottom sheet)
+   The floating layer — one material, three sizes
    ============================================================ */
-.rc-panel {
-  flex: none;
-  width: 400px;
-  max-width: 42vw;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border-left: 1px solid var(--line);
-  box-shadow: var(--shadow-lg);
-  z-index: 20;
+.rc-glass,
+.rc-mapbtn,
+.rc-turn,
+.rc-hud,
+.rc-dock,
+.rc-recentre,
+.rc-alert,
+.rc-status,
+.rc-pick-card {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--glass-line);
+  color: var(--glass-ink);
+  box-shadow: var(--shadow-float);
 }
 
-.rc-sheet-handle {
-  display: none;
-  width: 100%;
-  min-height: 44px;
-  border: none;
-  background: transparent;
-  cursor: grab;
-  padding: 14px 0 12px;
-  touch-action: none;
-}
-.rc-sheet-handle::after {
-  content: "";
-  display: block;
-  width: 40px; height: 4px;
-  margin: 0 auto;
-  border-radius: 999px;
-  background: var(--line-strong);
-}
-.rc-panel.is-dragging { transition: none !important; }
-
-.rc-panel-scroll {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  /* Results render above the form; without this the browser scrolls to keep
-     the pressed button in place and hides the summary the rider asked for. */
-  overflow-anchor: none;
-  overscroll-behavior: contain;
-  padding: 18px 18px 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* ============================================================
-   Peek bar — always-visible summary button under the drag handle
-   ============================================================ */
-.rc-peek-bar {
-  flex: none;
+/* ---------- top rail ---------- */
+.rc-rail {
+  position: absolute;
+  top: calc(var(--safe-t) + 8px);
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  z-index: 620;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  min-height: 44px;
-  padding: 4px 18px 12px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  color: inherit;
+  gap: 6px;
+  /* The gaps between the buttons are map. */
+  pointer-events: none;
 }
-.rc-peek-bar-text {
+
+.rc-rail > * { pointer-events: auto; }
+.rc-rail-spacer { flex: 1; pointer-events: none; }
+
+.rc-glass {
+  height: var(--rail-h);
+  min-width: var(--rail-h);
+  padding: 0 9px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s var(--ease), transform .12s var(--ease);
+}
+
+.rc-glass svg { width: 18px; height: 18px; flex: none; }
+.rc-glass:hover { background: var(--glass-strong); }
+.rc-glass:active { transform: scale(.95); }
+.rc-glass-wide { padding: 0 13px 0 11px; }
+.rc-glass-label { letter-spacing: -.01em; }
+
+.rc-theme-icon-moon, :root[data-theme="dark"] .rc-theme-icon-sun { display: none; }
+:root[data-theme="dark"] .rc-theme-icon-moon { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .rc-theme-icon-sun { display: none; }
+  :root:not([data-theme="light"]) .rc-theme-icon-moon { display: block; }
+}
+
+.rc-fs-icon-contract { display: none; }
+:root[data-fullscreen="on"] .rc-fs-icon-expand { display: none; }
+:root[data-fullscreen="on"] .rc-fs-icon-contract { display: block; }
+
+/* ---------- next turn / free-drive banner ---------- */
+.rc-turn {
+  position: absolute;
+  top: calc(var(--safe-t) + 8px + var(--rail-h) + 8px);
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  max-width: 560px;
+  margin-inline: auto;
+  z-index: 610;
+  border-radius: 13px;
+  padding: 8px 8px 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+}
+
+.rc-turn-dist {
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--matcha);
+  flex: none;
+}
+
+.rc-turn-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.rc-turn[data-soon="yes"] { border-color: var(--matcha); }
+.rc-turn[data-soon="yes"] .rc-turn-dist { font-size: 20px; }
+
+.rc-turn-stop {
+  flex: none;
+  width: 32px; height: 32px;
+  border-radius: 9px;
+  border: 1px solid var(--glass-line);
+  background: transparent;
+  display: grid; place-items: center;
+  cursor: pointer;
+  color: var(--rc-danger);
+}
+.rc-turn-stop svg { width: 16px; height: 16px; }
+.rc-turn-stop:hover { background: var(--rc-danger-soft); }
+
+.rc-turn-rec {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--rc-danger);
+  flex: none;
+  animation: rc-pulse 1.8s ease-in-out infinite;
+}
+@keyframes rc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* ---------- map controls ---------- */
+.rc-map-controls {
+  position: absolute;
+  right: calc(var(--safe-r) + var(--gut));
+  bottom: calc(var(--safe-b) + var(--rc-bottom-h) + var(--gut));
+  z-index: 600;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rc-mapbtn {
+  width: 40px; height: 40px;
+  border-radius: 11px;
+  display: grid; place-items: center;
+  cursor: pointer;
+  transition: background .15s var(--ease), transform .12s var(--ease);
+}
+.rc-mapbtn svg { width: 19px; height: 19px; }
+.rc-mapbtn-sm { height: 34px; }
+.rc-mapbtn:hover { background: var(--glass-strong); }
+.rc-mapbtn:active { transform: scale(.94); }
+.rc-mapbtn[hidden] { display: none; }
+
+.rc-compassbtn .rc-compass-needle { transition: transform .18s linear; }
+.rc-compassbtn[data-mode="course"] { color: var(--matcha); border-color: var(--matcha); }
+.rc-compassbtn .rc-compass-tail { opacity: .45; }
+
+/* ---------- re-centre ---------- */
+.rc-recentre {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--safe-b) + var(--rc-bottom-h) + var(--gut));
+  z-index: 605;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--matcha);
+  border-color: var(--matcha);
+}
+.rc-recentre svg { width: 16px; height: 16px; }
+.rc-recentre[hidden] { display: none; }
+
+/* ---------- alerts and status ---------- */
+.rc-alert {
+  position: absolute;
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  max-width: 560px;
+  margin-inline: auto;
+  bottom: calc(var(--safe-b) + var(--rc-bottom-h) + var(--gut) + 46px);
+  z-index: 604;
+  border-radius: 11px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.rc-alert[hidden] { display: none; }
+.rc-alert svg { width: 17px; height: 17px; flex: none; }
+.rc-alert[data-level="watch"]   { color: var(--rc-watch);   border-color: var(--rc-watch); }
+.rc-alert[data-level="caution"] { color: var(--rc-caution); border-color: var(--rc-caution); }
+.rc-alert[data-level="danger"]  { color: var(--rc-danger);  border-color: var(--rc-danger); }
+
+.rc-status {
+  position: absolute;
+  top: calc(var(--safe-t) + 8px + var(--rail-h) + 8px);
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  max-width: 460px;
+  margin-inline: auto;
+  z-index: 640;
+  border-radius: 11px;
+  padding: 8px 12px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+  transition: opacity .18s var(--ease), transform .18s var(--ease);
+}
+.rc-status:not(:empty) { opacity: 1; transform: none; }
+.rc-status.rc-error { color: var(--rc-danger); border-color: var(--rc-danger); }
+
+/* Nav and free driving put a banner in that slot; drop the toast below it. */
+:root[data-mode="nav"] .rc-status,
+:root[data-mode="free"] .rc-status { top: calc(var(--safe-t) + 8px + var(--rail-h) + 8px + 54px); }
+
+.rc-spinner {
+  width: 13px; height: 13px; flex: none;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--matcha);
+  border-radius: 50%;
+  animation: rc-spin .7s linear infinite;
+}
+@keyframes rc-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .rc-spinner { animation: none; } }
+
+/* ============================================================
+   The HUD — compact, and never in the way
+
+   Portrait: a strip across the bottom, one speed block and a scrolling row
+   of pods. Landscape: the same pods in a column down the left edge, because
+   a 380px-tall screen cannot spare 80px at the bottom and can easily spare
+   96px at the side.
+   ============================================================ */
+.rc-hud {
+  position: absolute;
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  bottom: calc(var(--safe-b) + var(--gut));
+  z-index: 590;
+  border-radius: 14px;
+  overflow: hidden;
+}
+.rc-hud[hidden] { display: none; }
+
+.rc-hud-progress {
+  height: 3px;
+  background: var(--line);
+  position: relative;
+  overflow: hidden;
+}
+.rc-hud-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: var(--matcha);
+  transition: width .5s var(--ease);
+}
+:root[data-mode="free"] .rc-hud-progress { display: none; }
+
+.rc-hud-tick {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+}
+.rc-hud-tick.is-clear   { background: var(--rc-clear); }
+.rc-hud-tick.is-watch   { background: var(--rc-watch); }
+.rc-hud-tick.is-caution { background: var(--rc-caution); }
+.rc-hud-tick.is-danger  { background: var(--rc-danger); }
+
+.rc-hud-body {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 7px 10px 8px;
+  min-height: 62px;
+}
+
+.rc-hud-speed {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 68px;
+  padding-right: 10px;
+  border-right: 1px solid var(--glass-line);
+}
+
+.rc-hud-speed-v {
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -.04em;
+  font-variant-numeric: tabular-nums;
+}
+.rc-hud-speed-v[data-empty="yes"] { font-size: 15px; color: var(--muted); letter-spacing: -.01em; }
+.rc-hud-speed-u {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* The pods. A horizontal scroller rather than a wrapping grid: a strip that
+   grows a second row grows into the map, which is the one thing it may not
+   do. Everything important is in the first three, and the rest is a swipe. */
+.rc-hud-pods {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.rc-hud-pods::-webkit-scrollbar { display: none; }
+
+.rc-pod {
+  flex: none;
+  scroll-snap-align: start;
+  min-width: 62px;
+  padding: 4px 9px;
+  border-radius: 9px;
+  background: var(--surface-2);
   display: flex;
   flex-direction: column;
   gap: 1px;
-  min-width: 0;
-  flex: 1 1 auto;
+  line-height: 1.15;
 }
-.rc-peek-bar-primary {
-  font-family: var(--serif);
-  font-size: 1.08rem;
-  font-weight: 500;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.rc-peek-bar-secondary {
-  font-size: .78rem;
+.rc-pod-k {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
   color: var(--muted);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.rc-peek-bar-secondary:empty { display: none; }
-#peek-bar-badge { flex: none; max-width: 42%; }
-#peek-bar-badge:empty { display: none; }
-
-/* On a real desktop sidebar the peek bar has no job: the panel is always
-   open and the summary is right there. It comes back on a short landscape
-   screen, where the panel is a drawer and the bar is what collapses it. */
-@media (min-width: 821px) {
-  .rc-peek-bar { display: none; }
+.rc-pod-v {
+  font-family: var(--display);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
-@media (orientation: landscape) and (max-height: 560px) {
-  .rc-peek-bar { display: flex; }
-}
-
-.rc-empty {
-  padding: 14px 16px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  color: var(--muted);
-  font-size: .92rem;
-}
-.rc-empty p { margin: 0; }
-.rc-panel[data-has-route] .rc-empty { display: none; }
+.rc-pod-v svg { width: 15px; height: 15px; }
+.rc-pod.is-clear   .rc-pod-v { color: var(--rc-clear); }
+.rc-pod.is-watch   .rc-pod-v { color: var(--rc-watch); }
+.rc-pod.is-caution .rc-pod-v { color: var(--rc-caution); }
+.rc-pod.is-danger  .rc-pod-v { color: var(--rc-danger); }
+.rc-pod.is-wide { min-width: 92px; }
 
 /* ============================================================
-   Status
+   The dock — the planning-mode bottom bar
    ============================================================ */
-.rc-status {
-  font-size: .85rem;
-  color: var(--muted);
-  min-height: 0;
-}
-.rc-status:empty { display: none; }
-.rc-status[data-kind="error"] { color: var(--rc-danger); }
-.rc-status.rc-busy { color: var(--muted); }
-
-.rc-spinner {
-  display: inline-flex;
+.rc-dock {
+  position: absolute;
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  bottom: calc(var(--safe-b) + var(--gut));
+  z-index: 590;
+  border-radius: 14px;
+  padding: 8px;
+  display: flex;
   align-items: center;
   gap: 8px;
+  max-width: 640px;
+  margin-inline: auto;
 }
-.rc-spinner::before {
-  content: "";
-  width: 13px; height: 13px;
-  border-radius: 50%;
-  border: 2px solid var(--line-strong);
-  border-top-color: var(--matcha);
-  animation: rc-spin .7s linear infinite;
-  flex: none;
-}
-@media (prefers-reduced-motion: reduce) {
-  .rc-spinner::before { animation-duration: 1.4s; }
-}
-@keyframes rc-spin { to { transform: rotate(360deg); } }
+:root[data-mode="nav"] .rc-dock,
+:root[data-mode="free"] .rc-dock { display: none; }
 
-.rc-error {
+.rc-dock-main {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
-  background: var(--rc-danger-soft);
-  border: 1px solid color-mix(in srgb, var(--rc-danger) 35%, var(--line));
-  border-radius: var(--radius-sm);
-  color: var(--rc-danger);
-  font-size: .85rem;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
 }
-.rc-error svg { width: 15px; height: 15px; flex: none; margin-top: 1px; }
+.rc-dock-main:hover { background: var(--surface-2); }
+.rc-dock-icon { flex: none; display: grid; place-items: center; color: var(--muted); }
+.rc-dock-icon svg { width: 19px; height: 19px; }
+.rc-dock-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.rc-dock-primary {
+  font-size: 14px; font-weight: 600; letter-spacing: -.015em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rc-dock-secondary {
+  font-size: 11.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.rc-dock-actions { display: flex; gap: 6px; flex: none; }
+
+.rc-dock-btn {
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s var(--ease), transform .12s var(--ease);
+}
+.rc-dock-btn svg { width: 17px; height: 17px; }
+.rc-dock-btn:active { transform: scale(.96); }
+.rc-dock-btn[hidden] { display: none; }
+.rc-dock-go {
+  background: var(--matcha);
+  border-color: var(--matcha);
+  color: var(--matcha-ink);
+}
+.rc-dock-go:hover { background: var(--matcha-hover); }
+.rc-dock-free:hover { background: var(--surface-2); }
+
+/* On a narrow phone the words go and the icons stay: three labelled buttons
+   plus a summary do not fit in 360px, and a squeezed row is worse than a
+   clear one. */
+@media (max-width: 420px) {
+  .rc-dock-btn span { display: none; }
+  .rc-dock-btn { padding: 0 11px; }
+}
+
+/* ============================================================
+   The planner — two states, both of them deliberate
+   ============================================================ */
+.rc-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 700;
+  background: rgba(26, 32, 24, .34);
+  -webkit-backdrop-filter: blur(1px);
+  backdrop-filter: blur(1px);
+  animation: rc-fade .18s var(--ease);
+}
+.rc-scrim[hidden] { display: none; }
+@keyframes rc-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.rc-panel {
+  position: absolute;
+  z-index: 710;
+  background: var(--surface);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior: contain;
+
+  /* Portrait default: a bottom sheet, closed. */
+  left: 0; right: 0; bottom: 0;
+  max-height: min(86dvh, 720px);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-top: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(101%);
+  transition: transform .26s var(--ease);
+  will-change: transform;
+}
+.rc-panel[data-open="true"] { transform: none; }
+.rc-panel.is-dragging { transition: none; }
+
+.rc-panel-head {
+  flex: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 8px 12px;
+  border-bottom: 1px solid var(--line);
+  touch-action: none;
+}
+
+.rc-panel-grab {
+  position: absolute;
+  top: 6px; left: 50%;
+  transform: translateX(-50%);
+  width: 40px; height: 4px;
+  border-radius: 2px;
+  background: var(--line-strong);
+}
+
+.rc-tabs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 2px;
+  margin-top: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.rc-tabs::-webkit-scrollbar { display: none; }
+
+.rc-tab {
+  flex: none;
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rc-tab:hover { background: var(--surface-2); color: var(--ink); }
+.rc-tab.is-active { background: var(--matcha-soft); color: var(--matcha); }
+
+.rc-panel-close {
+  flex: none;
+  margin-top: 8px;
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  display: grid; place-items: center;
+  cursor: pointer;
+}
+.rc-panel-close svg { width: 17px; height: 17px; }
+.rc-panel-close:hover { background: var(--surface-2); }
+
+.rc-panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 14px 14px calc(20px + var(--safe-b));
+}
+
+.rc-pane { display: flex; flex-direction: column; gap: 14px; }
+.rc-pane[hidden] { display: none; }
+
+/* Landscape and anything wide: a left drawer instead. A bottom sheet on a
+   380px-tall screen is either useless or the whole display; a drawer is
+   neither, and the map keeps its middle. */
+@media (orientation: landscape), (min-width: 900px) {
+  .rc-panel {
+    top: 0; bottom: 0; left: 0; right: auto;
+    width: min(400px, 82vw);
+    max-height: none;
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+    border: 1px solid var(--line);
+    border-left: 0;
+    transform: translateX(-101%);
+    padding-left: var(--safe-l);
+  }
+  .rc-panel[data-open="true"] { transform: none; }
+  .rc-panel-grab { display: none; }
+  .rc-panel-head { padding-top: 10px; }
+  .rc-tabs, .rc-panel-close { margin-top: 0; }
+  .rc-panel-scroll { padding-top: 14px; }
+}
+
+/* On a genuinely wide screen the drawer is a sidebar, and the map behind it
+   stays live: no scrim, because there is nothing to dismiss. */
+@media (min-width: 900px) {
+  .rc-scrim { display: none; }
+
+  /* The drawer stays open on a wide screen, so the floating furniture moves
+     over rather than hiding underneath it. */
+  :root[data-panel="open"] .rc-dock,
+  :root[data-panel="open"] .rc-hud,
+  :root[data-panel="open"] .rc-turn,
+  :root[data-panel="open"] .rc-alert,
+  :root[data-panel="open"] .rc-status,
+  :root[data-panel="open"] .rc-pick-card {
+    left: calc(var(--safe-l) + var(--gut) + min(400px, 82vw) + 8px);
+  }
+}
 
 /* ============================================================
    Form
    ============================================================ */
-.rc-form { display: flex; flex-direction: column; gap: 14px; }
+.rc-form { display: flex; flex-direction: column; gap: 12px; }
+.rc-field-group { display: flex; flex-direction: column; gap: 6px; position: relative; }
+.rc-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 .rc-label {
-  display: block;
-  font-family: var(--mono);
-  font-size: .68rem;
+  font-size: 10.5px;
+  font-weight: 700;
   letter-spacing: .09em;
   text-transform: uppercase;
-  color: var(--faint);
-  margin-bottom: 6px;
+  color: var(--muted);
 }
 
-.rc-field-group { position: relative; min-width: 0; }
-.rc-field-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; }
-.rc-depart-at-group:has(#depart-at[hidden]) { display: none; }
-.rc-field-row:has(.rc-depart-at-group[style*="display: none"]),
-.rc-field-row:has(#depart-at[hidden]) { grid-template-columns: 1fr; }
-
-.rc-input-row { display: flex; gap: 6px; }
-
-.rc-input, .rc-select {
-  width: 100%;
-  min-width: 0;
-  font: inherit;
-  font-size: .92rem;
-  padding: 9px 11px;
+.rc-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   background: var(--surface-2);
-  color: var(--ink);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  transition: border-color .16s var(--ease), background-color .16s var(--ease);
+  border-radius: var(--radius);
+  padding: 3px 4px 3px 10px;
+  transition: border-color .15s var(--ease);
+}
+.rc-input-row:focus-within { border-color: var(--matcha); }
+
+.rc-input-dot {
+  flex: none;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--matcha);
+}
+.rc-input-dot-end { border-radius: 2px; background: var(--matcha); }
+
+.rc-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  /* 16px keeps iOS from zooming the whole page on focus. */
+  font-size: 16px;
+  font-family: inherit;
+  padding: 9px 2px;
+  outline: none;
 }
 .rc-input::placeholder { color: var(--faint); }
-.rc-input:focus, .rc-select:focus { border-color: var(--matcha); outline: none; }
-.rc-select { cursor: pointer; }
 
 .rc-inputbtn {
   flex: none;
-  display: grid; place-items: center;
-  width: 38px;
-  background: var(--surface-2);
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  display: grid; place-items: center;
   cursor: pointer;
-  transition: color .16s var(--ease), border-color .16s var(--ease);
 }
-.rc-inputbtn:hover { color: var(--matcha); border-color: var(--line-strong); }
-.rc-inputbtn svg { width: 16px; height: 16px; }
+.rc-inputbtn svg { width: 18px; height: 18px; }
+.rc-inputbtn:hover { background: var(--surface); color: var(--ink); }
+.rc-inputbtn.is-active { background: var(--matcha-soft); color: var(--matcha); border-color: var(--matcha); }
 
-.rc-swap-row { display: flex; justify-content: flex-end; margin: -6px 0; }
-.rc-swap { width: 30px; height: 30px; border-radius: 50%; }
+.rc-swap-row { position: relative; display: flex; justify-content: flex-end; padding-right: 8px; height: 4px; }
+.rc-swap-line {
+  position: absolute;
+  left: 14px; top: -8px; bottom: -8px;
+  width: 2px;
+  background: var(--line-strong);
+  border-radius: 1px;
+}
+.rc-swap {
+  position: absolute;
+  top: -18px;
+  right: 8px;
+  width: 34px; height: 34px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  z-index: 2;
+}
 
-/* results dropdowns */
 .rc-results {
   list-style: none;
-  position: absolute;
-  left: 0; right: 0; top: calc(100% + 4px);
-  z-index: 25;
   background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   box-shadow: var(--shadow);
-  max-height: 240px;
+  max-height: 244px;
   overflow-y: auto;
-  padding: 4px;
+  overscroll-behavior: contain;
 }
 .rc-results[hidden] { display: none; }
 
 .rc-result {
+  padding: 9px 12px;
+  cursor: pointer;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 1px;
-  min-height: 44px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  cursor: pointer;
+  border-bottom: 1px solid var(--line);
 }
-.rc-result:hover, .rc-result.is-active {
-  background: var(--surface-2);
+.rc-result:last-child { border-bottom: 0; }
+.rc-result:hover, .rc-result.is-active { background: var(--matcha-soft); }
+.rc-result-name {
+  font-size: 13.5px; font-weight: 600;
+  display: flex; align-items: center; gap: 6px;
 }
-.rc-result-name { font-size: .88rem; color: var(--ink); }
-.rc-result-addr {
-  font-size: .76rem;
-  color: var(--faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.rc-result-addr { font-size: 11.5px; color: var(--muted); }
+.rc-result-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--matcha-soft);
+  color: var(--matcha);
+  flex: none;
 }
+.rc-result-tag.is-coord { background: var(--rc-clear-soft); color: var(--rc-clear); }
 
-/* stops */
-.rc-stops { display: flex; flex-direction: column; gap: 8px; }
-.rc-stop-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  position: relative;
-}
-.rc-stop-row input {
-  flex: 1 1 auto;
-  min-width: 0;
-  font: inherit;
-  font-size: .88rem;
-  padding: 8px 10px;
-  background: var(--surface-2);
-  color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-}
-.rc-stop-row input:focus { border-color: var(--matcha); outline: none; }
+.rc-stops { display: flex; flex-direction: column; gap: 10px; }
+.rc-stop-row { display: flex; align-items: flex-start; gap: 6px; }
+.rc-stop-row .rc-field-group { flex: 1; min-width: 0; }
 .rc-stop-remove {
   flex: none;
-  display: grid; place-items: center;
-  width: 30px; height: 30px;
-  background: transparent;
+  width: 36px; height: 44px;
+  border: 0; background: transparent;
   color: var(--faint);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: color .16s var(--ease), border-color .16s var(--ease);
+  display: grid; place-items: center;
 }
-.rc-stop-remove:hover { color: var(--rc-danger); border-color: var(--rc-danger); }
-.rc-stop-remove svg { width: 14px; height: 14px; }
+.rc-stop-remove svg { width: 17px; height: 17px; }
+.rc-stop-remove:hover { color: var(--rc-danger); }
+.rc-stop-pick svg { width: 18px; height: 18px; }
 
-.rc-textbtn {
-  align-self: flex-start;
-  display: inline-flex; align-items: center; gap: 6px;
-  background: none; border: none;
-  color: var(--matcha);
-  font-size: .85rem; font-weight: 500;
-  cursor: pointer;
-  padding: 2px 0;
-}
-.rc-textbtn:hover { color: var(--matcha-hover); }
-.rc-textbtn svg { width: 14px; height: 14px; }
-
-/* segmented control */
 .rc-segmented {
-  display: flex;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 3px;
-  gap: 3px;
-}
-.rc-seg-btn {
-  flex: 1;
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 7px 8px;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  color: var(--muted);
-  font-size: .85rem;
-  cursor: pointer;
-  transition: color .16s var(--ease), background-color .16s var(--ease);
-}
-.rc-seg-btn svg { width: 15px; height: 15px; }
-.rc-seg-btn:hover { color: var(--ink); }
-.rc-seg-btn[aria-pressed="true"] {
-  background: var(--surface);
-  color: var(--matcha);
-  box-shadow: var(--shadow-sm);
-}
-
-.rc-form-actions {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-top: 4px;
-}
-.rc-btn-primary {
-  font: inherit; font-size: .92rem; font-weight: 500;
-  padding: 10px 22px;
-  background: var(--matcha);
-  color: var(--matcha-ink);
-  border: none;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background-color .18s var(--ease), transform .18s var(--ease);
-}
-.rc-btn-primary:hover { background: var(--matcha-hover); }
-.rc-btn-primary:active { transform: translateY(1px); }
-.rc-btn-primary:disabled { opacity: .55; cursor: default; }
-
-/* ============================================================
-   Summary card
-   ============================================================ */
-.rc-summary {
-  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  padding: 4px;
+}
+.rc-seg-btn {
+  height: 40px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.rc-seg-btn svg { width: 19px; height: 19px; }
+.rc-seg-btn[aria-pressed="true"] { background: var(--matcha); color: var(--matcha-ink); }
+
+.rc-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 2px 0;
+}
+.rc-check input { width: 17px; height: 17px; accent-color: var(--matcha); }
+
+.rc-field-hint { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+.rc-field-hint code {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.rc-select {
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 15px;
+  padding: 0 10px;
+}
+
+.rc-form-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+.rc-btn-primary {
+  height: 46px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--matcha);
+  color: var(--matcha-ink);
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s var(--ease), transform .12s var(--ease);
+}
+.rc-btn-primary:hover { background: var(--matcha-hover); }
+.rc-btn-primary:active { transform: scale(.98); }
+.rc-btn-primary:disabled { opacity: .55; cursor: default; }
+
+.rc-textbtn {
+  border: 0;
+  background: transparent;
+  color: var(--matcha);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 2px;
+  min-height: 40px;
+}
+.rc-textbtn svg { width: 17px; height: 17px; }
+.rc-textbtn:hover { color: var(--matcha-hover); }
+.rc-textbtn-quiet { color: var(--muted); }
+.rc-textbtn-quiet:hover { color: var(--rc-danger); }
+
+/* ============================================================
+   Panel content blocks
+   ============================================================ */
+.rc-block { display: flex; flex-direction: column; gap: 10px; }
+
+.rc-section-h {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rc-section-h svg { width: 15px; height: 15px; }
+
+.rc-empty {
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 1.55;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.rc-empty[hidden] { display: none; }
+
+.rc-summary {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
 }
 .rc-summary[hidden] { display: none; }
-
-.rc-summary-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.rc-summary-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; min-width: 0; }
-.rc-summary-top .rc-badge { flex: 1 1 100%; min-width: 0; max-width: 100%; }
-/* Every live number — speed, distance, ETA, grade — is tabular so the digits
-   do not shuffle sideways as they change. Poppins ships the feature; without
-   it a speedometer counting 88 -> 89 visibly twitches. */
-.rc-nav-speed, .rc-nav-remaining, .rc-nav-eta, .rc-nav-tile-v,
-.rc-summary-stat, .rc-fact-v, .rc-chip-temp, .rc-chip-time, .rc-marker-temp,
-.rc-pick-coord, .rc-nav-step-dist {
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
-}
-
+.rc-summary-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.rc-summary-stats { display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .rc-summary-stat {
-  font-family: var(--serif);
-  font-size: 1.05rem;
-  color: var(--ink);
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -.025em;
+  font-variant-numeric: tabular-nums;
 }
-.rc-summary-rain { font-size: .84rem; color: var(--muted); }
+.rc-summary-stat:not(:first-child) { color: var(--muted); font-size: 14.5px; font-weight: 600; }
+.rc-summary-note, .rc-summary-rain { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.rc-summary-actions { display: flex; justify-content: flex-end; }
 
 .rc-advice-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
-.rc-advice {
-  display: flex; align-items: flex-start; gap: 8px;
-  font-size: .84rem;
+.rc-advice, .rc-reason {
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding-left: 15px;
+  position: relative;
   color: var(--ink-soft);
 }
-.rc-advice::before {
+.rc-advice::before, .rc-reason::before {
   content: "";
-  flex: none;
+  position: absolute;
+  left: 2px; top: 8px;
   width: 5px; height: 5px;
-  margin-top: 7px;
   border-radius: 50%;
   background: var(--matcha);
 }
+.rc-reason::before { background: var(--rc-caution); }
 
-.rc-reason {
-  font-size: .84rem;
-  color: var(--ink-soft);
-  padding-left: 14px;
-  position: relative;
-}
-.rc-reason::before {
-  content: "–";
-  position: absolute; left: 0;
-  color: var(--faint);
-}
-
-/* ============================================================
-   Badges (risk level)
-   ============================================================ */
 .rc-badge {
-  display: inline-flex; align-items: flex-start; gap: 6px;
-  font-size: .74rem; font-weight: 600;
-  letter-spacing: .02em;
-  padding: 4px 11px;
-  border-radius: 14px;
-  white-space: normal;
-  max-width: 100%;
-  min-width: 0;
-  overflow-wrap: break-word;
-  word-break: break-word;
-  text-align: left;
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  white-space: nowrap;
 }
 .rc-badge:empty { display: none; }
-.rc-badge::before {
-  content: "";
-  flex: none;
-  width: 6px; height: 6px;
-  margin-top: 5px;
-  border-radius: 50%;
-  background: currentColor;
-}
 .rc-badge.is-clear   { background: var(--rc-clear-soft);   color: var(--rc-clear); }
 .rc-badge.is-watch   { background: var(--rc-watch-soft);   color: var(--rc-watch); }
 .rc-badge.is-caution { background: var(--rc-caution-soft); color: var(--rc-caution); }
 .rc-badge.is-danger  { background: var(--rc-danger-soft);  color: var(--rc-danger); }
 
-/* ============================================================
-   Alternative routes
-   ============================================================ */
-.rc-alts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.rc-alts:empty { display: none; }
-
-.rc-alt {
-  flex: 1 1 auto;
-  min-width: 130px;
-  text-align: left;
-  padding: 9px 12px;
-  background: var(--surface-2);
+.rc-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 7px; }
+.rc-fact {
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: border-color .16s var(--ease), background-color .16s var(--ease);
-}
-.rc-alt:hover { border-color: var(--line-strong); }
-.rc-alt.is-active {
-  border-color: var(--matcha);
-  background: var(--matcha-soft);
-}
-.rc-alt-name { display: block; font-size: .85rem; font-weight: 500; color: var(--ink); }
-.rc-alt-meta { display: block; font-size: .76rem; color: var(--muted); margin-top: 2px; }
-
-/* ============================================================
-   Departure planner
-   ============================================================ */
-.rc-depart-planner {
+  padding: 7px 9px;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 1px;
 }
-.rc-depart-planner:empty { display: none; }
+.rc-fact-k { font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.rc-fact-v { font-family: var(--display); font-size: 14px; font-weight: 600; letter-spacing: -.02em; }
+.rc-fact-sub { font-size: 10.5px; color: var(--faint); }
+.rc-fact.is-clear   .rc-fact-v { color: var(--rc-clear); }
+.rc-fact.is-watch   .rc-fact-v { color: var(--rc-watch); }
+.rc-fact.is-caution .rc-fact-v { color: var(--rc-caution); }
+.rc-fact.is-danger  .rc-fact-v { color: var(--rc-danger); }
 
-.rc-offset {
-  flex: none;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  min-width: 46px;
-  padding: 8px 6px;
-  background: var(--surface-2);
+/* ---------- alternatives ---------- */
+.rc-alts { display: flex; flex-direction: column; gap: 7px; }
+.rc-alts[hidden] { display: none; }
+.rc-alt {
+  text-align: left;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 10px 12px;
   cursor: pointer;
-  transition: border-color .16s var(--ease), background-color .16s var(--ease);
-}
-.rc-offset:hover { border-color: var(--line-strong); }
-.rc-offset.is-active { border-color: var(--matcha); background: var(--matcha-soft); }
-.rc-offset.is-best { box-shadow: 0 0 0 1.5px var(--rc-clear) inset; }
-.rc-offset-h { font-size: .76rem; font-weight: 500; color: var(--ink-soft); }
-.rc-offset-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); }
-/* The dot IS the answer — it is what makes a row of departure times readable
-   at a glance. It had no colour rule at all, so every option showed the same
-   blank circle and the planner said nothing. */
-.rc-offset.is-clear   .rc-offset-dot { background: var(--rc-clear); }
-.rc-offset.is-watch   .rc-offset-dot { background: var(--rc-watch); }
-.rc-offset.is-caution .rc-offset-dot { background: var(--rc-caution); }
-.rc-offset.is-danger  .rc-offset-dot { background: var(--rc-danger); }
-
-.rc-planner-label {
-  font-family: var(--mono);
-  font-size: .68rem;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--faint);
-  margin-bottom: 6px;
-  flex: 0 0 100%;
-}
-.rc-planner-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
-.rc-planner-hint {
-  display: flex; align-items: center; gap: 6px;
-  font-size: .8rem; color: var(--muted);
-  margin-top: 6px;
-  flex: 0 0 100%;
-}
-.rc-planner-hint svg { width: 14px; height: 14px; flex: none; }
-
-/* ============================================================
-   Timeline / checkpoint chips
-   ============================================================ */
-.rc-timeline {
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-  overflow-x: auto;
-  overflow-y: visible;
-  padding: 4px 2px 10px;
-  margin: -4px -2px 0;
-  scroll-snap-type: x proximity;
-  flex-shrink: 0;
-}
-.rc-timeline:empty { display: none; }
-
-.rc-chip {
-  scroll-snap-align: start;
-  flex: none;
-  width: 108px;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding: 10px 10px 9px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  text-align: left;
-  transition: border-color .16s var(--ease), background-color .16s var(--ease), transform .16s var(--ease);
 }
-.rc-chip:hover { transform: translateY(-1px); }
-.rc-chip.is-selected { background: var(--surface); box-shadow: var(--shadow); }
+.rc-alt.is-active { border-color: var(--matcha); background: var(--matcha-soft); }
+.rc-alt-name { font-size: 13.5px; font-weight: 600; }
+.rc-alt-meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rc-alt-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px; }
+.rc-alt-tag {
+  font-size: 10px; font-weight: 600;
+  padding: 2px 7px; border-radius: 999px;
+  background: var(--surface); color: var(--muted);
+}
+.rc-alt-tag.is-danger { background: var(--rc-danger-soft); color: var(--rc-danger); }
+.rc-alt-tag.is-clear { background: var(--rc-clear-soft); color: var(--rc-clear); }
 
-.rc-chip.is-clear   { border-left-color: var(--rc-clear); }
+/* ---------- departure planner ---------- */
+.rc-depart-planner { display: flex; flex-direction: column; gap: 7px; }
+.rc-depart-planner[hidden] { display: none; }
+.rc-planner-label { font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.rc-planner-row { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 3px; scrollbar-width: none; }
+.rc-planner-row::-webkit-scrollbar { display: none; }
+.rc-offset {
+  flex: none;
+  width: 50px;
+  padding: 7px 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.rc-offset-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rc-clear); }
+.rc-offset.is-watch   .rc-offset-dot { background: var(--rc-watch); }
+.rc-offset.is-caution .rc-offset-dot { background: var(--rc-caution); }
+.rc-offset.is-danger  .rc-offset-dot { background: var(--rc-danger); }
+.rc-offset-h { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rc-offset.is-active { border-color: var(--matcha); background: var(--matcha-soft); }
+.rc-offset.is-best { border-color: var(--rc-clear); }
+.rc-planner-hint { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.rc-planner-hint svg { width: 15px; height: 15px; flex: none; }
+
+/* ---------- timeline ---------- */
+.rc-timeline { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.rc-chip {
+  flex: none;
+  width: 92px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--rc-clear);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
 .rc-chip.is-watch   { border-left-color: var(--rc-watch); }
 .rc-chip.is-caution { border-left-color: var(--rc-caution); }
 .rc-chip.is-danger  { border-left-color: var(--rc-danger); }
+.rc-chip.is-selected { border-color: var(--matcha); background: var(--matcha-soft); }
+.rc-chip-day { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.rc-chip-time { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rc-chip-icon svg { width: 22px; height: 22px; }
+.rc-chip-temp { font-family: var(--display); font-size: 15px; font-weight: 700; letter-spacing: -.02em; }
+.rc-chip-place { font-size: 10.5px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-chip-meta { font-size: 10px; color: var(--faint); }
 
-.rc-chip-day  { font-family: var(--mono); font-size: .64rem; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
-.rc-chip-time { font-size: .82rem; font-weight: 600; color: var(--ink); }
-.rc-chip-icon { width: 22px; height: 22px; color: var(--matcha); margin: 1px 0; }
-.rc-chip-icon svg { width: 100%; height: 100%; }
-.rc-chip-temp { font-family: var(--serif); font-size: 1.15rem; color: var(--ink); line-height: 1; }
-.rc-chip-place {
-  font-size: .72rem; color: var(--muted);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.rc-chip-meta { font-size: .68rem; color: var(--faint); }
-.rc-chip-dist { font-family: var(--mono); font-size: .66rem; color: var(--faint); margin-top: 1px; }
-
-/* ============================================================
-   Checkpoint detail panel
-   ============================================================ */
+/* ---------- checkpoint detail ---------- */
 .rc-details {
-  padding: 14px 16px;
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 .rc-details[hidden] { display: none; }
+.rc-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.rc-detail-head h3 { font-size: 15px; font-weight: 600; }
+.rc-detail-grid { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; font-size: 12.5px; }
+.rc-detail-k { color: var(--muted); }
+.rc-detail-v { text-align: right; font-variant-numeric: tabular-nums; }
+.rc-details ul { list-style: none; display: flex; flex-direction: column; gap: 5px; }
 
-.rc-detail-head {
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
-  flex-wrap: wrap;
+/* ---------- saved routes and marks ---------- */
+.rc-saved-list { display: flex; flex-direction: column; gap: 6px; }
+.rc-saved-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  overflow: hidden;
 }
-.rc-detail-head .rc-badge { flex: 1 1 100%; min-width: 0; }
-
-.rc-detail-grid {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 5px 12px;
+.rc-saved-load {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
-.rc-detail-k {
-  font-family: var(--mono);
-  font-size: .68rem;
-  letter-spacing: .06em;
-  text-transform: uppercase;
+.rc-saved-load:hover { background: var(--matcha-soft); }
+.rc-saved-name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-saved-meta { font-size: 11px; color: var(--muted); }
+.rc-saved-del, .rc-saved-act {
+  flex: none;
+  width: 40px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
   color: var(--faint);
+  cursor: pointer;
+  display: grid; place-items: center;
 }
-.rc-detail-v { font-size: .86rem; color: var(--ink-soft); min-width: 0; overflow-wrap: break-word; word-break: break-word; }
+.rc-saved-del svg, .rc-saved-act svg { width: 16px; height: 16px; }
+.rc-saved-del:hover { color: var(--rc-danger); background: var(--rc-danger-soft); }
+.rc-saved-act:hover { color: var(--matcha); background: var(--matcha-soft); }
 
-.rc-reason-list, .rc-advice-detail-list { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.rc-mark-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 
-/* ============================================================
-   Legend + attribution
-   ============================================================ */
-.rc-legend {
-  display: flex; flex-wrap: wrap; gap: 12px;
-  font-size: .78rem; color: var(--muted);
+.rc-history-summary { font-size: 12.5px; }
+.rc-history-empty { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.rc-history-actions { display: flex; justify-content: flex-start; }
+
+/* ---------- elevation ---------- */
+.rc-elev {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px 6px;
 }
-.rc-legend-item { display: inline-flex; align-items: center; gap: 6px; }
-.rc-legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.rc-legend-dot[data-level="clear"]   { background: var(--rc-clear); }
+.rc-elev[hidden] { display: none; }
+.rc-elev-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.rc-elev-title { font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.rc-elev-meta { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.rc-elev-svg { display: block; width: 100%; height: 66px; }
+.rc-elev-area { fill: var(--matcha-soft); }
+.rc-elev-line { fill: none; stroke: var(--matcha); stroke-width: 1.6; stroke-linejoin: round; }
+.rc-elev-here { stroke: var(--rc-danger); stroke-width: 1.6; stroke-dasharray: 3 2; }
+
+/* ---------- legend + attribution ---------- */
+.rc-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11.5px; color: var(--muted); }
+.rc-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.rc-legend-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--rc-clear); }
 .rc-legend-dot[data-level="watch"]   { background: var(--rc-watch); }
 .rc-legend-dot[data-level="caution"] { background: var(--rc-caution); }
 .rc-legend-dot[data-level="danger"]  { background: var(--rc-danger); }
 
-.rc-attrib {
-  font-size: .72rem;
-  color: var(--faint);
-  line-height: 1.6;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
-.rc-attrib a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
-.rc-attrib a:hover { color: var(--matcha); }
-
-/* ============================================================
-   Leaflet chrome overrides
-   ============================================================ */
-.leaflet-container {
-  background: var(--surface-2);
-  font-family: var(--sans);
-}
-.leaflet-control-zoom a {
-  background: var(--surface) !important;
-  color: var(--ink) !important;
-  border-color: var(--line) !important;
-}
-.leaflet-top.leaflet-left {
-  margin-top: calc(10px + env(safe-area-inset-top));
-  margin-left: calc(10px + env(safe-area-inset-left));
-}
-.leaflet-bottom.leaflet-left {
-  margin-bottom: calc(10px + env(safe-area-inset-bottom));
-  margin-left: calc(10px + env(safe-area-inset-left));
-}
-.leaflet-bottom.leaflet-right {
-  margin-bottom: calc(10px + env(safe-area-inset-bottom));
-  margin-right: calc(10px + env(safe-area-inset-right));
-}
-.leaflet-control-zoom a:hover { background: var(--surface-2) !important; }
-.leaflet-bar { border: 1px solid var(--line) !important; box-shadow: var(--shadow-sm) !important; }
-.leaflet-control-attribution {
-  background: color-mix(in srgb, var(--surface) 88%, transparent) !important;
-  color: var(--faint) !important;
-  border-radius: var(--radius-sm) 0 0 0;
-}
-.leaflet-control-attribution a { color: var(--muted) !important; }
-.leaflet-popup-content-wrapper {
-  background: var(--surface) !important;
-  color: var(--ink) !important;
-  border-radius: var(--radius-sm) !important;
-  box-shadow: var(--shadow) !important;
-}
-.leaflet-popup-tip { background: var(--surface) !important; }
-.leaflet-popup-content { font-family: var(--sans); font-size: .85rem; }
+.rc-attrib { font-size: 10.5px; color: var(--faint); line-height: 1.6; }
+.rc-attrib a { text-decoration: underline; text-underline-offset: 2px; }
 
 /* ============================================================
    Map markers — pinned to the ground, not floating
    ============================================================ */
+.rc-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  position: relative;
+  transform: rotate(calc(-1 * var(--rc-bearing, 0deg)));
+}
+.rc-marker-icon svg { width: 15px; height: 15px; display: block; }
+.rc-marker-temp { font-variant-numeric: tabular-nums; }
+.rc-marker-stem {
+  position: absolute;
+  left: 50%; bottom: -5px;
+  width: 2px; height: 5px;
+  margin-left: -1px;
+  background: var(--line-strong);
+}
+.rc-marker.is-clear   { border-color: var(--rc-clear);   color: var(--rc-clear); }
+.rc-marker.is-watch   { border-color: var(--rc-watch);   color: var(--rc-watch); }
+.rc-marker.is-caution { border-color: var(--rc-caution); color: var(--rc-caution); }
+.rc-marker.is-danger  { border-color: var(--rc-danger);  color: var(--rc-danger); }
+.rc-marker.is-selected { outline: 2px solid var(--matcha); outline-offset: 1px; }
 
-/* .rc-dot — a small checkpoint mark at every sampled coordinate.
-   iconAnchor is set by app.js to the element's centre. */
+.rc-marker-pin {
+  display: block;
+  color: var(--matcha);
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .3));
+  transform: rotate(calc(-1 * var(--rc-bearing, 0deg)));
+  transform-origin: 50% 93%;
+  background: none;
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+}
+.rc-marker-pin svg { width: 30px; height: 30px; display: block; }
+.rc-marker-start { color: var(--rc-clear); }
+.rc-marker-end { color: var(--rc-danger); }
+.rc-marker-stop { color: var(--rc-watch); }
+.rc-marker-mark { color: var(--matcha); }
+
 .rc-dot {
   display: block;
   width: 10px; height: 10px;
   border-radius: 50%;
   background: var(--rc-clear);
   border: 2px solid var(--surface);
-  box-shadow: 0 1px 3px rgba(20, 18, 15, .35);
+  box-shadow: var(--shadow-sm);
 }
-.rc-dot.is-clear   { background: var(--rc-clear); }
 .rc-dot.is-watch   { background: var(--rc-watch); }
 .rc-dot.is-caution { background: var(--rc-caution); }
 .rc-dot.is-danger  { background: var(--rc-danger); }
-.rc-dot.is-selected {
-  width: 13px; height: 13px;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 12%, transparent), 0 1px 3px rgba(20, 18, 15, .4);
-}
+.rc-dot.is-selected { outline: 2px solid var(--matcha); outline-offset: 1px; }
 
-/* .rc-marker — a chip drawn only for checkpoints that survive decluttering.
-   iconAnchor is set by app.js to [x, height] so the stem tip lands exactly
-   on the coordinate: the chip body sits above it, solid and grounded. */
-.rc-marker {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 9px 5px 6px;
-  margin-bottom: 7px; /* room for the stem */
-  background: var(--surface);
-  border: 1.5px solid var(--rc-clear);
-  border-radius: 999px;
-  box-shadow: 0 3px 8px -2px rgba(20, 18, 15, .38), 0 1px 2px rgba(20, 18, 15, .22);
-  font-family: var(--sans);
-  font-size: .72rem;
-  font-weight: 600;
-  color: var(--ink);
-  white-space: nowrap;
-}
-.rc-marker-stem {
-  position: absolute;
-  left: 50%; top: 100%;
-  width: 8px; height: 8px;
-  margin-left: -4px;
-  margin-top: -4px;
-  background: var(--surface);
-  border-right: 1.5px solid var(--rc-clear);
-  border-bottom: 1.5px solid var(--rc-clear);
-  transform: rotate(45deg);
-  border-radius: 0 0 2px 0;
-  z-index: -1;
-}
-.rc-marker-icon { width: 15px; height: 15px; display: grid; place-items: center; color: var(--muted); flex: none; }
-.rc-marker-icon svg { width: 100%; height: 100%; }
-.rc-marker-temp { line-height: 1; }
-
-.rc-marker.is-clear,   .rc-marker.is-clear   .rc-marker-stem { border-color: var(--rc-clear); }
-.rc-marker.is-watch,   .rc-marker.is-watch   .rc-marker-stem { border-color: var(--rc-watch); }
-.rc-marker.is-caution, .rc-marker.is-caution .rc-marker-stem { border-color: var(--rc-caution); }
-.rc-marker.is-danger,  .rc-marker.is-danger  .rc-marker-stem { border-color: var(--rc-danger); }
-.rc-marker.is-clear   .rc-marker-icon { color: var(--rc-clear); }
-.rc-marker.is-watch   .rc-marker-icon { color: var(--rc-watch); }
-.rc-marker.is-caution .rc-marker-icon { color: var(--rc-caution); }
-.rc-marker.is-danger  .rc-marker-icon { color: var(--rc-danger); }
-
-.rc-marker.is-selected {
-  border-width: 2px;
-  box-shadow: 0 5px 12px -2px rgba(20, 18, 15, .45), 0 1px 3px rgba(20, 18, 15, .3);
-  z-index: 2;
-}
-
-.rc-marker-start, .rc-marker-end,
-.rc-marker-pin.rc-marker-start, .rc-marker-pin.rc-marker-end {
-  background: var(--matcha);
-  color: var(--matcha-ink);
-  border-color: var(--matcha);
-}
-.rc-marker-start .rc-marker-icon,
-.rc-marker-end .rc-marker-icon { color: var(--matcha-ink); }
-.rc-marker-start .rc-marker-stem, .rc-marker-end .rc-marker-stem {
-  background: var(--matcha);
-  border-color: var(--matcha);
-}
-
-/* .rc-rider — you, on the map. The arrow points at your course in MAP space,
-   so course-up (which rotates the map by minus that course) shows it upright
-   without a second calculation. */
-.rc-rider {
-  display: block;
-  width: 26px; height: 26px;
-  color: var(--matcha);
-  filter: drop-shadow(0 1px 2px rgba(20, 18, 15, .5));
-  transform-origin: 50% 50%;
-}
-.rc-rider svg {
-  width: 100%; height: 100%;
-  stroke: var(--surface);
-  stroke-width: 1.6;
-  stroke-linejoin: round;
-}
-
-/* legacy pin-style start/end divIcon (kept for compatibility) */
-.rc-marker-pin {
-  display: grid; place-items: center;
-  width: 30px; height: 30px;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
-  background: var(--matcha);
-  color: var(--matcha-ink);
-  border: 2px solid var(--surface);
-  box-shadow: 0 3px 8px -2px rgba(20, 18, 15, .4);
-}
-.rc-marker-pin svg { width: 15px; height: 15px; transform: rotate(45deg); }
-
-/* ============================================================
-   Floating map controls
-   ============================================================ */
-.rc-map-controls {
-  position: absolute;
-  right: calc(12px + env(safe-area-inset-right));
-  /* These overlays are children of the map wrapper, which is its own stacking
-     context, so they compete with Leaflet's panes (up to 700) and controls
-     (800) rather than with the page. Everything RouteCast draws over the map
-     sits above all of it. */
-  z-index: 900;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-  transition: bottom .28s var(--ease);
-  padding: 2px;
-
-  /* The stack wants to sit just above the sheet — but "just above the sheet"
-     stops being a place once the sheet is open over 92% of the screen: the
-     buttons were pushed clean off the map and behind the header, where they
-     were unclickable while still reporting themselves as visible. The clamp
-     keeps that intent as the PREFERRED value while guaranteeing the top of
-     the stack never rises past the top of the map. --rc-controls-h is the
-     stack's real rendered height, kept current by updateSheetVars in app.js;
-     the fallback covers the first paint before it is written. */
-  bottom: clamp(
-    calc(12px + env(safe-area-inset-bottom)),
-    calc(var(--sheet-h, 150px) + 12px),
-    calc(100% - 12px - var(--rc-controls-h, 260px))
-  );
-  max-height: calc(100% - 24px);
-  overflow-y: auto;
-  scrollbar-width: none;
-}
-.rc-map-controls::-webkit-scrollbar { display: none; }
-@media (prefers-reduced-motion: reduce) {
-  .rc-map-controls { transition: none; }
-}
-/* On desktop the panel is a sidebar, so --sheet-h is 0 and the clamp above
-   already resolves to the bottom-right corner. Nothing to override. */
-
-.rc-mapbtn {
-  display: grid; place-items: center;
-  width: 44px; height: 44px;
-  background: var(--surface);
-  color: var(--ink-soft);
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  box-shadow: var(--shadow);
-  cursor: pointer;
-  transition: color .16s var(--ease), border-color .16s var(--ease), background-color .16s var(--ease);
-}
-.rc-mapbtn:hover { color: var(--matcha); border-color: var(--line-strong); }
-.rc-mapbtn:active { transform: translateY(1px); }
-.rc-mapbtn svg { width: 19px; height: 19px; }
-.rc-mapbtn[hidden] { display: none; }
-/* The needle points at true north, so in course-up it swings with the map. */
-.rc-compass-needle { transform: rotate(var(--rc-bearing, 0deg)); }
-.rc-compass-tail { opacity: .45; }
-#ctl-compass[data-mode="course"] {
-  color: var(--matcha);
-  border-color: var(--matcha);
-}
-@media (prefers-reduced-motion: reduce) {
-  html[data-rotate="on"] .rc-map { transition: none; }
-}
-
-/* Zoom is a pair, so it reads as one control: shorter buttons, joined into a
-   single pill, sitting above the round ones. */
-.rc-mapbtn-sm { height: 36px; border-radius: var(--radius); }
-#ctl-zoom-in {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-  border-bottom-width: 0;
-}
-#ctl-zoom-out {
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
-}
-.rc-map-controls #ctl-zoom-in + #ctl-zoom-out { margin-top: -8px; }
-.rc-mapbtn-sm svg { width: 17px; height: 17px; }
-
-/* The one button that starts something. */
-.rc-mapbtn-go,
-#ctl-nav { color: var(--matcha-ink); background: var(--matcha); border-color: var(--matcha); }
-.rc-mapbtn-go:hover,
-#ctl-nav:hover { background: var(--matcha-hover); color: var(--matcha-ink); border-color: var(--matcha-hover); }
-
-/* Leaflet's own zoom control is no longer created (see initMap in app.js):
-   it lives inside the rotated map element, so course-up left it tilted and
-   pushed off screen. RouteCast's buttons in #map-controls sit outside that
-   element and work in both modes. Belt and braces in case a plugin adds one. */
-.leaflet-control-zoom { display: none !important; }
+.rc-rider { display: block; color: var(--matcha); filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .45)); }
+.rc-rider svg { width: 26px; height: 26px; display: block; }
 
 /* ============================================================
    Centre-pin place picker
    ============================================================ */
-.rc-pick { position: absolute; inset: 0; z-index: 920; pointer-events: none; }
-.rc-pick[hidden], .rc-pick-card[hidden] { display: none; }
+.rc-pick { position: absolute; inset: 0; z-index: 560; pointer-events: none; }
+.rc-pick[hidden] { display: none; }
 
 .rc-pick-pin {
   position: absolute;
-  left: 50%;
-  top: calc((100% - var(--sheet-h, 150px)) / 2);
+  left: 50%; top: 50%;
   transform: translate(-50%, -100%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   color: var(--matcha);
-  pointer-events: none;
-  transition: transform .12s var(--ease);
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .35));
+  transition: transform .14s var(--ease);
 }
-@media (prefers-reduced-motion: reduce) {
-  .rc-pick-pin { transition: none; }
-}
-.rc-pick-pin svg {
-  width: 40px; height: 40px;
-  filter: drop-shadow(0 3px 4px rgba(20, 18, 15, .35));
-  transition: transform .12s var(--ease);
-}
+.rc-pick-pin svg { width: 40px; height: 40px; display: block; }
+.rc-pick-pin.is-moving { transform: translate(-50%, -112%); }
 .rc-pick-shadow {
-  display: block;
-  width: 14px; height: 5px;
-  margin-top: -3px;
+  position: absolute;
+  left: 50%; top: 100%;
+  transform: translate(-50%, -2px);
+  width: 10px; height: 4px;
   border-radius: 50%;
-  background: rgba(20, 18, 15, .3);
-  transition: transform .12s var(--ease), opacity .12s var(--ease);
-}
-.rc-pick-pin.is-moving { transform: translate(-50%, -114%); }
-.rc-pick-pin.is-moving svg { transform: translateY(-6px); }
-.rc-pick-pin.is-moving .rc-pick-shadow { transform: scale(.55); opacity: .55; }
-
-@media (min-width: 821px) {
-  /* desktop: panel is a sidebar beside the map, not a sheet over it */
-  .rc-pick-pin { top: 50%; }
-  .rc-pick-card { left: 0; right: auto; max-width: 380px; margin: 0 0 20px 20px; border-radius: var(--radius-lg); border: 1px solid var(--line); bottom: 0; }
+  background: rgba(0, 0, 0, .35);
 }
 
 .rc-pick-card {
   position: absolute;
-  left: 0; right: 0; bottom: 0;
-  /* Above the bottom sheet (z-index 20), which it deliberately covers while
-     a point is being placed. */
-  z-index: 45;
-  pointer-events: auto;
-  margin: 0 auto;
-  max-width: 480px;
-  padding: 16px 18px calc(16px + env(safe-area-inset-bottom));
-  background: var(--surface);
-  border-top: 1px solid var(--line);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  box-shadow: var(--shadow-lg);
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  bottom: calc(var(--safe-b) + var(--gut));
+  max-width: 520px;
+  margin-inline: auto;
+  z-index: 720;
+  border-radius: 14px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
-.rc-pick-title {
-  font-family: var(--mono);
-  font-size: .68rem;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--faint);
-  margin-bottom: 4px;
-}
-.rc-pick-label {
-  font-family: var(--serif);
-  font-size: 1.1rem;
-  font-weight: 500;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.rc-pick-sub {
-  font-size: .82rem;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.rc-pick-sub:empty { display: none; }
-.rc-pick-actions {
-  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
-  margin-top: 12px;
-}
-.rc-pick-actions .rc-textbtn { margin-right: auto; min-height: 44px; }
-.rc-pick-actions .rc-btn-primary { min-height: 44px; padding: 10px 24px; }
+.rc-pick-card[hidden] { display: none; }
+.rc-pick-title { font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.rc-pick-label { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-pick-sub { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-pick-coord { font-family: var(--mono); font-size: 11.5px; color: var(--matcha); }
+.rc-pick-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 
 /* ============================================================
-   Navigation HUD
+   iOS install sheet
    ============================================================ */
-.rc-nav-hud {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  right: 12px;
-  z-index: 910;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px 14px;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+.rc-ios-install { position: absolute; inset: 0; z-index: 900; display: grid; place-items: center; }
+.rc-ios-install[hidden] { display: none; }
+.rc-ios-install-scrim { position: absolute; inset: 0; background: rgba(26, 32, 24, .5); }
+.rc-ios-install-card {
+  position: relative;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  max-width: 460px;
-  margin: 0 auto;
-}
-/* color-mix is widely supported but not universally; a browser that skips
-   the declaration above still gets a solid, readable panel. */
-@supports not (background: color-mix(in srgb, red 50%, transparent)) {
-  .rc-nav-hud { background: var(--surface); }
-}
-.rc-nav-hud[hidden] { display: none; }
-
-/* ---- next instruction ---- */
-.rc-nav-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-
-.rc-nav-step {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-.rc-nav-step-dist {
-  font-size: .72rem;
-  font-weight: 600;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--matcha);
-}
-.rc-nav-step-dist:empty { display: none; }
-.rc-nav-step-text {
-  font-size: 1.02rem;
-  font-weight: 500;
-  line-height: 1.25;
-  color: var(--ink);
-  overflow-wrap: break-word;
-}
-/* Inside 150 m the turn is now, not soon. */
-.rc-nav-step[data-soon="yes"] .rc-nav-step-dist { color: var(--rc-caution); }
-.rc-nav-step[data-soon="yes"] .rc-nav-step-text { font-weight: 600; }
-
-.rc-nav-stop {
-  flex: none;
-  display: grid; place-items: center;
-  width: 34px; height: 34px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--muted);
-  cursor: pointer;
-}
-.rc-nav-stop:hover { color: var(--rc-danger); border-color: var(--rc-danger); }
-.rc-nav-stop svg { width: 15px; height: 15px; }
-
-/* ---- speedometer + remaining ---- */
-.rc-nav-mid {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding-top: 2px;
-  border-top: 1px solid var(--line);
-}
-.rc-nav-speedo {
-  flex: none;
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  padding-top: 8px;
-}
-/* Before the first fix reports a speed (and on the many phones that never
-   report one at all) the readout is a placeholder, not a measurement — so it
-   is drawn like one instead of as a heavy 40px dash. */
-.rc-nav-speed[data-empty="yes"] { font-size: 1.5rem; color: var(--faint); font-weight: 400; }
-.rc-nav-speed {
-  font-size: 2.5rem;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: -.03em;
-  color: var(--ink);
-}
-.rc-nav-speed-unit { font-size: .72rem; color: var(--muted); font-weight: 500; }
-
-.rc-nav-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  padding-top: 8px;
-  margin-left: auto;
-  text-align: right;
-}
-.rc-nav-remaining {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--ink);
-  white-space: nowrap;
-}
-.rc-nav-eta { font-size: .8rem; color: var(--muted); }
-
-.rc-nav-next {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  justify-content: flex-end;
-  font-size: .78rem;
-  color: var(--muted);
-}
-.rc-nav-next:empty { display: none; }
-.rc-nav-next-icon { width: 17px; height: 17px; flex: none; color: var(--matcha); }
-.rc-nav-next-icon svg { width: 100%; height: 100%; }
-
-/* ---- the tile row: everything you read while stopped ---- */
-.rc-nav-tiles {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 6px;
-}
-.rc-nav-tile {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  padding: 6px 7px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-}
-.rc-nav-tile-k {
-  font-size: .58rem;
-  font-weight: 600;
-  letter-spacing: .07em;
-  text-transform: uppercase;
-  color: var(--faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.rc-nav-tile-v {
-  font-size: .82rem;
-  font-weight: 500;
-  color: var(--ink-soft);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.rc-nav-tile-v[data-sign="up"]   { color: var(--rc-caution); }
-.rc-nav-tile-v[data-sign="down"] { color: var(--rc-clear); }
-.rc-nav-tile-v[data-level="watch"]   { color: var(--rc-watch); }
-.rc-nav-tile-v[data-level="caution"] { color: var(--rc-caution); }
-.rc-nav-tile-v[data-level="danger"]  { color: var(--rc-danger); }
-
-@media (max-width: 560px) {
-  .rc-nav-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-
-/* ---- progress ---- */
-.rc-nav-progress {
-  position: relative;
-  height: 5px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  overflow: hidden;
-}
-.rc-nav-progress-fill {
-  height: 100%;
-  width: 0;
-  border-radius: 999px;
-  background: var(--matcha);
-  transition: width .4s var(--ease);
-}
-@media (prefers-reduced-motion: reduce) {
-  .rc-nav-progress-fill { transition: none; }
-}
-.rc-nav-tick {
-  position: absolute;
-  top: 0;
-  width: 2px;
-  height: 100%;
-  transform: translateX(-1px);
-  opacity: .85;
-}
-.rc-nav-tick.is-clear   { background: var(--rc-clear); }
-.rc-nav-tick.is-watch   { background: var(--rc-watch); }
-.rc-nav-tick.is-caution { background: var(--rc-caution); }
-.rc-nav-tick.is-danger  { background: var(--rc-danger); }
-
-.rc-nav-alert {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--rc-caution-soft);
-  color: var(--rc-caution);
-  font-size: .82rem;
-}
-.rc-nav-alert[hidden] { display: none; }
-.rc-nav-alert[data-level="danger"] {
-  background: var(--rc-danger-soft);
-  color: var(--rc-danger);
-}
-.rc-nav-alert svg { width: 15px; height: 15px; flex: none; }
-
-html[data-nav="on"] .rc-panel { pointer-events: auto; }
-html[data-nav="on"] .rc-peek-bar-primary { color: var(--matcha); }
-
-/* ============================================================
-   "Pin on map" button — in the From/To rows via .rc-inputbtn,
-   and app.js injects a bare .rc-stop-pick into each stop row.
-   ============================================================ */
-.rc-stop-pick {
-  flex: none;
-  display: grid; place-items: center;
-  width: 30px; height: 30px;
-  background: transparent;
-  color: var(--matcha);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: color .16s var(--ease), border-color .16s var(--ease), background-color .16s var(--ease);
-}
-.rc-stop-pick svg { width: 14px; height: 14px; }
-.rc-stop-pick:hover { border-color: var(--matcha); }
-.rc-stop-pick.is-active,
-.rc-inputbtn.is-active {
-  background: var(--matcha-soft);
-  border-color: var(--matcha);
-  color: var(--matcha);
-}
-
-/* ============================================================
-   Responsive: bottom sheet under 820px
-   ============================================================ */
-/* ============================================================
-   Panel as a bottom sheet — narrow PORTRAIT screens only.
-
-   Scoped to portrait deliberately. A landscape phone has the width for a
-   side drawer and nowhere near the height for a sheet: at "half" the sheet
-   covered the map entirely and at "peek" it showed a single line of text.
-   The landscape block further down takes those screens instead, and this
-   one keeps its hands off them.
-   ============================================================ */
-@media (max-width: 820px) and (orientation: portrait) {
-  body { overflow: hidden; }
-
-  .rc-body { flex-direction: column; }
-
-  .rc-map-wrap { position: absolute; inset: 0; height: 100%; }
-
-  .rc-panel {
-    position: absolute;
-    left: 0; right: 0; bottom: 0;
-    width: auto; max-width: none;
-    height: auto;
-    max-height: 92vh;
-    max-height: 92dvh;
-    border-left: none;
-    border-top: 1px solid var(--line);
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    transition: transform .28s var(--ease), height .28s var(--ease);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .rc-panel { transition: none; }
-  }
-
-  .rc-sheet-handle { display: block; }
-
-  /* three snap points: peek (map owns the screen) / half / open */
-  .rc-panel[data-sheet="peek"] {
-    height: calc(150px + env(safe-area-inset-bottom));
-  }
-  .rc-panel[data-sheet="peek"] .rc-panel-scroll { overflow: hidden; }
-
-  .rc-panel[data-sheet="half"] {
-    height: 52vh;
-    height: 52dvh;
-  }
-
-  .rc-panel[data-sheet="open"] {
-    height: 92vh;
-    height: 92dvh;
-  }
-
-  /* iOS zoom-on-focus guard: inputs need >=16px */
-  .rc-input, .rc-select, .rc-stop-row input { font-size: 16px; }
-
-  /* comfortable touch targets */
-  .rc-iconbtn, .rc-inputbtn, .rc-stop-remove, .rc-stop-pick, .rc-nav-stop {
-    min-width: 44px; min-height: 44px;
-  }
-  .rc-swap.rc-inputbtn { min-width: 44px; min-height: 44px; width: 44px; height: 44px; }
-  .rc-btn-install { min-height: 44px; }
-
-  .rc-chip { min-height: 44px; scroll-snap-align: center; }
-  .rc-timeline {
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-  .rc-timeline::-webkit-scrollbar { display: none; }
-
-  .rc-offset { min-height: 44px; }
-  .rc-alt { min-height: 44px; display: flex; flex-direction: column; justify-content: center; }
-
-  /* header: back link, wordmark and up to four actions on a narrow phone */
-  .rc-header { gap: 8px; padding-left: calc(10px + env(safe-area-inset-left)); padding-right: calc(10px + env(safe-area-inset-right)); }
-  .rc-wordmark { font-size: 1rem; gap: 6px; }
-  .rc-wordmark-mark { width: 22px; height: 22px; }
-  .rc-wordmark-mark svg { width: 13px; height: 13px; }
-  .rc-header-actions { gap: 5px; }
-
-  /* v2 overlays: keep clear of the sheet at every snap point, safe-area aware */
-  .rc-nav-hud { margin-left: calc(10px + env(safe-area-inset-left)); margin-right: calc(10px + env(safe-area-inset-right)); }
-  .rc-pick-card { max-width: none; }
-  html[data-nav="on"] .rc-panel[data-sheet] { height: calc(150px + env(safe-area-inset-bottom)); }
-}
-
-@media (min-width: 821px) {
-  .rc-sheet-handle { display: none; }
-}
-
-/* Landscape phones and tablets never get the drag handle: the panel is a
-   drawer or a sidebar there, and neither snaps. */
-@media (orientation: landscape) {
-  .rc-sheet-handle { display: none; }
-}
-
-@media (max-width: 380px) and (orientation: portrait) {
-  .rc-btn-install-label { display: none; }
-  .rc-btn-install { padding: 0; width: 34px; min-width: 44px; justify-content: center; }
-  .rc-wordmark-mark { display: none; }
-}
-
-@media (max-width: 340px) {
-  .rc-wordmark { font-size: .88rem; }
-  .rc-header { gap: 5px; }
-  .rc-header-actions { gap: 3px; }
-}
-
-/* ============================================================
-   Trip facts, terrain, saved routes, your roads
-   ============================================================ */
-.rc-section-h {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: .7rem;
-  font-weight: 600;
-  letter-spacing: .09em;
-  text-transform: uppercase;
-  color: var(--faint);
-  margin-bottom: 10px;
-}
-.rc-section-h svg { width: 14px; height: 14px; flex: none; }
-
-.rc-summary-note {
-  font-size: .78rem;
-  line-height: 1.45;
-  color: var(--muted);
-}
-.rc-summary-note:empty { display: none; }
-
-.rc-summary-actions { display: flex; gap: 12px; flex-wrap: wrap; }
-
-.rc-field-hint { font-size: .74rem; color: var(--muted); margin-top: 6px; line-height: 1.4; }
-.rc-field-hint:empty { display: none; }
-
-/* ---- facts grid ---- */
-.rc-facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
-  gap: 7px;
-}
-.rc-facts:empty { display: none; }
-.rc-fact {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-}
-.rc-fact-k {
-  font-size: .6rem;
-  font-weight: 600;
-  letter-spacing: .07em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-.rc-fact-v { font-size: .95rem; font-weight: 500; color: var(--ink); }
-.rc-fact-sub { font-size: .68rem; color: var(--muted); }
-.rc-fact.is-watch   { border-color: var(--rc-watch); }
-.rc-fact.is-caution { border-color: var(--rc-caution); }
-.rc-fact.is-danger  { border-color: var(--rc-danger); }
-.rc-fact.is-watch   .rc-fact-v { color: var(--rc-watch); }
-.rc-fact.is-caution .rc-fact-v { color: var(--rc-caution); }
-.rc-fact.is-danger  .rc-fact-v { color: var(--rc-danger); }
-
-/* ---- elevation profile ---- */
-.rc-elev {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  padding: 12px 12px 8px;
-}
-.rc-elev[hidden] { display: none; }
-.rc-elev-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 6px;
-}
-.rc-elev-title {
-  font-size: .7rem;
-  font-weight: 600;
-  letter-spacing: .09em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-.rc-elev-meta { font-size: .74rem; color: var(--muted); }
-.rc-elev-svg { display: block; width: 100%; height: 72px; }
-.rc-elev-area { fill: var(--matcha-soft); stroke: none; }
-.rc-elev-line { fill: none; stroke: var(--matcha); stroke-width: 1.6; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.rc-elev-here { stroke: var(--rc-caution); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
-
-/* ---- saved routes ---- */
-.rc-saved[hidden] { display: none; }
-.rc-saved-list { display: flex; flex-direction: column; gap: 6px; }
-.rc-saved-row { display: flex; gap: 6px; align-items: stretch; }
-.rc-saved-load {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  text-align: left;
-  padding: 9px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  cursor: pointer;
-  color: inherit;
-  transition: border-color .16s var(--ease);
-}
-.rc-saved-load:hover { border-color: var(--matcha); }
-.rc-saved-name {
-  font-size: .88rem;
-  font-weight: 500;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rc-saved-meta { font-size: .72rem; color: var(--muted); }
-.rc-saved-del {
-  flex: none;
-  display: grid; place-items: center;
-  width: 36px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--faint);
-  cursor: pointer;
-}
-.rc-saved-del:hover { color: var(--rc-danger); border-color: var(--rc-danger); }
-.rc-saved-del svg { width: 14px; height: 14px; }
-
-/* ---- your roads ---- */
-.rc-history-summary { margin-bottom: 10px; }
-.rc-history-empty { font-size: .8rem; line-height: 1.5; color: var(--muted); }
-.rc-history-actions { display: flex; }
-.rc-textbtn-quiet { color: var(--muted); font-size: .78rem; }
-.rc-textbtn-quiet:hover { color: var(--rc-danger); }
-
-/* ---- alternatives: familiarity and expressway tags ---- */
-.rc-alt-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-.rc-alt-tag {
-  font-size: .64rem;
-  font-weight: 600;
-  letter-spacing: .04em;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: var(--matcha-soft);
-  color: var(--matcha);
-}
-.rc-alt-tag.is-danger { background: var(--rc-danger-soft); color: var(--rc-danger); }
-
-/* ---- picker coordinate readout ---- */
-.rc-pick-coord {
-  font-family: var(--mono);
-  font-size: .74rem;
-  color: var(--matcha);
-  letter-spacing: .01em;
-}
-.rc-pick-coord:empty { display: none; }
-
-/* ============================================================
-   Landscape — a short, wide screen is a different machine.
-
-   Below 560px of height the bottom sheet is hopeless: at "half" it eats the
-   map, at "peek" it shows one line. So in landscape the panel becomes a side
-   drawer instead — full height, fixed width, its own scroll — and the peek
-   bar collapses it to a strip when the map needs the whole screen. The HUD
-   moves to the top-left column so it never sits over the drawer, and the
-   tiles run in one row because there is width to spare and no height at all.
-   ============================================================ */
-@media (orientation: landscape) and (max-height: 560px) {
-  .rc-header { padding-top: 4px; padding-bottom: 4px; min-height: 0; }
-  .rc-wordmark { font-size: .92rem; }
-
-  .rc-body { flex-direction: row; }
-
-  .rc-map-wrap { position: relative; inset: auto; flex: 1 1 auto; height: 100%; }
-
-  .rc-panel {
-    position: relative;
-    inset: auto;
-    flex: none;
-    width: min(360px, 44vw);
-    max-width: none;
-    height: 100%;
-    max-height: none;
-    border-left: 1px solid var(--line);
-    border-top: none;
-    border-radius: 0;
-    padding-bottom: 0;
-    padding-right: env(safe-area-inset-right);
-    transition: width .28s var(--ease);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .rc-panel { transition: none; }
-  }
-  /* Collapsed: the peek bar alone, rotated out of the way of the map. */
-  .rc-panel.is-collapsed { width: 54px; }
-  .rc-panel.is-collapsed .rc-panel-scroll { display: none; }
-  .rc-panel.is-collapsed .rc-peek-bar-text,
-  .rc-panel.is-collapsed .rc-badge { display: none; }
-  .rc-panel.is-collapsed .rc-peek-bar::after {
-    content: "";
-    width: 4px;
-    height: 40px;
-    border-radius: 999px;
-    background: var(--line-strong);
-    margin: 0 auto;
-  }
-
-  /* The drawer never snaps, so the grab handle would be a lie. */
-  .rc-sheet-handle { display: none; }
-
-  .rc-peek-bar { padding: 10px 14px; min-height: 48px; }
-  .rc-panel-scroll { padding: 12px 14px 18px; gap: 14px; }
-
-  /* HUD: left column, clear of the drawer, tiles in one row. */
-  .rc-nav-hud {
-    right: auto;
-    left: calc(10px + env(safe-area-inset-left));
-    top: 8px;
-    margin: 0;
-    width: min(420px, 52vw);
-    max-width: none;
-    padding: 10px 12px 12px;
-    gap: 8px;
-  }
-  .rc-nav-speed { font-size: 2rem; }
-  .rc-nav-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .rc-nav-tile { padding: 4px 6px; }
-
-  /* Controls hug the map's own bottom-right, not the sheet's. */
-  .rc-map-controls {
-    bottom: calc(10px + env(safe-area-inset-bottom));
-    right: 10px;
-    gap: 6px;
-  }
-  .rc-mapbtn { width: 40px; height: 40px; }
-  .rc-mapbtn-sm { width: 40px; height: 32px; }
-
-  .rc-pick-card { left: 14px; right: auto; width: min(340px, 46vw); bottom: 14px; }
-  .rc-elev-svg { height: 56px; }
-}
-
-/* A landscape tablet has the height for the normal sidebar; only the short
-   screens above get the drawer treatment. */
-@media (orientation: landscape) and (min-height: 561px) and (max-width: 820px) {
-  .rc-panel { max-height: 82dvh; }
-}
-
-/* ============================================================
-   iOS "Add to Home Screen" instruction sheet
-   ============================================================ */
-#ios-install[hidden] { display: none; }
-
-.rc-ios-install {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-}
-
-.rc-ios-install-scrim {
-  position: absolute;
-  inset: 0;
-  background: rgba(20, 18, 15, .45);
-}
-
-.rc-ios-install-card {
-  position: relative;
-  width: 100%;
-  max-width: 480px;
-  margin: 0 auto;
-  padding: 22px 22px calc(22px + env(safe-area-inset-bottom));
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-bottom: none;
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  box-shadow: var(--shadow-lg);
+  padding: 22px;
+  margin: 20px;
+  max-width: 360px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  animation: rc-sheet-up .32s var(--ease);
 }
+.rc-ios-install-heading { font-size: 17px; font-weight: 600; }
+.rc-ios-install-copy { font-size: 13.5px; color: var(--ink-soft); line-height: 1.6; }
+.rc-ios-share-icon { width: 17px; height: 17px; vertical-align: -3px; }
+
+/* ============================================================
+   Landscape — the HUD moves to the side
+
+   A short, wide screen is a different machine. The bottom strip becomes a
+   column at the left edge: same pods, same order, no horizontal scroll, and
+   the whole centre and right of the map stay clear. The dock does the same,
+   because a route summary is no more welcome across the bottom of a 380px
+   screen than the HUD was.
+   ============================================================ */
+@media (orientation: landscape) and (max-height: 620px) {
+  :root { --rc-bottom-h: 0px; --rc-side-w: 108px; }
+
+  .rc-hud {
+    left: calc(var(--safe-l) + var(--gut));
+    right: auto;
+    top: calc(var(--safe-t) + 8px + var(--rail-h) + 8px);
+    bottom: calc(var(--safe-b) + var(--gut));
+    width: var(--rc-side-w);
+    display: flex;
+    flex-direction: column;
+  }
+  .rc-hud-progress { height: 3px; }
+  .rc-hud-body {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 8px;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .rc-hud-body::-webkit-scrollbar { display: none; }
+  .rc-hud-speed {
+    min-width: 0;
+    padding: 0 0 6px;
+    border-right: 0;
+    border-bottom: 1px solid var(--glass-line);
+  }
+  .rc-hud-speed-v { font-size: 27px; }
+  .rc-hud-pods {
+    flex-direction: column;
+    align-items: stretch;
+    overflow-x: hidden;
+    overflow-y: visible;
+    gap: 5px;
+  }
+  .rc-pod { min-width: 0; width: 100%; }
+
+  /* The dock keeps the bottom but shrinks to what it needs, so the map is
+     not fenced in on two sides. */
+  .rc-dock {
+    left: auto;
+    right: calc(var(--safe-r) + var(--gut) + 46px);
+    width: min(420px, 60vw);
+    margin-inline: 0;
+  }
+  .rc-map-controls { bottom: calc(var(--safe-b) + var(--gut)); }
+  .rc-recentre { left: auto; right: calc(var(--safe-r) + var(--gut) + 52px); transform: none; bottom: calc(var(--safe-b) + var(--gut) + 62px); }
+  .rc-alert,
+  .rc-turn,
+  .rc-status { left: calc(var(--safe-l) + var(--gut) + var(--rc-side-w) + 8px); margin-inline: 0; }
+  :root[data-mode="nav"] .rc-status,
+  :root[data-mode="free"] .rc-status { top: calc(var(--safe-t) + 8px + var(--rail-h) + 8px + 54px); }
+  /* The column scrolls; give the last pod room to sit clear of the edge. */
+  .rc-hud-body { padding-bottom: 12px; }
+  .rc-pick-card { left: auto; right: calc(var(--safe-r) + var(--gut) + 52px); width: min(420px, 62vw); margin-inline: 0; }
+
+  :root[data-mode="nav"] .rc-map-controls,
+  :root[data-mode="free"] .rc-map-controls { bottom: calc(var(--safe-b) + var(--gut)); }
+}
+
+/* A tall landscape screen (tablet) keeps the bottom strip but caps its
+   width, so it reads as an instrument cluster rather than a wall. */
+@media (orientation: landscape) and (min-height: 621px) {
+  .rc-hud, .rc-dock { max-width: 720px; margin-inline: auto; }
+}
+
+@media (min-width: 900px) {
+  .rc-hud, .rc-dock { max-width: 760px; }
+}
+
+/* Very small phones: give the map back every pixel the chrome can spare. */
+@media (max-width: 360px) {
+  :root { --gut: 7px; --rail-h: 37px; }
+  .rc-hud-speed-v { font-size: 26px; }
+  .rc-hud-speed { min-width: 60px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .rc-ios-install-card { animation: none; }
-}
-@keyframes rc-sheet-up {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
-}
-
-.rc-ios-install-heading {
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: 1.2rem;
-  color: var(--ink);
-}
-
-.rc-ios-install-copy {
-  font-size: .92rem;
-  color: var(--ink-soft);
-  line-height: 1.6;
-}
-.rc-ios-share-icon {
-  width: 17px; height: 17px;
-  vertical-align: -3px;
-  margin: 0 2px;
-  color: var(--matcha);
-}
-
-#ios-install-close {
-  align-self: stretch;
-  min-height: 44px;
+  .rc-panel, .rc-map, .rc-hud-progress-fill, .rc-status { transition: none; }
+  .rc-turn-rec { animation: none; }
 }

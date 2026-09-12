@@ -327,7 +327,7 @@ function sandbox(iconsOnly) {
       removeItem: function (k) { delete store[k]; },
       clear: function () { store = {}; }
     },
-    navigator: { onLine: true, storage: null },
+    navigator: { onLine: true, storage: null, geolocation: null, wakeLock: null },
     document: {
       visibilityState: "visible",
       addEventListener: function () {},
@@ -342,7 +342,8 @@ function sandbox(iconsOnly) {
   vm.createContext(ctx);
   var files = iconsOnly
     ? ["util.js", "icons.js"]
-    : ["util.js", "history.js", "traffic.js", "eta.js", "routes.js", "router.js", "sampler.js", "elevation.js"];
+    : ["util.js", "coords.js", "history.js", "traffic.js", "eta.js", "routes.js", "marks.js",
+       "router.js", "sampler.js", "elevation.js", "free.js"];
   files.forEach(function (f) {
       vm.runInContext(read("static/js/" + f), ctx, { filename: f });
     });
@@ -682,6 +683,110 @@ section("Behaviour: expressway detection");
   check("the motorcycle profile asks for the exclusion",
         RC.router.VEHICLE.motorcycle.avoidMotorways === true &&
         !RC.router.VEHICLE.car.avoidMotorways);
+})();
+
+section("Behaviour: coordinate parsing");
+(function () {
+  var RC = sandbox().RC;
+  function near(got, lat, lon) {
+    return got && Math.abs(got.lat - lat) < 1e-4 && Math.abs(got.lon - lon) < 1e-4;
+  }
+
+  check("a decimal pair is a coordinate", near(RC.coords.parse("14.5995, 120.9842"), 14.5995, 120.9842));
+  check("so is one separated by a space", near(RC.coords.parse("14.5995 120.9842"), 14.5995, 120.9842));
+  check("a southern/western pair keeps its signs", near(RC.coords.parse("-33.8688, 151.2093"), -33.8688, 151.2093));
+  check("hemisphere letters are read", near(RC.coords.parse("14.5995N, 120.9842E"), 14.5995, 120.9842));
+  check("and reversed hemisphere letters too", near(RC.coords.parse("S33.8688 E151.2093"), -33.8688, 151.2093));
+  check("degrees, minutes and seconds are read",
+        near(RC.coords.parse("14\u00B035'58.2\"N 120\u00B059'3.1\"E"), 14.5995, 120.98419));
+  check("a geo: URI is read", near(RC.coords.parse("geo:14.5995,120.9842"), 14.5995, 120.9842));
+  check("a maps link with an @pair is read",
+        near(RC.coords.parse("https://www.google.com/maps/@14.5995,120.9842,15z"), 14.5995, 120.9842));
+  check("an OpenStreetMap permalink is read",
+        near(RC.coords.parse("https://www.openstreetmap.org/#map=15/14.5995/120.9842"), 14.5995, 120.9842));
+
+  // The whole point: a street address must NOT be mistaken for a position.
+  check("a street address is not a coordinate", RC.coords.parse("5 Ayala Avenue, Makati") === null);
+  check("a bare place name is not a coordinate", RC.coords.parse("Tagaytay") === null);
+  check("an out-of-range pair is refused", RC.coords.parse("95.1, 200.4") === null);
+  check("empty input is refused", RC.coords.parse("   ") === null && RC.coords.parse(null) === null);
+  check("a coordinate formats back to a metre", RC.coords.format(14.599512, 120.984219) === "14.59951, 120.98422");
+})();
+
+section("Behaviour: marks");
+(function () {
+  var RC = sandbox().RC;
+  check("an empty store lists no marks", RC.marks.list().length === 0);
+
+  var home = RC.marks.save({ name: "Home gate", lat: 14.5995, lon: 120.9842 });
+  check("a mark comes back", RC.marks.list().length === 1 && RC.marks.get(home.id).name === "Home gate");
+  check("a mark is exact by construction", RC.marks.toPlace(RC.marks.get(home.id)).precise === true);
+
+  RC.marks.save({ name: "Home", lat: 14.599501, lon: 120.984201 });
+  check("the same spot renames rather than duplicating",
+        RC.marks.list().length === 1 && RC.marks.list()[0].name === "Home", String(RC.marks.list().length));
+
+  RC.marks.save({ name: "The fork", lat: 14.7, lon: 121.1 });
+  check("a different spot is a different mark", RC.marks.list().length === 2);
+
+  check("a mark can be found by name", RC.marks.find("fork").length === 1);
+  check("nothing matches nonsense", RC.marks.find("zzzz").length === 0);
+  check("the nearest mark is found within range",
+        (RC.marks.nearest(14.59952, 120.98421, 60) || {}).name === "Home");
+  check("and not found outside it", RC.marks.nearest(14.8, 121.4, 60) === null);
+
+  var threw = false;
+  try { RC.marks.save({ name: "Nowhere" }); } catch (e) { threw = true; }
+  check("a mark without a coordinate is refused", threw);
+
+  for (var i = 0; i < RC.marks.MAX + 5; i++) RC.marks.save({ name: "P" + i, lat: 10 + i / 500, lon: 121 });
+  check("the mark store is bounded", RC.marks.list().length <= RC.marks.MAX, String(RC.marks.list().length));
+})();
+
+section("Behaviour: expressway detection reads refs too");
+(function () {
+  var RC = sandbox().RC;
+  // OSRM routinely names an expressway step after the surface road it
+  // parallels and puts the expressway only in `ref`. Reading one field
+  // missed the road entirely.
+  var route = {
+    steps: [
+      { text: "Continue onto Governor's Drive", ref: "NLEX", distance: 9000 },
+      { text: "Continue onto EDSA", ref: "C-4", distance: 4000 }
+    ]
+  };
+  check("an expressway carried only in the ref is caught",
+        RC.router.expresswayNames(route).indexOf("NLEX") > -1,
+        JSON.stringify(RC.router.expresswayNames(route)));
+  check("an ordinary ref is not a false positive",
+        RC.router.expresswayNames(route).length === 1);
+  check("the metres are counted from the ref as well",
+        RC.router.expresswayMeters(route) === 9000, String(RC.router.expresswayMeters(route)));
+  check("the motorcycle exclusion is a ladder, strictest first",
+        RC.router.VEHICLE.motorcycle.exclude[0] === "motorway,toll" &&
+        RC.router.VEHICLE.motorcycle.exclude[1] === "motorway" &&
+        RC.router.VEHICLE.motorcycle.exclude[2] === null,
+        JSON.stringify(RC.router.VEHICLE.motorcycle.exclude));
+})();
+
+section("Behaviour: free driving odometer");
+(function () {
+  var RC = sandbox().RC;
+  var accept = RC.free._acceptStep;
+  var a = { lat: 14.6, lon: 121.0 };
+  var b = { lat: 14.6, lon: 121.0009 };   // ~97 m east
+
+  check("an ordinary step is counted", accept(a, b, 5, 8) > 80);
+  check("a parked phone's jitter is not",
+        accept(a, { lat: 14.600002, lon: 121.000002 }, 5, 8) === 0);
+  check("a step inside the fix's own error circle is not",
+        accept(a, b, 5, 300) === 0);
+  check("a vague fix cannot move the odometer at all",
+        accept(a, { lat: 14.61, lon: 121.0 }, 30, 500) === 0);
+  check("a teleport is not",
+        accept(a, { lat: 15.6, lon: 121.0 }, 2, 8) === 0);
+  check("a step with no elapsed time is not", accept(a, b, 0, 8) === 0);
+  check("a free ride is not recording before it starts", RC.free.isActive() === false);
 })();
 
 section("Behaviour: terrain profile");

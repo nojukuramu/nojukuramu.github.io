@@ -47,6 +47,7 @@ RC.nav = (function () {
   var ARRIVE_EPS_M = 15;            // close enough to the final coordinate to call it arrival
   var RATIO_MIN = 0.6, RATIO_MAX = 2.0;
   var MIN_EXPECTED_S_FOR_RATIO = 5; // ignore ratio noise over a near-zero expected-time span
+  var MAX_PLAUSIBLE_KMH = 400;      // faster than this is a GPS jump, not a vehicle
 
   // Rerouting
   var REROUTE_M = 90;               // perpendicular distance that means "another road", not "wobble"
@@ -417,7 +418,11 @@ RC.nav = (function () {
         var dtS = (fixNow.getTime() - st.lastFix.t) / 1000;
         if (dtS > 0.4 && dtS < 30) {
           var dM = RC.haversine({ lat: st.lastFix.lat, lon: st.lastFix.lon }, { lat: lat, lon: lon });
-          speedKmh = (dM / dtS) * 3.6;
+          var derived = (dM / dtS) * 3.6;
+          // A fix that jumps — a tunnel exit, a cell-tower fallback, a cold
+          // start — derives a speed no vehicle has. Showing 1,400 km/h on the
+          // dashboard is worse than showing nothing, so it stays nothing.
+          if (derived < MAX_PLAUSIBLE_KMH) speedKmh = derived;
         }
       }
       st.lastFix = { lat: lat, lon: lon, t: fixNow.getTime() };
