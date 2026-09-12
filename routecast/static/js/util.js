@@ -91,10 +91,15 @@ var RC = (function () {
   };
 
   /* ---------- fetch ---------- */
-  function HttpError(message, kind, status) {
+  /* `code` is the upstream service's own machine-readable reason — OSRM's
+     "InvalidValue", "NoRoute" and friends. Callers that need to tell "the
+     parameter I sent is not supported here" apart from "this request is
+     wrong" cannot do it from the message, which is written for a human. */
+  function HttpError(message, kind, status, code) {
     var e = new Error(message);
     e.kind = kind;
     if (status) e.status = status;
+    if (code) e.code = code;
     return e;
   }
   RC.error = HttpError;

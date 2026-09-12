@@ -113,7 +113,8 @@ RC.eta = (function () {
       // re-integrated: they are used for display and for waypoint
       // boundaries, never for timing a checkpoint.
       steps: (route.steps || []).map(function (s) {
-        return { text: s.text, distance: s.distance, duration: s.duration * mean, lat: s.lat, lon: s.lon };
+        return { text: s.text, name: s.name, ref: s.ref, distance: s.distance,
+                 duration: s.duration * mean, lat: s.lat, lon: s.lon };
       }),
       legs: (route.legs || []).map(function (l) {
         return { distance: l.distance, duration: l.duration * mean };
@@ -128,6 +129,11 @@ RC.eta = (function () {
       calibrated.motorwayAvoidanceReason = route.motorwayAvoidanceReason;
     }
     if (route.expresswayNames) calibrated.expresswayNames = route.expresswayNames;
+    // The metres, not just the names: the panel reports how much expressway
+    // is in the line, and a calibrated route that dropped the figure would
+    // report "none found" on a route that has plenty.
+    if (route.expresswayM != null) calibrated.expresswayM = route.expresswayM;
+    if (route.excludeApplied) calibrated.excludeApplied = route.excludeApplied;
     if (route.familiarity) calibrated.familiarity = route.familiarity;
 
     var calibration = {

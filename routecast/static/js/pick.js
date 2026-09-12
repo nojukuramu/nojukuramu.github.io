@@ -211,10 +211,20 @@ RC.pick = (function () {
 
   function isActive() { return active; }
 
+  /* What the pin is over right now, as the Place it would confirm to. Used
+     by "Save as mark", which has to be able to keep a spot WITHOUT setting
+     it as a route endpoint — marking the fuel stop you noticed on the way
+     past is not the same as agreeing to route through it. */
+  function current() {
+    if (!active || !map) return null;
+    return placeFromCenter(mapCenter(), currentPlace);
+  }
+
   return {
     init: init,
     start: start,
     stop: stop,
+    current: current,
     isActive: isActive,
     onConfirm: null,
     onCancel: null
