@@ -78,6 +78,13 @@
   --rc-danger:       #B03434;
   --rc-danger-soft:  #F5DEDE;
 
+  /* The group ride's own two colours. The planned route is deliberately NOT on
+     the matcha hue and NOT one of the four risk colours: it has to read as a
+     different KIND of line — one nobody's position can change — at a glance,
+     in the rain, through a visor. */
+  --rc-planned:      #4B5BC4;
+  --rc-planned-soft: #E2E5F7;
+
   --map-filter: none;
 
   /* Geometry. --rc-bottom-h is the height the bottom overlay currently
@@ -91,6 +98,10 @@
   --rc-bottom-h: 96px;
   --rc-side-w: 0px;
   --rail-h: 40px;
+  /* Where the room's own notices stack: under the rail AND under the status
+     line, which already owns the slot directly below it and moves down again
+     while driving. One token, so the two never land on top of each other. */
+  --rc-notice-top: calc(var(--safe-t) + 8px + var(--rail-h) + 8px + 44px);
 
   color-scheme: light;
 }
@@ -133,6 +144,8 @@
     --rc-caution-soft: #332315;
     --rc-danger:       #DE6A6A;
     --rc-danger-soft:  #331B1B;
+    --rc-planned:      #8E9BF0;
+    --rc-planned-soft: #1C2044;
 
     --map-filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.86) saturate(.55);
 
@@ -175,6 +188,8 @@
   --rc-caution-soft: #332315;
   --rc-danger:       #DE6A6A;
   --rc-danger-soft:  #331B1B;
+  --rc-planned:      #8E9BF0;
+  --rc-planned-soft: #1C2044;
 
   --map-filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.86) saturate(.55);
 
@@ -1596,4 +1611,324 @@ code { font-family: var(--mono); font-size: .92em; }
 @media (prefers-reduced-motion: reduce) {
   .rc-panel, .rc-map, .rc-hud-progress-fill, .rc-status { transition: none; }
   .rc-turn-rec { animation: none; }
+}
+
+/* ============================================================
+   Group ride
+
+   Three separate jobs, deliberately not one panel:
+     * the room itself lives in the planner's Ride tab, where there is room
+       for a roster, a door and a chat log;
+     * what the rider needs WHILE MOVING is one line ("you are off the
+       planned route") and one thumb-sized button (push to talk);
+     * the choice of a way back is a card the rider opens on purpose, never
+       one that appears over the road on its own.
+
+   Nothing here is ever tall enough to hide the road ahead, and every surface
+   uses the same glass material as the rest of the floating layer.
+   ============================================================ */
+
+/* ---------- the rail button and its badge ---------- */
+.rc-glass-group { position: relative; }
+.rc-glass-badge {
+  position: absolute;
+  top: -4px; right: -4px;
+  min-width: 17px; height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--matcha);
+  color: var(--matcha-ink);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+.rc-glass-badge[data-kind="chat"] { background: var(--rc-planned); color: #FFFFFF; }
+.rc-glass-badge[hidden] { display: none; }
+
+/* ---------- push to talk ---------- */
+.rc-pttbtn { color: var(--rc-planned); border-color: var(--rc-planned); }
+.rc-pttbtn[data-state="talking"] {
+  background: var(--rc-danger);
+  border-color: var(--rc-danger);
+  color: #FFFFFF;
+  transform: scale(1.04);
+}
+.rc-pttbtn[data-state="hearing"] { color: var(--rc-clear); border-color: var(--rc-clear); }
+
+/* ---------- somebody is talking / the room said something ---------- */
+.rc-voice-now,
+.rc-group-toast {
+  position: absolute;
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  max-width: 460px;
+  margin-inline: auto;
+  z-index: 608;
+  border-radius: 11px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--glass-line);
+  color: var(--glass-ink);
+  box-shadow: var(--shadow-float);
+}
+:root[data-mode="nav"], :root[data-mode="free"] {
+  --rc-notice-top: calc(var(--safe-t) + 8px + var(--rail-h) + 8px + 54px + 44px);
+}
+.rc-group-toast { top: var(--rc-notice-top); }
+.rc-voice-now {
+  top: calc(var(--rc-notice-top) + 40px);
+  color: var(--rc-clear);
+  border-color: var(--rc-clear);
+}
+.rc-group-toast[data-kind="chat"] { border-color: var(--rc-planned); }
+.rc-group-toast[data-kind="voice"] { border-color: var(--rc-clear); }
+.rc-group-toast[data-kind="ok"] { border-color: var(--matcha); }
+.rc-group-toast[hidden], .rc-voice-now[hidden] { display: none; }
+
+/* ---------- off the planned route ---------- */
+.rc-offplan {
+  position: absolute;
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  max-width: 560px;
+  margin-inline: auto;
+  bottom: calc(var(--safe-b) + var(--rc-bottom-h) + var(--gut) + 90px);
+  z-index: 606;
+  border-radius: 11px;
+  padding: 7px 8px 7px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--rc-planned);
+  color: var(--glass-ink);
+  box-shadow: var(--shadow-float);
+}
+.rc-offplan[hidden] { display: none; }
+.rc-offplan svg { width: 17px; height: 17px; flex: none; color: var(--rc-planned); }
+.rc-offplan-text { flex: 1; min-width: 0; }
+.rc-offplan-btn {
+  flex: none;
+  height: 28px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--rc-planned);
+  color: #FFFFFF;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ---------- the ways back ---------- */
+.rc-rejoin-card {
+  position: absolute;
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  bottom: calc(var(--safe-b) + var(--gut));
+  max-width: 520px;
+  margin-inline: auto;
+  z-index: 722;
+  border-radius: 14px;
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(60vh, 460px);
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--glass-line);
+  color: var(--glass-ink);
+  box-shadow: var(--shadow-float);
+}
+.rc-rejoin-card[hidden] { display: none; }
+.rc-rejoin-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rc-rejoin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.rc-way {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--faint);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  cursor: pointer;
+}
+.rc-way:hover { border-color: var(--line-strong); }
+.rc-way.is-selected { border-left-color: var(--matcha); background: var(--matcha-soft); }
+.rc-way-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rc-way-label { font-size: 13.5px; font-weight: 600; }
+.rc-way-stats { font-size: 12px; font-weight: 600; color: var(--matcha); font-variant-numeric: tabular-nums; }
+.rc-way-why { font-size: 11.5px; color: var(--muted); }
+
+/* ---------- the roster ---------- */
+.rc-mate-list { display: flex; flex-direction: column; gap: 2px; }
+.rc-mate-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--line);
+}
+.rc-mate-row:last-child { border-bottom: 0; }
+.rc-mate-row.is-stale { opacity: .55; }
+.rc-mate-swatch {
+  flex: none;
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.rc-mate-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rc-mate-rowname { font-size: 13.5px; font-weight: 600; }
+.rc-mate-sub { font-size: 11.5px; color: var(--muted); }
+.rc-mate-tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--matcha);
+  background: var(--matcha-soft);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+
+.rc-pending { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+.rc-pending-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; }
+
+.rc-room-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.rc-room-code { display: flex; flex-direction: column; gap: 2px; }
+.rc-room-code-v {
+  font-family: var(--mono);
+  font-size: 24px;
+  letter-spacing: .18em;
+  color: var(--matcha);
+}
+.rc-room-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rc-input-code { text-transform: uppercase; letter-spacing: .12em; font-family: var(--mono); }
+
+/* ---------- chat ---------- */
+.rc-chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.rc-chat-sys { font-size: 11.5px; color: var(--muted); font-style: italic; }
+.rc-chat-line { display: flex; align-items: baseline; gap: 6px; font-size: 13px; flex-wrap: wrap; }
+.rc-chat-who { font-weight: 700; color: var(--matcha); }
+.rc-chat-line.is-mine .rc-chat-who { color: var(--rc-planned); }
+.rc-chat-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rc-chat-at { font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+/* ---------- riders on the map ---------- */
+.rc-marker-planned { color: var(--rc-planned); }
+
+.rc-mate { position: relative; display: block; width: 16px; height: 16px; }
+.rc-mate.is-stale { opacity: .5; }
+.rc-mate-dot {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--rider, var(--matcha));
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .45);
+}
+/* The heading wedge is drawn from the centre of the dot and rotated, so a
+   rider's marker says which way they are pointing without a second glyph. */
+.rc-mate-arrow {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 0; height: 0;
+  margin: -17px 0 0 -5px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 9px solid var(--rider, var(--matcha));
+  transform-origin: 50% 145%;
+}
+.rc-mate-name {
+  position: absolute;
+  left: 22px;
+  top: -3px;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--glass-ink);
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-line);
+  border-radius: 7px;
+  padding: 1px 6px;
+  box-shadow: var(--shadow-sm);
+}
+.rc-mate-name b { color: var(--rider, var(--matcha)); font-variant-numeric: tabular-nums; }
+
+/* ---------- landscape: keep the left column and the centre clear ---------- */
+@media (orientation: landscape) and (max-height: 620px) {
+  .rc-rejoin-card {
+    left: auto;
+    right: calc(var(--safe-r) + var(--gut) + 52px);
+    width: min(440px, 66vw);
+    margin-inline: 0;
+    max-height: calc(100vh - var(--safe-t) - var(--safe-b) - var(--rail-h) - 34px);
+  }
+  .rc-offplan {
+    left: calc(var(--safe-l) + var(--gut) + var(--rc-side-w) + 8px);
+    right: calc(var(--safe-r) + var(--gut) + 52px);
+    margin-inline: 0;
+    bottom: calc(var(--safe-b) + var(--gut) + 46px);
+  }
+  .rc-group-toast,
+  .rc-voice-now {
+    left: calc(var(--safe-l) + var(--gut) + var(--rc-side-w) + 8px);
+    right: calc(var(--safe-r) + var(--gut) + 52px);
+    margin-inline: 0;
+  }
+  .rc-chat-log { max-height: 150px; }
+}
+
+/* A wide screen keeps the drawer open, so the room's own floating furniture
+   moves over with everything else. */
+@media (min-width: 900px) {
+  :root[data-panel="open"] .rc-offplan,
+  :root[data-panel="open"] .rc-group-toast,
+  :root[data-panel="open"] .rc-voice-now,
+  :root[data-panel="open"] .rc-rejoin-card {
+    left: calc(var(--safe-l) + var(--gut) + min(400px, 82vw) + 8px);
+  }
+}
+
+@media (max-width: 360px) {
+  .rc-room-code-v { font-size: 20px; }
 }

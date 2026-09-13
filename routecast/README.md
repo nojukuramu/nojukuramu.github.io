@@ -10,6 +10,11 @@ the forecast for right now, and not the forecast for your destination only.
 Or skip the planning entirely and hit **Free drive**: the dashboard, the recorder and
 the local forecast, with no destination and nothing to count down to.
 
+Or ride it with other people: **Group ride** puts a room of phones on one map, with one
+static planned route everybody can see, everyone's live position, chat, push-to-talk
+voice, and — for whoever drifts off the agreed line — a set of real routes back to it.
+It runs phone to phone, with no server holding anybody's position.
+
 Live at <https://nojukuramu.github.io/routecast/>.
 
 ## What it does
@@ -27,6 +32,9 @@ Live at <https://nojukuramu.github.io/routecast/>.
 - **A departure planner.** The same forecast data is re-scored for departures from three
   hours earlier to six hours later, so you can see whether waiting an hour dodges the
   squall. No extra network calls — it re-reads the hourly series already fetched.
+- **Group ride.** A room of riders on one map (see below): one shared **planned route**
+  that is static by design, live positions, a roster with a door on it, chat, push-to-talk
+  voice, and routes back to the line for anyone who leaves it.
 - **Gear and riding advice** derived from the actual numbers, not generic filler.
 - **An ETA that has been told the truth.** The routing engine's own timings are
   free-flow: no traffic, no signals, no junction delay. That optimism used to
@@ -263,6 +271,98 @@ forecast, and a reload starts clean.
 Map rotation costs nothing at all: one CSS transform on the map element, eased along the shortest
 arc and written only when the angle has actually moved more than a degree and a half.
 
+## Group ride
+
+A ride is a room. One rider hosts it, the others join with a six-character code, and
+everything after that travels **directly between the phones** — WebRTC data channels over
+the same transport this site already uses for KaraokeNatin and The Wolf Game
+(`static/js/peer.js`). A public PeerJS broker is borrowed for the introduction only: it
+relays a handful of SDP messages keyed by peer id and then has nothing further to do with
+the ride. Nobody's position, chat or voice ever reaches a server.
+
+### The planned route is static, and that is the whole point
+
+The host plans a route the ordinary way and then sets it as the ride's planned route. It
+is simplified (Douglas–Peucker, ~10 m), rounded to about a metre, chunked, and sent to
+every rider — so the line on your screen is **the same geometry as the line on theirs**,
+not each phone's own idea of the same road. It is drawn in its own colour (indigo,
+dashed, `--rc-planned`), deliberately off both the matcha accent and the four risk
+colours, because it has to read as a different *kind* of line at a glance through a
+visor.
+
+It does not move. It is not re-routed because you took a wrong turn, it does not follow
+your position, and planning something of your own does not touch it. A planned route that
+quietly rewrote itself per rider would not be a plan.
+
+### Leaving the line, and the ways back
+
+When a rider is more than 160 m from the planned route (and back inside 90 m before the
+warning clears — one threshold would flicker all the way down a parallel road), one line
+appears over the map: how far off you are, and a **Ways back** button. It is a button, not
+a card that covers the road.
+
+Opening it asks the router for up to three genuinely different answers, all of them real
+routes rather than drawn guesses:
+
+1. **Direct to a stop** — straight to the next stop or the destination, ignoring the
+   planned line entirely. Sometimes the detour you took really is the shorter way to the
+   next meeting point.
+2. **Back to the planned route** — to the nearest point on the line, found by
+   perpendicular projection onto its segments, not by snapping to the nearest vertex.
+3. **Rejoin, then on to the stop** — one routing request through that nearest point and
+   on to the stop, so the geometry actually runs along the planned road rather than being
+   two lines stapled together.
+
+Every candidate is scored on time **plus** how much of it is spent more than 70 m from
+the planned corridor (a mild minute-per-kilometre penalty), so the recommendation is not
+simply "whatever is fastest for me" — which, in a group, is the wrong question. All of
+them are drawn: grey for the ones you have not picked, the accent colour for the one you
+have. Tapping one on the map selects it; *Ride the highlighted one* hands it to live
+navigation exactly as if you had planned it yourself.
+
+Asking costs routing requests, so it is rate limited: at most one round per 45 seconds
+unless you have moved 400 m or asked for a refresh yourself. Being lost is not a reason
+to hammer a public demo server.
+
+### The door
+
+A room code is six characters against a public broker, and somebody will eventually guess
+one. So:
+
+- **A name is required.** "Who is that dot" is a safety question when you are driving.
+- **Approval is on by default.** A guest who has not been let in can do exactly two
+  things — say who they are, and ask for a snapshot. Every other message is refused *at
+  the host*, not filtered out of a UI the sender is not obliged to be running.
+- **A refusal is a refusal.** A refused or removed rider is told and disconnected, so
+  their own reconnect loop stops dialling.
+- Chat is attributed to the channel it arrived on, never to what the payload claims; it
+  is length-capped and rate limited per rider; positions are range-checked and stamped
+  with the receiver's clock, because a clock you do not own cannot age a marker.
+- The host can turn chat or voice off for the whole room, and turning the door off lets
+  in everyone already waiting rather than leaving a lobby nobody can be admitted from.
+
+### Voice
+
+Push to talk: hold the microphone button beside the map controls, speak, let go. The clip
+is recorded whole (Opus in a container), base64-chunked down the data channel, relayed by
+the host and played to everyone else. **Hands-free** keeps the mic open and sends what you
+say as back-to-back four-second segments instead.
+
+This is a walkie-talkie, not a phone call, and that is a deliberate trade. A live audio
+track would mean renegotiating every peer connection in the room each time somebody
+joins; a clip needs none of that, survives a tunnel (it simply arrives late), and matches
+how people actually talk on a ride — in bursts, with a thumb on a button and eyes on the
+road. The cost is latency: you hear a sentence when the sentence is finished.
+
+### What it costs
+
+Nothing polls a server. Positions go out on a 2.5-second timer *or* sooner if the rider
+actually moved 30 m, and the host sends one batched message for the whole room rather
+than one per rider. Voice costs nothing at all until a thumb is on the button. The room's
+own geolocation watch exists so presence works when neither navigation nor free drive is
+running; when either of them is, their fixes are reused rather than a second watch paid
+for.
+
 ## Honest limitations
 
 - **OSRM has no motorcycle profile.** Motorcycle routes are the driving profile with
@@ -307,6 +407,25 @@ arc and written only when the angle has actually moved more than a degree and a 
 - **DEM elevation is not your altimeter.** The terrain model is 90 m resolution and steadier
   than a phone's GPS altitude, which is why the dashboard prefers it — but on a bridge or in a
   cutting it reports the ground, not the road. The tile says which source it is using.
+- **A group ride is only as up as its host.** The room is a star: everyone talks to the
+  host and the host relays. That is what makes one authoritative planned route possible,
+  and it means the host's connection is the room. If the host closes the tab, the ride
+  ends for everybody; there is no host migration.
+- **Voice is a walkie-talkie.** Clips, not a live track — you hear a sentence once it is
+  finished. Recording needs `MediaRecorder`, so a browser without it can listen but not
+  talk, and autoplay rules mean a phone that has not been touched yet may need one tap
+  before it will play anything.
+- **The signalling broker is somebody else's.** Rooms are introduced through public
+  PeerJS brokers and hard NATs fall back to a public TURN relay. If both are down, a
+  guest cannot find a host — the app retries for as long as you leave it open, but there
+  is no backend here to fix that.
+- **A room code is not a password.** It is six characters, which is why approval is on by
+  default and why it should stay on. Turn it off only among people you can see.
+- **Positions are as good as the phones sending them.** A rider in a tunnel goes stale
+  rather than wrong: their last known dot dims instead of vanishing, which is information,
+  not a promise about where they are now.
+- **Twelve riders.** A host holds one connection per rider; the cap is its uplink, not a
+  licence limit.
 - **Recorded roads live in `localStorage`.** Persistent storage is requested but only ever
   granted as a heuristic, and clearing site data clears the lot. There is no export yet.
 
@@ -337,6 +456,10 @@ routecast/
     elevation.js            RC.elevation— Open-Meteo DEM profile, climb/descent, grade at a point
     risk.js                 RC.risk     — vehicle-aware scoring, advice, departure planner
     pick.js                 RC.pick     — the centre-pin place picker
+    peer.js                 RC.net      — WebRTC data channels over a public broker; no backend
+    rejoin.js               RC.rejoin   — planned-route geometry: projection, simplify, ways back
+    group.js                RC.group    — the room: roster, the door, chat, voice, the planned route
+    groupui.js              RC.groupui  — the room on screen: the Ride tab, the layers, the cards
     nav.js                  RC.nav      — live navigation: route projection, live ETA, wake lock,
                                           reroute and forecast-refresh gating, ride recording
     free.js                 RC.free     — free driving: the dashboard and the recorder, no route
@@ -344,7 +467,9 @@ routecast/
     compass.js              RC.compass  — heading sources, north-up / course-up map rotation
     app.js                  the glue: map, form, the render pipeline, the draggable sheet
     pwa.js                  install prompt, iOS fallback, full-screen toggle
-  tools/validate.js         the whole test suite: `node tools/validate.js`
+  tools/validate.js         static + pure-module suite: `node tools/validate.js`
+  tools/group-e2e.js        two real browsers, one room: `node tools/group-e2e.js`
+  tools/broker.js           a local stand-in for the public broker; not shipped
 ```
 
 ## Testing
@@ -372,7 +497,38 @@ as neither, that a mark re-saved on the same spot renames rather than duplicates
 a free ride's odometer refuses a parked phone's jitter, a step inside its own error circle
 and a teleport alike.
 
+The group ride's own arithmetic is checked in the same half: that the nearest point on a
+planned line is found abeam rather than at a vertex, that a straight line simplifies to
+its endpoints while a corner never does, that a route laid over the planned one counts as
+nothing off the corridor while one a kilometre to the side counts as all of it, that a
+stop already passed drops off the list while a destination never does, that three
+distinct ways back are offered with exactly one recommended and the same road is never
+offered twice under two names, and that what arrives off the wire is treated as a
+stranger's claim — an impossible speed clamped, a coordinate outside the globe refused, a
+heading normalised, a timestamp replaced with the receiver's own.
+
+```
+node tools/group-e2e.js
+```
+
+The room itself cannot be tested in one JavaScript context, so this one drives **two real
+Chromium contexts** through the real transport, with the public broker replaced by
+`tools/broker.js` on localhost and OSRM, Open-Meteo, Nominatim and the tiles answered
+locally. It checks the claims that are about another machine: that a code finds a host,
+that an unapproved guest reaches a lobby and nothing it sends reaches the room, that the
+planned route arrives whole and byte-identical rather than recomputed, that a rider's own
+re-plan does not move it, that drifting off it produces several ways back with one
+highlighted, that a push-to-talk clip recorded from a fake microphone is encoded, chunked,
+relayed and heard at the other end, that a guest cannot post under the host's name or
+flood the room, and that nothing overflows the screen in either orientation. It needs
+Playwright; everything else in `tools/` needs nothing at all.
+
 Nothing is sent anywhere but those services. Your last trip, your saved routes and the
 record of the roads you have ridden all live in `localStorage` and never leave the device —
 nothing is uploaded, and there is no analytics of any kind. *Your roads* in the panel shows
 exactly what has been kept and throws all of it away in one tap.
+
+A group ride is the one thing here that shares anything, and it shares it with the people
+in the room and nobody else: positions, chat and voice go straight to the other phones
+over WebRTC. Nothing is stored anywhere central, nothing outlives the room, and the only
+thing kept on your own device is the name you last used.

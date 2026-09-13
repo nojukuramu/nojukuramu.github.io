@@ -139,7 +139,30 @@ RC.icons = (function () {
 
     alert: wrap(
       '<path d="M12 3.5L2.5 20.5h19L12 3.5Z"/><path d="M12 9.8v4.2M12 17.3v.1"/>'
-    )
+    ),
+
+    people: wrap(
+      '<circle cx="9.2" cy="8.4" r="3.4"/>' +
+      '<path d="M2.8 20c.6-3.4 3.2-5.4 6.4-5.4s5.8 2 6.4 5.4"/>' +
+      '<path d="M16.2 5.6a3 3 0 0 1 0 5.8M17.4 14.9c2 .7 3.4 2.5 3.8 5.1"/>'
+    ),
+
+    chat: wrap(
+      '<path d="M20.5 12.4c0 3.9-3.8 7-8.5 7a10 10 0 0 1-2.6-.34L4.2 21l1.2-3.6a6.6 6.6 0 0 1-1.9-4.5c0-3.9 3.8-7 8.5-7s8.5 3.1 8.5 7Z"/>'
+    ),
+
+    mic: wrap(
+      '<path d="M12 3.6a2.7 2.7 0 0 1 2.7 2.7v5a2.7 2.7 0 0 1-5.4 0v-5A2.7 2.7 0 0 1 12 3.6Z"/>' +
+      '<path d="M6.4 11a5.6 5.6 0 0 0 11.2 0M12 17v3.4M9 20.4h6"/>'
+    ),
+
+    // The static planned route: one agreed line with the stops strung on it.
+    route: wrap(
+      '<circle cx="6" cy="18.5" r="2.4"/><circle cx="18" cy="5.5" r="2.4"/>' +
+      '<path d="M8.4 18.5h4.1a3.3 3.3 0 0 0 0-6.6h-2a3.2 3.2 0 0 1 0-6.4h5.1"/>'
+    ),
+
+    check: wrap('<path d="M4.5 12.6 9.4 17.5 19.5 6.8"/>')
   };
 
   var uiFallback = wrap('<circle cx="12" cy="12" r="8.5"/>');
