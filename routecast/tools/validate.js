@@ -204,6 +204,20 @@ section("Static: element ids");
     }
   });
   check("every RC.el() id exists in index.html", missing.length === 0, missing.join(", "));
+
+  /* groupui.js reaches for elements through its own one-letter helpers, so the
+     check above cannot see them — and a typo in one of those ids is a button
+     that silently does nothing. The helpers all take the id first, and none of
+     them is ever called as a method, which is what the leading guard is for
+     (map.on("zoomend") is not an element lookup). */
+  var ui = read("static/js/groupui.js");
+  var uiMissing = [];
+  var r3 = /(^|[^.\w])(?:el|on|show|text)\("([a-z][a-z0-9-]*)"/g, m3;
+  while ((m3 = r3.exec(ui))) {
+    if (!declared[m3[2]]) uiMissing.push("#" + m3[2]);
+  }
+  check("every id groupui.js reaches for exists in index.html",
+        uiMissing.length === 0, uiMissing.join(", "));
 })();
 
 section("Static: script manifest");
@@ -278,6 +292,9 @@ section("Static: theme tokens");
   var undef = Object.keys(used).filter(function (t) {
     // Tokens written from JavaScript at runtime are declared there, not here.
     if (t === "--sheet-h" || t === "--rc-controls-h" || t === "--rc-bearing") return false;
+    // --rider is each group-ride member's own colour, written onto their marker
+    // by groupui.js from the room's palette.
+    if (t === "--rider") return false;
     return !declared[t];
   });
   check("every var(--token) is defined", undef.length === 0, undef.join(", "));
@@ -327,7 +344,11 @@ function sandbox(iconsOnly) {
       removeItem: function (k) { delete store[k]; },
       clear: function () { store = {}; }
     },
-    navigator: { onLine: true, storage: null, geolocation: null, wakeLock: null },
+    navigator: { onLine: true, storage: null, geolocation: null, wakeLock: null, mediaDevices: null },
+    setInterval: function () { return 0; },
+    clearInterval: function () {},
+    Uint8Array: Uint8Array,
+    Blob: typeof Blob === "function" ? Blob : function () {},
     document: {
       visibilityState: "visible",
       addEventListener: function () {},
@@ -343,7 +364,7 @@ function sandbox(iconsOnly) {
   var files = iconsOnly
     ? ["util.js", "icons.js"]
     : ["util.js", "coords.js", "history.js", "traffic.js", "eta.js", "routes.js", "marks.js",
-       "router.js", "sampler.js", "elevation.js", "free.js"];
+       "router.js", "sampler.js", "elevation.js", "free.js", "rejoin.js", "group.js"];
   files.forEach(function (f) {
       vm.runInContext(read("static/js/" + f), ctx, { filename: f });
     });
@@ -825,6 +846,158 @@ section("Behaviour: terrain profile");
       check("a re-plan of the same line costs no second request", requested === before);
     });
   });
+})();
+
+
+section("Behaviour: rejoining a planned route");
+(function () {
+  var RC = sandbox().RC;
+  var J = RC.rejoin;
+
+  /* A planned line due north, 0.05 degrees of latitude long (about 5.5 km),
+     and a rider a touch over a kilometre east of the middle of it. */
+  var planned = [];
+  for (var i = 0; i <= 10; i++) planned.push([14.0 + i * 0.005, 121.0]);
+  var from = { lat: 14.02, lon: 121.01 };
+
+  var near = J.nearestOn(planned, from.lat, from.lon);
+  check("the nearest point on the line is found abeam, not at a vertex",
+        Math.abs(near.lat - 14.02) < 1e-6 && Math.abs(near.lon - 121.0) < 1e-6,
+        JSON.stringify([near.lat, near.lon]));
+  check("its distance is the perpendicular one", near.distM > 1000 && near.distM < 1150,
+        String(Math.round(near.distM)));
+  check("and it knows how far along the line it sits",
+        near.alongM > 2100 && near.alongM < 2300, String(Math.round(near.alongM)));
+
+  var cum = J.cumulative(planned);
+  check("the line's length is accumulated", cum[cum.length - 1] > 5400 && cum[cum.length - 1] < 5700,
+        String(Math.round(cum[cum.length - 1])));
+
+  check("a point on the line is not off it", J.distanceToLine(planned, 14.03, 121.0) < 1);
+
+  // A straight line simplifies to its two ends; a kink survives.
+  check("a straight line simplifies to its endpoints", J.simplify(planned, 12).length === 2,
+        String(J.simplify(planned, 12).length));
+  var kinked = [[14.0, 121.0], [14.0, 121.02], [14.02, 121.02]];
+  check("a corner is never simplified away", J.simplify(kinked, 12).length === 3);
+  check("simplify keeps the first and last point",
+        J.simplify(planned, 12)[0][0] === 14.0 &&
+        J.simplify(planned, 12)[1][0] === planned[planned.length - 1][0]);
+
+  var packed = J.compact([[14.123456789, 121.987654321]]);
+  check("coordinates are rounded to about a metre",
+        packed[0][0] === 14.12346 && packed[0][1] === 121.98765, JSON.stringify(packed[0]));
+
+  check("a line laid over the planned one is not off the corridor",
+        J.offCorridorMeters(planned, planned) === 0);
+  var parallel = planned.map(function (c) { return [c[0], c[1] + 0.01]; });
+  check("a line a kilometre to the side is entirely off it",
+        J.offCorridorMeters(parallel, planned) > 5000,
+        String(Math.round(J.offCorridorMeters(parallel, planned))));
+
+  /* stopsAhead: the middle stop is behind a rider two thirds of the way up
+     the line; the destination never is. */
+  var plan = {
+    coords: planned,
+    stops: [{ lat: 14.01, lon: 121.0, name: "Fuel" }, { lat: 14.05, lon: 121.0, name: "End" }]
+  };
+  var ahead = J.stopsAhead(plan, { lat: 14.035, lon: 121.001 });
+  check("a stop already passed drops off the list", ahead.length === 1 && ahead[0].name === "End",
+        JSON.stringify(ahead.map(function (s) { return s.name; })));
+  var allAhead = J.stopsAhead(plan, { lat: 14.001, lon: 121.001 });
+  check("stops still ahead stay on it", allAhead.length === 2);
+
+  /* The suggestion itself, against a router that answers with the polyline
+     through the waypoints it was given. Three asks: to the stop, back to the
+     line, and through the line to the stop. */
+  var asks = [];
+  function fakeRouter(waypoints) {
+    asks.push(waypoints.length);
+    var coords = waypoints.map(function (w) { return [w.lat, w.lon]; });
+    var d = 0;
+    for (var k = 1; k < coords.length; k++) {
+      d += J.metres(coords[k - 1][0], coords[k - 1][1], coords[k][0], coords[k][1]);
+    }
+    return Promise.resolve([{ coords: coords, distance: d, duration: d / 12 }]);
+  }
+
+  return J.suggest({ from: from, planned: plan, router: fakeRouter }).then(function (list) {
+    check("three kinds of way back are offered", list.length === 3,
+          list.map(function (c) { return c.kind; }).join(", "));
+    var kinds = list.map(function (c) { return c.kind; }).sort().join(",");
+    check("they are a stop, a rejoin and an optimised one", kinds === "optimised,rejoin,stop", kinds);
+    check("exactly one is recommended",
+          list.filter(function (c) { return c.recommended; }).length === 1);
+    check("the recommendation is the best scoring one", list[0].recommended === true &&
+          list[0].score <= list[1].score && list[1].score <= list[2].score);
+    check("every candidate carries its own id",
+          list[0].id !== list[1].id && list[1].id !== list[2].id);
+    check("the router was asked once per candidate", asks.length === 3, asks.join(","));
+    check("the optimised one routes through a via", asks.indexOf(3) > -1, asks.join(","));
+    check("time off the planned corridor is measured",
+          list.every(function (c) { return typeof c.offCorridorM === "number"; }));
+
+    // Two candidates that turn out to be the same road are one candidate.
+    function sameRouter() {
+      return Promise.resolve([{ coords: [[14.02, 121.01], [14.05, 121.0]], distance: 4000, duration: 400 }]);
+    }
+    return J.suggest({ from: from, planned: plan, router: sameRouter }).then(function (dup) {
+      check("the same road is never offered twice under two names", dup.length < 3,
+            String(dup.length));
+      return J.suggest({ from: from, planned: null, router: fakeRouter });
+    }).then(function (none) {
+      check("no planned route means nothing to rejoin", none.length === 0);
+    });
+  });
+})();
+
+section("Behaviour: what the group ride accepts off the wire");
+(function () {
+  var RC = sandbox().RC;
+  var G = RC.group;
+
+  check("a name is trimmed, de-newlined and capped",
+        G._clean.name("  Ka\nrl\t Rider with a very long name indeed  ").length <= G.NAME_MAX &&
+        G._clean.name("A\nB") === "A B", JSON.stringify(G._clean.name("A\nB")));
+  check("an invisible-character name is not a name",
+        G._clean.name("​​") === "", JSON.stringify(G._clean.name("​​")));
+  check("chat is capped at the advertised length",
+        G._clean.text(new Array(600).join("x")).length === G.CHAT_MAX);
+
+  check("a fix off the wire needs two real numbers",
+        G._clean.fix({ lat: "abc", lon: 1 }) === null && G._clean.fix(null) === null);
+  check("a coordinate outside the globe is refused",
+        G._clean.fix({ lat: 91, lon: 0 }) === null && G._clean.fix({ lat: 0, lon: 181 }) === null);
+  var fix = G._clean.fix({ lat: 14, lon: 121, speedKmh: 9000, courseDeg: -90, at: 8.64e15 });
+  check("an impossible speed is clamped", fix.speedKmh === 400, String(fix.speedKmh));
+  check("a heading is normalised into the circle", fix.courseDeg === 270, String(fix.courseDeg));
+  check("the timestamp is ours, not the sender's", fix.at > 1.6e12 && fix.at < 4e12, String(fix.at));
+
+  /* A planned route on the wire: simplified, rounded, stops kept. A straight
+     line of a thousand points is two. */
+  var line = [];
+  for (var i = 0; i < 1000; i++) line.push([14 + i * 0.0001, 121.000000123]);
+  var packed = G._packPlan({
+    coords: line, distance: 11000, duration: 900,
+    stops: [{ lat: 14.09999, lon: 121.0000001, name: "End\nof it" }],
+    vehicle: "motorcycle"
+  }, "Host");
+  check("a shared route is simplified before it is sent", packed.coords.length < 10,
+        String(packed.coords.length));
+  check("and rounded on the way out", String(packed.coords[0][1]).length <= 10,
+        String(packed.coords[0][1]));
+  check("its stops survive, names cleaned", packed.stops.length === 1 &&
+        packed.stops[0].name === "End of it", JSON.stringify(packed.stops[0]));
+  check("the vehicle rides along with it", packed.vehicle === "motorcycle");
+  check("a shared route carries an id", typeof packed.id === "string" && packed.id.length > 4);
+  check("nonsense for a vehicle falls back to a car",
+        G._packPlan({ coords: line, stops: [], vehicle: "hovercraft" }, "Host").vehicle === "car");
+
+  check("the room is not active until one is opened", G.isActive() === false);
+  check("a room that does not exist has no planned route", G.planned() === null);
+  check("host-only controls refuse to act outside a room",
+        G.setPlanned({ coords: line }) === false && G.kick("nobody") === false &&
+        G.setApproval(true) === false);
 })();
 
 /* ============================================================

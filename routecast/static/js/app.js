@@ -610,7 +610,8 @@
       danger:  v("--rc-danger", "#B03434"),
       accent:  v("--matcha", "#4F7A38"),
       casing:  v("--ink", "#1A2018"),
-      ghost:   v("--faint", "#939C8A")
+      ghost:   v("--faint", "#939C8A"),
+      planned: v("--rc-planned", "#4B5BC4")
     };
     return themeCache;
   }
@@ -1427,6 +1428,9 @@
     if (state.checkpoints.length) { labelCheckpoints(); render(); }
     renderMarks();
     renderFreeSummary();
+    // Every distance the room shows — how far away each rider is, how far off
+    // the planned route — is in these units too.
+    RC.groupui.refresh();
   }
 
   function toggleTheme() {
@@ -1437,6 +1441,7 @@
     forgetThemeColors();
     if (state.routes.length) { drawRoute({ fit: false }); drawWeatherMarkers(); }
     renderElevation();
+    RC.groupui.redraw();
   }
 
   function useMyLocation() {
@@ -1739,6 +1744,7 @@
     }
     var scroll = RC.el("panel-scroll");
     if (scroll) scroll.scrollTop = 0;
+    if (name === "group") RC.groupui.refresh();
     if (name === "marks") renderMarks();
     if (name === "you") { renderHistoryPanel(); renderFreeSummary(); }
   }
@@ -2041,6 +2047,85 @@
     }
   }
 
+  /* ---------------------------------------------------------
+     Riding a line somebody else worked out
+
+     The group ride's "ways back" hand over a finished route object. Adopting
+     one is exactly what a re-plan already does — take the geometry, sample it,
+     read the sky along it, draw it — and then it drives. Nothing here knows or
+     cares that a room produced it.
+     --------------------------------------------------------- */
+  function driveRoute(raw, targets) {
+    if (!raw || !raw.coords || raw.coords.length < 2) return Promise.resolve(false);
+    if (RC.nav.isActive()) stopNav();
+    if (RC.free.isActive()) stopFree();
+
+    var token = ++state.planToken;
+    if (activeRequest) { activeRequest.abort(); activeRequest = null; }
+
+    raw.familiarity = RC.history.familiarity(raw.coords, state.vehicle);
+    var route = RC.eta.plan(raw, new Date(), state.vehicle).route;
+    state.routes = [route];
+    state.routeIndex = 0;
+    state.selected = -1;
+
+    var ends = targets && targets.length ? targets : [{
+      lat: route.coords[route.coords.length - 1][0],
+      lon: route.coords[route.coords.length - 1][1],
+      name: "the end of this way"
+    }];
+
+    setStatus("Taking that way…", "busy");
+    return loadWeatherFor(route, token).then(function () {
+      if (token !== state.planToken) return false;
+      rebuildNavTargets(route, ends);
+      return RC.nav.start({
+        map: map,
+        route: route,
+        checkpoints: state.checkpoints,
+        vehicle: state.vehicle,
+        series: state.series,
+        profile: state.profile,
+        departedAt: new Date()
+      }).then(function () {
+        setStatus("", "");
+        setMode("nav");
+        RC.follow.enable({ zoom: Math.max(map.getZoom(), NAV_ZOOM) });
+        return true;
+      });
+    }).catch(function (err) {
+      if (token !== state.planToken) return false;
+      setStatus(err && err.message ? err.message : "Could not take that way.", "error");
+      return false;
+    });
+  }
+
+  /* What the host would share as the ride's planned route: the line currently
+     selected, and the named places it was built from. Deliberately a snapshot
+     — once it is the room's planned route it stops following this rider's
+     re-plans, which is the entire point of a planned route. */
+  function currentPlanForGroup() {
+    var route = state.routes[state.routeIndex];
+    if (!route || !route.coords || route.coords.length < 2) return null;
+    var stops = [];
+    for (var i = 1; i < state.endpoints.length; i++) {
+      var p = state.endpoints[i].place;
+      if (p) stops.push({ lat: p.lat, lon: p.lon, name: p.name });
+    }
+    if (!stops.length) {
+      var last = route.coords[route.coords.length - 1];
+      stops = [{ lat: last[0], lon: last[1], name: "Destination" }];
+    }
+    return {
+      coords: route.coords,
+      stops: stops,
+      distance: route.distance,
+      duration: route.duration,
+      vehicle: state.vehicle,
+      by: RC.group.myName()
+    };
+  }
+
   // One forecast for where the rider actually is, on free drive's own gate.
   function fetchLocalWeather(fs) {
     var point = [{ lat: fs.lat, lon: fs.lon, eta: new Date() }];
@@ -2285,6 +2370,8 @@
     renderNavHud(ns);
     updateRiderMarker(ns.lat, ns.lon, ns.courseDeg);
     dropPassedTargets(ns.distanceAlong);
+    RC.groupui.pushFix({ lat: ns.lat, lon: ns.lon, speedKmh: ns.speedKmh,
+                         courseDeg: ns.courseDeg, accuracy: ns.accuracy });
   };
   RC.nav.onArrive = function () { setStatus("You've arrived.", ""); flashStatus(5000); stopNav(); };
   RC.nav.onOffRoute = function (ns) {
@@ -2303,6 +2390,8 @@
     RC.compass.setCourse(fs.headingDeg, fs.speedKmh, null);
     renderFreeHud(fs);
     updateRiderMarker(fs.lat, fs.lon, fs.courseDeg);
+    RC.groupui.pushFix({ lat: fs.lat, lon: fs.lon, speedKmh: fs.speedKmh,
+                         courseDeg: fs.courseDeg, accuracy: fs.accuracy });
   };
   RC.free.onWeather = fetchLocalWeather;
   RC.free.onError = function (msg) { setStatus(msg, "error"); };
@@ -2463,6 +2552,23 @@
     }, 150);
     window.addEventListener("resize", onViewportChange);
     window.addEventListener("orientationchange", onViewportChange);
+
+    /* The room is its own thing drawn over the same map. It gets the handful of
+       app-level answers it cannot work out for itself and nothing else. */
+    RC.groupui.init({
+      map: map,
+      themeColors: themeColors,
+      units: function () { return state.units; },
+      vehicle: function () { return state.vehicle; },
+      avoidMotorways: function () { return state.avoidMotorways; },
+      currentPlan: currentPlanForGroup,
+      driveRoute: driveRoute,
+      setStatus: setStatus,
+      flashStatus: flashStatus,
+      openPanel: openPanel,
+      closePanel: closePanel,
+      isPanelOpen: isPanelOpen
+    });
 
     setVehicle(state.vehicle);
     setAvoidMotorways(state.avoidMotorways, true);
