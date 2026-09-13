@@ -18,8 +18,14 @@
    POS      a rider's fix, every couple of seconds, batched by the host
    PLAN     the planned route: simplified, rounded to ~1 m, sent in chunks
    CHAT     text, capped and rate limited
-   VOICE    a push-to-talk clip, Opus in a container, chunked like the plan
+   TALK     one flag: a thumb went down, or came up
+   VOICE    a recorded clip — the fallback for peers with no live audio path
    STATE    the room itself: who is in it, who is waiting, what the settings are
+
+   Voice does not travel on this channel at all in the normal case. It rides the
+   peer connection's own audio path (see static/js/voice.js), which is both why
+   it is live rather than a recording and why a rider's sentence is never queued
+   behind a planned route being pushed to a phone that just joined.
 
    The door
    --------
@@ -35,7 +41,7 @@
    Nothing polls a server. One geolocation watch feeds presence (the same fix
    nav.js is already getting, when it is running), positions go out on a timer
    OR on real movement, and voice costs nothing at all until a thumb is on the
-   button.
+   button — and, thanks to DTX, very little even when one is.
    ============================================================ */
 var RC = RC || {};
 
@@ -58,7 +64,8 @@ RC.group = (function () {
     BYE: "bye",
     RESYNC: "resync",
     APPROVE: "approve",      // guest(co-nothing) -> host is refused; host uses it locally
-    NUDGE: "nudge"           // "where are you?" ping, host relays
+    NUDGE: "nudge",          // "where are you?" ping, host relays
+    TALK: "talk"             // live voice: a thumb went down, or came up
   };
 
   var NAME_MAX = 22;
@@ -76,6 +83,7 @@ RC.group = (function () {
   var VOICE_MAX_B = 400000;       // a clip bigger than this is dropped
   var VOICE_MAX_MS = 20000;       // a stuck thumb is not a 10-minute broadcast
   var HANDS_FREE_MS = 4000;       // segment length when the mic is left open
+  var TALK_STALE_MS = 15000;      // a "stopped talking" that never arrived
 
   /* A rider is a colour on a map before they are a name in a list. These are
      picked to stay apart from the route palette (matcha green, the four risk
@@ -323,12 +331,16 @@ RC.group = (function () {
     return { id: rid(8), from: fromId, name: name, text: text, at: now(), kind: kind || "say" };
   }
 
-  /* ---------------- voice: push to talk ----------------
-     Opus in a container, recorded whole and sent whole. A live audio track
-     would mean renegotiating every peer connection in the room whenever
-     somebody joins; a clip needs none of that, survives a tunnel (it simply
-     arrives late), and matches how people actually talk on a ride: in bursts,
-     with a thumb on a button, eyes on the road. */
+  /* ---------------- voice, the fallback path ----------------
+     Opus in a container, recorded whole and sent whole, chunked down the data
+     channel. This is what the room used to do and what it still does when the
+     live path is unavailable — an older peer on the other end, a browser with
+     no transceivers, a host that cannot mix.
+
+     It is correct and it is slow, and the reason is structural: nothing leaves
+     the phone until the recording stops, so the floor on delay is the length of
+     what was said. See RC.voice (static/js/voice.js) for the path that carries
+     a syllable while it is still being spoken. */
 
   function pickMime() {
     if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return "";
@@ -518,6 +530,122 @@ RC.group = (function () {
     }
   }
 
+  /* ---------------- voice, the live path ----------------
+     RC.voice owns the audio; everything here is the part that needs to know
+     about the room — who is allowed in the mix, and who the room should be
+     told is talking.
+
+     The audio itself never touches the data channel, so a rider's voice is not
+     queued behind a route being pushed to a phone that just joined. What does
+     travel on the channel is one flag per press: the sound arrives on its own
+     path, and the name beside it arrives on this one. */
+
+  function liveOn() {
+    return !!(st && st.live && RC.voice && RC.voice.active());
+  }
+
+  /** Start the engine for this role, or decide we cannot. A host without Web
+      Audio has no way to mix the room down to one stream per guest, so it stays
+      on clips and so does everybody who joins it. */
+  function startLive(role) {
+    if (!RC.voice || !RC.voice.available(role)) { st.live = false; return false; }
+    st.live = RC.voice.start(role);
+    if (st.live) {
+      RC.voice.setMuted(!!st.muted);
+      RC.voice.onBlocked = function () {
+        if (st && !st.autoplayWarned) {
+          st.autoplayWarned = true;
+          notice("Tap anywhere to let RouteCast play voice from the room.", "warn");
+        }
+      };
+    }
+    return st.live;
+  }
+
+  function stopLive() {
+    if (!RC.voice) return;
+    RC.voice.onBlocked = null;
+    try { RC.voice.stop(); } catch (e) {}
+  }
+
+  /** The mix is the approved room and nothing else. Called whenever either of
+      those two facts can have changed — a link opening or closing, an approval,
+      the host turning voice off — because an unapproved stranger is exactly the
+      person who must not be able to speak into a helmet. */
+  function syncVoicePeers() {
+    if (!liveOn() || st.role !== "host" || !st.net) return;
+    var live = {};
+    if (st.settings.voice !== false) {
+      st.net.guests().forEach(function (l) {
+        var m = st.members[l.id];
+        if (!m || !m.approved) return;
+        if (!l.audioReady || !l.audioReady()) return;
+        live[l.id] = l;
+      });
+    }
+    // A guest that dropped and came back keeps its connection id but arrives on
+    // a new peer connection, so identity here is the link, not the id.
+    RC.voice.peerIds().forEach(function (id) {
+      if (live[id] !== RC.voice.linkOf(id)) RC.voice.removePeer(id);
+    });
+    Object.keys(live).forEach(function (id) {
+      RC.voice.addPeer(id, live[id]);
+    });
+  }
+
+  /** A guest has exactly one peer: the host. The link is only handed over once
+      it is open, which is also when negotiation is far enough along for
+      audioReady() to mean something. */
+  function syncGuestVoice() {
+    if (!liveOn() || st.role !== "guest" || !st.net || !st.net.link) return;
+    var l = st.net.link();
+    var want = l && st.settings.voice !== false && !st.waiting &&
+               l.audioReady && l.audioReady() ? l : null;
+    // A reconnect hands back a different link object on the same peer id, so
+    // the old one always goes before the new one arrives.
+    RC.voice.peerIds().forEach(function (id) {
+      if (!want || id !== "host" || RC.voice.linkOf(id) !== want) RC.voice.removePeer(id);
+    });
+    if (want) RC.voice.addPeer("host", want);
+  }
+
+  /* The name beside the voice. One flag each way, relayed by the host like
+     anything else, with a deadline on it so a release lost in a tunnel does not
+     leave somebody marked as talking for the rest of the ride. */
+
+  function sendTalk(on) {
+    if (!st) return;
+    var msg = { type: MSG.TALK, on: !!on, from: st.meId, name: st.myName };
+    if (st.role === "host") broadcast(msg);
+    else st.net.send(msg);
+  }
+
+  function setSpeaking(fromId, name, on) {
+    if (!st) return;
+    if (on) {
+      st.speaking = { name: name, from: fromId, at: now() };
+      fire("Voice", { name: name, from: fromId, at: now(), live: true });
+    } else if (st.speaking && st.speaking.from === fromId) {
+      st.speaking = null;
+    }
+    changed();
+  }
+
+  function onTalk(m, fromLink) {
+    if (!st || st.settings.voice === false) return;
+    // On the host, who said it is the link it arrived on and never the sender's
+    // own claim — otherwise a rider can put their words in somebody else's
+    // mouth on every phone in the room.
+    var from = String((fromLink && fromLink.id) || m.from || "");
+    if (!from || from === st.meId) return;
+    var name = cleanName(m.name) || (st.members[from] && st.members[from].name) || "Someone";
+    if (st.role === "host") {
+      broadcast({ type: MSG.TALK, on: !!m.on, from: from, name: name }, fromLink && fromLink.id);
+    }
+    if (st.muted) return;
+    setSpeaking(from, name, !!m.on);
+  }
+
   /* ---------------- presence ---------------- */
 
   function setMyFix(fix) {
@@ -574,6 +702,11 @@ RC.group = (function () {
     Object.keys(st.voiceIn).forEach(function (k) {
       if (now() - st.voiceIn[k].at > 30000) delete st.voiceIn[k];
     });
+    // ...and a live talker whose "I stopped" went into a tunnel with them.
+    if (st.speaking && st.speaking.from !== st.meId && now() - st.speaking.at > TALK_STALE_MS) {
+      st.speaking = null;
+      dirty = true;
+    }
     if (dirty) changed();
   }
 
@@ -636,6 +769,7 @@ RC.group = (function () {
 
       link.send({ type: MSG.WELCOME, youId: id, color: m.color, approved: m.approved });
       if (m.approved) {
+        syncVoicePeers();
         sendStateTo(link);
         pushChat(chatMessage("system", m.name, m.name + " joined the ride.", "system"));
         pushState();
@@ -685,6 +819,9 @@ RC.group = (function () {
         if (st.settings.voice === false) return;
         onVoiceChunk(data, link);
         break;
+      case MSG.TALK:
+        onTalk(data, link);
+        break;
       case MSG.NUDGE: {
         var who = cleanName(data.name) || m.name;
         var n = chatMessage("system", who, who + " asked where everyone is.", "system");
@@ -719,11 +856,18 @@ RC.group = (function () {
     st.members[st.meId].host = true;
     st.order.push(st.meId);
 
+    startLive("host");
+
     st.net = RC.net.host(code, {
       on: {
-        "guest-open": function (link) { /* named on HELLO, not before */ },
+        "guest-open": function (link) {
+          /* Named on HELLO, not before — but the audio path is negotiated and
+             idle either way, so it is wired the moment approval allows it. */
+          syncVoicePeers();
+        },
         "guest-message": function (link, data) { hostReceive(link, data); },
         "guest-close": function (link) {
+          if (RC.voice) RC.voice.removePeer(link.id);
           var m = st && st.members[link.id];
           if (!m) return;
           m.online = false;
@@ -763,6 +907,8 @@ RC.group = (function () {
       case MSG.STATE: {
         var s = data.state || {};
         st.waiting = false;
+        // Falls through to syncGuestVoice() at the end of the case: being let
+        // in, or the host turning voice on, is what opens the audio path.
         st.rev = num(s.rev) || 0;
         st.hostName = cleanName(s.hostName);
         st.settings = {
@@ -792,6 +938,7 @@ RC.group = (function () {
                            at: num(m.at) || now(), kind: m.kind === "system" ? "system" : "say" });
           });
         }
+        syncGuestVoice();
         changed();
         break;
       }
@@ -818,6 +965,9 @@ RC.group = (function () {
       case MSG.VOICE:
         if (st.settings.voice === false) return;
         onVoiceChunk(data, null);
+        break;
+      case MSG.TALK:
+        onTalk(data, null);
         break;
       case MSG.PLAN_META: onPlanMeta(data); break;
       case MSG.PLAN_CHUNK: onPlanChunk(data); break;
@@ -850,6 +1000,7 @@ RC.group = (function () {
 
     st = baseState("guest", name, code);
     st.waiting = true;
+    startLive("guest");
 
     /* RC.net.join never gives up — it walks the broker list and backs off for
        as long as the room is open, which is exactly what you want halfway
@@ -887,7 +1038,8 @@ RC.group = (function () {
         },
         // Every fresh channel re-introduces us: a reconnect the rider never saw
         // must not leave the host holding a nameless link.
-        open: hello,
+        open: function () { hello(); syncGuestVoice(); },
+        closed: function () { if (RC.voice) RC.voice.removePeer("host"); },
         message: function (data) { guestReceive(data); }
       });
 
@@ -930,6 +1082,7 @@ RC.group = (function () {
       muted: false,
       handsFree: false,
       talking: false,
+      live: false,
       mic: null,
       rec: null,
       autoplayWarned: false,
@@ -956,6 +1109,7 @@ RC.group = (function () {
     was.timers.forEach(function (t) { clearInterval(t); });
     stopWatch();
     setHandsFree(false);
+    stopLive();
     releaseMic();
     try { if (was.rec) was.rec.stop(); } catch (e) {}
     try { if (was.net) was.net.stop(); } catch (e) {}
@@ -1051,6 +1205,7 @@ RC.group = (function () {
       if (!requireHost()) return false;
       st.settings.voice = !!on;
       if (!on) setHandsFree(false);
+      syncVoicePeers();
       pushState();
       return true;
     },
@@ -1066,6 +1221,7 @@ RC.group = (function () {
           link.send({ type: MSG.NOTICE, text: "You are in. Ride safe.", kind: "ok" });
           sendStateTo(link);
         }
+        syncVoicePeers();
         pushChat(chatMessage("system", m.name, m.name + " joined the ride.", "system"));
       } else {
         // Refused, not merely ignored: otherwise their own retry loop keeps
@@ -1152,12 +1308,45 @@ RC.group = (function () {
 
     /* ---- voice ---- */
     canTalk: function () {
-      return !!(st && st.settings.voice !== false && window.MediaRecorder &&
-                navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+      if (!st || st.settings.voice === false) return false;
+      if (liveOn()) return true;
+      return !!(window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    },
+
+    /** True when the thumb opens a microphone that is already connected, rather
+        than starting a recording nobody will hear until it stops. The UI says
+        so, because the two behave differently enough that a rider should know
+        which one they are on. */
+    isLive: function () { return liveOn() && RC.voice.ready(); },
+
+    /** Open the capture device before it is needed. The talk button calls this
+        as soon as it is on screen, so the first press is not paying for a
+        permission check and a device open while somebody is mid-sentence. */
+    primeVoice: function () {
+      if (!liveOn()) return Promise.resolve(false);
+      return RC.voice.prime();
     },
 
     startTalking: function () {
       if (!st || st.talking || !api.canTalk()) return Promise.resolve(false);
+
+      // The live path: open the gate, tell the room, and that is the entire
+      // send side. Nothing is buffered, so nothing has to be flushed.
+      if (api.isLive()) {
+        st.talking = true;
+        changed();
+        return RC.voice.setTransmit(true).then(function (ok) {
+          if (!st) return false;
+          if (!ok) { st.talking = false; changed(); return false; }
+          sendTalk(true);
+          return true;
+        }, function (err) {
+          if (st) { st.talking = false; changed(); }
+          notice(err && err.message ? err.message : "Could not open the microphone.", "error");
+          return false;
+        });
+      }
+
       st.talking = true;
       changed();
       return recordOnce(VOICE_MAX_MS).then(function (blob) {
@@ -1173,7 +1362,19 @@ RC.group = (function () {
     },
 
     stopTalking: function () {
-      if (!st || !st.rec) return false;
+      if (!st) return false;
+      if (liveOn() && st.talking) {
+        st.talking = false;
+        // Hands-free outranks the button: letting go of push-to-talk while the
+        // mic is deliberately open must not close it.
+        if (!st.handsFree) {
+          RC.voice.setTransmit(false);
+          sendTalk(false);
+        }
+        changed();
+        return true;
+      }
+      if (!st.rec) return false;
       try { st.rec.stop(); } catch (e) {}
       return true;
     },
@@ -1182,6 +1383,8 @@ RC.group = (function () {
       if (!st) return false;
       st.muted = !!on;
       if (on) st.playQueue.length = 0;
+      if (liveOn()) RC.voice.setMuted(st.muted);
+      if (on) st.speaking = null;
       changed();
       return true;
     },
@@ -1206,15 +1409,41 @@ RC.group = (function () {
     onFix: null
   };
 
-  /** Hands-free: the mic stays open and goes out as back-to-back segments.
-      Each segment is a complete recording, so it plays anywhere a single clip
-      plays — no streaming container to keep alive across a tunnel. */
+  /** Hands-free: the microphone is simply left open.
+
+      On the live path that is literally all it is — the gate stays up and Opus
+      DTX means a quiet rider costs the uplink almost nothing, so an open mic
+      for an hour is cheaper than the old four-second segments were.
+
+      On the fallback path it is what it always was: back-to-back recordings,
+      each a complete clip that plays anywhere a single clip plays. */
   function setHandsFree(on) {
     if (!st) return false;
     on = !!on;
     if (st.handsFree === on) return true;
     st.handsFree = on;
     changed();
+
+    if (liveOn()) {
+      if (!on) {
+        RC.voice.setTransmit(false);
+        if (!st.talking) sendTalk(false);
+        return true;
+      }
+      if (!api.isLive()) { st.handsFree = false; changed(); return false; }
+      RC.voice.setTransmit(true).then(function (ok) {
+        if (!st || !st.handsFree) return;
+        if (!ok) { st.handsFree = false; changed(); return; }
+        sendTalk(true);
+      }, function (err) {
+        if (!st) return;
+        st.handsFree = false;
+        changed();
+        notice(err && err.message ? err.message : "Could not open the microphone.", "error");
+      });
+      return true;
+    }
+
     if (!on) {
       try { if (st.rec) st.rec.stop(); } catch (e) {}
       releaseMic();

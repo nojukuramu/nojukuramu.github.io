@@ -448,6 +448,12 @@ RC.groupui = (function () {
       ptt.setAttribute("aria-pressed", RC.group.isTalking() ? "true" : "false");
       ptt.setAttribute("data-state", RC.group.isTalking() ? "talking"
         : RC.group.speaking() ? "hearing" : "idle");
+      // Live is the normal case; the recorded fallback is worth saying out loud,
+      // because on it nobody hears a word until the button comes back up.
+      ptt.setAttribute("data-mode", RC.group.isLive() ? "live" : "clip");
+      ptt.title = RC.group.isLive()
+        ? "Hold to talk — the room hears you as you speak."
+        : "Hold to talk — the room hears the clip once you let go.";
     }
     var who = RC.group.speaking();
     var strip = el("voice-now");
@@ -571,7 +577,11 @@ RC.groupui = (function () {
     };
     RC.group.onVoice = function (v) {
       renderVoice();
-      if (!panelShowsRide()) toast(v.name + " sent a voice message", "voice");
+      // Live voice is already audible by the time this fires, so the toast names
+      // the speaker; a clip is an event that happened and is being played back.
+      if (!panelShowsRide()) {
+        toast(v.live ? v.name + " is talking" : v.name + " sent a voice message", "voice");
+      }
     };
     RC.group.onNotice = function (t, kind) {
       bridge.setStatus(t, kind === "error" ? "error" : "");
@@ -658,6 +668,10 @@ RC.groupui = (function () {
       try { btn.setPointerCapture(e.pointerId); } catch (err) {}
       RC.group.startTalking();
     }
+    // A thumb resting on the button before it presses is free warning: open the
+    // capture device then, so the press itself is instantaneous.
+    btn.addEventListener("pointerenter", function () { RC.group.primeVoice(); });
+    btn.addEventListener("focus", function () { RC.group.primeVoice(); });
     function up() {
       if (!pttHold) return;
       pttHold = false;

@@ -11,7 +11,7 @@ Or skip the planning entirely and hit **Free drive**: the dashboard, the recorde
 the local forecast, with no destination and nothing to count down to.
 
 Or ride it with other people: **Group ride** puts a room of phones on one map, with one
-static planned route everybody can see, everyone's live position, chat, push-to-talk
+static planned route everybody can see, everyone's live position, chat, live push-to-talk
 voice, and — for whoever drifts off the agreed line — a set of real routes back to it.
 It runs phone to phone, with no server holding anybody's position.
 
@@ -343,16 +343,35 @@ one. So:
 
 ### Voice
 
-Push to talk: hold the microphone button beside the map controls, speak, let go. The clip
-is recorded whole (Opus in a container), base64-chunked down the data channel, relayed by
-the host and played to everyone else. **Hands-free** keeps the mic open and sends what you
-say as back-to-back four-second segments instead.
+Push to talk: hold the microphone button beside the map controls and speak. The room
+hears you *while* you are speaking — voice rides the peer connection's own audio path
+(Opus over SRTP, packetised every 20 ms), not the data channel. **Hands-free** simply
+leaves the gate open.
 
-This is a walkie-talkie, not a phone call, and that is a deliberate trade. A live audio
-track would mean renegotiating every peer connection in the room each time somebody
-joins; a clip needs none of that, survives a tunnel (it simply arrives late), and matches
-how people actually talk on a ride — in bursts, with a thumb on a button and eyes on the
-road. The cost is latency: you hear a sentence when the sentence is finished.
+The trick that makes the button instant is that there is nothing to set up when it is
+pressed. Each link is negotiated with an audio transceiver already in it, empty, from the
+moment the link exists — so starting to talk is a local `replaceTrack()` and a gain ramp,
+with no offer, no answer and no round trip through a public broker. The microphone is
+kept warm for a minute and a half after a release, so the second press costs nothing
+either.
+
+Opus is tuned for a motorbike rather than a podcast: wideband instead of full band,
+in-band FEC so a lost packet is repaired from the next one instead of waiting for a
+retransmit that would arrive too late to be a warning, and DTX so an open microphone on a
+quiet rider costs the uplink almost nothing. The receiver asks for a 40 ms de-jitter
+buffer — low enough to stay conversational, and the browser is free to grow it when a
+link deserves it.
+
+The star still holds. Guests send one stream to the host and get one back; the host is a
+mixer, building for each guest the sum of everyone *else* plus its own microphone. That
+is how a guest hears the whole room over a single stream, and why nobody ever hears
+themselves. Two people talking at once are two people talking at once, not a queue.
+
+**The clip path is still there** as a fallback, and is what runs against a peer too old
+to have the audio section, a browser without transceivers, or a host that cannot mix: the
+utterance is recorded whole, base64-chunked down the data channel, relayed and played.
+It is correct and it is slow — nothing leaves the phone until the recording stops — which
+is precisely what the live path exists to fix. The talk button says which one you are on.
 
 ### What it costs
 
@@ -411,10 +430,12 @@ for.
   host and the host relays. That is what makes one authoritative planned route possible,
   and it means the host's connection is the room. If the host closes the tab, the ride
   ends for everybody; there is no host migration.
-- **Voice is a walkie-talkie.** Clips, not a live track — you hear a sentence once it is
-  finished. Recording needs `MediaRecorder`, so a browser without it can listen but not
-  talk, and autoplay rules mean a phone that has not been touched yet may need one tap
-  before it will play anything.
+- **Voice is a walkie-talkie, not a conference call.** It is live now, but it is still
+  half-duplex by habit: a thumb on a button, eyes on the road. A peer that cannot
+  negotiate the audio section falls back to recorded clips, where you hear a sentence
+  only once it is finished, and a host whose browser has no Web Audio cannot mix, so its
+  whole room falls back with it. Autoplay rules mean a phone that has not been touched
+  yet may need one tap before it will play anything.
 - **The signalling broker is somebody else's.** Rooms are introduced through public
   PeerJS brokers and hard NATs fall back to a public TURN relay. If both are down, a
   guest cannot find a host — the app retries for as long as you leave it open, but there
@@ -457,6 +478,7 @@ routecast/
     risk.js                 RC.risk     — vehicle-aware scoring, advice, departure planner
     pick.js                 RC.pick     — the centre-pin place picker
     peer.js                 RC.net      — WebRTC data channels over a public broker; no backend
+    voice.js                RC.voice    — live voice: the pre-negotiated audio path, host mixing
     rejoin.js               RC.rejoin   — planned-route geometry: projection, simplify, ways back
     group.js                RC.group    — the room: roster, the door, chat, voice, the planned route
     groupui.js              RC.groupui  — the room on screen: the Ride tab, the layers, the cards

@@ -75,6 +75,104 @@
   var SOFT_REOFFERS = 3;          // re-asks on one broker before moving on
   var ID_TAKEN_ROUNDS = 3;        // sweeps before a host surrenders its code
 
+  /* ---------------- live audio ----------------
+   * Every link carries one audio transceiver, negotiated in the very first
+   * offer/answer and never touched again. That is the whole trick: the m=audio
+   * section exists from the moment the link does, with no track in it, so
+   * turning the microphone on later is `replaceTrack()` — a local call that
+   * signals nobody and renegotiates nothing. The alternative (add the track
+   * when the thumb goes down) costs an offer/answer round trip through a public
+   * broker before the first syllable can leave the phone.
+   *
+   * Opus is then tuned for a motorbike, not a podcast: wideband rather than
+   * full band, in-band FEC so a lost packet is repaired from the next one
+   * instead of waiting for a retransmit that would arrive too late to matter,
+   * and DTX so an open mic on a quiet rider costs nothing at all.
+   */
+  var AUDIO_MAX_BPS = 24000;      // wideband voice; a phone's uplink is precious
+  var AUDIO_PTIME_MS = 20;        // packetisation: 20 ms is the latency/overhead knee
+  var AUDIO_JITTER_MS = 40;       // ask for a small de-jitter buffer; NetEq may grow it
+
+  /** Opus parameters live in one fmtp line, as `key=value` pairs. Rewrite the
+      ones we care about and leave everything the browser negotiated alone. */
+  function tuneAudioSdp(sdp) {
+    if (!sdp || sdp.indexOf("m=audio") < 0) return sdp;
+
+    var want = {
+      minptime: "10",              // let the stack packetise finer if it wants to
+      useinbandfec: "1",           // repair loss forward; never wait for a resend
+      usedtx: "1",                 // silence is free
+      stereo: "0",
+      "sprop-stereo": "0",
+      maxaveragebitrate: String(AUDIO_MAX_BPS),
+      maxplaybackrate: "16000",    // voice, not music: fewer bits for the same words
+      "sprop-maxcapturerate": "16000",
+      cbr: "0"
+    };
+
+    var rtpmap = /a=rtpmap:(\d+) opus\/48000/i.exec(sdp);
+    if (rtpmap) {
+      var pt = rtpmap[1];
+      var fmtp = new RegExp("a=fmtp:" + pt + " ([^\\r\\n]*)");
+      var have = fmtp.exec(sdp);
+      var params = {};
+      if (have) {
+        have[1].split(";").forEach(function (kv) {
+          var i = kv.indexOf("=");
+          if (i > 0) params[kv.slice(0, i).trim()] = kv.slice(i + 1).trim();
+        });
+      }
+      Object.keys(want).forEach(function (k) { params[k] = want[k]; });
+      var line = "a=fmtp:" + pt + " " + Object.keys(params).map(function (k) {
+        return k + "=" + params[k];
+      }).join(";");
+      sdp = have ? sdp.replace(fmtp, line) : sdp.replace(rtpmap[0], rtpmap[0] + "\r\n" + line);
+
+      // ptime is a media-level attribute rather than a codec parameter, but its
+      // position among the other a= lines is free — so it goes next to the
+      // codec it describes, which is the one anchor guaranteed to be inside the
+      // audio section. Appending to the section instead would land after the
+      // description's own trailing CRLF whenever m=audio came last.
+      sdp = sdp.replace(/\r\na=ptime:\d+/g, "").replace(/\r\na=maxptime:\d+/g, "");
+      sdp = sdp.replace(line, line + "\r\na=ptime:" + AUDIO_PTIME_MS +
+                              "\r\na=maxptime:" + AUDIO_PTIME_MS);
+    }
+
+    return sdp;
+  }
+
+  function tuneDescription(desc) {
+    if (!desc || !desc.sdp) return desc;
+    var sdp;
+    try { sdp = tuneAudioSdp(desc.sdp); } catch (e) { return desc; }
+    if (sdp === desc.sdp) return desc;
+    return { type: desc.type, sdp: sdp };
+  }
+
+  /** Tell the receiver we would rather hear a glitch than a late word. Both of
+      these are hints and both are optional; a browser that has neither keeps
+      its own adaptive buffer, which is merely the status quo. */
+  function tuneReceiver(recv) {
+    if (!recv) return;
+    try { recv.jitterBufferTarget = AUDIO_JITTER_MS; } catch (e) { /* not supported */ }
+    try { recv.playoutDelayHint = AUDIO_JITTER_MS / 1000; } catch (e) { /* not supported */ }
+  }
+
+  /** Voice is the one stream on this connection that cannot be late, so it is
+      marked as such for the network stack and capped so a burst of it cannot
+      starve the data channel carrying everyone's positions. */
+  function tuneSender(sender) {
+    if (!sender || !sender.getParameters) return;
+    try {
+      var p = sender.getParameters();
+      if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+      p.encodings[0].maxBitrate = AUDIO_MAX_BPS;
+      p.encodings[0].networkPriority = "high";
+      p.encodings[0].priority = "high";
+      if (sender.setParameters) sender.setParameters(p).catch(function () {});
+    } catch (e) { /* older stacks reject the shape; the defaults are survivable */ }
+  }
+
   /* ---------------- small helpers ---------------- */
 
   function randomBytes(n) {
@@ -375,6 +473,8 @@
     var self = emitter({});
     var pc = new RTCPeerConnection(ICE);
     var dc = null;
+    var audioTx = null;    // the one audio transceiver, negotiated up front
+    var remoteAudio = null;
     var pending = [];      // ICE candidates received before setRemoteDescription
     var remoteSet = false;
     var lastSeen = Date.now();
@@ -495,25 +595,134 @@
       pc.ondatachannel = function (ev) { attach(ev.channel); };
     }
 
+    /* The audio slot is negotiated in the very first offer/answer, empty, so
+     * that switching a microphone on later is a local call and not another trip
+     * through a public broker. Each role gets there differently, and the
+     * difference matters:
+     *
+     *   - the offerer adds the transceiver itself, here, before any description
+     *     exists, and it goes into the offer as sendrecv;
+     *   - the answerer must NOT pre-add one. Applying a remote offer does not
+     *     adopt a transceiver you made earlier — the browser creates its own for
+     *     each m-section and leaves yours unassociated, so the pre-added one is
+     *     ignored and the answer comes back `recvonly`: an answerer that can
+     *     hear the room and never speak to it. Instead it takes the transceiver
+     *     the offer created and turns it up to sendrecv before answering.
+     *
+     * A peer that predates all this, or a browser with no transceivers at all,
+     * simply has no audio section: `currentDirection` stays null, audioReady()
+     * reports false, and the data channel — with the recorded-clip fallback
+     * riding on it — is untouched. */
+    if (opts.initiator) {
+      try {
+        audioTx = pc.addTransceiver("audio", { direction: "sendrecv" });
+        tuneReceiver(audioTx.receiver);
+      } catch (e) {
+        audioTx = null;
+      }
+    }
+
+    /** The link's audio transceiver, whoever created it. */
+    function audioT() {
+      if (audioTx) return audioTx;
+      if (!pc.getTransceivers) return null;
+      var list;
+      try { list = pc.getTransceivers(); } catch (e) { return null; }
+      for (var i = 0; i < list.length; i++) {
+        var t = list[i];
+        var kind = (t.receiver && t.receiver.track && t.receiver.track.kind) ||
+                   (t.sender && t.sender.track && t.sender.track.kind);
+        if (kind === "audio") {
+          audioTx = t;
+          tuneReceiver(t.receiver);
+          return t;
+        }
+      }
+      return null;
+    }
+
+    /** The far end's voice. The receiver's track exists from the moment the
+        transceiver does — long before anybody speaks — so this can be wired
+        into an <audio> element the instant the link opens, and the first
+        syllable is not waiting on an element to be created and started. */
+    self.remoteAudio = function () {
+      if (remoteAudio) return remoteAudio;
+      var t = audioT();
+      if (!t || !t.receiver || !t.receiver.track) return null;
+      try { remoteAudio = new MediaStream([t.receiver.track]); } catch (e) { return null; }
+      return remoteAudio;
+    };
+
+    /** Did the negotiation actually leave us with a two-way audio path? A
+        half-open one is no use to a room where anybody may speak next, and
+        claiming it works would strand a rider holding a button that does
+        nothing — so the recorded-clip fallback takes over instead. */
+    self.audioReady = function () {
+      if (dead) return false;
+      var t = audioT();
+      return !!t && t.currentDirection === "sendrecv";
+    };
+
+    /** Swap what we are sending. No signalling, no renegotiation: this is the
+        whole reason the transceiver was created empty at link time. */
+    self.setAudioTrack = function (track) {
+      var t = dead ? null : audioT();
+      if (!t || !t.sender) return Promise.resolve(false);
+      return t.sender.replaceTrack(track || null).then(function () {
+        if (track) tuneSender(t.sender);
+        return true;
+      }, function () { return false; });
+    };
+
+    /* Every description that leaves or enters this peer connection is rewritten
+       first: ours carries what we want to receive, and theirs is rewritten too,
+       because the codec parameters that govern our *encoder* are the ones the
+       remote description asked for.
+       Rewriting SDP is a liberty, so it is taken reversibly. If a browser
+       refuses the tuned form, the untouched one goes in behind it and the link
+       comes up on default Opus settings — losing the tuning is a slower ride,
+       losing the description is no ride at all. */
+    function setLocal(desc) {
+      return pc.setLocalDescription(tuneDescription(desc)).catch(function () {
+        return pc.setLocalDescription(desc);
+      });
+    }
+
+    function setRemote(desc) {
+      return pc.setRemoteDescription(new RTCSessionDescription(tuneDescription(desc)))
+        .catch(function () {
+          return pc.setRemoteDescription(new RTCSessionDescription(desc));
+        });
+    }
+
     self.createOffer = function () {
       return pc
         .createOffer()
-        .then(function (offer) { return pc.setLocalDescription(offer); })
+        .then(function (offer) { return setLocal(offer); })
         .then(function () { return waitForIce(); })
         .then(function () { return pc.localDescription; });
     };
 
     self.acceptOffer = function (sdp) {
-      return pc
-        .setRemoteDescription(new RTCSessionDescription(sdp))
-        .then(function () { remoteSet = true; drain(); return pc.createAnswer(); })
-        .then(function (answer) { return pc.setLocalDescription(answer); })
+      return setRemote(sdp)
+        .then(function () {
+          remoteSet = true;
+          drain();
+          // The offer created an audio transceiver for us, receive-only because
+          // we have no track on it yet. Say we intend to send as well, before
+          // the answer is written — this is the one moment at which that can be
+          // done without a second offer/answer later on.
+          var t = audioT();
+          if (t) { try { t.direction = "sendrecv"; } catch (e) { /* not settable */ } }
+          return pc.createAnswer();
+        })
+        .then(function (answer) { return setLocal(answer); })
         .then(function () { return waitForIce(); })
         .then(function () { return pc.localDescription; });
     };
 
     self.acceptAnswer = function (sdp) {
-      return pc.setRemoteDescription(new RTCSessionDescription(sdp)).then(function () {
+      return setRemote(sdp).then(function () {
         remoteSet = true;
         drain();
       });
@@ -577,6 +786,15 @@
         delete probes[k];
         fn(false);
       });
+      // Let go of whatever track we were sending before the connection closes,
+      // so a rebuilt link is never fighting the old one for the microphone.
+      try {
+        if (audioTx && audioTx.sender) {
+          var drop = audioTx.sender.replaceTrack(null);
+          if (drop && drop.catch) drop.catch(function () {});
+        }
+      } catch (e) { /* ignore */ }
+      remoteAudio = null;
       try { if (dc) dc.close(); } catch (e) { /* ignore */ }
       try { pc.close(); } catch (e) { /* ignore */ }
       self.emit("close", reason || "closed");
@@ -1017,6 +1235,14 @@
 
     self.isOpen = function () { return !!(att && att.link && att.link.isOpen()); };
 
+    /** The live link to the host, for the things that need the peer connection
+        itself rather than a message on it — the voice path being the only one.
+        Null whenever we are between attempts, which is exactly when there is
+        nothing to attach a microphone to anyway. */
+    self.link = function () {
+      return att && att.link && att.link.isOpen() ? att.link : null;
+    };
+
     self.retryNow = function () {
       if (stopped) return;
       attempt = 0;
@@ -1048,9 +1274,18 @@
   RC.net = {
     host: host,
     join: join,
+    AUDIO_MAX_BPS: AUDIO_MAX_BPS,
+    AUDIO_JITTER_MS: AUDIO_JITTER_MS,
     makeCode: makeCode,
     normalizeCode: normalizeCode,
     peerIdFor: peerIdFor,
-    BROKERS: BROKERS
+    BROKERS: BROKERS,
+
+    /* Exposed for the harness. Rewriting somebody else's SDP is the one thing
+       in here that is pure text and can go wrong silently; the link itself is
+       the one thing that can only be tested by actually connecting two of them,
+       which the end-to-end check does by signalling a pair to each other. */
+    _tuneSdp: tuneAudioSdp,
+    _Link: Link
   };
 })(typeof window !== "undefined" ? window : globalThis);
