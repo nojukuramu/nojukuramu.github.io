@@ -364,7 +364,8 @@ function sandbox(iconsOnly) {
   var files = iconsOnly
     ? ["util.js", "icons.js"]
     : ["util.js", "coords.js", "history.js", "traffic.js", "eta.js", "routes.js", "marks.js",
-       "router.js", "sampler.js", "elevation.js", "free.js", "rejoin.js", "group.js"];
+       "router.js", "sampler.js", "elevation.js", "free.js", "rejoin.js", "peer.js",
+       "group.js"];
   files.forEach(function (f) {
       vm.runInContext(read("static/js/" + f), ctx, { filename: f });
     });
@@ -998,6 +999,51 @@ section("Behaviour: what the group ride accepts off the wire");
   check("host-only controls refuse to act outside a room",
         G.setPlanned({ coords: line }) === false && G.kick("nobody") === false &&
         G.setApproval(true) === false);
+})();
+
+section("Behaviour: the SDP the voice path rewrites");
+(function () {
+  var RC = sandbox().RC;
+  var tune = RC.net._tuneSdp;
+
+  var offer = [
+    "v=0", "o=- 1 2 IN IP4 127.0.0.1", "s=-", "t=0 0",
+    "a=group:BUNDLE 0 1",
+    "m=application 9 UDP/DTLS/SCTP webrtc-datachannel", "c=IN IP4 0.0.0.0",
+    "a=mid:0", "a=sctp-port:5000",
+    "m=audio 9 UDP/TLS/RTP/SAVPF 111 63", "c=IN IP4 0.0.0.0",
+    "a=mid:1", "a=sendrecv",
+    "a=rtpmap:111 opus/48000/2",
+    "a=fmtp:111 minptime=10;useinbandfec=1",
+    "a=rtpmap:63 red/48000/2", "a=fmtp:63 111/111",
+    "a=ssrc:123 cname:abc", ""
+  ].join("\r\n");
+
+  var out = tune(offer);
+
+  check("loss is repaired forward, never by waiting for a resend",
+        /useinbandfec=1/.test(out));
+  check("a quiet rider costs the uplink nothing", /usedtx=1/.test(out));
+  check("voice is capped at wideband, not full band",
+        /maxplaybackrate=16000/.test(out) && /maxaveragebitrate=24000/.test(out));
+  check("packets are 20 ms, stated once", (out.match(/a=ptime:20/g) || []).length === 1);
+
+  // The description has to survive the rewrite as a *description*: a stray
+  // blank line or a dropped final CRLF is rejected wholesale by the browser,
+  // and the symptom is a room nobody can join rather than a room nobody can
+  // hear.
+  var lines = out.split("\r\n");
+  check("no blank line is opened mid-description",
+        lines.slice(0, -1).every(function (l) { return l.length > 0; }));
+  check("the trailing newline survives", out.slice(-2) === "\r\n");
+  check("another codec's parameters are left alone", out.indexOf("a=fmtp:63 111/111") > 0);
+  check("an audioless description is returned untouched",
+        tune("v=0\r\nm=application 9 x\r\n") === "v=0\r\nm=application 9 x\r\n");
+  check("nothing to rewrite is not an error", tune("") === "" && tune(null) === null);
+
+  // Rewriting twice happens for real: an answer we tuned comes back through
+  // the same path on a re-offer.
+  check("rewriting an already-rewritten description is a no-op", tune(out) === out);
 })();
 
 /* ============================================================
