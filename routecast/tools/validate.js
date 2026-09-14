@@ -364,8 +364,8 @@ function sandbox(iconsOnly) {
   var files = iconsOnly
     ? ["util.js", "icons.js"]
     : ["util.js", "coords.js", "history.js", "traffic.js", "eta.js", "routes.js", "marks.js",
-       "router.js", "sampler.js", "elevation.js", "free.js", "rejoin.js", "peer.js",
-       "group.js"];
+       "router.js", "sampler.js", "elevation.js", "free.js", "rejoin.js", "qr.js",
+       "peer.js", "group.js"];
   files.forEach(function (f) {
       vm.runInContext(read("static/js/" + f), ctx, { filename: f });
     });
@@ -1044,6 +1044,130 @@ section("Behaviour: the SDP the voice path rewrites");
   // Rewriting twice happens for real: an answer we tuned comes back through
   // the same path on a re-offer.
   check("rewriting an already-rewritten description is a no-op", tune(out) === out);
+})();
+
+section("Behaviour: the QR code a room is joined by");
+(function () {
+  var QR = sandbox().RC.qr;
+
+  /* Total codewords and remainder bits per version (ISO/IEC 18004 table 1).
+     These came across from KaraokeNatin with the encoder, because they are
+     what caught the one real bug it ever had: alignment patterns wrongly
+     omitted where they cross the timing lines, which silently shifted every
+     data module from version 7 up — producing a symbol that looks perfectly
+     convincing and decodes to nothing. */
+  var TOTAL = {
+    1: 26, 2: 44, 3: 70, 4: 100, 5: 134, 6: 172, 7: 196, 8: 242, 9: 292, 10: 346, 11: 404,
+    12: 466, 13: 532, 14: 581, 15: 655, 16: 733, 17: 815, 18: 901, 19: 991, 20: 1085,
+    21: 1156, 22: 1258, 23: 1364, 24: 1474, 25: 1588
+  };
+  function remainder(v) { return v === 1 ? 0 : v <= 6 ? 7 : v <= 13 ? 0 : v <= 20 ? 3 : 4; }
+
+  var countOk = true;
+  for (var v = 1; v <= QR.MAX_VERSION; v++) {
+    var grid = QR._internal.makeMatrix(v);
+    var free = 0;
+    for (var y = 0; y < grid.size; y++) {
+      for (var x = 0; x < grid.size; x++) if (!grid.reserved[y][x]) free++;
+    }
+    if (free !== TOTAL[v] * 8 + remainder(v)) countOk = false;
+  }
+  check("every version leaves exactly the standard number of data modules", countOk);
+
+  var blockOk = true;
+  ["L", "M"].forEach(function (ecc) {
+    for (var v2 = 1; v2 <= QR.MAX_VERSION; v2++) {
+      var b = QR._internal.BLOCKS[ecc][v2];
+      var blocks = b[1] + b[3];
+      if (b[1] * b[2] + b[3] * b[4] + blocks * b[0] !== TOTAL[v2]) blockOk = false;
+    }
+  });
+  check("block layouts account for every codeword", blockOk);
+
+  var invite = "https://nojukuramu.github.io/routecast/?ride=RIDE42";
+  var sym = QR.encode(invite, { ecc: "M" });
+
+  /* A reader finds the symbol by its three corners and nothing else. */
+  function finderAt(m, ox, oy) {
+    var want = ["1111111", "1000001", "1011101", "1011101", "1011101", "1000001", "1111111"];
+    for (var yy = 0; yy < 7; yy++) {
+      for (var xx = 0; xx < 7; xx++) {
+        if ((m[oy + yy][ox + xx] ? "1" : "0") !== want[yy][xx]) return false;
+      }
+    }
+    return true;
+  }
+  check("finder patterns are intact in all three corners",
+        finderAt(sym.modules, 0, 0) &&
+        finderAt(sym.modules, sym.size - 7, 0) &&
+        finderAt(sym.modules, 0, sym.size - 7));
+
+  var timingOk = true;
+  for (var i = 8; i < sym.size - 8; i++) {
+    if (sym.modules[6][i] !== (i % 2 === 0)) timingOk = false;
+    if (sym.modules[i][6] !== (i % 2 === 0)) timingOk = false;
+  }
+  check("timing patterns alternate across the symbol", timingOk);
+
+  /* The whole point is a code somebody reads off a screen at arm's length in
+     a car park. A big version is a dense symbol, and a dense symbol needs the
+     phone closer than the situation allows. */
+  check("a ride invite fits in version 4 or smaller at ECC M",
+        sym.version <= 4, "version " + sym.version);
+
+  var CAPACITY_M = {
+    1: 14, 2: 26, 3: 42, 4: 62, 5: 84, 6: 106, 7: 122, 8: 152, 9: 180, 10: 213, 11: 251,
+    12: 287, 13: 331, 14: 362, 15: 412, 16: 450, 17: 504, 18: 560, 19: 624, 20: 666,
+    21: 711, 22: 779, 23: 857, 24: 911, 25: 997
+  };
+  var capOk = true;
+  for (var v3 = 1; v3 <= QR.MAX_VERSION; v3++) {
+    if (QR.encode(new Array(CAPACITY_M[v3] + 1).join("a"), { ecc: "M" }).version > v3) capOk = false;
+  }
+  check("version selection matches byte-mode capacities at ECC M", capOk);
+
+  var threw = false;
+  try {
+    QR.encode(new Array(CAPACITY_M[QR.MAX_VERSION] + 41).join("x"), { ecc: "M" });
+  } catch (e) { threw = true; }
+  check("an oversized payload fails loudly rather than drawing nonsense", threw);
+})();
+
+section("Behaviour: what a scanned code is allowed to mean");
+(function () {
+  /* codeFromScan lives in groupui.js, which needs a whole Leaflet map to load.
+     The rule it encodes is small and worth pinning on its own: a camera is
+     pointed at whatever happens to be in front of it, so what comes back is a
+     stranger's claim in exactly the way a message off the wire is. */
+  var src = read("static/js/groupui.js");
+  var m = /function codeFromScan\(raw\) \{[\s\S]*?\n  \}/.exec(src);
+  check("the scanner has a single place where it decides what it read", !!m);
+  if (!m) return;
+
+  // Lifted out of the file and given the one collaborator it uses, so the rule
+  // is checked as it is actually written rather than as a copy of it.
+  var codeFromScan = new Function("RC", m[0] + "\nreturn codeFromScan;")({
+    net: { normalizeCode: function (c) {
+      return String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+    } }
+  });
+
+  check("a full invite link yields its code",
+        codeFromScan("https://nojukuramu.github.io/routecast/?ride=RIDE42") === "RIDE42");
+  check("a bare six-character code is accepted", codeFromScan("ride42") === "RIDE42");
+  check("the code is normalised the same way a typed one is",
+        codeFromScan("  ride42  ") === "RIDE42");
+  check("a link with the code among other parameters still works",
+        codeFromScan("https://example.test/routecast/?utm=x&ride=ABC123&z=1") === "ABC123");
+
+  // The failures matter more than the successes here: a rider pointing a
+  // camera around a car park must not be dropped into a stranger's room by a
+  // poster, a wifi code or a URL that merely contains six characters.
+  check("an unrelated URL is not a room", codeFromScan("https://example.test/") === "");
+  check("a longer word is not a code", codeFromScan("MOTORCYCLES") === "");
+  check("free text is not a code", codeFromScan("Cafe Wifi: password123") === "");
+  check("nothing scanned is nothing joined",
+        codeFromScan("") === "" && codeFromScan(null) === "");
 })();
 
 /* ============================================================

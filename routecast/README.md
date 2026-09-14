@@ -34,7 +34,8 @@ Live at <https://nojukuramu.github.io/routecast/>.
   squall. No extra network calls — it re-reads the hourly series already fetched.
 - **Group ride.** A room of riders on one map (see below): one shared **planned route**
   that is static by design, live positions, a roster with a door on it, chat, push-to-talk
-  voice, and routes back to the line for anyone who leaves it.
+  voice, and routes back to the line for anyone who leaves it. Joining is a six-character
+  code read aloud, a link, or the host's **QR code** pointed at with a camera.
 - **Gear and riding advice** derived from the actual numbers, not generic filler.
 - **An ETA that has been told the truth.** The routing engine's own timings are
   free-flow: no traffic, no signals, no junction delay. That optimism used to
@@ -379,6 +380,30 @@ one. So:
 - The host can turn chat or voice off for the whole room, and turning the door off lets
   in everyone already waiting rather than leaving a lobby nobody can be admitted from.
 
+### Joining by camera
+
+Six characters read aloud across a car park is fine until it is windy, or the other rider
+still has their helmet on, or the code has an `O` and a `0` in it. So the host can put the
+room code up as a **QR code** — tap *Show QR* in the room card — and it carries the ordinary
+invite link, nothing else.
+
+A guest points a camera at it from the join form. The scan **fills the code in and stops**,
+for exactly the same reason the `?ride=` link does: a room is somewhere you choose to be,
+the name is still required, and the host still has to let you in. Pointing a camera at a
+poster is not consent to broadcast your position.
+
+What comes back off a camera is a stranger's claim in the same way a message off the wire
+is, so it is read narrowly: a `ride=` parameter in a URL, or a bare six-character code, and
+nothing else. A URL that merely *contains* six characters somewhere is not a room, which is
+why `codeFromScan` is checked against café wifi notices and unrelated links rather than only
+against the codes it is supposed to accept.
+
+Scanning uses the browser's own `BarcodeDetector`. Where it is missing — Safari and Firefox
+at the time of writing — there is no honest fallback short of shipping a decoder, so the
+button says to type the six characters instead of opening a camera that will never find
+anything. Drawing a code works everywhere: the encoder is ~540 lines and has no CDN behind
+it.
+
 ### Voice
 
 Push to talk: hold the microphone button beside the map controls and speak. The room
@@ -544,6 +569,7 @@ routecast/
     elevation.js            RC.elevation— Open-Meteo DEM profile, climb/descent, grade at a point
     risk.js                 RC.risk     — vehicle-aware scoring, advice, departure planner
     pick.js                 RC.pick     — the centre-pin place picker
+    qr.js                   RC.qr       — a QR encoder, lifted from KaraokeNatin; no CDN
     peer.js                 RC.net      — WebRTC data channels over a public broker; no backend
     voice.js                RC.voice    — live voice: the pre-negotiated audio path, host mixing
     rejoin.js               RC.rejoin   — planned-route geometry: projection, simplify, ways back
@@ -589,6 +615,16 @@ as neither, that a mark re-saved on the same spot renames rather than duplicates
 a free ride's odometer refuses a parked phone's jitter, a step inside its own error circle
 and a teleport alike.
 
+The QR encoder is checked there too, against the tables in ISO/IEC 18004 rather than
+against itself: that every version leaves exactly the standard number of free data modules,
+that the block layouts account for every codeword, that the finder and timing patterns
+survive masking, that version selection tracks the documented byte-mode capacities and that
+an oversized payload fails loudly instead of drawing a convincing symbol that decodes to
+nothing. Those invariants came across with the encoder because they are what caught its one
+real bug — alignment patterns wrongly omitted where they cross the timing lines, which
+silently shifted every data module from version 7 up. The rule for what a *scanned* string
+is allowed to mean is pinned next to them.
+
 The group ride's own arithmetic is checked in the same half: that the nearest point on a
 planned line is found abeam rather than at a vertex, that a straight line simplifies to
 its endpoints while a corner never does, that a route laid over the planned one counts as
@@ -612,8 +648,14 @@ planned route arrives whole and byte-identical rather than recomputed, that a ri
 re-plan does not move it, that drifting off it produces several ways back with one
 highlighted, that a push-to-talk clip recorded from a fake microphone is encoded, chunked,
 relayed and heard at the other end, that a guest cannot post under the host's name or
-flood the room, and that nothing overflows the screen in either orientation. It needs
-Playwright; everything else in `tools/` needs nothing at all.
+flood the room, and that nothing overflows the screen in either orientation.
+
+It also joins a third rider **by camera**: the host's QR is drawn for real, and a stubbed
+`BarcodeDetector` hands the app what a reader would have seen, so what is under test is the
+path from "the detector saw this string" to "the rider is at the door" — including that the
+camera is released the moment the code is read, that scanning alone puts nobody in the room,
+and that a scanned rider can be refused like any other. It needs Playwright; everything else
+in `tools/` needs nothing at all.
 
 ```
 node tools/voice-latency.js

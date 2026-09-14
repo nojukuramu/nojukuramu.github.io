@@ -421,8 +421,29 @@
               <div class="rc-input-row">
                 <input type="text" id="group-code" class="rc-input rc-input-code" placeholder="6 characters — blank to generate one" maxlength="8" spellcheck="false" autocapitalize="characters" />
               </div>
-              <p class="rc-field-hint">Read it aloud, message it, or share the invite link once you are hosting.</p>
+              <p class="rc-field-hint">Read it aloud, message it, or point your camera at the host's code.</p>
+              <div class="rc-room-acts">
+                <button type="button" class="rc-act" id="group-scan-btn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.6 8.4V5.4a1.8 1.8 0 0 1 1.8-1.8h3M15.6 3.6h3a1.8 1.8 0 0 1 1.8 1.8v3M20.4 15.6v3a1.8 1.8 0 0 1-1.8 1.8h-3M8.4 20.4h-3a1.8 1.8 0 0 1-1.8-1.8v-3"/><path d="M7 12h10"/></svg>
+                  Scan a code
+                </button>
+              </div>
             </div>
+
+            <!-- The scanner. Inline rather than over the whole screen: the
+                 panel is already the biggest surface on a phone, and a camera
+                 that appears where the code field is makes it obvious what the
+                 picture is for. -->
+            <section class="rc-scan" id="group-scan" hidden>
+              <div class="rc-scan-frame">
+                <video id="group-scan-video" playsinline muted></video>
+                <span class="rc-scan-reticle" aria-hidden="true"></span>
+              </div>
+              <p class="rc-field-hint" id="group-scan-status" role="status" aria-live="polite">Starting the camera…</p>
+              <div class="rc-room-acts">
+                <button type="button" class="rc-act rc-act-danger" id="group-scan-stop">Stop scanning</button>
+              </div>
+            </section>
 
             <label class="rc-check">
               <input type="checkbox" id="group-approval" checked />
@@ -465,6 +486,19 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 20H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h8"/><path d="M17.5 15.5 21 12l-3.5-3.5M21 12H10"/></svg>
                   Leave
                 </button>
+                <button type="button" class="rc-act" id="group-qr-btn" aria-expanded="false" aria-controls="group-qr">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.6" y="3.6" width="6.2" height="6.2" rx="1.2"/><rect x="14.2" y="3.6" width="6.2" height="6.2" rx="1.2"/><rect x="3.6" y="14.2" width="6.2" height="6.2" rx="1.2"/><path d="M14.2 14.2h2.6v2.6h-2.6zM20.4 14.2v2.6M17.8 20.4h2.6M14.2 20.4h.9"/></svg>
+                  <span id="group-qr-label">Show QR</span>
+                </button>
+              </div>
+
+              <!-- Held up at arm's length across a car park, so it is drawn as
+                   large as the card allows and always on white: a QR reader
+                   wants contrast, not a colour scheme. -->
+              <div class="rc-qr" id="group-qr" hidden>
+                <canvas id="group-qr-canvas" role="img" aria-label="QR code for this ride's invite link"></canvas>
+                <p class="rc-field-hint">Point a phone at this to join. It carries the code, so there is
+                nothing to type — the other rider still has to add a name, and you still have to let them in.</p>
               </div>
             </section>
 
@@ -675,6 +709,7 @@
   <script src="static/js/elevation.js"></script>
   <script src="static/js/risk.js"></script>
   <script src="static/js/pick.js"></script>
+  <script src="static/js/qr.js"></script>
   <script src="static/js/peer.js"></script>
   <script src="static/js/voice.js"></script>
   <script src="static/js/rejoin.js"></script>

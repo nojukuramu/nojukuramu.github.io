@@ -58,6 +58,10 @@ RC.groupui = (function () {
   var toastTimer = null;
   var pttHold = false;
 
+  var qrOpen = false;       // the host has asked for the code as a picture
+  var qrDrawn = null;       // the URL currently on the canvas
+  var scan = null;          // { stream, timer, detector } while the camera is on
+
   function el(id) { return RC.el(id); }
   function on(id, ev, fn) {
     var node = el(id);
@@ -300,11 +304,197 @@ RC.groupui = (function () {
     return { key: "connecting", text: "Finding the ride…" };
   }
 
+  /** The one definition of what an invite link is. Copy, Invite, the line
+      under the code and the QR code all read it, so they cannot drift apart. */
+  function inviteUrl() {
+    var code = RC.group.code();
+    return code ? location.origin + location.pathname + "?ride=" + code : "";
+  }
+
+  /* ---------------------------------------------------------
+     The room code as a picture
+
+     Six characters read aloud across a car park is fine until it is windy, or
+     the other rider still has their helmet on, or the code has an O and a 0 in
+     it. The QR carries the whole invite link, so there is nothing to hear and
+     nothing to type — and because it is only the link, it opens the same door
+     as the link does: the newcomer still has to give a name, and the host
+     still has to let them in.
+     --------------------------------------------------------- */
+  function renderQr() {
+    var box = el("group-qr");
+    var canvas = el("group-qr-canvas");
+    var btn = el("group-qr-btn");
+    if (!box || !canvas) return;
+
+    var url = inviteUrl();
+    var can = !!url && !!RC.qr;
+    if (btn) btn.hidden = !can;
+    if (!can || !qrOpen) {
+      box.hidden = true;
+      if (btn) btn.setAttribute("aria-expanded", "false");
+      return;
+    }
+
+    box.hidden = false;
+    btn.setAttribute("aria-expanded", "true");
+    if (qrDrawn === url) return;    // redrawing on every tick would flicker
+
+    try {
+      // The card is the width budget; 260px is as big as a phone panel gives
+      // us and comfortably more than a reader needs.
+      RC.qr.draw(canvas, url, { px: 260, dark: "#000000", light: "#FFFFFF" });
+      qrDrawn = url;
+    } catch (e) {
+      // A link too long for version 25 cannot happen with a six-character
+      // code, but a drawing surface can still be refused.
+      box.hidden = true;
+      qrDrawn = null;
+    }
+  }
+
+  function toggleQr() {
+    qrOpen = !qrOpen;
+    text("group-qr-label", qrOpen ? "Hide QR" : "Show QR");
+    renderQr();
+  }
+
+  /* ---------------------------------------------------------
+     Reading somebody else's code
+
+     Leans on the browser's own barcode reader, as KaraokeNatin's library
+     sharing does. Where it is missing — Safari and Firefox at the time of
+     writing — there is no honest fallback short of shipping a decoder, so the
+     button says which road is still open rather than opening a camera that
+     will never find anything.
+
+     A scan never joins on its own. It fills the code in and stops, for the
+     same reason the ?ride= link does: a room is somewhere you choose to be,
+     and pointing a camera at a poster is not that choice.
+     --------------------------------------------------------- */
+  function scanSupported() {
+    return typeof window.BarcodeDetector === "function" &&
+           !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  }
+
+  /** Pull a room code out of whatever the camera read. Accepts a full invite
+      link, a bare code, and the link with anything else hung off it — but
+      never anything that merely looks code-shaped inside a longer string, so
+      a stray poster cannot drop a rider into a stranger's room. */
+  function codeFromScan(raw) {
+    var text = String(raw || "").trim();
+    if (!text) return "";
+    var m = /[?&]ride=([A-Za-z0-9]{4,8})\b/.exec(text);
+    if (m) return RC.net.normalizeCode(m[1]);
+    if (/^[A-Za-z0-9]{6}$/.test(text)) return RC.net.normalizeCode(text);
+    return "";
+  }
+
+  function scanStatus(msg) { text("group-scan-status", msg); }
+
+  function startScan() {
+    if (scan) return;
+    if (!scanSupported()) {
+      toast("This browser cannot scan QR codes — type the six characters instead.", "warn");
+      var codeInput = el("group-code");
+      if (codeInput) codeInput.focus();
+      return;
+    }
+
+    show("group-scan", true);
+    show("group-scan-btn", false);
+    scanStatus("Starting the camera…");
+    // The viewfinder opens below the code field, which on a phone is below the
+    // fold. Somebody who has just tapped "Scan" is holding the phone up at a
+    // screen, not scrolling.
+    var box = el("group-scan");
+    if (box && box.scrollIntoView) {
+      try { box.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) { box.scrollIntoView(); }
+    }
+    var video = el("group-scan-video");
+    var detector;
+    try {
+      detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+    } catch (e) {
+      show("group-scan", false);
+      toast("This browser cannot read QR codes.", "warn");
+      return;
+    }
+
+    scan = { stream: null, timer: null };
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "environment" }, audio: false })
+      .then(function (stream) {
+        if (!scan) {                       // stopped while the camera opened
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          return;
+        }
+        scan.stream = stream;
+        video.srcObject = stream;
+
+        // play() is asked for but never waited on. It rejects on an autoplay
+        // policy and simply never settles until a first frame arrives, and in
+        // both cases the camera is open and the detector can already be
+        // reading it — so hanging the scan loop off this promise is how a
+        // working camera reports itself as broken.
+        var p = video.play();
+        if (p && p.catch) p.catch(function () {});
+
+        scanStatus("Point the camera at the host's code.");
+        scan.timer = setInterval(function () {
+          if (!scan) return;
+          detector.detect(video).then(function (codes) {
+            for (var i = 0; i < codes.length; i++) {
+              var code = codeFromScan(codes[i].rawValue);
+              if (code) { onScanned(code); return; }
+            }
+          }, function () { /* a frame the detector could not use */ });
+        }, 350);
+      })
+      .catch(function () {
+        // Only getUserMedia reaching here is a real failure: no camera, or a
+        // permission the rider refused.
+        stopScan();
+        scanStatus("");
+        toast("The camera could not be opened.", "warn");
+      });
+  }
+
+  function onScanned(code) {
+    stopScan();
+    var input = el("group-code");
+    if (input) input.value = code;
+    var name = el("group-name");
+    toast("Ride code " + code + " scanned — add your name to join.", "ok");
+    // The name is the only thing still missing, so put the cursor in it.
+    if (name && !name.value.trim()) name.focus();
+    else if (name) el("group-join-btn").focus();
+  }
+
+  function stopScan() {
+    if (scan) {
+      clearInterval(scan.timer);
+      if (scan.stream) scan.stream.getTracks().forEach(function (t) { t.stop(); });
+      scan = null;
+    }
+    var video = el("group-scan-video");
+    if (video) { try { video.pause(); video.srcObject = null; } catch (e) {} }
+    show("group-scan", false);
+    show("group-scan-btn", true);
+  }
+
   function renderLobby() {
     var live = RC.group.isActive();
     show("group-off", !live);
     show("group-on", live);
-    if (!live) return;
+    // In a room there is nothing left to scan, and a camera nobody is looking
+    // at is a red dot in the status bar and a battery cost.
+    if (live && scan) { stopScan(); scanStatus(""); }
+    if (!live) {
+      qrOpen = false;
+      qrDrawn = null;
+      return;
+    }
 
     text("group-code-out", RC.group.code());
     var state = stateOf();
@@ -317,12 +507,10 @@ RC.groupui = (function () {
     // result happened somewhere the rider cannot see.
     var linkEl = el("group-link");
     if (linkEl) {
-      var code = RC.group.code();
-      linkEl.hidden = !code;
-      linkEl.textContent = code
-        ? location.origin + location.pathname + "?ride=" + code
-        : "";
+      linkEl.hidden = !RC.group.code();
+      linkEl.textContent = inviteUrl();
     }
+    renderQr();
 
     var host = RC.group.isHost();
     show("group-host-tools", host);
@@ -794,7 +982,7 @@ RC.groupui = (function () {
     on("group-share", "click", function () {
       var code = RC.group.code();
       if (!code) return;
-      var url = location.origin + location.pathname + "?ride=" + code;
+      var url = inviteUrl();
       if (navigator.share) {
         navigator.share({ title: "RouteCast group ride", text: "Join my ride — code " + code, url: url })
           .catch(function () {});
@@ -805,6 +993,10 @@ RC.groupui = (function () {
         }, function () {});
       }
     });
+
+    on("group-qr-btn", "click", toggleQr);
+    on("group-scan-btn", "click", startScan);
+    on("group-scan-stop", "click", function () { stopScan(); scanStatus(""); });
 
     on("group-approval-on", "change", function () { RC.group.setApproval(this.checked); });
     on("group-chat-on", "change", function () { RC.group.setChatEnabled(this.checked); });

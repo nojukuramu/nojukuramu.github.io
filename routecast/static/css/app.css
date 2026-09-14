@@ -2095,6 +2095,67 @@ code { font-family: var(--mono); font-size: .92em; }
 }
 .rc-count:empty { display: none; }
 
+/* ---------- the QR code ----------
+   A room code is six characters read aloud across a car park, which is fine
+   until it is windy or the other rider is wearing a helmet. The same invite
+   link as a picture removes the transcription entirely.
+
+   Always on white, never on the surface token: a reader wants contrast, and a
+   dark-theme QR on a dark card is a code that does not scan. */
+.rc-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: #FFFFFF;
+  border: 1px solid var(--line);
+}
+.rc-qr[hidden] { display: none; }
+.rc-qr canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;   /* a module is a square, not a gradient */
+}
+.rc-qr .rc-field-hint { color: #66705E; text-align: center; max-width: 34ch; }
+
+/* ---------- the scanner ---------- */
+.rc-scan {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rc-scan[hidden] { display: none; }
+.rc-scan-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-width: 320px;
+  max-height: 46vh;
+  margin-inline: auto;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #000000;
+}
+.rc-scan-frame video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Somewhere to aim. The detector reads the whole frame — this is for the
+   human, who otherwise does not know how close to hold the phone. */
+.rc-scan-reticle {
+  position: absolute;
+  inset: 14%;
+  border-radius: 14px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .34);
+  border: 2px solid rgba(255, 255, 255, .85);
+}
+
+
 /* ---------- chat ---------- */
 .rc-chat-log {
   display: flex;
