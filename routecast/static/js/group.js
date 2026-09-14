@@ -548,6 +548,11 @@ RC.group = (function () {
       Audio has no way to mix the room down to one stream per guest, so it stays
       on clips and so does everybody who joins it. */
   function startLive(role) {
+    // The host relays what it hears; a guest is where the audio stops. That
+    // decides how much de-jitter delay this device should be holding, and it
+    // has to be decided before the first link is built, because the receiver is
+    // tuned the moment its transceiver appears.
+    if (RC.net && RC.net.setAudioRole) RC.net.setAudioRole(role);
     if (!RC.voice || !RC.voice.available(role)) { st.live = false; return false; }
     st.live = RC.voice.start(role);
     if (st.live) {

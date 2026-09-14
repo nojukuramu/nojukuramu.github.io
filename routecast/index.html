@@ -389,7 +389,15 @@
 
         <!-- ===== Ride (group) =====
              A name, a code and a door. All three are required before anyone
-             can be anywhere near your live position. -->
+             can be anywhere near your live position.
+
+             In a room, the pane is read top to bottom in the order a rider
+             needs it: WHERE AM I CONNECTED (the room card, which carries the
+             code and the one line of state that matters), WHO IS AT THE DOOR
+             (loud, because it is a security decision), then the room itself —
+             riders, the agreed line, voice, chat. Host-only switches sit in a
+             fold at the bottom: they are set once and then never touched
+             again, and they used to push the chat off the screen. -->
         <section class="rc-pane" id="pane-group" role="tabpanel" aria-labelledby="tab-group" hidden>
 
           <div id="group-off" class="rc-block">
@@ -422,56 +430,55 @@
             </label>
 
             <div class="rc-form-actions">
-              <button type="button" class="rc-textbtn" id="group-join-btn">Join a ride</button>
+              <button type="button" class="rc-btn-ghost" id="group-join-btn">Join a ride</button>
               <button type="button" class="rc-btn-primary" id="group-host-btn">Start a ride</button>
             </div>
           </div>
 
           <div id="group-on" hidden>
-            <section class="rc-block">
-              <div class="rc-room-head">
+
+            <!-- The room card. Everything about "am I actually in a ride, and
+                 how do I get somebody else into it" lives here and nowhere
+                 else, so it never has to be hunted for mid-ride. -->
+            <section class="rc-room" id="group-room">
+              <div class="rc-room-top">
                 <div class="rc-room-code">
                   <span class="rc-label">Room code</span>
                   <strong id="group-code-out" class="rc-room-code-v">------</strong>
                 </div>
-                <div class="rc-room-acts">
-                  <button type="button" class="rc-textbtn" id="group-copy">Copy</button>
-                  <button type="button" class="rc-textbtn" id="group-share">Invite</button>
-                  <button type="button" class="rc-textbtn rc-textbtn-quiet" id="group-leave">Leave</button>
-                </div>
+                <span class="rc-state" id="group-state" data-state="connecting">
+                  <span class="rc-state-dot" aria-hidden="true"></span>
+                  <span id="group-state-text">Connecting…</span>
+                </span>
               </div>
-              <p class="rc-field-hint" id="group-link"></p>
+              <p class="rc-field-hint rc-room-link" id="group-link" hidden></p>
+              <div class="rc-room-acts">
+                <button type="button" class="rc-act" id="group-copy">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M5.5 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v.5"/></svg>
+                  Copy code
+                </button>
+                <button type="button" class="rc-act" id="group-share">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5.5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="18.5" r="2.6"/><path d="M8.3 10.8 15.7 6.8M8.3 13.2l7.4 4"/></svg>
+                  Invite
+                </button>
+                <button type="button" class="rc-act rc-act-danger" id="group-leave">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 20H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h8"/><path d="M17.5 15.5 21 12l-3.5-3.5M21 12H10"/></svg>
+                  Leave
+                </button>
+              </div>
             </section>
 
-            <section class="rc-block" id="group-pending" hidden></section>
+            <!-- The door. Loud on purpose: this is the one control in the app
+                 that decides who can see where somebody is. -->
+            <section class="rc-door" id="group-pending" hidden></section>
 
             <section class="rc-block">
               <h2 class="rc-section-h">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9.2" cy="8.4" r="3.4"/><path d="M2.8 20c.6-3.4 3.2-5.4 6.4-5.4s5.8 2 6.4 5.4"/><path d="M16.2 5.6a3 3 0 0 1 0 5.8M17.4 14.9c2 .7 3.4 2.5 3.8 5.1"/></svg>
                 Riders
+                <span class="rc-count" id="group-members-count"></span>
               </h2>
               <div id="group-members" class="rc-mate-list"></div>
-            </section>
-
-            <section class="rc-block" id="group-host-tools" hidden>
-              <h2 class="rc-section-h">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.05A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.05A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6h.05A1.7 1.7 0 0 0 10.6 3.05V3a2 2 0 1 1 4 0v.05A1.7 1.7 0 0 0 16.15 4.6 1.7 1.7 0 0 0 18 4.26l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 20.5 9v.05a1.7 1.7 0 0 0 1.55 1.55H21a2 2 0 1 1 0 4h-.05A1.7 1.7 0 0 0 19.4 15Z"/></svg>
-                Host settings
-              </h2>
-              <label class="rc-check">
-                <input type="checkbox" id="group-approval-on" checked />
-                <span>Ask me before letting anyone in</span>
-              </label>
-              <label class="rc-check">
-                <input type="checkbox" id="group-chat-on" checked />
-                <span>Allow chat</span>
-              </label>
-              <label class="rc-check">
-                <input type="checkbox" id="group-voice-on" checked />
-                <span>Allow voice</span>
-              </label>
-              <p class="rc-field-hint">Turning the door off lets in everyone already waiting. A removed rider
-              cannot reconnect with the same code until the ride is restarted.</p>
             </section>
 
             <section class="rc-block">
@@ -479,12 +486,20 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="18.5" r="2.4"/><circle cx="18" cy="5.5" r="2.4"/><path d="M8.4 18.5h4.1a3.3 3.3 0 0 0 0-6.6h-2a3.2 3.2 0 0 1 0-6.4h5.1"/></svg>
                 Planned route
               </h2>
+              <!-- Three numbers instead of a sentence: distance, time, stops.
+                   A run-on line of grey text is not readable at a fuel stop. -->
+              <div class="rc-stat-strip" id="group-plan-stats" hidden>
+                <span class="rc-stat"><b id="group-plan-dist">—</b><i>distance</i></span>
+                <span class="rc-stat"><b id="group-plan-time">—</b><i>moving</i></span>
+                <span class="rc-stat"><b id="group-plan-stops">—</b><i>stops</i></span>
+              </div>
               <p class="rc-field-hint" id="group-plan-info"></p>
-              <div class="rc-mark-actions">
-                <button type="button" class="rc-textbtn" id="group-plan-set" hidden>Set the route I planned</button>
-                <button type="button" class="rc-textbtn" id="group-plan-show" hidden>Show it on the map</button>
-                <button type="button" class="rc-textbtn" id="group-rejoin-btn" hidden>Ways back to it</button>
-                <button type="button" class="rc-textbtn rc-textbtn-quiet" id="group-plan-clear" hidden>Clear it</button>
+              <p class="rc-off-line" id="group-plan-off" hidden></p>
+              <div class="rc-room-acts">
+                <button type="button" class="rc-act" id="group-plan-set" hidden>Use my planned route</button>
+                <button type="button" class="rc-act" id="group-plan-show" hidden>Show on the map</button>
+                <button type="button" class="rc-act" id="group-rejoin-btn" hidden>Ways back to it</button>
+                <button type="button" class="rc-act rc-act-danger" id="group-plan-clear" hidden>Clear it</button>
               </div>
             </section>
 
@@ -492,16 +507,26 @@
               <h2 class="rc-section-h">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.6a2.7 2.7 0 0 1 2.7 2.7v5a2.7 2.7 0 0 1-5.4 0v-5A2.7 2.7 0 0 1 12 3.6Z"/><path d="M6.4 11a5.6 5.6 0 0 0 11.2 0M12 17v3.4M9 20.4h6"/></svg>
                 Voice
+                <span class="rc-state rc-state-sm" id="group-voice-state" data-state="off">
+                  <span class="rc-state-dot" aria-hidden="true"></span>
+                  <span id="group-voice-state-text">Off</span>
+                </span>
               </h2>
               <p class="rc-field-hint" id="group-voice-note">Hold the microphone button by the map controls to talk
-              to everyone. Hands-free keeps the mic open and sends what you say in short bursts.</p>
-              <label class="rc-check">
+              to everyone.</p>
+              <label class="rc-switch">
+                <span class="rc-switch-text">
+                  <b>Hands-free</b>
+                  <i>Keep the mic open — no thumb on the button.</i>
+                </span>
                 <input type="checkbox" id="group-handsfree" />
-                <span>Hands-free (keep the mic open)</span>
               </label>
-              <label class="rc-check">
+              <label class="rc-switch">
+                <span class="rc-switch-text">
+                  <b>Mute the ride</b>
+                  <i>You still send; you just stop hearing the room.</i>
+                </span>
                 <input type="checkbox" id="group-mute" />
-                <span>Mute the ride</span>
               </label>
             </section>
 
@@ -517,10 +542,39 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12 20.5 4l-7 16.5-2.6-6.4L4 12Z"/></svg>
                 </button>
               </div>
-              <div class="rc-mark-actions">
-                <button type="button" class="rc-textbtn" id="group-nudge">Ask where everyone is</button>
+              <div class="rc-room-acts">
+                <button type="button" class="rc-act" id="group-nudge">Ask where everyone is</button>
               </div>
             </section>
+
+            <!-- Set once, at the start of a ride, and then left alone — so it
+                 folds away instead of sitting between the riders and the chat. -->
+            <details class="rc-fold" id="group-host-tools" hidden>
+              <summary class="rc-fold-head">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.05A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.05A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6h.05A1.7 1.7 0 0 0 10.6 3.05V3a2 2 0 1 1 4 0v.05A1.7 1.7 0 0 0 16.15 4.6 1.7 1.7 0 0 0 18 4.26l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 20.5 9v.05a1.7 1.7 0 0 0 1.55 1.55H21a2 2 0 1 1 0 4h-.05A1.7 1.7 0 0 0 19.4 15Z"/></svg>
+                <span>Host settings</span>
+                <svg class="rc-fold-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
+              </summary>
+              <div class="rc-fold-body">
+                <label class="rc-switch">
+                  <span class="rc-switch-text">
+                    <b>Ask me before letting anyone in</b>
+                    <i>Turning this off lets in everyone already waiting.</i>
+                  </span>
+                  <input type="checkbox" id="group-approval-on" checked />
+                </label>
+                <label class="rc-switch">
+                  <span class="rc-switch-text"><b>Allow chat</b></span>
+                  <input type="checkbox" id="group-chat-on" checked />
+                </label>
+                <label class="rc-switch">
+                  <span class="rc-switch-text"><b>Allow voice</b></span>
+                  <input type="checkbox" id="group-voice-on" checked />
+                </label>
+                <p class="rc-field-hint">A removed rider cannot reconnect with the same code until the ride
+                is restarted.</p>
+              </div>
+            </details>
           </div>
         </section>
 

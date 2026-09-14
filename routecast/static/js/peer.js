@@ -47,7 +47,16 @@
     { host: "peerjs.92k.de", port: 443, path: "/", key: "peerjs" }
   ];
 
-  var ICE = {
+  /* ICE. `window.RC_ICE` replaces the whole configuration — that is how
+     tools/voice-latency.js points the suite at the STUN and TURN servers it
+     starts itself, and it is also the escape hatch for anyone who would rather
+     put their own relay in than borrow a public one.
+
+     The public servers here are best-effort by definition, and the thing that
+     matters most about the list is what happens when one of them has stopped
+     answering: see waitForIce(). A black hole in this list must cost a moment,
+     not a second and a half. */
+  var ICE = global.RC_ICE || {
     iceServers: [
       { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
       { urls: ["stun:stun.cloudflare.com:3478"] },
@@ -68,6 +77,8 @@
   var SILENCE_MS = 20000;         // no traffic for this long => assume dead
   var PROBE_MS = 2500;            // a wake-up probe waits this long for a pong
   var ICE_GRACE_MS = 8000;        // "disconnected" often heals; give it a moment
+  var ICE_HOST_GRACE_MS = 300;    // host candidates only: wait this long for more
+  var ICE_GATHER_MAX_MS = 1200;   // ceiling on holding a description back at all
   var OFFER_TIMEOUT_MS = 12000;   // per-attempt ceiling for reaching the host
   var ANSWER_OPEN_MS = 8000;      // answer accepted but channel never opened
   var SOCKET_STALE_MS = 25000;    // signalling socket idle this long => recycle
@@ -92,6 +103,17 @@
   var AUDIO_MAX_BPS = 24000;      // wideband voice; a phone's uplink is precious
   var AUDIO_PTIME_MS = 20;        // packetisation: 20 ms is the latency/overhead knee
   var AUDIO_JITTER_MS = 40;       // ask for a small de-jitter buffer; NetEq may grow it
+
+  /* A de-jitter buffer is worth its delay exactly once, at the ear. The host is
+   * not an ear: what arrives there is re-mixed and sent on, so a buffer held on
+   * its receive side is added to the one the guest at the far end is already
+   * holding — the same smoothing, bought twice, and the second copy is paid for
+   * by everyone in the room listening to everyone else. A guest hearing another
+   * guest was measurably further behind than a host hearing the same guest, and
+   * this is most of the difference. So the relay hop asks for as little delay as
+   * the stack will give it, and the final hop keeps the real buffer. */
+  var AUDIO_JITTER_RELAY_MS = 0;
+  var audioJitterMs = AUDIO_JITTER_MS;
 
   /** Opus parameters live in one fmtp line, as `key=value` pairs. Rewrite the
       ones we care about and leave everything the browser negotiated alone. */
@@ -154,8 +176,15 @@
       its own adaptive buffer, which is merely the status quo. */
   function tuneReceiver(recv) {
     if (!recv) return;
-    try { recv.jitterBufferTarget = AUDIO_JITTER_MS; } catch (e) { /* not supported */ }
-    try { recv.playoutDelayHint = AUDIO_JITTER_MS / 1000; } catch (e) { /* not supported */ }
+    try { recv.jitterBufferTarget = audioJitterMs; } catch (e) { /* not supported */ }
+    try { recv.playoutDelayHint = audioJitterMs / 1000; } catch (e) { /* not supported */ }
+  }
+
+  /** Say whether this device is the end of the line for the audio it receives
+      or a stop along the way. The host is a mixer and so is a stop; everybody
+      else is an ear. Set once per room, before any link exists. */
+  function setAudioRole(role) {
+    audioJitterMs = role === "relay" || role === "host" ? AUDIO_JITTER_RELAY_MS : AUDIO_JITTER_MS;
   }
 
   /** Voice is the one stream on this connection that cannot be late, so it is
@@ -742,28 +771,58 @@
     /* Candidates are trickled through the broker as they arrive, but half of
      * the public brokers drop messages under load — so the description also
      * carries everything gathered by the time it is sent. Waiting for the full
-     * set is the reliable path; waiting for it *forever* is not, hence the
-     * early exit once we hold something usable. */
+     * set is the reliable path; waiting for it *forever* is not.
+     *
+     * "Forever" turns out to be the common case rather than the exotic one. A
+     * STUN or TURN server that has quietly stopped answering never completes
+     * gathering — it just sits there until the browser's own STUN retransmit
+     * schedule gives up, which is far longer than anyone will hold a phone
+     * still for. Both ends then pay it, one after the other, so a single dead
+     * entry in the list above used to add about a second to every link: joining
+     * a ride took twice as long as it had any need to, and the talk button was
+     * a recorder for all of it.
+     *
+     * So the wait is over what has *arrived*, not over a state that may never
+     * be reached:
+     *
+     *   - gathering completes                 -> go, obviously
+     *   - a reflexive or relay candidate      -> go: the far side of the NAT is
+     *     lands                                  covered, which is the only
+     *                                            thing the extra wait was for
+     *   - only host candidates, and a moment  -> go: this is a LAN, or every
+     *     has passed since the first one         server in the list is a black
+     *                                            hole, and in both cases more
+     *                                            waiting buys precisely nothing
+     *
+     * Trickle keeps running throughout, so anything gathered after the
+     * description has gone still reaches the far end by the ordinary path. This
+     * only decides how long the *first* message is held back. */
     function waitForIce() {
       if (pc.iceGatheringState === "complete") return Promise.resolve();
       return new Promise(function (resolve) {
         var done = false;
-        var got = 0;
+        var hostGrace = null;
         function finish() {
           if (done) return;
           done = true;
           pc.removeEventListener("icegatheringstatechange", check);
           pc.removeEventListener("icecandidate", count);
-          clearTimeout(early);
+          clearTimeout(hostGrace);
           clearTimeout(hard);
           resolve();
         }
         function check() { if (pc.iceGatheringState === "complete") finish(); }
-        function count(ev) { if (ev.candidate) got++; }
+        function count(ev) {
+          var c = ev.candidate;
+          if (!c || !c.candidate) return;
+          // `type` is not populated everywhere; the candidate line always is.
+          var type = c.type || (/ typ (\w+)/.exec(c.candidate) || [])[1] || "";
+          if (type === "srflx" || type === "relay" || type === "prflx") return finish();
+          if (!hostGrace) hostGrace = setTimeout(finish, ICE_HOST_GRACE_MS);
+        }
         pc.addEventListener("icegatheringstatechange", check);
         pc.addEventListener("icecandidate", count);
-        var early = setTimeout(function () { if (got > 0) finish(); }, 1200);
-        var hard = setTimeout(finish, 2500);
+        var hard = setTimeout(finish, ICE_GATHER_MAX_MS);
       });
     }
 
@@ -1276,6 +1335,7 @@
     join: join,
     AUDIO_MAX_BPS: AUDIO_MAX_BPS,
     AUDIO_JITTER_MS: AUDIO_JITTER_MS,
+    setAudioRole: setAudioRole,
     makeCode: makeCode,
     normalizeCode: normalizeCode,
     peerIdFor: peerIdFor,

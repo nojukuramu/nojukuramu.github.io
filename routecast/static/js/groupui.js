@@ -288,6 +288,18 @@ RC.groupui = (function () {
   /* ---------------------------------------------------------
      The planner's Ride tab
      --------------------------------------------------------- */
+  /** The room's state as one word and one colour. Four situations that used to
+      be told apart only by reading an 11.5px grey sentence: hosting, in and
+      connected, still looking, and in the lobby waiting to be let in. */
+  function stateOf() {
+    if (RC.group.isWaiting()) return { key: "waiting", text: "Waiting at the door" };
+    if (RC.group.isHost()) return { key: "host", text: "Hosting" };
+    var link = RC.group.linkState();
+    if (link === "connected") return { key: "live", text: "Connected" };
+    if (link === "retrying") return { key: "lost", text: "Reconnecting…" };
+    return { key: "connecting", text: "Finding the ride…" };
+  }
+
   function renderLobby() {
     var live = RC.group.isActive();
     show("group-off", !live);
@@ -295,13 +307,22 @@ RC.groupui = (function () {
     if (!live) return;
 
     text("group-code-out", RC.group.code());
-    var link = RC.group.linkState();
-    var linkLabel = RC.group.isHost()
-      ? "Hosting — share the code"
-      : link === "connected" ? "Connected to the host"
-      : link === "retrying" ? "Reconnecting…"
-      : link === "connecting" ? "Finding the ride…" : link;
-    text("group-link", RC.group.isWaiting() ? "Waiting for the host to let you in…" : linkLabel);
+    var state = stateOf();
+    var pill = el("group-state");
+    if (pill) pill.setAttribute("data-state", state.key);
+    text("group-state-text", state.text);
+
+    // The invite link, spelled out, for the phone that has neither a share
+    // sheet nor a clipboard — and so that "Invite" is not a button whose whole
+    // result happened somewhere the rider cannot see.
+    var linkEl = el("group-link");
+    if (linkEl) {
+      var code = RC.group.code();
+      linkEl.hidden = !code;
+      linkEl.textContent = code
+        ? location.origin + location.pathname + "?ride=" + code
+        : "";
+    }
 
     var host = RC.group.isHost();
     show("group-host-tools", host);
@@ -323,12 +344,13 @@ RC.groupui = (function () {
     var list = RC.group.pending();
     if (!list.length) { box.hidden = true; box.innerHTML = ""; return; }
     box.hidden = false;
-    var html = '<p class="rc-label">Asking to join</p>';
+    var html = '<p class="rc-door-head">' + RC.icons.ui("knock") +
+      (list.length === 1 ? "Someone is asking to join" : list.length + " riders are asking to join") + "</p>";
     for (var i = 0; i < list.length; i++) {
       html += '<div class="rc-pending">' +
         '<span class="rc-pending-name">' + RC.escapeHtml(list[i].name) + "</span>" +
-        '<button type="button" class="rc-textbtn" data-approve="' + RC.escapeHtml(list[i].id) + '">Let in</button>' +
-        '<button type="button" class="rc-textbtn rc-textbtn-quiet" data-refuse="' + RC.escapeHtml(list[i].id) + '">Refuse</button>' +
+        '<button type="button" class="rc-act rc-act-primary" data-approve="' + RC.escapeHtml(list[i].id) + '">Let in</button>' +
+        '<button type="button" class="rc-act rc-act-danger" data-refuse="' + RC.escapeHtml(list[i].id) + '">Refuse</button>' +
         "</div>";
     }
     box.innerHTML = html;
@@ -359,30 +381,40 @@ RC.groupui = (function () {
       } else if (m.me) {
         away = "you";
       }
-      var offPlan = "";
+      var offPlan = false;
       if (plan && m.fix) {
         var d = RC.rejoin.distanceToLine(plan.coords, m.fix.lat, m.fix.lon);
-        if (d > RC.rejoin.OFF_ROUTE_M) offPlan = " · off the line";
+        offPlan = d > RC.rejoin.OFF_ROUTE_M;
       }
       var speed = m.fix && m.fix.speedKmh != null ? RC.fmtSpeed(m.fix.speedKmh, units()) : null;
+      // The sub-line is facts about where somebody is; anything that is a
+      // STATE — host, waiting, off the line, offline — is a tag, because a
+      // rider scanning the list is looking for the odd one out, not reading.
+      var sub = [];
+      if (!m.fix) sub.push("no fix yet");
+      else if (away) sub.push(away);
+      if (speed) sub.push(speed);
       html += '<div class="rc-mate-row' + (m.stale ? " is-stale" : "") + '">' +
         '<span class="rc-mate-swatch" style="background:' + m.color + '"></span>' +
         '<span class="rc-mate-meta">' +
           '<span class="rc-mate-rowname">' + RC.escapeHtml(m.name) +
             (m.host ? ' <span class="rc-mate-tag">host</span>' : "") +
-            (m.approved ? "" : ' <span class="rc-mate-tag">waiting</span>') + "</span>" +
-          '<span class="rc-mate-sub">' +
-            RC.escapeHtml((m.fix ? (away || "") : "no fix yet") + offPlan) +
-            (speed ? " · " + RC.escapeHtml(speed) : "") +
-            (m.online ? "" : " · offline") +
-          "</span>" +
+            (m.approved ? "" : ' <span class="rc-mate-tag is-waiting">waiting</span>') +
+            (offPlan ? ' <span class="rc-mate-tag is-off">off the line</span>' : "") +
+            (m.online ? "" : ' <span class="rc-mate-tag is-off">offline</span>') + "</span>" +
+          '<span class="rc-mate-sub">' + RC.escapeHtml(sub.join(" · ") || "—") + "</span>" +
         "</span>" +
         (RC.group.isHost() && !m.me
-          ? '<button type="button" class="rc-textbtn rc-textbtn-quiet" data-kick="' + RC.escapeHtml(m.id) + '">Remove</button>'
+          ? '<button type="button" class="rc-act rc-act-danger" data-kick="' + RC.escapeHtml(m.id) + '">Remove</button>'
           : "") +
         "</div>";
     }
     box.innerHTML = html;
+    var countEl = el("group-members-count");
+    if (countEl) {
+      var inRoom = list.filter(function (m2) { return m2.approved; }).length;
+      countEl.textContent = inRoom > 1 ? inRoom + " on the ride" : "just you";
+    }
     drawMembers();
   }
 
@@ -395,18 +427,32 @@ RC.groupui = (function () {
     show("group-plan-clear", host && !!plan);
     show("group-plan-show", !!plan);
     show("group-rejoin-btn", !!plan);
+    show("group-plan-stats", !!plan);
     if (!plan) {
+      show("group-plan-off", false);
       box.textContent = host
         ? "No planned route yet. Plan one on the Route tab, then set it for the whole ride."
         : "The host has not set a planned route yet.";
       return;
     }
-    box.textContent = "Planned by " + plan.by + " — " + RC.fmtDist(plan.distance, units()) +
-      ", " + RC.fmtDur(plan.duration) + ", " + plan.stops.length +
-      (plan.stops.length === 1 ? " stop." : " stops.") +
-      (suggestState.distM != null
-        ? " You are " + RC.fmtDist(suggestState.distM, units()) + " from it."
-        : "");
+    text("group-plan-dist", RC.fmtDist(plan.distance, units()));
+    text("group-plan-time", RC.fmtDur(plan.duration));
+    text("group-plan-stops", String(plan.stops.length));
+    box.textContent = "Set by " + plan.by + ". It does not move — the same line on every phone.";
+
+    // How far off the line you are is the one number here that changes while
+    // riding, so it gets its own coloured row rather than a clause at the end
+    // of a sentence nobody re-reads.
+    var off = el("group-plan-off");
+    if (off) {
+      var d = suggestState.distM;
+      var isOff = d != null && d > RC.rejoin.OFF_ROUTE_M;
+      off.hidden = d == null;
+      off.textContent = d == null ? "" :
+        isOff ? "You are " + RC.fmtDist(d, units()) + " off the planned line."
+              : "You are on the planned line.";
+      off.setAttribute("data-off", isOff ? "yes" : "no");
+    }
   }
 
   function renderChat() {
@@ -443,27 +489,50 @@ RC.groupui = (function () {
     if (hf) hf.checked = RC.group.isHandsFree();
     var mute = el("group-mute");
     if (mute) mute.checked = RC.group.isMuted();
+    var who = RC.group.speaking();
     var ptt = el("ptt-btn");
+    var isLive = RC.group.isLive();
     if (ptt) {
       ptt.setAttribute("aria-pressed", RC.group.isTalking() ? "true" : "false");
       ptt.setAttribute("data-state", RC.group.isTalking() ? "talking"
-        : RC.group.speaking() ? "hearing" : "idle");
+        : who ? "hearing" : "idle");
       // Live is the normal case; the recorded fallback is worth saying out loud,
       // because on it nobody hears a word until the button comes back up.
-      ptt.setAttribute("data-mode", RC.group.isLive() ? "live" : "clip");
-      ptt.title = RC.group.isLive()
+      ptt.setAttribute("data-mode", isLive ? "live" : "clip");
+      ptt.title = isLive
         ? "Hold to talk — the room hears you as you speak."
         : "Hold to talk — the room hears the clip once you let go.";
     }
-    var who = RC.group.speaking();
     var strip = el("voice-now");
     if (strip) {
       strip.hidden = !who;
       if (who) strip.textContent = who.name + " is talking";
     }
-    if (!can && live) {
-      var noteEl = el("group-voice-note");
-      if (noteEl) noteEl.textContent = "This browser will not record audio, so you can listen but not talk.";
+
+    /* Which of the two voice paths the room is actually on is not cosmetic:
+       on the live one the room hears you mid-sentence, and on the recorded
+       fallback nobody hears a syllable until the button comes back up. That
+       used to be visible only as a tooltip on a button on the other side of
+       the screen. */
+    var pill = el("group-voice-state");
+    var state = !live ? { key: "off", text: "Off" }
+      : RC.group.isMuted() ? { key: "lost", text: "Muted" }
+      : RC.group.isTalking() ? { key: "live", text: "You are talking" }
+      : who ? { key: "live", text: who.name + " is talking" }
+      : !can ? { key: "off", text: "Listen only" }
+      : isLive ? { key: "live", text: "Live" }
+      : { key: "waiting", text: "Recorded clips" };
+    if (pill) pill.setAttribute("data-state", state.key);
+    // textContent, so a rider called <b>Bea</b> is a rider called <b>Bea</b>.
+    text("group-voice-state-text", state.text);
+
+    var noteEl = el("group-voice-note");
+    if (noteEl) {
+      noteEl.textContent = !can
+        ? "This browser will not share a microphone, so you can listen but not talk."
+        : isLive
+          ? "Hold the microphone button beside the map controls. The room hears you while you speak."
+          : "This link has no live audio path, so the room hears each burst once you let the button go.";
     }
   }
 

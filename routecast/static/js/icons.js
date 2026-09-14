@@ -89,6 +89,15 @@ RC.icons = (function () {
       '<circle cx="12" cy="10.2" r="2.3"/>'
     ),
 
+    /* Somebody is at the door: a closed door with a knock beside the handle.
+       Used for the group ride's approval queue, which is the one decision in
+       the app that has a safety consequence. */
+    knock: wrap(
+      '<path d="M5.5 20.5V4.6a1 1 0 0 1 1-1h8.4a1 1 0 0 1 1 1v15.9"/>' +
+      '<path d="M4 20.5h13.4"/><circle cx="13.3" cy="12.4" r=".9"/>' +
+      '<path d="M19.4 8.6l1.8-1.1M19.9 11.6h2.1M19.4 14.6l1.8 1.1"/>'
+    ),
+
     flag: wrap(
       '<path d="M6 21V4"/><path d="M6 4.5c1.6-1 3.4-1 5 0s3.4 1 5 0v8c-1.6 1-3.4 1-5 0s-3.4-1-5 0Z"/>'
     ),
