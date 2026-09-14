@@ -837,6 +837,14 @@ code { font-family: var(--mono); font-size: .92em; }
 }
 
 .rc-pane { display: flex; flex-direction: column; gap: 14px; }
+/* Inside a room the Ride pane is a stack of sections, and #group-on is an
+   ordinary div — so the pane's own gap applied between "off" and "on" and
+   nowhere at all between the sections themselves. Every heading sat flush
+   against whatever ended above it, which is most of why the pane read as one
+   undifferentiated column. A gap, and a hairline over each section, so the
+   headings belong to what follows them rather than to what came before. */
+#group-on { display: flex; flex-direction: column; gap: 18px; }
+#group-on > .rc-block { padding-top: 16px; border-top: 1px solid var(--line); }
 .rc-pane[hidden] { display: none; }
 
 /* Landscape and anything wide: a left drawer instead. A bottom sheet on a
@@ -1815,21 +1823,338 @@ code { font-family: var(--mono); font-size: .92em; }
   background: var(--matcha-soft);
   border-radius: 5px;
   padding: 1px 5px;
+  white-space: nowrap;
 }
+/* Being at the door and being off the agreed line are the two states worth
+   picking out of a roster at a glance; neither is the accent colour, because
+   the accent means "this is fine". */
+.rc-mate-tag.is-waiting { color: var(--rc-watch); background: var(--rc-watch-soft); }
+.rc-mate-tag.is-off { color: var(--rc-caution); background: var(--rc-caution-soft); }
 
-.rc-pending { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
-.rc-pending-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; }
-
-.rc-room-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.rc-room-code { display: flex; flex-direction: column; gap: 2px; }
+/* ---------- the room card ----------
+   The Ride pane used to be six identical grey-headed blocks in a column, and
+   the two things a rider actually reaches for mid-ride — the code, and whether
+   they are still connected — were a 24px number and an 11.5px grey sentence
+   sitting in the middle of them. Both now live in one raised card at the top,
+   and everything below it is ordinary panel content again. */
+.rc-room {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-sm);
+}
+.rc-room-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.rc-room-code { display: flex; flex-direction: column; gap: 1px; }
 .rc-room-code-v {
   font-family: var(--mono);
-  font-size: 24px;
+  font-size: 26px;
+  line-height: 1.15;
   letter-spacing: .18em;
   color: var(--matcha);
 }
-.rc-room-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rc-room-acts { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.rc-room-link { font-family: var(--mono); font-size: 10.5px; overflow-wrap: anywhere; }
+.rc-room-link[hidden] { display: none; }
 .rc-input-code { text-transform: uppercase; letter-spacing: .12em; font-family: var(--mono); }
+
+/* ---------- one line of state, in a colour ----------
+   "Connected", "Reconnecting", "Waiting at the door" and "Hosting" are four
+   genuinely different situations, and telling them apart used to mean reading
+   a grey hint. A dot and a tint say it before the words are read. */
+.rc-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.rc-state-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.rc-state[data-state="live"]      { color: var(--rc-clear);   background: var(--rc-clear-soft);   border-color: transparent; }
+.rc-state[data-state="host"]      { color: var(--matcha);     background: var(--matcha-soft);     border-color: transparent; }
+.rc-state[data-state="waiting"]   { color: var(--rc-watch);   background: var(--rc-watch-soft);   border-color: transparent; }
+.rc-state[data-state="connecting"]{ color: var(--rc-caution); background: var(--rc-caution-soft); border-color: transparent; }
+.rc-state[data-state="lost"]      { color: var(--rc-danger);  background: var(--rc-danger-soft);  border-color: transparent; }
+/* A pulse only while something is genuinely in flight — a steady dot for a
+   steady state, because motion in the corner of the eye is a cost while riding. */
+.rc-state[data-state="connecting"] .rc-state-dot,
+.rc-state[data-state="waiting"] .rc-state-dot { animation: rc-pulse 1.4s var(--ease) infinite; }
+@keyframes rc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+
+.rc-state-sm { margin-left: auto; font-size: 10px; padding: 3px 8px 3px 7px; text-transform: none; letter-spacing: 0; }
+
+/* ---------- an action: a button that looks like one ----------
+   Copy, Invite, Leave, Set the route, Clear it and Remove were all the same
+   green text link, which made a destructive one indistinguishable from a
+   harmless one at arm's length. */
+.rc-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  /* A chip is exactly as wide as its label. Left to shrink inside a flex row
+     it ends up narrower than the words it contains, which with nowrap spills
+     the text out of both ends of its own outline. */
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .15s var(--ease), border-color .15s var(--ease), color .15s var(--ease);
+}
+.rc-act svg { width: 15px; height: 15px; flex: none; }
+.rc-act:hover { background: var(--matcha-soft); border-color: var(--matcha); color: var(--matcha); }
+.rc-act:disabled { opacity: .5; cursor: default; }
+.rc-act-danger { color: var(--muted); }
+.rc-act-danger:hover { background: var(--rc-danger-soft); border-color: var(--rc-danger); color: var(--rc-danger); }
+.rc-act-primary {
+  background: var(--matcha);
+  border-color: var(--matcha);
+  color: var(--matcha-ink);
+}
+.rc-act-primary:hover { background: var(--matcha-hover); border-color: var(--matcha-hover); color: var(--matcha-ink); }
+.rc-act[hidden] { display: none; }
+
+.rc-btn-ghost {
+  height: 46px;
+  padding: 0 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s var(--ease), border-color .15s var(--ease);
+}
+.rc-btn-ghost:hover { background: var(--surface-2); border-color: var(--matcha); color: var(--matcha); }
+
+/* ---------- the door ----------
+   Letting a stranger into a room is the one decision here with a safety
+   consequence, so it gets a colour and a box of its own rather than a plain
+   line of text among the others. */
+.rc-door {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 13px;
+  border: 1px solid var(--rc-watch);
+  border-radius: var(--radius);
+  background: var(--rc-watch-soft);
+}
+.rc-door[hidden] { display: none; }
+.rc-door-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--rc-watch);
+}
+.rc-door-head svg { width: 15px; height: 15px; }
+.rc-pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid rgba(184, 137, 42, .25);
+}
+.rc-pending-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--ink); }
+
+/* ---------- three numbers, not a sentence ---------- */
+.rc-stat-strip {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.rc-stat-strip[hidden] { display: none; }
+.rc-stat {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.rc-stat b {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rc-stat i {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.rc-off-line {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--rc-caution);
+  background: var(--rc-caution-soft);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+}
+/* On the line is the ordinary case, and the ordinary case does not shout. */
+.rc-off-line[data-off="no"] { color: var(--rc-clear); background: var(--rc-clear-soft); }
+.rc-off-line[hidden] { display: none; }
+
+/* ---------- a switch row ----------
+   A checkbox with a label beside it says what the setting is called. A row
+   with a second line says what it DOES, which is the part that stops a rider
+   guessing at a fuel stop. */
+.rc-switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  cursor: pointer;
+}
+.rc-switch:first-of-type { border-top: 0; }
+.rc-switch-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rc-switch-text b { font-size: 13.5px; font-weight: 600; color: var(--ink-soft); }
+.rc-switch-text i { font-style: normal; font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+.rc-switch input { flex: none; width: 19px; height: 19px; accent-color: var(--matcha); }
+
+/* ---------- a fold ---------- */
+.rc-fold {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.rc-fold[hidden] { display: none; }
+.rc-fold-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 13px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+}
+.rc-fold-head::-webkit-details-marker { display: none; }
+.rc-fold-head svg { width: 15px; height: 15px; flex: none; }
+.rc-fold-caret { margin-left: auto; transition: transform .18s var(--ease); }
+.rc-fold[open] .rc-fold-caret { transform: rotate(180deg); }
+.rc-fold-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0 13px 12px;
+}
+
+.rc-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--matcha);
+  background: var(--matcha-soft);
+  border-radius: 999px;
+  padding: 1px 8px;
+  letter-spacing: 0;
+}
+.rc-count:empty { display: none; }
+
+/* ---------- the QR code ----------
+   A room code is six characters read aloud across a car park, which is fine
+   until it is windy or the other rider is wearing a helmet. The same invite
+   link as a picture removes the transcription entirely.
+
+   Always on white, never on the surface token: a reader wants contrast, and a
+   dark-theme QR on a dark card is a code that does not scan. */
+.rc-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: #FFFFFF;
+  border: 1px solid var(--line);
+}
+.rc-qr[hidden] { display: none; }
+.rc-qr canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;   /* a module is a square, not a gradient */
+}
+.rc-qr .rc-field-hint { color: #66705E; text-align: center; max-width: 34ch; }
+
+/* ---------- the scanner ---------- */
+.rc-scan {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rc-scan[hidden] { display: none; }
+.rc-scan-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-width: 320px;
+  max-height: 46vh;
+  margin-inline: auto;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #000000;
+}
+.rc-scan-frame video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Somewhere to aim. The detector reads the whole frame — this is for the
+   human, who otherwise does not know how close to hold the phone. */
+.rc-scan-reticle {
+  position: absolute;
+  inset: 14%;
+  border-radius: 14px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .34);
+  border: 2px solid rgba(255, 255, 255, .85);
+}
+
 
 /* ---------- chat ---------- */
 .rc-chat-log {

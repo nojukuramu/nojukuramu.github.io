@@ -58,6 +58,10 @@ RC.groupui = (function () {
   var toastTimer = null;
   var pttHold = false;
 
+  var qrOpen = false;       // the host has asked for the code as a picture
+  var qrDrawn = null;       // the URL currently on the canvas
+  var scan = null;          // { stream, timer, detector } while the camera is on
+
   function el(id) { return RC.el(id); }
   function on(id, ev, fn) {
     var node = el(id);
@@ -288,20 +292,225 @@ RC.groupui = (function () {
   /* ---------------------------------------------------------
      The planner's Ride tab
      --------------------------------------------------------- */
+  /** The room's state as one word and one colour. Four situations that used to
+      be told apart only by reading an 11.5px grey sentence: hosting, in and
+      connected, still looking, and in the lobby waiting to be let in. */
+  function stateOf() {
+    if (RC.group.isWaiting()) return { key: "waiting", text: "Waiting at the door" };
+    if (RC.group.isHost()) return { key: "host", text: "Hosting" };
+    var link = RC.group.linkState();
+    if (link === "connected") return { key: "live", text: "Connected" };
+    if (link === "retrying") return { key: "lost", text: "Reconnecting…" };
+    return { key: "connecting", text: "Finding the ride…" };
+  }
+
+  /** The one definition of what an invite link is. Copy, Invite, the line
+      under the code and the QR code all read it, so they cannot drift apart. */
+  function inviteUrl() {
+    var code = RC.group.code();
+    return code ? location.origin + location.pathname + "?ride=" + code : "";
+  }
+
+  /* ---------------------------------------------------------
+     The room code as a picture
+
+     Six characters read aloud across a car park is fine until it is windy, or
+     the other rider still has their helmet on, or the code has an O and a 0 in
+     it. The QR carries the whole invite link, so there is nothing to hear and
+     nothing to type — and because it is only the link, it opens the same door
+     as the link does: the newcomer still has to give a name, and the host
+     still has to let them in.
+     --------------------------------------------------------- */
+  function renderQr() {
+    var box = el("group-qr");
+    var canvas = el("group-qr-canvas");
+    var btn = el("group-qr-btn");
+    if (!box || !canvas) return;
+
+    var url = inviteUrl();
+    var can = !!url && !!RC.qr;
+    if (btn) btn.hidden = !can;
+    if (!can || !qrOpen) {
+      box.hidden = true;
+      if (btn) btn.setAttribute("aria-expanded", "false");
+      return;
+    }
+
+    box.hidden = false;
+    btn.setAttribute("aria-expanded", "true");
+    if (qrDrawn === url) return;    // redrawing on every tick would flicker
+
+    try {
+      // The card is the width budget; 260px is as big as a phone panel gives
+      // us and comfortably more than a reader needs.
+      RC.qr.draw(canvas, url, { px: 260, dark: "#000000", light: "#FFFFFF" });
+      qrDrawn = url;
+    } catch (e) {
+      // A link too long for version 25 cannot happen with a six-character
+      // code, but a drawing surface can still be refused.
+      box.hidden = true;
+      qrDrawn = null;
+    }
+  }
+
+  function toggleQr() {
+    qrOpen = !qrOpen;
+    text("group-qr-label", qrOpen ? "Hide QR" : "Show QR");
+    renderQr();
+  }
+
+  /* ---------------------------------------------------------
+     Reading somebody else's code
+
+     Leans on the browser's own barcode reader, as KaraokeNatin's library
+     sharing does. Where it is missing — Safari and Firefox at the time of
+     writing — there is no honest fallback short of shipping a decoder, so the
+     button says which road is still open rather than opening a camera that
+     will never find anything.
+
+     A scan never joins on its own. It fills the code in and stops, for the
+     same reason the ?ride= link does: a room is somewhere you choose to be,
+     and pointing a camera at a poster is not that choice.
+     --------------------------------------------------------- */
+  function scanSupported() {
+    return typeof window.BarcodeDetector === "function" &&
+           !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  }
+
+  /** Pull a room code out of whatever the camera read. Accepts a full invite
+      link, a bare code, and the link with anything else hung off it — but
+      never anything that merely looks code-shaped inside a longer string, so
+      a stray poster cannot drop a rider into a stranger's room. */
+  function codeFromScan(raw) {
+    var text = String(raw || "").trim();
+    if (!text) return "";
+    var m = /[?&]ride=([A-Za-z0-9]{4,8})\b/.exec(text);
+    if (m) return RC.net.normalizeCode(m[1]);
+    if (/^[A-Za-z0-9]{6}$/.test(text)) return RC.net.normalizeCode(text);
+    return "";
+  }
+
+  function scanStatus(msg) { text("group-scan-status", msg); }
+
+  function startScan() {
+    if (scan) return;
+    if (!scanSupported()) {
+      toast("This browser cannot scan QR codes — type the six characters instead.", "warn");
+      var codeInput = el("group-code");
+      if (codeInput) codeInput.focus();
+      return;
+    }
+
+    show("group-scan", true);
+    show("group-scan-btn", false);
+    scanStatus("Starting the camera…");
+    // The viewfinder opens below the code field, which on a phone is below the
+    // fold. Somebody who has just tapped "Scan" is holding the phone up at a
+    // screen, not scrolling.
+    var box = el("group-scan");
+    if (box && box.scrollIntoView) {
+      try { box.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) { box.scrollIntoView(); }
+    }
+    var video = el("group-scan-video");
+    var detector;
+    try {
+      detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+    } catch (e) {
+      show("group-scan", false);
+      toast("This browser cannot read QR codes.", "warn");
+      return;
+    }
+
+    scan = { stream: null, timer: null };
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "environment" }, audio: false })
+      .then(function (stream) {
+        if (!scan) {                       // stopped while the camera opened
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          return;
+        }
+        scan.stream = stream;
+        video.srcObject = stream;
+
+        // play() is asked for but never waited on. It rejects on an autoplay
+        // policy and simply never settles until a first frame arrives, and in
+        // both cases the camera is open and the detector can already be
+        // reading it — so hanging the scan loop off this promise is how a
+        // working camera reports itself as broken.
+        var p = video.play();
+        if (p && p.catch) p.catch(function () {});
+
+        scanStatus("Point the camera at the host's code.");
+        scan.timer = setInterval(function () {
+          if (!scan) return;
+          detector.detect(video).then(function (codes) {
+            for (var i = 0; i < codes.length; i++) {
+              var code = codeFromScan(codes[i].rawValue);
+              if (code) { onScanned(code); return; }
+            }
+          }, function () { /* a frame the detector could not use */ });
+        }, 350);
+      })
+      .catch(function () {
+        // Only getUserMedia reaching here is a real failure: no camera, or a
+        // permission the rider refused.
+        stopScan();
+        scanStatus("");
+        toast("The camera could not be opened.", "warn");
+      });
+  }
+
+  function onScanned(code) {
+    stopScan();
+    var input = el("group-code");
+    if (input) input.value = code;
+    var name = el("group-name");
+    toast("Ride code " + code + " scanned — add your name to join.", "ok");
+    // The name is the only thing still missing, so put the cursor in it.
+    if (name && !name.value.trim()) name.focus();
+    else if (name) el("group-join-btn").focus();
+  }
+
+  function stopScan() {
+    if (scan) {
+      clearInterval(scan.timer);
+      if (scan.stream) scan.stream.getTracks().forEach(function (t) { t.stop(); });
+      scan = null;
+    }
+    var video = el("group-scan-video");
+    if (video) { try { video.pause(); video.srcObject = null; } catch (e) {} }
+    show("group-scan", false);
+    show("group-scan-btn", true);
+  }
+
   function renderLobby() {
     var live = RC.group.isActive();
     show("group-off", !live);
     show("group-on", live);
-    if (!live) return;
+    // In a room there is nothing left to scan, and a camera nobody is looking
+    // at is a red dot in the status bar and a battery cost.
+    if (live && scan) { stopScan(); scanStatus(""); }
+    if (!live) {
+      qrOpen = false;
+      qrDrawn = null;
+      return;
+    }
 
     text("group-code-out", RC.group.code());
-    var link = RC.group.linkState();
-    var linkLabel = RC.group.isHost()
-      ? "Hosting — share the code"
-      : link === "connected" ? "Connected to the host"
-      : link === "retrying" ? "Reconnecting…"
-      : link === "connecting" ? "Finding the ride…" : link;
-    text("group-link", RC.group.isWaiting() ? "Waiting for the host to let you in…" : linkLabel);
+    var state = stateOf();
+    var pill = el("group-state");
+    if (pill) pill.setAttribute("data-state", state.key);
+    text("group-state-text", state.text);
+
+    // The invite link, spelled out, for the phone that has neither a share
+    // sheet nor a clipboard — and so that "Invite" is not a button whose whole
+    // result happened somewhere the rider cannot see.
+    var linkEl = el("group-link");
+    if (linkEl) {
+      linkEl.hidden = !RC.group.code();
+      linkEl.textContent = inviteUrl();
+    }
+    renderQr();
 
     var host = RC.group.isHost();
     show("group-host-tools", host);
@@ -323,12 +532,13 @@ RC.groupui = (function () {
     var list = RC.group.pending();
     if (!list.length) { box.hidden = true; box.innerHTML = ""; return; }
     box.hidden = false;
-    var html = '<p class="rc-label">Asking to join</p>';
+    var html = '<p class="rc-door-head">' + RC.icons.ui("knock") +
+      (list.length === 1 ? "Someone is asking to join" : list.length + " riders are asking to join") + "</p>";
     for (var i = 0; i < list.length; i++) {
       html += '<div class="rc-pending">' +
         '<span class="rc-pending-name">' + RC.escapeHtml(list[i].name) + "</span>" +
-        '<button type="button" class="rc-textbtn" data-approve="' + RC.escapeHtml(list[i].id) + '">Let in</button>' +
-        '<button type="button" class="rc-textbtn rc-textbtn-quiet" data-refuse="' + RC.escapeHtml(list[i].id) + '">Refuse</button>' +
+        '<button type="button" class="rc-act rc-act-primary" data-approve="' + RC.escapeHtml(list[i].id) + '">Let in</button>' +
+        '<button type="button" class="rc-act rc-act-danger" data-refuse="' + RC.escapeHtml(list[i].id) + '">Refuse</button>' +
         "</div>";
     }
     box.innerHTML = html;
@@ -359,30 +569,40 @@ RC.groupui = (function () {
       } else if (m.me) {
         away = "you";
       }
-      var offPlan = "";
+      var offPlan = false;
       if (plan && m.fix) {
         var d = RC.rejoin.distanceToLine(plan.coords, m.fix.lat, m.fix.lon);
-        if (d > RC.rejoin.OFF_ROUTE_M) offPlan = " · off the line";
+        offPlan = d > RC.rejoin.OFF_ROUTE_M;
       }
       var speed = m.fix && m.fix.speedKmh != null ? RC.fmtSpeed(m.fix.speedKmh, units()) : null;
+      // The sub-line is facts about where somebody is; anything that is a
+      // STATE — host, waiting, off the line, offline — is a tag, because a
+      // rider scanning the list is looking for the odd one out, not reading.
+      var sub = [];
+      if (!m.fix) sub.push("no fix yet");
+      else if (away) sub.push(away);
+      if (speed) sub.push(speed);
       html += '<div class="rc-mate-row' + (m.stale ? " is-stale" : "") + '">' +
         '<span class="rc-mate-swatch" style="background:' + m.color + '"></span>' +
         '<span class="rc-mate-meta">' +
           '<span class="rc-mate-rowname">' + RC.escapeHtml(m.name) +
             (m.host ? ' <span class="rc-mate-tag">host</span>' : "") +
-            (m.approved ? "" : ' <span class="rc-mate-tag">waiting</span>') + "</span>" +
-          '<span class="rc-mate-sub">' +
-            RC.escapeHtml((m.fix ? (away || "") : "no fix yet") + offPlan) +
-            (speed ? " · " + RC.escapeHtml(speed) : "") +
-            (m.online ? "" : " · offline") +
-          "</span>" +
+            (m.approved ? "" : ' <span class="rc-mate-tag is-waiting">waiting</span>') +
+            (offPlan ? ' <span class="rc-mate-tag is-off">off the line</span>' : "") +
+            (m.online ? "" : ' <span class="rc-mate-tag is-off">offline</span>') + "</span>" +
+          '<span class="rc-mate-sub">' + RC.escapeHtml(sub.join(" · ") || "—") + "</span>" +
         "</span>" +
         (RC.group.isHost() && !m.me
-          ? '<button type="button" class="rc-textbtn rc-textbtn-quiet" data-kick="' + RC.escapeHtml(m.id) + '">Remove</button>'
+          ? '<button type="button" class="rc-act rc-act-danger" data-kick="' + RC.escapeHtml(m.id) + '">Remove</button>'
           : "") +
         "</div>";
     }
     box.innerHTML = html;
+    var countEl = el("group-members-count");
+    if (countEl) {
+      var inRoom = list.filter(function (m2) { return m2.approved; }).length;
+      countEl.textContent = inRoom > 1 ? inRoom + " on the ride" : "just you";
+    }
     drawMembers();
   }
 
@@ -395,18 +615,32 @@ RC.groupui = (function () {
     show("group-plan-clear", host && !!plan);
     show("group-plan-show", !!plan);
     show("group-rejoin-btn", !!plan);
+    show("group-plan-stats", !!plan);
     if (!plan) {
+      show("group-plan-off", false);
       box.textContent = host
         ? "No planned route yet. Plan one on the Route tab, then set it for the whole ride."
         : "The host has not set a planned route yet.";
       return;
     }
-    box.textContent = "Planned by " + plan.by + " — " + RC.fmtDist(plan.distance, units()) +
-      ", " + RC.fmtDur(plan.duration) + ", " + plan.stops.length +
-      (plan.stops.length === 1 ? " stop." : " stops.") +
-      (suggestState.distM != null
-        ? " You are " + RC.fmtDist(suggestState.distM, units()) + " from it."
-        : "");
+    text("group-plan-dist", RC.fmtDist(plan.distance, units()));
+    text("group-plan-time", RC.fmtDur(plan.duration));
+    text("group-plan-stops", String(plan.stops.length));
+    box.textContent = "Set by " + plan.by + ". It does not move — the same line on every phone.";
+
+    // How far off the line you are is the one number here that changes while
+    // riding, so it gets its own coloured row rather than a clause at the end
+    // of a sentence nobody re-reads.
+    var off = el("group-plan-off");
+    if (off) {
+      var d = suggestState.distM;
+      var isOff = d != null && d > RC.rejoin.OFF_ROUTE_M;
+      off.hidden = d == null;
+      off.textContent = d == null ? "" :
+        isOff ? "You are " + RC.fmtDist(d, units()) + " off the planned line."
+              : "You are on the planned line.";
+      off.setAttribute("data-off", isOff ? "yes" : "no");
+    }
   }
 
   function renderChat() {
@@ -443,27 +677,50 @@ RC.groupui = (function () {
     if (hf) hf.checked = RC.group.isHandsFree();
     var mute = el("group-mute");
     if (mute) mute.checked = RC.group.isMuted();
+    var who = RC.group.speaking();
     var ptt = el("ptt-btn");
+    var isLive = RC.group.isLive();
     if (ptt) {
       ptt.setAttribute("aria-pressed", RC.group.isTalking() ? "true" : "false");
       ptt.setAttribute("data-state", RC.group.isTalking() ? "talking"
-        : RC.group.speaking() ? "hearing" : "idle");
+        : who ? "hearing" : "idle");
       // Live is the normal case; the recorded fallback is worth saying out loud,
       // because on it nobody hears a word until the button comes back up.
-      ptt.setAttribute("data-mode", RC.group.isLive() ? "live" : "clip");
-      ptt.title = RC.group.isLive()
+      ptt.setAttribute("data-mode", isLive ? "live" : "clip");
+      ptt.title = isLive
         ? "Hold to talk — the room hears you as you speak."
         : "Hold to talk — the room hears the clip once you let go.";
     }
-    var who = RC.group.speaking();
     var strip = el("voice-now");
     if (strip) {
       strip.hidden = !who;
       if (who) strip.textContent = who.name + " is talking";
     }
-    if (!can && live) {
-      var noteEl = el("group-voice-note");
-      if (noteEl) noteEl.textContent = "This browser will not record audio, so you can listen but not talk.";
+
+    /* Which of the two voice paths the room is actually on is not cosmetic:
+       on the live one the room hears you mid-sentence, and on the recorded
+       fallback nobody hears a syllable until the button comes back up. That
+       used to be visible only as a tooltip on a button on the other side of
+       the screen. */
+    var pill = el("group-voice-state");
+    var state = !live ? { key: "off", text: "Off" }
+      : RC.group.isMuted() ? { key: "lost", text: "Muted" }
+      : RC.group.isTalking() ? { key: "live", text: "You are talking" }
+      : who ? { key: "live", text: who.name + " is talking" }
+      : !can ? { key: "off", text: "Listen only" }
+      : isLive ? { key: "live", text: "Live" }
+      : { key: "waiting", text: "Recorded clips" };
+    if (pill) pill.setAttribute("data-state", state.key);
+    // textContent, so a rider called <b>Bea</b> is a rider called <b>Bea</b>.
+    text("group-voice-state-text", state.text);
+
+    var noteEl = el("group-voice-note");
+    if (noteEl) {
+      noteEl.textContent = !can
+        ? "This browser will not share a microphone, so you can listen but not talk."
+        : isLive
+          ? "Hold the microphone button beside the map controls. The room hears you while you speak."
+          : "This link has no live audio path, so the room hears each burst once you let the button go.";
     }
   }
 
@@ -725,7 +982,7 @@ RC.groupui = (function () {
     on("group-share", "click", function () {
       var code = RC.group.code();
       if (!code) return;
-      var url = location.origin + location.pathname + "?ride=" + code;
+      var url = inviteUrl();
       if (navigator.share) {
         navigator.share({ title: "RouteCast group ride", text: "Join my ride — code " + code, url: url })
           .catch(function () {});
@@ -736,6 +993,10 @@ RC.groupui = (function () {
         }, function () {});
       }
     });
+
+    on("group-qr-btn", "click", toggleQr);
+    on("group-scan-btn", "click", startScan);
+    on("group-scan-stop", "click", function () { stopScan(); scanStatus(""); });
 
     on("group-approval-on", "change", function () { RC.group.setApproval(this.checked); });
     on("group-chat-on", "change", function () { RC.group.setChatEnabled(this.checked); });

@@ -34,7 +34,8 @@ Live at <https://nojukuramu.github.io/routecast/>.
   squall. No extra network calls — it re-reads the hourly series already fetched.
 - **Group ride.** A room of riders on one map (see below): one shared **planned route**
   that is static by design, live positions, a roster with a door on it, chat, push-to-talk
-  voice, and routes back to the line for anyone who leaves it.
+  voice, and routes back to the line for anyone who leaves it. Joining is a six-character
+  code read aloud, a link, or the host's **QR code** pointed at with a camera.
 - **Gear and riding advice** derived from the actual numbers, not generic filler.
 - **An ETA that has been told the truth.** The routing engine's own timings are
   free-flow: no traffic, no signals, no junction delay. That optimism used to
@@ -324,6 +325,44 @@ Asking costs routing requests, so it is rate limited: at most one round per 45 s
 unless you have moved 400 m or asked for a refresh yourself. Being lost is not a reason
 to hammer a public demo server.
 
+### The Ride tab
+
+Everything about a room that is not on the map is one tab in the planner, and it used to be
+six identically-styled blocks in a single column: the same uppercase grey heading over each
+one, ten actions that were all the same green text link, and the two things a rider actually
+reaches for mid-ride — the code, and whether they are still connected — sitting somewhere in
+the middle of it. Whether you were connected, reconnecting, or waiting in a lobby was an
+11.5px grey sentence.
+
+It is now read top to bottom in the order it is needed:
+
+- **The room card.** The code, large, and one state pill beside it — *Hosting*, *Connected*,
+  *Finding the ride…*, *Reconnecting…*, *Waiting at the door* — each with its own colour, and
+  a dot that pulses only while something is genuinely in flight. Copy, Invite and Leave are
+  buttons rather than links, and Leave turns red under the thumb instead of looking like the
+  other two. The invite link is spelled out underneath, because a button whose entire result
+  happened on the clipboard is a button you cannot check.
+- **The door**, when anybody is at it: its own amber box, one row per rider, a solid
+  **Let in** and a quiet **Refuse**. This is the one control in the app with a safety
+  consequence, and it no longer looks like everything else.
+- **Riders**, with the count in the heading and each rider's *state* — host, waiting, off
+  the line, offline — as a coloured tag rather than more grey text on the end of a sentence,
+  because scanning a roster is looking for the odd one out.
+- **The planned route** as three numbers — distance, moving time, stops — instead of one
+  run-on line, with how far off the line you are as its own row: green when you are on it,
+  amber when you are not.
+- **Voice**, which now says which of the two paths the room is on (*Live*, *Recorded clips*,
+  *Muted*, *Listen only*, or who is talking right now). That mattered and was previously
+  readable only as a tooltip on a button on the other side of the screen: on the live path
+  the room hears you mid-sentence, and on the fallback nobody hears a syllable until your
+  thumb comes up.
+- **Chat**, unchanged.
+- **Host settings**, folded away. They are set once at the start of a ride and then never
+  touched, and they used to sit between the riders and the chat.
+
+Each section is separated by a hairline and real space. Inside a room the sections had no
+gap between them at all, which is most of why the pane read as one undifferentiated scroll.
+
 ### The door
 
 A room code is six characters against a public broker, and somebody will eventually guess
@@ -340,6 +379,30 @@ one. So:
   with the receiver's clock, because a clock you do not own cannot age a marker.
 - The host can turn chat or voice off for the whole room, and turning the door off lets
   in everyone already waiting rather than leaving a lobby nobody can be admitted from.
+
+### Joining by camera
+
+Six characters read aloud across a car park is fine until it is windy, or the other rider
+still has their helmet on, or the code has an `O` and a `0` in it. So the host can put the
+room code up as a **QR code** — tap *Show QR* in the room card — and it carries the ordinary
+invite link, nothing else.
+
+A guest points a camera at it from the join form. The scan **fills the code in and stops**,
+for exactly the same reason the `?ride=` link does: a room is somewhere you choose to be,
+the name is still required, and the host still has to let you in. Pointing a camera at a
+poster is not consent to broadcast your position.
+
+What comes back off a camera is a stranger's claim in the same way a message off the wire
+is, so it is read narrowly: a `ride=` parameter in a URL, or a bare six-character code, and
+nothing else. A URL that merely *contains* six characters somewhere is not a room, which is
+why `codeFromScan` is checked against café wifi notices and unrelated links rather than only
+against the codes it is supposed to accept.
+
+Scanning uses the browser's own `BarcodeDetector`. Where it is missing — Safari and Firefox
+at the time of writing — there is no honest fallback short of shipping a decoder, so the
+button says to type the six characters instead of opening a camera that will never find
+anything. Drawing a code works everywhere: the encoder is ~540 lines and has no CDN behind
+it.
 
 ### Voice
 
@@ -358,9 +421,35 @@ either.
 Opus is tuned for a motorbike rather than a podcast: wideband instead of full band,
 in-band FEC so a lost packet is repaired from the next one instead of waiting for a
 retransmit that would arrive too late to be a warning, and DTX so an open microphone on a
-quiet rider costs the uplink almost nothing. The receiver asks for a 40 ms de-jitter
-buffer — low enough to stay conversational, and the browser is free to grow it when a
-link deserves it.
+quiet rider costs the uplink almost nothing.
+
+**A de-jitter buffer is worth its delay exactly once, at the ear.** The receiver asks for
+40 ms — low enough to stay conversational, and the browser is free to grow it when a link
+deserves it — but only on a device that is the *end* of the line for that audio. The host
+is not: what arrives there is re-mixed and sent straight back out, so a buffer held on its
+receive side was simply added to the one the guest at the far end was already holding. The
+same smoothing, bought twice, and paid for by everyone in the room listening to anyone but
+the host. The relay hop now asks for as little delay as the stack will give it, and
+`tools/voice-latency.js` measures the difference: guest to guest through the mix came down
+from about 175 ms to about 130 ms on a link with no network latency in it at all.
+
+**Nothing waits for a server that has stopped answering.** Candidates are trickled through
+the broker as they arrive, but because public brokers drop messages under load the first
+description also carries whatever has been gathered by the time it is sent — so there is a
+moment's wait before the offer goes out. That wait used to end when ICE gathering
+*completed*, and a STUN or TURN server that has quietly died never completes gathering: it
+sits there until the browser's own retransmit schedule gives up. Both ends paid it in turn,
+so one dead entry in the list added about a second to every link, and the talk button was a
+recorder for all of it. The wait is now over what has **arrived** rather than over a state
+that may never be reached — a reflexive or relay candidate ends it immediately, host
+candidates alone end it 300 ms later — and trickle carries the rest as it always did.
+Measured against a deliberately black-holed STUN server, joining a ride went from 2.1 s to
+1.2 s; against a dead relay in an otherwise healthy list, from 2.1 s to 1.2 s as well.
+
+The ICE configuration can be replaced wholesale by setting `window.RC_ICE` before the
+scripts load, which is both how the latency suite points at the servers it starts itself
+and the escape hatch for anyone who would rather use their own relay than borrow a public
+one.
 
 The star still holds. Guests send one stream to the host and get one back; the host is a
 mixer, building for each guest the sum of everyone *else* plus its own microphone. That
@@ -436,10 +525,13 @@ for.
   only once it is finished, and a host whose browser has no Web Audio cannot mix, so its
   whole room falls back with it. Autoplay rules mean a phone that has not been touched
   yet may need one tap before it will play anything.
-- **The signalling broker is somebody else's.** Rooms are introduced through public
-  PeerJS brokers and hard NATs fall back to a public TURN relay. If both are down, a
-  guest cannot find a host — the app retries for as long as you leave it open, but there
-  is no backend here to fix that.
+- **The signalling broker is somebody else's, and so is the relay.** Rooms are introduced
+  through public PeerJS brokers and hard NATs fall back to a public TURN relay. A relay
+  that has stopped answering no longer costs a second of setup, but it still costs the
+  riders who needed it their link: there is no free public TURN server that can be relied
+  on, and this app has no server of its own to run one. `window.RC_ICE` is there for anyone
+  who does. If both are down, a guest cannot find a host — the app retries for as long as
+  you leave it open, but there is no backend here to fix that.
 - **A room code is not a password.** It is six characters, which is why approval is on by
   default and why it should stay on. Turn it off only among people you can see.
 - **Positions are as good as the phones sending them.** A rider in a tunnel goes stale
@@ -477,6 +569,7 @@ routecast/
     elevation.js            RC.elevation— Open-Meteo DEM profile, climb/descent, grade at a point
     risk.js                 RC.risk     — vehicle-aware scoring, advice, departure planner
     pick.js                 RC.pick     — the centre-pin place picker
+    qr.js                   RC.qr       — a QR encoder, lifted from KaraokeNatin; no CDN
     peer.js                 RC.net      — WebRTC data channels over a public broker; no backend
     voice.js                RC.voice    — live voice: the pre-negotiated audio path, host mixing
     rejoin.js               RC.rejoin   — planned-route geometry: projection, simplify, ways back
@@ -491,7 +584,10 @@ routecast/
     pwa.js                  install prompt, iOS fallback, full-screen toggle
   tools/validate.js         static + pure-module suite: `node tools/validate.js`
   tools/group-e2e.js        two real browsers, one room: `node tools/group-e2e.js`
+  tools/voice-latency.js    three browsers, one room, a stopwatch on the voice path
   tools/broker.js           a local stand-in for the public broker; not shipped
+  tools/stun.js             a STUN server, ~150 lines, with a dead mode and a slow one
+  tools/turn.js             a TURN server that actually relays, for the relay-only case
 ```
 
 ## Testing
@@ -519,6 +615,16 @@ as neither, that a mark re-saved on the same spot renames rather than duplicates
 a free ride's odometer refuses a parked phone's jitter, a step inside its own error circle
 and a teleport alike.
 
+The QR encoder is checked there too, against the tables in ISO/IEC 18004 rather than
+against itself: that every version leaves exactly the standard number of free data modules,
+that the block layouts account for every codeword, that the finder and timing patterns
+survive masking, that version selection tracks the documented byte-mode capacities and that
+an oversized payload fails loudly instead of drawing a convincing symbol that decodes to
+nothing. Those invariants came across with the encoder because they are what caught its one
+real bug — alignment patterns wrongly omitted where they cross the timing lines, which
+silently shifted every data module from version 7 up. The rule for what a *scanned* string
+is allowed to mean is pinned next to them.
+
 The group ride's own arithmetic is checked in the same half: that the nearest point on a
 planned line is found abeam rather than at a vertex, that a straight line simplifies to
 its endpoints while a corner never does, that a route laid over the planned one counts as
@@ -542,8 +648,37 @@ planned route arrives whole and byte-identical rather than recomputed, that a ri
 re-plan does not move it, that drifting off it produces several ways back with one
 highlighted, that a push-to-talk clip recorded from a fake microphone is encoded, chunked,
 relayed and heard at the other end, that a guest cannot post under the host's name or
-flood the room, and that nothing overflows the screen in either orientation. It needs
-Playwright; everything else in `tools/` needs nothing at all.
+flood the room, and that nothing overflows the screen in either orientation.
+
+It also joins a third rider **by camera**: the host's QR is drawn for real, and a stubbed
+`BarcodeDetector` hands the app what a reader would have seen, so what is under test is the
+path from "the detector saw this string" to "the rider is at the door" — including that the
+camera is released the moment the code is read, that scanning alone puts nobody in the room,
+and that a scanned rider can be refused like any other. It needs Playwright; everything else
+in `tools/` needs nothing at all.
+
+```
+node tools/voice-latency.js
+```
+
+"Voice feels slow" is not something you can fix; a number is. This puts **three** Chromium
+contexts in one room — a host and two guests — replaces each one's microphone with a tone
+whose start time the test knows, and watches for that tone arriving at the far end with an
+analyser. Three numbers come out: how long after joining the talk button stops being a
+recorder, how long a guest takes to reach the host, and how long a guest takes to reach
+*another* guest, which is the long way round through the host's mix.
+
+The ICE servers are its own. `tools/stun.js` is a STUN Binding server with two failure
+modes bolted on — `black` answers nothing at all, `slow` answers late — and `tools/turn.js`
+is a real TURN server (Allocate, CreatePermission, ChannelBind, ChannelData and the Send
+and Data indications) that relays over UDP and can be told to add latency to every packet
+it carries. Borrowing a public server for this would have measured that server's afternoon
+rather than this app's code, and no public server can be asked to die on cue.
+
+Five cases run: STUN answering, STUN black-holed, a dead TURN entry sitting in an
+otherwise healthy list, `iceTransportPolicy: "relay"` with both riders forced through the
+relay, and a relay 120 ms away. The second and third are the ones that found something —
+see below.
 
 Nothing is sent anywhere but those services. Your last trip, your saved routes and the
 record of the roads you have ridden all live in `localStorage` and never leave the device —

@@ -194,6 +194,9 @@ async function main() {
     await page.goto(base);
     await page.waitForSelector("#map", { state: "attached" });
     await page.waitForFunction(() => !!(window.RC && window.RC.group && window.RC.groupui));
+    // Kept so a page opened mid-suite can be closed again — a browser context
+    // left open holds a camera, a microphone and a broker socket.
+    page.__ctx = ctx;
     return page;
   }
 
@@ -368,6 +371,99 @@ async function main() {
           const m = window.RC.group.chat().filter((x) => x.text === "this is the host speaking")[0];
           return m && m.name === "Second Rider";
         }));
+
+  section("A room code as a picture");
+
+  // The host's QR carries the invite link and nothing else, so what the guest
+  // scans has to be exactly what the guest would have been told to type.
+  await host.click("#group-qr-btn");
+  await host.waitForFunction(() => {
+    const box = document.getElementById("group-qr");
+    const c = document.getElementById("group-qr-canvas");
+    return box && !box.hidden && c && c.width > 0;
+  }, null, { timeout: 10000 });
+  check("the host can show the room code as a QR", true);
+
+  const qrPayload = await host.evaluate(() => {
+    // Re-encode what the app encoded and compare the module grids: a canvas
+    // this test decoded itself would only prove the decoder agrees with the
+    // encoder, which is not a claim worth making.
+    const url = location.origin + location.pathname + "?ride=" + window.RC.group.code();
+    const a = window.RC.qr.encode(url, { ecc: "M" });
+    const c = document.getElementById("group-qr-canvas");
+    return { url: url, size: a.size, version: a.version, drawn: c.width > 0 && c.height > 0 };
+  });
+  check("the QR encodes this room's invite link",
+        qrPayload.url.endsWith("?ride=RIDE42"), qrPayload.url);
+  check("and it is small enough to read at arm's length",
+        qrPayload.version <= 4, "version " + qrPayload.version);
+
+  await host.click("#group-qr-btn");
+  check("and it folds away again",
+        await host.evaluate(() => document.getElementById("group-qr").hidden));
+
+  // A third rider joins by camera. There is no camera here and Chromium has no
+  // BarcodeDetector, so both are stubbed — what is under test is the app's own
+  // path from "the detector saw this string" to "the rider is in the room",
+  // which is the part that can actually be wrong.
+  const scanner = await newPage("scanner", START, { width: 430, height: 860 });
+  await scanner.evaluate((payload) => {
+    window.BarcodeDetector = function () {
+      return {
+        detect: function () {
+          return Promise.resolve([{ rawValue: payload, format: "qr_code" }]);
+        }
+      };
+    };
+    // A canvas stream stands in for a camera. It has to actually produce
+    // frames — a canvas that is never redrawn emits none, the <video> never
+    // reaches its first frame, and anything waiting on that is waiting for
+    // ever.
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 64;
+    const cx = canvas.getContext("2d");
+    let tick = 0;
+    setInterval(function () {
+      cx.fillStyle = tick++ % 2 ? "#202020" : "#303030";
+      cx.fillRect(0, 0, 64, 64);
+    }, 100);
+    const fake = canvas.captureStream(10);
+    navigator.mediaDevices.getUserMedia = function () { return Promise.resolve(fake); };
+  }, qrPayload.url);
+
+  await scanner.click("#group-btn");
+  await scanner.fill("#group-name", "Third Rider");
+  await scanner.click("#group-scan-btn");
+  await scanner.waitForFunction(
+    () => document.getElementById("group-code").value === "RIDE42",
+    null, { timeout: 15000 });
+  check("a scanned code fills the room in", true);
+  check("the camera is let go the moment it has been read",
+        await scanner.evaluate(() => {
+          const v = document.getElementById("group-scan-video");
+          return document.getElementById("group-scan").hidden && !v.srcObject;
+        }));
+  check("but scanning alone does not put anybody in the room",
+        !(await scanner.evaluate(() => window.RC.group.isActive())));
+
+  await scanner.click("#group-join-btn");
+  await scanner.waitForFunction(
+    () => window.RC.group.isActive() && window.RC.group.linkState() === "connected",
+    null, { timeout: 40000 });
+  await host.waitForFunction(() => window.RC.group.pending().length === 1, null, { timeout: 20000 });
+  check("and the scanned code reaches the right room",
+        await host.evaluate(() => window.RC.group.pending()[0].name === "Third Rider"));
+  check("a scanned rider still has to be let in",
+        await scanner.evaluate(() => window.RC.group.isWaiting()));
+
+  // Refused at the door, and gone from the roster — which is also how the rest
+  // of this file gets its two-rider room back. A rider who merely *drops* keeps
+  // their slot on purpose, so leaving would not have cleared it.
+  await host.evaluate(() => window.RC.group.kick(window.RC.group.pending()[0].id));
+  await scanner.waitForFunction(() => !window.RC.group.isActive(), null, { timeout: 20000 });
+  check("a scanned rider can be refused like any other",
+        await host.evaluate(() => window.RC.group.members().length === 2));
+  await scanner.__ctx.close();
 
   section("Voice carries across the room");
 
