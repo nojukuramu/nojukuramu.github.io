@@ -15,6 +15,10 @@ static planned route everybody can see, everyone's live position, chat, live pus
 voice, and — for whoever drifts off the agreed line — a set of real routes back to it.
 It runs phone to phone, with no server holding anybody's position.
 
+Or open the door entirely: **PUBs** is the public road. Turn it on and every rider nearby
+who has also turned it on is on your map, and you are on theirs; open a **PUB room** and
+anyone can walk in and talk. Same phone-to-phone transport, no accounts, nothing stored.
+
 Live at <https://nojukuramu.github.io/routecast/>.
 
 ## What it does
@@ -36,6 +40,21 @@ Live at <https://nojukuramu.github.io/routecast/>.
   that is static by design, live positions, a roster with a door on it, chat, push-to-talk
   voice, and routes back to the line for anyone who leaves it. Joining is a six-character
   code read aloud, a link, or the host's **QR code** pointed at with a camera.
+- **PUBs — the public road.** A group ride is a room you are invited into; a PUB is the
+  opposite. Switch it on and your name and position go to every rider in your area who has
+  switched it on, and theirs come back. Anyone can also open a **PUB room**: a chat room
+  with the door wedged open, published to the area so it is walked into rather than
+  invited to. Off by default, one tap to go dark, and a local ignore list that drops
+  somebody where their messages *arrive* rather than filtering them out of a list. There
+  is still no server: the area code is derived from where you are, and the first phone in
+  an area holds it for everybody until it leaves (see below).
+- **A heat map of your own riding.** The recorder has been writing down which roads you
+  actually use since the first ride, because that is what makes the planner prefer a line
+  you know. *Your roads* now draws it: every recorded stretch, coloured by **visits**,
+  by **your own average speed on it**, by **how long each crossing takes you**, or by
+  **how lately you rode it**. The speed one is the one that surprises people. Colour is
+  assigned by rank rather than by value, so the map always says something instead of
+  painting one commute red and the rest of your life blue.
 - **Gear and riding advice** derived from the actual numbers, not generic filler.
 - **An ETA that has been told the truth.** The routing engine's own timings are
   free-flow: no traffic, no signals, no junction delay. That optimism used to
@@ -180,11 +199,13 @@ Live at <https://nojukuramu.github.io/routecast/>.
 - **Built for a phone.** The map owns the screen and everything else lives in a bottom sheet you
   drag between three heights. Safe-area aware, dynamic viewport heights so nothing jumps when the
   browser chrome hides, 44px touch targets, and inputs sized so iOS never zooms on focus.
-- **Installable and full screen.** An Install button appears where the browser supports it (and
-  becomes an "Add to Home Screen" walkthrough on iOS Safari, which has no install prompt). A
-  full-screen toggle uses the Fullscreen API where it exists, and hides itself where it does not
-  rather than sitting there dead — on an iPhone, installing to the home screen *is* how you get
-  full screen.
+- **Installable, and the status bar stays.** An Install button appears where the browser
+  supports it, and becomes an "Add to Home Screen" walkthrough on iOS Safari, which has no
+  install prompt. There is deliberately **no full-screen toggle**: it used to be there, and
+  all it did was hide the clock, the signal bars and the battery meter behind a map — three
+  things a phone on a handlebar is better at than anything RouteCast draws, traded for a
+  strip of tiles. The manifest asks for `standalone` rather than `fullscreen` for the same
+  reason. Installed or not, the notification bar is on the screen.
 
 ## The data, and why there are no API keys
 
@@ -471,6 +492,79 @@ own geolocation watch exists so presence works when neither navigation nor free 
 running; when either of them is, their fixes are reused rather than a second watch paid
 for.
 
+## PUBs
+
+Two things, deliberately separate, and you can have either without the other.
+
+**Being visible** is your name and your position going out to the area. It is off until
+you switch it on, and the switch is next to one sentence about what it means rather than
+buried in a settings page. What leaves the phone is rounded to four decimal places — about
+eleven metres — because a public broadcast does not need to say which side of the road you
+are on. There is a **Go dark** button in the first card of the pane, and the rail button
+carries a live count the whole time PUBs is on, because "am I still broadcasting" is a
+question that must never need a tap to answer.
+
+**A PUB room** is a chat room with no door. It carries no positions at all, so you can
+walk into one without going public. Codes are published to the area, so a PUB is found
+rather than shared.
+
+### How an area works with no server
+
+The app already knows how to introduce two browsers with nothing but a six-character code
+(`peer.js`, over a public PeerJS broker). A ride's code is random and secret. A PUB's is
+neither: it is **derived from where you are**, one code per ~1° cell of the world, so two
+riders in the same region compute the same code without ever having spoken.
+
+Somebody still has to hold that room, so the first phone to arrive becomes the area's hub.
+Every client tries to *join* the area code first and only takes it over as host when
+nothing answers; if two phones start at the same instant, one is told the code is taken
+and quietly becomes a guest of the other. The hub is a relay and nothing else — it holds
+the area's presence list for as long as it is there, and when it leaves the next phone to
+notice picks the room up. Ride into the next cell and you are reseated on that cell's hub,
+without losing the room you were chatting in.
+
+Ride codes are drawn from an alphabet with no `0`, `1`, `I` or `O` in it — the characters
+that get misread aloud. PUB codes start with one of those on purpose (`0` for an area, `1`
+for a room), so a PUB can never land on somebody's private ride and a ride can never be
+mistaken for a PUB.
+
+### What it refuses
+
+Everything off the wire is a stranger's claim. Names and messages are stripped of control
+characters and capped; a fix that is not a plausible coordinate is dropped rather than
+drawn at (0, 0); nobody can claim to be travelling at Mach 3 or facing 900 degrees; one
+loud rider cannot flood a room. A stranger's dot is a **hollow ring**, never the solid dot
+a rider in your own ride gets, because the difference has to survive a glance at a moving
+map. And a hub relays; it does not moderate — a self-appointed relay moderating a public
+channel is worse than one that does not, which is why the ignore list is local, permanent
+and applied where messages arrive.
+
+## Running with the screen off
+
+A ride does not stop because the phone went in a pocket. It used to here: the tab was
+backgrounded, timers were throttled to one tick a minute, the wake lock was taken away,
+and a rider who pulled the phone out at the next junction found a dashboard that had
+quietly lost ten kilometres.
+
+`background.js` is the one place that fights that, and navigation, free drive, the room
+and PUBs all just take a counted hold on it for as long as their session lasts. Three
+things, worth knowing apart because the first is famous, the second is what actually
+works, and the third is what everybody assumes is happening and is not:
+
+1. **The screen wake lock**, re-taken on every return to visibility. The browser releases
+   it whenever the page is hidden and does not give it back, which is the whole of "it
+   worked until I took a call".
+2. **A loop of digital silence.** A page that is playing audio is a page the browser will
+   not freeze, so timers keep firing and `watchPosition` keeps delivering. It is
+   inaudible, it does not duck your music, and it can only *start* from a user
+   gesture — which is exactly what tapping Go or Free drive is.
+3. **A heartbeat in a Web Worker.** A `setTimeout` in a hidden page is clamped to once a
+   minute; the same timer in a worker is not clamped nearly as hard. It flushes the
+   recorded roads and re-arms a position watch that died silently in a frozen page.
+
+There is a switch for all of it in *You*, and it is honest: turned off, the app behaves
+exactly as it did before any of this existed.
+
 ## Honest limitations
 
 - **OSRM has no motorcycle profile.** Motorcycle routes are the driving profile with
@@ -481,6 +575,21 @@ for.
 - **A forecast is a forecast.** Ten hours out it is a strong hint; three days out it is a
   mood. The further along the route, the more the arrival-time forecast is guessing.
 - Points beyond the 16-day forecast horizon are shown as "no data" rather than invented.
+- **Nothing survives the browser being closed.** Everything in *Running with the screen
+  off* keeps a ride alive through a locked screen, another app and a phone in a pocket.
+  None of it — and nothing any web page can do — keeps it alive once the browser itself is
+  killed, or once iOS suspends the whole app. On the way back, every wake-up re-establishes
+  the truth rather than trusting state that was frozen along with the page.
+- **A PUB is only as populated as your area.** There is no directory and no server: you
+  see the riders who happen to be in your ~110 km cell with PUBs on at that moment. On a
+  quiet road that is nobody, and the pane says so rather than pretending.
+- **A PUB area is held by a phone.** When the hub rides away, the area goes quiet for a
+  few seconds until somebody else notices and picks it up. That is the honest cost of
+  having no server, and it resolves itself.
+- **The heat map is as coarse as the record.** It is drawn from the same ~124 m cell
+  chain the planner uses, so it shows the roads you use and not the lane you were in —
+  and a stretch with no usable speed is left out of the speed view rather than parked at
+  one end of the ramp pretending to be the slowest thing on the map.
 - **Course-up is a riding mode, not a browsing mode.** Leaflet has no rotation of its own, so the
   map element is rotated with a CSS transform — which means Leaflet's pointer maths no longer
   matches what you see. Rather than let dragging drift off-axis, dragging is disabled while
@@ -554,9 +663,13 @@ routecast/
   manifest.webmanifest
   static/css/app.css
   static/js/
-    util.js                 formatting, storage, fetch with timeout/retry, rate-limit queue
+    util.js                 formatting, storage, fetch with timeout/retry, rate-limit queue,
+                                          bearings and the course tracker every mode shares
     icons.js                inline SVG weather and UI icons
+    background.js           RC.background — wake lock, silence, worker heartbeat: the ride
+                                          keeps running with the screen off
     history.js              RC.history  — the roads you actually rode, and how long they took
+    heat.js                 RC.heat     — that record, drawn: visits, speed, held-up, recency
     traffic.js              RC.traffic  — time-of-week congestion, grounded in your own rides
     eta.js                  RC.eta      — per-edge ETA calibration; everything downstream reads it
     coords.js               RC.coords   — coordinate parsing: decimals, DMS, geo:, map links
@@ -574,14 +687,17 @@ routecast/
     voice.js                RC.voice    — live voice: the pre-negotiated audio path, host mixing
     rejoin.js               RC.rejoin   — planned-route geometry: projection, simplify, ways back
     group.js                RC.group    — the room: roster, the door, chat, voice, the planned route
-    groupui.js              RC.groupui  — the room on screen: the Ride tab, the layers, the cards
+    groupui.js              RC.groupui  — the room on screen: the Ride tab, the layers, the
+                                          cards, and the rail of riders above the speedometer
+    pubs.js                 RC.pubs     — the public road: area hubs, presence, PUB rooms
+    pubsui.js               RC.pubsui   — PUBs on screen: the Pubs tab, the strangers layer
     nav.js                  RC.nav      — live navigation: route projection, live ETA, wake lock,
                                           reroute and forecast-refresh gating, ride recording
     free.js                 RC.free     — free driving: the dashboard and the recorder, no route
     follow.js               RC.follow   — the camera: who owns the map, you or the app
     compass.js              RC.compass  — heading sources, north-up / course-up map rotation
     app.js                  the glue: map, form, the render pipeline, the draggable sheet
-    pwa.js                  install prompt, iOS fallback, full-screen toggle
+    pwa.js                  install prompt and the iOS add-to-home-screen fallback
   tools/validate.js         static + pure-module suite: `node tools/validate.js`
   tools/group-e2e.js        two real browsers, one room: `node tools/group-e2e.js`
   tools/voice-latency.js    three browsers, one room, a stopwatch on the voice path
@@ -614,6 +730,15 @@ rather than as one degree four minutes in the Gulf of Guinea while a street addr
 as neither, that a mark re-saved on the same spot renames rather than duplicates, and that
 a free ride's odometer refuses a parked phone's jitter, a step inside its own error circle
 and a teleport alike.
+
+It also checks the things the newer features would be expensive to get wrong: that a
+moving vehicle has a heading even when the chipset reports none and a parked one does not,
+that a turn is followed and a reported GPS course is used as given; that the recorded
+roads come back as real geometry at roughly the speed they were ridden, and that riding a
+road a second time makes one segment hotter rather than inventing a second one; and that
+two riders in the same region derive the same PUB area code while riders in different
+regions do not, that an area code can never be mistaken for a ride code, and that a
+stranger cannot claim to be at 99,999 km/h or facing 905 degrees.
 
 The QR encoder is checked there too, against the tables in ISO/IEC 18004 rather than
 against itself: that every version leaves exactly the standard number of free data modules,

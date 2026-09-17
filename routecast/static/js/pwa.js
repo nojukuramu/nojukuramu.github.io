@@ -1,5 +1,5 @@
 /* ============================================================
-   RouteCast — install-to-home-screen and full-screen chrome.
+   RouteCast — install to home screen.
    No modules, no build step. Hangs off RC where useful.
    ============================================================ */
 (function () {
@@ -13,9 +13,9 @@
      --------------------------------------------------------- */
   function isStandalone() {
     try {
-      // The manifest declares display_override, so an installed app can report
-      // fullscreen or minimal-ui rather than standalone. Checking only
-      // standalone left the install button showing inside the installed app.
+      // display_override can land an installed app on minimal-ui rather than
+      // standalone, and an old install may still report fullscreen. Checking
+      // only standalone left the install button showing inside the app.
       return (window.matchMedia && (
           window.matchMedia("(display-mode: standalone)").matches ||
           window.matchMedia("(display-mode: fullscreen)").matches ||
@@ -138,75 +138,31 @@
   });
 
   /* ---------------------------------------------------------
-     Full screen
+     No full screen
+
+     RouteCast used to have a button that asked the browser for the whole
+     display — notification bar and all. It was removed on purpose. A rider
+     hiding the clock, the signal bars and the battery meter behind a map is
+     giving up the three pieces of information a phone on a handlebar is
+     best at, and getting a strip of tiles back for them. The manifest asks
+     for `standalone` rather than `fullscreen` for the same reason: installed
+     or not, the status bar stays on the screen.
+
+     The iOS install path survives, because on iPhone "add to home screen" is
+     the only thing that ever removed the browser chrome, and removing the
+     browser's own chrome is not the same as hiding the system's.
      --------------------------------------------------------- */
-  var fsBtn = RC.el("fullscreen-btn");
-  var root = document.documentElement;
+  if (isIOS() && !isStandalone() && !dismissedRecently()) showInstallBtn();
 
-  function fsSupported() {
-    return !!(root.requestFullscreen || root.webkitRequestFullscreen);
-  }
-
-  function isFullscreen() {
-    return !!(document.fullscreenElement || document.webkitFullscreenElement);
-  }
-
-  function requestFs() {
-    if (root.requestFullscreen) return root.requestFullscreen();
-    if (root.webkitRequestFullscreen) { root.webkitRequestFullscreen(); return Promise.resolve(); }
-    return Promise.reject(new Error("Full screen is not supported."));
-  }
-
-  function exitFs() {
-    if (document.exitFullscreen) return document.exitFullscreen();
-    if (document.webkitExitFullscreen) { document.webkitExitFullscreen(); return Promise.resolve(); }
-    return Promise.reject(new Error("Full screen is not supported."));
-  }
-
-  function syncFsState() {
-    var on = isFullscreen();
-    if (fsBtn) fsBtn.setAttribute("aria-pressed", String(on));
-    root.setAttribute("data-fullscreen", on ? "on" : "off");
-    RC.store.set("fullscreen", on);
-  }
-
-  if (fsSupported()) {
-    document.addEventListener("fullscreenchange", syncFsState);
-    document.addEventListener("webkitfullscreenchange", syncFsState);
-
-    if (fsBtn) {
-      fsBtn.addEventListener("click", function () {
-        var p = isFullscreen() ? exitFs() : requestFs();
-        if (p && p.catch) p.catch(function () { /* user gesture required elsewhere, or denied */ });
-      });
+  // A preference left over from the button, and the attribute it set. Both
+  // are cleared once so an upgrading install does not stay stuck in a mode
+  // it can no longer leave.
+  try {
+    if (RC.store.get("fullscreen", null) !== null) {
+      RC.store.set("fullscreen", null);
+      if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen();
+      else if (document.webkitExitFullscreen && document.webkitFullscreenElement) document.webkitExitFullscreen();
     }
-
-    // Reapplying full screen on load needs a user gesture in virtually every
-    // browser, so wait for the first interaction and try then; if the
-    // browser refuses, drop the remembered preference silently.
-    if (RC.store.get("fullscreen", false)) {
-      var tryReapply = function () {
-        document.removeEventListener("click", tryReapply, true);
-        document.removeEventListener("keydown", tryReapply, true);
-        document.removeEventListener("touchend", tryReapply, true);
-        if (!isFullscreen()) {
-          var p = requestFs();
-          if (p && p.catch) p.catch(function () { /* silently give up */ });
-        }
-      };
-      document.addEventListener("click", tryReapply, true);
-      document.addEventListener("keydown", tryReapply, true);
-      document.addEventListener("touchend", tryReapply, true);
-    }
-
-    syncFsState();
-  } else {
-    // iPhone Safari has no Fullscreen API at all — hide the dead control
-    // and lean on the install-to-home-screen path instead, which is how
-    // full screen actually happens there.
-    if (fsBtn) fsBtn.hidden = true;
-    if (isIOS() && !isStandalone() && !dismissedRecently()) {
-      showInstallBtn();
-    }
-  }
+  } catch (e) {}
+  document.documentElement.removeAttribute("data-fullscreen");
 })();

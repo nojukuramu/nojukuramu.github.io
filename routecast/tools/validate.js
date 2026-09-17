@@ -205,18 +205,34 @@ section("Static: element ids");
   });
   check("every RC.el() id exists in index.html", missing.length === 0, missing.join(", "));
 
-  /* groupui.js reaches for elements through its own one-letter helpers, so the
-     check above cannot see them — and a typo in one of those ids is a button
-     that silently does nothing. The helpers all take the id first, and none of
-     them is ever called as a method, which is what the leading guard is for
-     (map.on("zoomend") is not an element lookup). */
-  var ui = read("static/js/groupui.js");
+  /* groupui.js and pubsui.js reach for elements through their own one-letter
+     helpers, so the check above cannot see them — and a typo in one of those
+     ids is a button that silently does nothing. The helpers all take the id
+     first, and none of them is ever called as a method, which is what the
+     leading guard is for (map.on("zoomend") is not an element lookup).
+
+     Event names that happen to look like ids are the only false positive this
+     can produce, so they are named rather than pattern-matched away: a list
+     that has to be edited when somebody adds a listener is a list somebody
+     reads. */
+  var EVENT_NAMES = {
+    click: 1, change: 1, keydown: 1, keyup: 1, input: 1, focus: 1, blur: 1,
+    submit: 1, zoomend: 1, moveend: 1, dragstart: 1, contextmenu: 1,
+    pointerdown: 1, pointerup: 1, pointermove: 1, pointercancel: 1,
+    pointerenter: 1, pointerleave: 1, touchend: 1, wheel: 1, resize: 1,
+    visibilitychange: 1, pageshow: 1, pagehide: 1, beat: 1, thaw: 1,
+    hide: 1, show: 1, enabled: 1, open: 1, message: 1, state: 1, closed: 1
+  };
   var uiMissing = [];
-  var r3 = /(^|[^.\w])(?:el|on|show|text)\("([a-z][a-z0-9-]*)"/g, m3;
-  while ((m3 = r3.exec(ui))) {
-    if (!declared[m3[2]]) uiMissing.push("#" + m3[2]);
-  }
-  check("every id groupui.js reaches for exists in index.html",
+  ["groupui.js", "pubsui.js"].forEach(function (name) {
+    var ui = read("static/js/" + name);
+    var r3 = /(^|[^.\w])(?:el|on|show|text)\("([a-z][a-z0-9-]*)"/g, m3;
+    while ((m3 = r3.exec(ui))) {
+      if (EVENT_NAMES[m3[2]]) continue;
+      if (!declared[m3[2]]) uiMissing.push(name + " -> #" + m3[2]);
+    }
+  });
+  check("every id the UI modules reach for exists in index.html",
         uiMissing.length === 0, uiMissing.join(", "));
 })();
 
@@ -293,8 +309,9 @@ section("Static: theme tokens");
     // Tokens written from JavaScript at runtime are declared there, not here.
     if (t === "--sheet-h" || t === "--rc-controls-h" || t === "--rc-bearing") return false;
     // --rider is each group-ride member's own colour, written onto their marker
-    // by groupui.js from the room's palette.
-    if (t === "--rider") return false;
+    // by groupui.js from the room's palette; --pub is the same idea for a
+    // stranger on the public road, written by pubsui.js.
+    if (t === "--rider" || t === "--pub") return false;
     return !declared[t];
   });
   check("every var(--token) is defined", undef.length === 0, undef.join(", "));
@@ -365,7 +382,7 @@ function sandbox(iconsOnly) {
     ? ["util.js", "icons.js"]
     : ["util.js", "coords.js", "history.js", "traffic.js", "eta.js", "routes.js", "marks.js",
        "router.js", "sampler.js", "elevation.js", "free.js", "rejoin.js", "qr.js",
-       "peer.js", "group.js"];
+       "peer.js", "group.js", "pubs.js"];
   files.forEach(function (f) {
       vm.runInContext(read("static/js/" + f), ctx, { filename: f });
     });
@@ -1168,6 +1185,172 @@ section("Behaviour: what a scanned code is allowed to mean");
   check("free text is not a code", codeFromScan("Cafe Wifi: password123") === "");
   check("nothing scanned is nothing joined",
         codeFromScan("") === "" && codeFromScan(null) === "");
+})();
+
+
+section("Behaviour: which way the vehicle is pointing");
+(function () {
+  /* The bug this exists to stop coming back: course-up rotation that never
+     rotated, because `coords.heading` is null on a great many devices and
+     nothing downstream had a second opinion. */
+  var RC = sandbox().RC;
+
+  var t = RC.courseTracker();
+  check("no heading before any fix", t.get() === null);
+
+  // Due north, 20 m a second, with a chipset that reports no heading at all.
+  var lat = 14.6, lon = 121.0, step = 20 / 111320;
+  var at = 1000;
+  t.push(lat, lon, at, null, 72);
+  for (var i = 1; i < 6; i++) {
+    at += 1000;
+    t.push(lat + i * step, lon, at, null, 72);
+  }
+  var north = t.get();
+  check("a moving vehicle has a heading even with no GPS course", north !== null);
+  check("and that heading is the way it is going",
+        north !== null && (north < 8 || north > 352), "got " + north);
+
+  // Turn east and keep going; the smoothing should follow round.
+  var lat2 = lat + 6 * step, lon2 = lon;
+  var eStep = 20 / (111320 * Math.cos(lat2 * Math.PI / 180));
+  for (var j = 1; j < 14; j++) {
+    at += 1000;
+    t.push(lat2, lon2 + j * eStep, at, null, 72);
+  }
+  var east = t.get();
+  check("a turn is followed", east > 60 && east < 120, "got " + east);
+
+  // A parked phone drifting a metre at a time must not invent a direction.
+  var parked = RC.courseTracker();
+  parked.push(14.6, 121.0, 1000, null, 0);
+  parked.push(14.600002, 121.000002, 2000, null, 0);
+  parked.push(14.599998, 120.999997, 3000, null, 0);
+  check("a parked phone has no course", parked.get() === null);
+
+  // The chipset's own course, when it has one, wins outright and is not
+  // smoothed: it is already filtered, and smoothing it only adds lag.
+  var gps = RC.courseTracker();
+  gps.push(14.6, 121.0, 1000, 217.5, 80);
+  check("a reported GPS course is used as given", gps.get() === 217.5, "got " + gps.get());
+
+  // Crossing north is a short step, not a 358-degree spin.
+  check("the shortest arc is taken across north",
+        Math.abs(RC.bearing({ lat: 0, lon: 0 }, { lat: 1, lon: 0 })) < 0.01);
+  var west = RC.bearing({ lat: 0, lon: 0 }, { lat: 0, lon: -1 });
+  check("a bearing is degrees clockwise from north", Math.abs(west - 270) < 0.01, "got " + west);
+})();
+
+section("Behaviour: the heat map's reading of the record");
+(function () {
+  var RC = sandbox().RC;
+
+  RC.history.startSession("motorcycle");
+  var coords = line(14.6, 121.0, 40, 60);
+  var t = Date.now() - 3600000;
+  for (var i = 0; i < coords.length; i++) {
+    RC.history.record({ lat: coords[i][0], lon: coords[i][1], t: t + i * 6000, speedKmh: 36 });
+  }
+  RC.history.endSession(null);
+
+  var segs = RC.history.segments();
+  check("the recorded roads come back as geometry", segs.length > 3, "segments=" + segs.length);
+
+  var ok = segs.every(function (s) {
+    return s.a && s.b && s.a.length === 2 && s.b.length === 2 &&
+           isFinite(s.a[0]) && isFinite(s.a[1]) && isFinite(s.b[0]) && isFinite(s.b[1]);
+  });
+  check("every segment has two real ends", ok);
+
+  var near = segs.every(function (s) {
+    return Math.abs(s.a[0] - 14.6) < 0.2 && Math.abs(s.a[1] - 121.0) < 0.3;
+  });
+  check("and they are where the ride was", near);
+
+  var speeds = segs.filter(function (s) { return s.kmh != null; });
+  check("each one knows how fast it was ridden", speeds.length === segs.length);
+  var plausible = speeds.every(function (s) { return s.kmh > 20 && s.kmh < 60; });
+  check("at about the speed it was actually ridden", plausible,
+        speeds.length ? "first=" + speeds[0].kmh.toFixed(1) : "none");
+
+  check("a motorcycle ride is recorded against the motorcycle",
+        segs.every(function (s) { return s.vehicle === "motorcycle"; }));
+  check("filtering by the other vehicle finds nothing",
+        RC.history.segments({ vehicle: "car" }).length === 0);
+
+  var sum = RC.history.heatSummary();
+  check("the summary counts what the segments hold", sum.segments === segs.length);
+  check("and adds up the distance", sum.meters > 1000, "m=" + Math.round(sum.meters));
+  check("and knows the overall pace", sum.kmh > 20 && sum.kmh < 60, "kmh=" + sum.kmh);
+
+  // Riding the same road twice must reinforce one segment, not invent two:
+  // the whole heat map is built on that being true.
+  var before = RC.history.segments().length;
+  RC.history.startSession("motorcycle");
+  var t2 = Date.now();
+  for (var j = 0; j < coords.length; j++) {
+    RC.history.record({ lat: coords[j][0], lon: coords[j][1], t: t2 + j * 6000, speedKmh: 36 });
+  }
+  RC.history.endSession(null);
+  var after = RC.history.segments();
+  check("riding a road again does not duplicate it", after.length === before,
+        before + " then " + after.length);
+  check("it makes it hotter instead",
+        after.some(function (s) { return s.uses > 1; }));
+})();
+
+section("Behaviour: what a PUB is allowed to be");
+(function () {
+  var RC = sandbox().RC;
+  var area = RC.pubs._areaCode;
+
+  check("an area code is six characters", area(14.6, 121.0).length === 6);
+
+  /* The one property the whole scheme rests on: two riders in the same region
+     compute the same code without having spoken, and riders in different
+     regions do not. */
+  check("two riders in the same area agree on it",
+        area(14.60, 121.00) === area(14.95, 121.40));
+  check("a different region is a different area",
+        area(14.6, 121.0) !== area(35.6, 139.7));
+  check("so is the cell next door",
+        area(14.6, 121.0) !== area(16.6, 121.0));
+
+  /* And the one that keeps PUBs away from private rides: ride codes are drawn
+     from an alphabet with no 0, 1, I or O in it, so a code starting with one
+     of those can never be somebody's room. */
+  check("an area code cannot be mistaken for a ride", area(14.6, 121.0).charAt(0) === "0");
+  check("a PUB code is recognised as one", RC.pubs.isPubCode(area(14.6, 121.0)));
+  check("a ride code is not a PUB", !RC.pubs.isPubCode("QWERTY"));
+  check("an area is not a room", !RC.pubs.isRoomCode(area(14.6, 121.0)));
+  check("a room code is", RC.pubs.isRoomCode("1ABCDE"));
+
+  // The antipodes and the poles are where a cell index goes wrong quietly.
+  check("the date line has an area", area(0, 179.9).length === 6 && area(0, -179.9).length === 6);
+  check("so do the poles", area(-89.9, 0).length === 6 && area(89.9, 0).length === 6);
+
+  /* Everything off the wire is a stranger's claim. */
+  var clean = RC.pubs._clean;
+  check("a name is capped", clean.name(new Array(80).join("x")).length <= 22);
+  check("control characters never reach a public map",
+        clean.name("a\u0000b\u2028c") === "a b c", JSON.stringify(clean.name("a\u0000b\u2028c")));
+  check("an empty name stays empty", clean.name("   ") === "");
+  check("a message is capped", clean.text(new Array(600).join("y")).length <= 280);
+
+  check("a fix at the bottom of the sea is refused", clean.fix({ lat: 999, lon: 0 }) === null);
+  check("a fix with no coordinates is refused", clean.fix({ name: "x" }) === null);
+  check("a plausible fix is kept", !!clean.fix({ lat: 14.6, lon: 121.0 }));
+  check("a stranger cannot claim to be travelling at Mach 3",
+        clean.fix({ lat: 14.6, lon: 121.0, speedKmh: 99999 }).speedKmh === 400);
+  check("nor to be facing 900 degrees",
+        clean.fix({ lat: 14.6, lon: 121.0, courseDeg: 905 }).courseDeg === 185);
+
+  /* What is broadcast is deliberately blunter than what is known. */
+  var blunt = clean.blunt;
+  check("a shared position is rounded before it leaves the phone",
+        blunt(14.59952345) === 14.5995, "got " + blunt(14.59952345));
+  check("rounding is to about ten metres, not to a suburb",
+        Math.abs(blunt(14.59952345) - 14.59952345) < 0.0001);
 })();
 
 /* ============================================================

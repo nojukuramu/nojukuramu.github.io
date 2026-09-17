@@ -593,9 +593,14 @@ RC.group = (function () {
     RC.voice.peerIds().forEach(function (id) {
       if (live[id] !== RC.voice.linkOf(id)) RC.voice.removePeer(id);
     });
+    var added = false;
     Object.keys(live).forEach(function (id) {
-      RC.voice.addPeer(id, live[id]);
+      if (RC.voice.addPeer(id, live[id])) added = true;
     });
+    // Somebody arrived while the mic was already open. Their link carries the
+    // audio from this moment on, but the flag that puts a name on the "X is
+    // talking" strip went out before they existed, so re-announce it.
+    if (added && (st.talking || st.handsFree)) sendTalk(true);
   }
 
   /** A guest has exactly one peer: the host. The link is only handed over once
@@ -611,7 +616,11 @@ RC.group = (function () {
     RC.voice.peerIds().forEach(function (id) {
       if (!want || id !== "host" || RC.voice.linkOf(id) !== want) RC.voice.removePeer(id);
     });
-    if (want) RC.voice.addPeer("host", want);
+    if (want && RC.voice.addPeer("host", want) && (st.talking || st.handsFree)) {
+      // Same re-announcement, from the other side of the star: a guest whose
+      // link came back mid-sentence has to say so again.
+      sendTalk(true);
+    }
   }
 
   /* The name beside the voice. One flag each way, relayed by the host like
@@ -726,6 +735,12 @@ RC.group = (function () {
       notice("This browser will not share a location, so the room cannot see you.", "warn");
       return;
     }
+    /* A room is the case where backgrounding hurts somebody OTHER than the
+       rider who did it: a phone that freezes in a pocket stops sending
+       position, and the rest of the room watches a dot go stale and starts
+       wondering whether to turn round. So the room takes its own hold on
+       staying awake, independent of whether a ride is also running. */
+    if (RC.background) RC.background.hold("group");
     st.watchId = navigator.geolocation.watchPosition(function (pos) {
       var c = pos.coords || {};
       setMyFix({
@@ -739,8 +754,11 @@ RC.group = (function () {
   }
 
   function stopWatch() {
-    if (st && st.watchId != null && navigator.geolocation) {
-      try { navigator.geolocation.clearWatch(st.watchId); } catch (e) {}
+    if (st && st.watchId != null) {
+      if (navigator.geolocation) {
+        try { navigator.geolocation.clearWatch(st.watchId); } catch (e) {}
+      }
+      if (RC.background) RC.background.release("group");
     }
     if (st) st.watchId = null;
   }
@@ -1324,6 +1342,13 @@ RC.group = (function () {
         which one they are on. */
     isLive: function () { return liveOn() && RC.voice.ready(); },
 
+    /** Is the ROOM on the live path at all — regardless of whether there is
+        anybody on the other end of it yet? This is the question the talk
+        button and the hands-free switch ask; isLive() is the narrower one the
+        status pill asks, and conflating the two is what used to stop a lone
+        rider from opening their own microphone. */
+    isLiveMode: function () { return liveOn(); },
+
     /** Open the capture device before it is needed. The talk button calls this
         as soon as it is on screen, so the first press is not paying for a
         permission check and a device open while somebody is mid-sentence. */
@@ -1335,9 +1360,19 @@ RC.group = (function () {
     startTalking: function () {
       if (!st || st.talking || !api.canTalk()) return Promise.resolve(false);
 
-      // The live path: open the gate, tell the room, and that is the entire
-      // send side. Nothing is buffered, so nothing has to be flushed.
-      if (api.isLive()) {
+      /* The live path: open the gate, tell the room, and that is the entire
+         send side. Nothing is buffered, so nothing has to be flushed.
+
+         The test is liveOn() — "is this room on the live path" — and NOT
+         isLive(), which additionally asks whether an audio path to somebody
+         else is already up. Those came apart in the one case that matters:
+         the first rider in the room. Alone, there is nobody to have a live
+         path TO, so isLive() was false and the thumb fell through to the
+         recorded fallback — recording clips and sending them to nobody. The
+         microphone opens on the room's terms; who is listening is the
+         transport's business, and voice.js wires a latecomer's stream to an
+         already-open mic the moment their link appears. */
+      if (liveOn()) {
         st.talking = true;
         changed();
         return RC.voice.setTransmit(true).then(function (ok) {
@@ -1435,7 +1470,13 @@ RC.group = (function () {
         if (!st.talking) sendTalk(false);
         return true;
       }
-      if (!api.isLive()) { st.handsFree = false; changed(); return false; }
+      /* No isLive() gate here either. This is the bug riders actually hit:
+         alone in a freshly started room, the switch flicked itself straight
+         back off, because "hands-free" was being read as "hands-free to
+         somebody". An open mic with nobody in the room is a perfectly
+         reasonable thing to want — it is how you are already talking when
+         the second rider's link comes up, instead of noticing thirty
+         seconds later that they could not hear you. */
       RC.voice.setTransmit(true).then(function (ok) {
         if (!st || !st.handsFree) return;
         if (!ok) { st.handsFree = false; changed(); return; }

@@ -77,6 +77,99 @@ var RC = (function () {
     return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
   };
 
+  /* Compass bearing from a to b, degrees clockwise from north. */
+  RC.bearing = function (a, b) {
+    var toRad = Math.PI / 180;
+    var la1 = a.lat * toRad, la2 = b.lat * toRad;
+    var dLon = (b.lon - a.lon) * toRad;
+    var y = Math.sin(dLon) * Math.cos(la2);
+    var x = Math.cos(la1) * Math.sin(la2) - Math.sin(la1) * Math.cos(la2) * Math.cos(dLon);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  };
+
+  /* ---------- which way the vehicle is pointing ----------
+
+     `coords.heading` is the honest answer and a great many phones never give
+     it: it is null at a standstill by specification, and null ALWAYS on a
+     device with no course-over-ground of its own — which includes most
+     laptops, some tablets, and more Android handsets than anyone expects.
+     Course-up navigation that waits for it simply never rotates, which is
+     exactly what "the compass just locks on north" was.
+
+     So: a rider who is moving has a heading whether or not the chipset says
+     so, and two fixes and a clock are all it takes to find it. This is that
+     fallback, kept in one place because navigation and free drive both need
+     it and must not disagree about which way the bike is pointing.
+
+     The rules are the ones that keep it honest rather than merely available:
+
+     * A step shorter than the fix's own error circle is noise, and noise has
+       a uniformly distributed bearing. Below MIN_STEP_M nothing is emitted.
+     * Below MIN_KMH the rider is stopped, and a stopped vehicle has no course
+       over ground at all — the last known one is held rather than replaced by
+       the direction the GPS happened to wander.
+     * The result is smoothed on the SHORTEST ARC, so crossing north is a
+       two-degree step and not a 358-degree spin.
+  */
+  RC.courseTracker = function (opts) {
+    opts = opts || {};
+    var MIN_STEP_M = opts.minStepM == null ? 6 : opts.minStepM;
+    var MIN_KMH = opts.minKmh == null ? 3 : opts.minKmh;
+    var MAX_GAP_S = opts.maxGapS == null ? 12 : opts.maxGapS;
+    var ALPHA = opts.alpha == null ? 0.45 : opts.alpha;
+
+    var last = null;       // the fix the next bearing is measured from
+    var heading = null;    // smoothed, degrees clockwise from north
+    var fromGps = false;   // was the last answer the chipset's own?
+
+    function norm(d) { return ((d % 360) + 360) % 360; }
+    function blend(a, b) {
+      var d = norm(b - a);
+      if (d > 180) d -= 360;
+      return norm(a + d * ALPHA);
+    }
+
+    return {
+      /* Feed every fix. `gpsHeading` is coords.heading or null; `speedKmh` is
+         whatever the caller already worked out. Returns the best heading
+         available, or null while there has never been one. */
+      push: function (lat, lon, t, gpsHeading, speedKmh) {
+        var moving = speedKmh == null || speedKmh >= MIN_KMH;
+
+        if (typeof gpsHeading === "number" && !isNaN(gpsHeading) && moving) {
+          // The chipset's own course wins outright, and is not smoothed: it is
+          // already filtered, and smoothing it would add lag for nothing.
+          heading = norm(gpsHeading);
+          fromGps = true;
+          last = { lat: lat, lon: lon, t: t };
+          return heading;
+        }
+
+        if (!last) { last = { lat: lat, lon: lon, t: t }; return heading; }
+        var dtS = (t - last.t) / 1000;
+        if (!(dtS > 0) || dtS > MAX_GAP_S) { last = { lat: lat, lon: lon, t: t }; return heading; }
+
+        var m = RC.haversine(last, { lat: lat, lon: lon });
+        var impliedKmh = (m / dtS) * 3.6;
+        if (m < MIN_STEP_M || impliedKmh < MIN_KMH) {
+          // Parked, crawling, or drifting. Hold what we had; do not move the
+          // anchor either, so a slow crawl accumulates into one real step
+          // instead of being thrown away one metre at a time.
+          return heading;
+        }
+
+        var b = RC.bearing(last, { lat: lat, lon: lon });
+        heading = (heading == null || fromGps) ? b : blend(heading, b);
+        fromGps = false;
+        last = { lat: lat, lon: lon, t: t };
+        return heading;
+      },
+
+      get: function () { return heading; },
+      reset: function () { last = null; heading = null; fromGps = false; }
+    };
+  };
+
   /* ---------- storage ---------- */
   RC.store = {
     get: function (key, fallback) {

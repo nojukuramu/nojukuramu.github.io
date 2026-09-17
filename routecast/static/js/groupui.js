@@ -237,6 +237,7 @@ RC.groupui = (function () {
     }
     renderOffPlan();
     renderMembers();
+    renderMatesRail();
   }
 
   function renderOffPlan() {
@@ -287,6 +288,186 @@ RC.groupui = (function () {
         title: m.name
       }).addTo(memberLayer);
     }
+  }
+
+
+  /* ---------------------------------------------------------
+     The rest of the ride, above the speedometer
+
+     The map answers "where is everybody" for the riders who happen to be on
+     the screen. It answers nothing at all for the ones who are not — and in a
+     real group ride that is most of them most of the time, because the moment
+     you are following somebody the map is zoomed to the road in front of you
+     and the rider four minutes up it is off the top of it.
+
+     So: one line each, in the strip between the map and the dashboard. The
+     design constraint is that this is read at 80 km/h through a visor, which
+     rules out almost everything:
+
+     * MAX_ROWS rows, never more. A list that grows pushes the map away, and
+       the map is the point. Six riders on a five-row rail means the least
+       interesting one is folded into "+2".
+     * Sorted by how much you need to know about them, not alphabetically and
+       not by joining order. A rider whose phone has gone quiet outranks one
+       who is merrily 400 m ahead, because the quiet one is the one you might
+       have to turn round for.
+     * Offscreen riders first among equals, because the onscreen ones are
+       already answered by the map.
+     * An arrow per row that points at them RELATIVE TO WHERE YOU ARE
+       POINTING, so it is read as "look over your left shoulder" rather than
+       as a compass bearing that has to be converted in your head. On a
+       course-up map that is simply their bearing minus yours; on a north-up
+       one it is the same arithmetic, which is why it is done here rather than
+       leaned on the map's rotation.
+     * Gap along the PLANNED LINE when there is one, because "1.2 km ahead"
+       is a useful number and "1.2 km away" is not when the road bends back on
+       itself. Straight-line distance is the fallback and says "away" rather
+       than "ahead", so the two are never confused.
+
+     Everything is one row of glass: no cards, no avatars, no chrome.
+     --------------------------------------------------------- */
+  var MATES_MAX_ROWS = 4;
+  var MATES_QUIET_MS = 20000;     // no fix this long: they are the story
+
+  /* Distance along the planned line, for the one comparison that matters in a
+     group ride: who is in front. RC.rejoin already knows how to project a
+     point onto a polyline properly — perpendicular, clamped per segment, with
+     the along-distance interpolated — and reusing it means the gap in this
+     rail and the "you are off the line" card can never be computed two
+     different ways and disagree.
+
+     The cumulative table is the expensive half and depends only on the line,
+     which does not change during a ride, so it is worked out once per plan
+     rather than once per rider per fix.
+
+     Returns null for a rider far enough off the line that a projection would
+     be a fiction: somebody who has taken a different road entirely is not
+     "800 m ahead", they are elsewhere, and the rail says "off" instead. */
+  var planCum = null, planCumFor = null;
+
+  function planCumulative(plan) {
+    if (planCumFor !== plan) {
+      planCumFor = plan;
+      planCum = RC.rejoin.cumulative(plan.coords);
+    }
+    return planCum;
+  }
+
+  var PLAN_GAP_MAX_M = 1200;   // further off the line than this: not a gap
+
+  function alongPlan(plan, lat, lon) {
+    if (!plan || !plan.coords || plan.coords.length < 2) return null;
+    var n = RC.rejoin.nearestOn(plan.coords, lat, lon, planCumulative(plan));
+    if (!n || n.distM > PLAN_GAP_MAX_M) return null;
+    return n.alongM;
+  }
+
+  function bearingBetween(a, b) {
+    return RC.bearing({ lat: a.lat, lon: a.lon }, { lat: b.lat, lon: b.lon });
+  }
+
+  function onScreen(fix) {
+    if (!map || !fix) return false;
+    try { return map.getBounds().pad(-0.08).contains(L.latLng(fix.lat, fix.lon)); }
+    catch (e) { return false; }
+  }
+
+  function renderMatesRail() {
+    var rail = el("mates-rail");
+    if (!rail) return;
+
+    var live = RC.group.isActive();
+    var riding = bridge.mode() === "nav" || bridge.mode() === "free";
+    var me = RC.group.myFix();
+    if (!live || !riding) {
+      rail.hidden = true;
+      rail.innerHTML = "";
+      if (typeof RC.onMatesRailChange === "function") RC.onMatesRailChange();
+      return;
+    }
+
+    var plan = RC.group.planned();
+    var myAlong = me && plan ? alongPlan(plan, me.lat, me.lon) : null;
+    var myCourse = me && me.courseDeg != null ? me.courseDeg
+      : (RC.compass && RC.compass.isRotated() ? -RC.compass.getBearing() : 0);
+
+    var rows = [];
+    var list = RC.group.members();
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i];
+      if (m.me || !m.approved) continue;
+
+      var quiet = m.stale || !m.fix;
+      var seen = !quiet && onScreen(m.fix);
+      var gapM = null, ahead = null, awayM = null, look = null;
+
+      if (m.fix && me) {
+        awayM = RC.rejoin.metres(me.lat, me.lon, m.fix.lat, m.fix.lon);
+        look = bearingBetween(me, m.fix) - myCourse;
+        if (myAlong != null) {
+          var theirs = alongPlan(plan, m.fix.lat, m.fix.lon);
+          if (theirs != null) { gapM = Math.abs(theirs - myAlong); ahead = theirs > myAlong; }
+        }
+      }
+
+      rows.push({
+        m: m, quiet: quiet, seen: seen,
+        gapM: gapM, ahead: ahead, awayM: awayM, look: look,
+        /* The sort key, and the whole judgement of the feature. Lower is more
+           urgent. A rider whose phone has gone quiet is the top of the list
+           whatever else is true, because they are the one you might have to
+           turn round for. Then whoever is off the screen, because the map is
+           already answering for everyone on it. Within a band, nearest first —
+           capped at 99 km so one rider who went home does not sort ahead of a
+           band below them. */
+        rank: (quiet ? 0 : seen ? 200 : 100) +
+              Math.min(99, awayM == null ? 99 : awayM / 1000)
+      });
+    }
+
+    if (!rows.length) {
+      rail.hidden = true;
+      rail.innerHTML = "";
+      if (typeof RC.onMatesRailChange === "function") RC.onMatesRailChange();
+      return;
+    }
+    rows.sort(function (a, b) { return a.rank - b.rank; });
+
+    var shown = rows.slice(0, MATES_MAX_ROWS);
+    var rest = rows.length - shown.length;
+    var html = "";
+
+    for (var j = 0; j < shown.length; j++) {
+      var r = shown[j];
+      var f = r.m.fix;
+      var speed = (!r.quiet && f && f.speedKmh != null) ? Math.round(
+        units() === "imperial" ? f.speedKmh / 1.609344 : f.speedKmh) : null;
+
+      var gap = r.quiet ? "quiet"
+        : r.gapM != null ? RC.fmtDist(r.gapM, units()) + (r.ahead ? " up" : " back")
+        : r.awayM != null ? RC.fmtDist(r.awayM, units()) + " off"
+        : "—";
+
+      html += '<div class="rc-mate-chip' + (r.quiet ? " is-quiet" : "") +
+              (r.seen ? " is-seen" : "") + '" style="--rider: ' + r.m.color + '">' +
+        (r.look == null ? '<span class="rc-mate-chip-dot"></span>'
+          : '<span class="rc-mate-chip-look" style="transform: rotate(' +
+            Math.round(r.look) + 'deg)"></span>') +
+        '<span class="rc-mate-chip-name">' + RC.escapeHtml(r.m.name) + '</span>' +
+        '<span class="rc-mate-chip-speed">' +
+          (speed == null ? '<i>--</i>' : speed) + '</span>' +
+        '<span class="rc-mate-chip-gap">' + RC.escapeHtml(gap) + '</span>' +
+        '</div>';
+    }
+    if (rest > 0) {
+      html += '<div class="rc-mate-chip is-more"><span class="rc-mate-chip-name">+' +
+        rest + ' more</span></div>';
+    }
+
+    rail.innerHTML = html;
+    rail.hidden = false;
+    // The rail just changed height; everything below it is measured from that.
+    if (typeof RC.onMatesRailChange === "function") RC.onMatesRailChange();
   }
 
   /* ---------------------------------------------------------
@@ -604,6 +785,7 @@ RC.groupui = (function () {
       countEl.textContent = inRoom > 1 ? inRoom + " on the ride" : "just you";
     }
     drawMembers();
+    renderMatesRail();
   }
 
   function renderPlanBlock() {
@@ -703,12 +885,19 @@ RC.groupui = (function () {
        used to be visible only as a tooltip on a button on the other side of
        the screen. */
     var pill = el("group-voice-state");
+    var liveMode = RC.group.isLiveMode();
+    var alone = RC.group.members().length < 2;
     var state = !live ? { key: "off", text: "Off" }
       : RC.group.isMuted() ? { key: "lost", text: "Muted" }
       : RC.group.isTalking() ? { key: "live", text: "You are talking" }
       : who ? { key: "live", text: who.name + " is talking" }
       : !can ? { key: "off", text: "Listen only" }
       : isLive ? { key: "live", text: "Live" }
+      // On the live path with an empty room: the microphone works, there is
+      // simply no one to hear it. Saying "Recorded clips" here was a lie that
+      // made riders think the mic was broken.
+      : liveMode && alone ? { key: "waiting", text: "Live — room is empty" }
+      : liveMode ? { key: "connecting", text: "Live — linking up" }
       : { key: "waiting", text: "Recorded clips" };
     if (pill) pill.setAttribute("data-state", state.key);
     // textContent, so a rider called <b>Bea</b> is a rider called <b>Bea</b>.
@@ -720,7 +909,11 @@ RC.groupui = (function () {
         ? "This browser will not share a microphone, so you can listen but not talk."
         : isLive
           ? "Hold the microphone button beside the map controls. The room hears you while you speak."
-          : "This link has no live audio path, so the room hears each burst once you let the button go.";
+          : liveMode && alone
+            ? "Hold the microphone button beside the map controls. Hands-free works on your own too — the mic stays open and whoever joins next hears you straight away."
+            : liveMode
+              ? "Hold the microphone button beside the map controls. The room hears you as soon as the link is up."
+              : "This link has no live audio path, so the room hears each burst once you let the button go.";
     }
   }
 
@@ -1072,7 +1265,7 @@ RC.groupui = (function () {
 
   return {
     init: init,
-    redraw: function () { drawPlanned(); drawSuggestions(); drawMembers(); },
+    redraw: function () { drawPlanned(); drawSuggestions(); drawMembers(); renderMatesRail(); },
     refresh: function () { renderLobby(); },
     plannedRoute: function () { return RC.group.planned(); },
     pushFix: function (fix) { if (RC.group.isActive()) RC.group.pushFix(fix); },

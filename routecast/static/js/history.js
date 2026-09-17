@@ -430,6 +430,103 @@ RC.history = (function () {
     return { kmh: (meters / seconds) * 3.6, edges: hits };
   }
 
+  /* ---------- the record, as geometry ----------
+
+     Everything above reads the edge store to answer a question about a route
+     somebody is planning. This reads it to answer a question about the rider:
+     where have you actually been, how often, how fast, and how long did it
+     take you each time.
+
+     An edge key carries its own geometry — it is literally the two grid cells
+     it joins — so the whole travelled network can be reconstructed from the
+     store with no coordinates ever having been saved. That is worth saying
+     out loud: RouteCast has never written down a track. It writes down which
+     ~124 m cells were adjacent in a ride, which is enough to draw the roads
+     you use and not enough to replay a journey.
+
+     Returns one entry per edge:
+       a, b        the two cell centres, [lat, lon]
+       uses        how many separate crossings
+       meters      total distance credited to it
+       seconds     total time spent on it
+       kmh         the speed those two imply
+       perVisitS   seconds per crossing — "how long this bit takes me"
+       lastDay     day index of the most recent crossing
+       vehicle     "car" | "motorcycle"
+  */
+  function segments(opts) {
+    opts = opts || {};
+    var d = load();
+    var want = VEHICLES[opts.vehicle] ? opts.vehicle : null;
+    var out = [];
+    var keys = Object.keys(d.edges);
+
+    for (var i = 0; i < keys.length; i++) {
+      var key = keys[i];
+      var parts = key.split("|");
+      if (parts.length !== 3) continue;
+      var vehicle = parts[0] === "m" ? "motorcycle" : "car";
+      if (want && vehicle !== want) continue;
+
+      var a = cellCentre(parts[1]);
+      var b = cellCentre(parts[2]);
+      if (!a || !b) continue;
+
+      var e = d.edges[key];
+      var uses = e[0] || 0, meters = e[1] || 0, seconds = e[2] || 0;
+      if (!(uses > 0)) continue;
+
+      out.push({
+        a: a, b: b,
+        uses: uses,
+        meters: meters,
+        seconds: seconds,
+        // Both totals are sums over the same crossings, so their ratio is the
+        // honest average speed — not the average of the per-crossing speeds,
+        // which would weight a crawl the same as a clear run.
+        kmh: seconds > 0 ? (meters / seconds) * 3.6 : null,
+        perVisitS: seconds / uses,
+        lastDay: e[3] || 0,
+        vehicle: vehicle
+      });
+    }
+    return out;
+  }
+
+  /* The centre of a cell, from its id. The id is two rounded integers joined
+     by a dot, and a negative longitude makes the second one start with a
+     minus — which split(".") handles and a regex for "number.number" would
+     not, so it is a split. */
+  function cellCentre(id) {
+    var bits = String(id).split(".");
+    if (bits.length !== 2) return null;
+    var la = Number(bits[0]), lo = Number(bits[1]);
+    if (!isFinite(la) || !isFinite(lo)) return null;
+    return [la / CELL, lo / CELL];
+  }
+
+  /* A summary of the whole record, for the panel that offers the heat map:
+     enough to say whether there is anything worth drawing before drawing it. */
+  function heatSummary(vehicle) {
+    var segs = segments({ vehicle: vehicle });
+    var out = {
+      segments: segs.length, meters: 0, seconds: 0, uses: 0,
+      maxUses: 0, kmh: null, busiest: null, slowest: null
+    };
+    for (var i = 0; i < segs.length; i++) {
+      var s = segs[i];
+      out.meters += s.meters;
+      out.seconds += s.seconds;
+      out.uses += s.uses;
+      if (s.uses > out.maxUses) { out.maxUses = s.uses; out.busiest = s; }
+      // "Slowest" only counts roads ridden more than once: a single crawl
+      // through one junction is an anecdote, not a pattern.
+      if (s.uses > 1 && s.kmh != null && (!out.slowest || s.kmh < out.slowest.kmh)) out.slowest = s;
+    }
+    out.kmh = out.seconds > 0 ? (out.meters / out.seconds) * 3.6 : null;
+    return out;
+  }
+
   function stats() {
     var d = load();
     var keys = Object.keys(d.edges);
@@ -472,6 +569,8 @@ RC.history = (function () {
     rankRoutes: rankRoutes,
     etaBias: etaBias,
     observedSpeed: observedSpeed,
+    segments: segments,
+    heatSummary: heatSummary,
     stats: stats,
     clear: clear,
     flush: flush,

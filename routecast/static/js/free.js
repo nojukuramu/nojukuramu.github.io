@@ -45,7 +45,11 @@ RC.free = (function () {
   function canGoOnline() {
     try {
       if (navigator.onLine === false) return false;
-      if (document.visibilityState === "hidden") return false;
+      // Hidden is only a veto when the rider has turned background running
+      // off. A ride deliberately left running in a pocket is entitled to come
+      // back out of it with a forecast for where it actually is.
+      if (document.visibilityState === "hidden" &&
+          !(RC.background && RC.background.held() && RC.background.isEnabled())) return false;
     } catch (e) {}
     return true;
   }
@@ -56,30 +60,32 @@ RC.free = (function () {
     return prev + (next - prev) * SPEED_SMOOTHING;
   }
 
-  /* ---------- wake lock (same contract as nav.js) ---------- */
+  /* ---------- staying alive ----------
+     One owner for "do not let this phone go to sleep on me", shared with
+     navigation, so a free ride inside a group room does not have two modules
+     taking and dropping the same wake lock behind each other's backs. See
+     static/js/background.js for what a web page can and cannot actually do
+     about a screen that has gone off. */
 
-  function releaseWakeLock() {
-    if (st && st.wakeLock) {
-      try { st.wakeLock.release(); } catch (e) {}
-      st.wakeLock = null;
-    }
+  function holdBackground() {
+    if (RC.background) RC.background.hold("free");
   }
 
-  function acquireWakeLock() {
-    if (!st || !st.active) return;
-    try {
-      if (navigator.wakeLock && navigator.wakeLock.request) {
-        navigator.wakeLock.request("screen").then(function (lock) {
-          if (!st || !st.active) { try { lock.release(); } catch (e) {} return; }
-          st.wakeLock = lock;
-        }, function () {});
-      }
-    } catch (e) {}
+  function releaseBackground() {
+    if (RC.background) RC.background.release("free");
   }
 
-  function onVisibilityChange() {
+  /* A position watch that died in a frozen page dies silently. Re-arm it on
+     the way back rather than discovering at the next junction that the
+     odometer stopped twenty minutes ago. */
+  function rearmWatch() {
+    if (!st || !st.active || !navigator.geolocation) return;
+    if (st.lastFix && Date.now() - st.lastFix.t < 30000) return;
+    try { if (st.watchId != null) navigator.geolocation.clearWatch(st.watchId); } catch (e) {}
     try {
-      if (document.visibilityState === "visible" && st && st.active && !st.wakeLock) acquireWakeLock();
+      st.watchId = navigator.geolocation.watchPosition(handlePosition, handleError, {
+        enableHighAccuracy: true, maximumAge: 2000, timeout: 15000
+      });
     } catch (e) {}
   }
 
@@ -134,7 +140,7 @@ RC.free = (function () {
 
       var speedKmh = (typeof c.speed === "number" && c.speed != null && !isNaN(c.speed))
         ? Math.max(0, c.speed * 3.6) : null;
-      var headingDeg = (typeof c.heading === "number" && !isNaN(c.heading)) ? c.heading : null;
+      var gpsHeadingDeg = (typeof c.heading === "number" && !isNaN(c.heading)) ? c.heading : null;
 
       var stepM = 0;
       if (st.lastFix) {
@@ -193,6 +199,12 @@ RC.free = (function () {
       }
 
       st.lastFix = { lat: lat, lon: lon, t: nowMs };
+
+      /* Which way the bike is pointing. The chipset's own course when it has
+         one, the line between the last two fixes when it does not — see
+         RC.courseTracker. Free drive has no route to fall back on, so without
+         this a phone that reports no heading simply never turned the map. */
+      var headingDeg = st.course.push(lat, lon, nowMs, gpsHeadingDeg, speedKmh);
 
       var elapsedS = (nowMs - st.startedAt) / 1000;
       // Two averages, because they answer different questions: the moving
@@ -277,11 +289,9 @@ RC.free = (function () {
       try { navigator.geolocation.clearWatch(st.watchId); } catch (e) {}
       st.watchId = null;
     }
-    releaseWakeLock();
-    if (st.visListenerAttached) {
-      try { document.removeEventListener("visibilitychange", onVisibilityChange); } catch (e) {}
-      st.visListenerAttached = false;
-    }
+    releaseBackground();
+    if (st.unwatchThaw) { st.unwatchThaw(); st.unwatchThaw = null; }
+    if (st.unwatchShow) { st.unwatchShow(); st.unwatchShow = null; }
     st.active = false;
   }
 
@@ -300,8 +310,8 @@ RC.free = (function () {
         vehicle: opts.vehicle || "car",
         recordHistory: opts.recordHistory !== false,
         watchId: null,
-        wakeLock: null,
-        visListenerAttached: false,
+        unwatchThaw: null,
+        unwatchShow: null,
         startedAt: 0,
         lastTickTs: 0,
         lastFix: null,
@@ -316,6 +326,7 @@ RC.free = (function () {
         minAltM: null,
         maxAltM: null,
         track: [],
+        course: RC.courseTracker(),
         wx: null,
         wxAt: null,
         wxBusy: false,
@@ -344,11 +355,11 @@ RC.free = (function () {
         try { RC.history.startSession(st.vehicle); } catch (e) {}
       }
 
-      acquireWakeLock();
-      try {
-        document.addEventListener("visibilitychange", onVisibilityChange);
-        st.visListenerAttached = true;
-      } catch (e) {}
+      holdBackground();
+      if (RC.background) {
+        st.unwatchThaw = RC.background.on("thaw", rearmWatch);
+        st.unwatchShow = RC.background.on("show", rearmWatch);
+      }
     });
   }
 
