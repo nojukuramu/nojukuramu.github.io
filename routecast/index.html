@@ -22,6 +22,10 @@
   <meta name="apple-mobile-web-app-title" content="RouteCast">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
+  <!-- The app's version, declared once. sw.js carries the same number as its
+       cache name, and tools/validate.js refuses to let the two drift apart. -->
+  <script>window.RC_VERSION = "11";</script>
+
   <!-- Set theme before paint to avoid a flash -->
   <script>
     (function () {
@@ -90,6 +94,20 @@
       <button class="rc-glass" id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle theme">
         <svg class="rc-theme-icon rc-theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.6M12 18.9v2.6M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M2.5 12h2.6M18.9 12h2.6M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/></svg>
         <svg class="rc-theme-icon rc-theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
+      </button>
+    </div>
+
+    <!-- ---------- a new version is waiting ----------
+         The only thing in this app allowed over the map unprompted, and it
+         earns that by being one line high with a way to dismiss it. It never
+         applies itself: a service worker swapping the code out mid-ride is
+         the failure this replaces. -->
+    <div id="update-bar" class="rc-update" role="status" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.4 11.4a8.4 8.4 0 1 0-.7 4.6"/><path d="M21 7.4v4.6h-4.6"/></svg>
+      <span class="rc-update-text">New version ready</span>
+      <button type="button" class="rc-update-go" id="update-go">Reload</button>
+      <button type="button" class="rc-update-later" id="update-later" aria-label="Not now" title="Not now">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
     </div>
 
@@ -296,7 +314,7 @@
               Add a stop
             </button>
 
-            <p class="rc-field-hint" id="input-hint">A field takes whatever you have: <code>14.5995, 120.9842</code>, a pasted map link, one of your marks, or a place to search for. Coordinates and marks are used exactly as written — nothing is snapped to a nearby landmark.</p>
+            <p class="rc-field-hint" id="input-hint">Coordinates, a map link, a mark, or a place.<button type="button" class="rc-infobtn" data-info="fields" aria-label="What a field takes" title="What a field takes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></p>
 
             <div class="rc-field-group">
               <span class="rc-label">Vehicle</span>
@@ -361,10 +379,8 @@
         <!-- ===== Trip ===== -->
         <section class="rc-pane" id="pane-trip" role="tabpanel" aria-labelledby="tab-trip" hidden>
           <div class="rc-empty" id="empty-state">
-            <p>Nothing planned yet. RouteCast breaks a route into checkpoints and reads the
-            forecast for each one <em>at the hour you get there</em> — so you can see where the
-            rain, wind or heat will actually catch you. Or skip all of it and hit
-            <strong>Free drive</strong>: the ride is recorded either way.</p>
+            <p>Nothing planned yet. Plan a route for the weather at each point, or hit
+            <strong>Free drive</strong>.<button type="button" class="rc-infobtn" data-info="trip" aria-label="What the trip pane shows" title="What the trip pane shows"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></p>
           </div>
 
           <div id="summary" class="rc-summary" hidden>
@@ -419,9 +435,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9.2" cy="8.4" r="3.4"/><path d="M2.8 20c.6-3.4 3.2-5.4 6.4-5.4s5.8 2 6.4 5.4"/><path d="M16.2 5.6a3 3 0 0 1 0 5.8M17.4 14.9c2 .7 3.4 2.5 3.8 5.1"/></svg>
               Ride together
             </h2>
-            <p class="rc-field-hint">Everyone in a ride sees one <strong>planned route</strong> and each other's
-            live position. It runs phone to phone — no account, no server holding your track. Your name and a
-            room code are required, and the host has to let you in.</p>
+            <p class="rc-field-hint">One planned route, everyone's live position, phone to phone.<button type="button" class="rc-infobtn" data-info="group" aria-label="How riding together works" title="How riding together works"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></p>
 
             <div class="rc-field-group">
               <label class="rc-label" for="group-name">Your name</label>
@@ -435,7 +449,7 @@
               <div class="rc-input-row">
                 <input type="text" id="group-code" class="rc-input rc-input-code" placeholder="6 characters — blank to generate one" maxlength="8" spellcheck="false" autocapitalize="characters" />
               </div>
-              <p class="rc-field-hint">Read it aloud, message it, or point your camera at the host's code.</p>
+              <p class="rc-field-hint">Read it aloud, or scan the host's code.</p>
               <div class="rc-room-acts">
                 <button type="button" class="rc-act" id="group-scan-btn">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.6 8.4V5.4a1.8 1.8 0 0 1 1.8-1.8h3M15.6 3.6h3a1.8 1.8 0 0 1 1.8 1.8v3M20.4 15.6v3a1.8 1.8 0 0 1-1.8 1.8h-3M8.4 20.4h-3a1.8 1.8 0 0 1-1.8-1.8v-3"/><path d="M7 12h10"/></svg>
@@ -511,8 +525,7 @@
                    wants contrast, not a colour scheme. -->
               <div class="rc-qr" id="group-qr" hidden>
                 <canvas id="group-qr-canvas" role="img" aria-label="QR code for this ride's invite link"></canvas>
-                <p class="rc-field-hint">Point a phone at this to join. It carries the code, so there is
-                nothing to type — the other rider still has to add a name, and you still have to let them in.</p>
+                <p class="rc-field-hint">Point a phone at this to join.<button type="button" class="rc-infobtn" data-info="qr" aria-label="What the QR code carries" title="What the QR code carries"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></p>
               </div>
             </section>
 
@@ -554,14 +567,13 @@
             <section class="rc-block" id="group-voice-row" hidden>
               <h2 class="rc-section-h">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.6a2.7 2.7 0 0 1 2.7 2.7v5a2.7 2.7 0 0 1-5.4 0v-5A2.7 2.7 0 0 1 12 3.6Z"/><path d="M6.4 11a5.6 5.6 0 0 0 11.2 0M12 17v3.4M9 20.4h6"/></svg>
-                Voice
+                Voice<button type="button" class="rc-infobtn" data-info="voice" aria-label="How voice works in a ride" title="How voice works in a ride"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button>
                 <span class="rc-state rc-state-sm" id="group-voice-state" data-state="off">
                   <span class="rc-state-dot" aria-hidden="true"></span>
                   <span id="group-voice-state-text">Off</span>
                 </span>
               </h2>
-              <p class="rc-field-hint" id="group-voice-note">Hold the microphone button by the map controls to talk
-              to everyone.</p>
+              <p class="rc-field-hint" id="group-voice-note">Hold the microphone button by the map controls.</p>
               <label class="rc-switch">
                 <span class="rc-switch-text">
                   <b>Hands-free</b>
@@ -619,8 +631,7 @@
                   <span class="rc-switch-text"><b>Allow voice</b></span>
                   <input type="checkbox" id="group-voice-on" checked />
                 </label>
-                <p class="rc-field-hint">A removed rider cannot reconnect with the same code until the ride
-                is restarted.</p>
+                <p class="rc-field-hint">A removed rider cannot reconnect until the ride is restarted.</p>
               </div>
             </details>
           </div>
@@ -640,16 +651,11 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.4"/><path d="M2.9 9.4h18.2M2.9 14.6h18.2"/><path d="M12 2.6c2.4 2.6 3.6 5.8 3.6 9.4S14.4 18.8 12 21.4c-2.4-2.6-3.6-5.8-3.6-9.4S9.6 5.2 12 2.6Z"/></svg>
               PUBs
             </h2>
-            <p class="rc-field-hint">A ride is a room you are invited into. A <strong>PUB</strong> is the
-            public road: turn it on and your name and position are shared with every rider nearby who has
-            also turned it on, and you see theirs. It runs phone to phone like everything else here —
-            nobody stores it — but it is <strong>public</strong>, and the people who can see it are
-            strangers.</p>
+            <p class="rc-field-hint">Share where you are with the riders around you, and see them.<button type="button" class="rc-infobtn" data-info="pubs" aria-label="What PUBs does" title="What PUBs does"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></p>
 
-            <div class="rc-note" id="pubs-warning" data-level="caution">
+            <div class="rc-note" data-level="caution">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.4 21.2 19.6H2.8L12 3.4Z"/><path d="M12 9.6v4.2M12 17h.01"/></svg>
-              <span>Anyone nearby running RouteCast can see where you are, to about a hundred metres,
-              for as long as this is on. Do not leave it on from home.</span>
+              <span>Strangers can see roughly where you are. Do not leave it on from home.</span>
             </div>
 
             <div class="rc-field-group">
@@ -657,7 +663,6 @@
               <div class="rc-input-row">
                 <input type="text" id="pubs-name" class="rc-input" placeholder="What strangers should call you" maxlength="22" autocomplete="nickname" />
               </div>
-              <p class="rc-field-hint">Pick something you are happy to have shouted across a car park.</p>
             </div>
 
             <div class="rc-form-actions">
@@ -666,10 +671,9 @@
 
             <h2 class="rc-section-h">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 12.4c0 3.9-3.8 7-8.5 7a10 10 0 0 1-2.6-.34L4.2 21l1.2-3.6a6.6 6.6 0 0 1-1.9-4.5c0-3.9 3.8-7 8.5-7s8.5 3.1 8.5 7Z"/></svg>
-              Just the chat
+              Just the chat<button type="button" class="rc-infobtn" data-info="pubs-rooms" aria-label="What a PUB room is" title="What a PUB room is"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button>
             </h2>
-            <p class="rc-field-hint">A PUB room is a chat room with the door wedged open. It carries no
-            positions at all, so you can walk into one without going public.</p>
+            <p class="rc-field-hint">A chat room with the door open. It carries no positions.</p>
             <div class="rc-field-group">
               <label class="rc-label" for="pubs-room-code">PUB code</label>
               <div class="rc-input-row">
@@ -685,7 +689,7 @@
             <section class="rc-room" id="pubs-area">
               <div class="rc-room-top">
                 <div class="rc-room-code">
-                  <span class="rc-label">Area</span>
+                  <span class="rc-label">Area<button type="button" class="rc-infobtn" data-info="pubs-area" aria-label="How an area works" title="How an area works"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></span>
                   <strong id="pubs-area-code" class="rc-room-code-v">------</strong>
                 </div>
                 <span class="rc-state" id="pubs-state" data-state="connecting">
@@ -727,8 +731,7 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                 </button>
               </div>
-              <p class="rc-field-hint">It is published to this area the moment it exists, and anyone can
-              walk in. You are holding it: close it and it is gone.</p>
+              <p class="rc-field-hint">Published to the area at once. Close it and it is gone.</p>
             </div>
           </section>
 
@@ -755,10 +758,10 @@
             </div>
           </section>
 
-          <section class="rc-block">
-            <p class="rc-field-hint" id="pubs-blocked-note"></p>
+          <section class="rc-block" id="pubs-blocked-block" hidden>
+            <p class="rc-field-hint"><span id="pubs-blocked-note"></span><button type="button" class="rc-infobtn" data-info="pubs-ignore" aria-label="What ignoring does" title="What ignoring does"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></p>
             <div class="rc-history-actions">
-              <button type="button" class="rc-textbtn rc-textbtn-quiet" id="pubs-unblock">Un-ignore everyone I have ignored</button>
+              <button type="button" class="rc-textbtn rc-textbtn-quiet" id="pubs-unblock">Un-ignore everyone</button>
             </div>
           </section>
         </section>
@@ -769,8 +772,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21.5s-6.8-6.3-6.8-11.3a6.8 6.8 0 1 1 13.6 0c0 5-6.8 11.3-6.8 11.3Z"/><circle cx="12" cy="10.2" r="2.3"/></svg>
             Your marks
           </h2>
-          <p class="rc-field-hint">A mark is a coordinate you named yourself — a gate, a fork, a shed, home.
-          Reusing one costs nothing and goes exactly where you put it, which a searched address does not.</p>
+          <p class="rc-field-hint">A coordinate you named yourself, used exactly as you put it.<button type="button" class="rc-infobtn" data-info="marks" aria-label="What a mark is for" title="What a mark is for"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></p>
           <div class="rc-mark-actions">
             <button type="button" class="rc-textbtn" id="mark-add">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -805,17 +807,12 @@
           <section id="heat-panel" class="rc-block">
             <h2 class="rc-section-h">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18.5c2.4 0 2.4-3.4 4.8-3.4s2.4 3.4 4.8 3.4 2.4-3.4 4.8-3.4c1.2 0 1.8.8 2.4 1.7"/><path d="M4 12.6c2.4 0 2.4-3.4 4.8-3.4s2.4 3.4 4.8 3.4 2.4-3.4 4.8-3.4c1.2 0 1.8.9 2.4 1.7"/><path d="M4 6.7c2.4 0 2.4-3.4 4.8-3.4"/></svg>
-              Heat map
+              Heat map<button type="button" class="rc-infobtn" data-info="heat" aria-label="What the heat map draws" title="What the heat map draws"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button>
             </h2>
-            <p class="rc-field-hint">Every road you have ridden, drawn from the same record that decides
-            which line RouteCast prefers. It never left this phone and it is not a track: what is stored
-            is which stretches you crossed, how often, and how long each crossing took.</p>
+            <p class="rc-field-hint">Every road you have ridden. It has never left this phone.</p>
 
             <label class="rc-switch">
-              <span class="rc-switch-text">
-                <b>Show it on the map</b>
-                <i>Your roads, over the map you are looking at.</i>
-              </span>
+              <span class="rc-switch-text"><b>Show it on the map</b></span>
               <input type="checkbox" id="heat-on" />
             </label>
 
@@ -838,16 +835,28 @@
           <section id="background-panel" class="rc-block">
             <h2 class="rc-section-h">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.6" y="2.6" width="10.8" height="18.8" rx="2.4"/><path d="M10.4 5.4h3.2"/><path d="M12 17.6h.01"/></svg>
-              Keep going in the background
+              Background<button type="button" class="rc-infobtn" data-info="background" aria-label="What running in the background does" title="What running in the background does"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button>
             </h2>
             <label class="rc-switch">
               <span class="rc-switch-text">
                 <b>Run with the screen off</b>
-                <i>Keep recording, keep sending your position to the ride, keep the ETA honest.</i>
+                <i>Keep recording in a pocket.</i>
               </span>
               <input type="checkbox" id="background-on" checked />
             </label>
             <p class="rc-field-hint" id="background-note"></p>
+          </section>
+
+          <!-- ===== the version, and the way to ask ===== -->
+          <section id="version-panel" class="rc-block">
+            <h2 class="rc-section-h">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.4 11.4a8.4 8.4 0 1 0-.7 4.6"/><path d="M21 7.4v4.6h-4.6"/></svg>
+              Version<button type="button" class="rc-infobtn" data-info="update" aria-label="How updating works" title="How updating works"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button>
+            </h2>
+            <p class="rc-field-hint" id="version-note"></p>
+            <div class="rc-history-actions">
+              <button type="button" class="rc-textbtn" id="version-check">Check for updates</button>
+            </div>
           </section>
 
           <section class="rc-block">
@@ -883,6 +892,23 @@
       </div>
     </div>
 
+    <!-- ---------- where the long explanations live ----------
+         One sheet for the whole app. Every (i) in the panel opens it; the copy
+         itself is in static/js/info.js, so the same explanation can be reached
+         from three places without three copies of it drifting apart. -->
+    <div id="info-sheet" class="rc-info" hidden>
+      <div class="rc-info-scrim" id="info-scrim"></div>
+      <div class="rc-info-card" role="dialog" aria-modal="true" aria-labelledby="info-title">
+        <div class="rc-info-head">
+          <h2 class="rc-info-title" id="info-title"></h2>
+          <button type="button" class="rc-panel-close" id="info-close" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+        <div class="rc-info-body" id="info-body"></div>
+      </div>
+    </div>
+
     <div id="ios-install" class="rc-ios-install" hidden>
       <div class="rc-ios-install-scrim" id="ios-install-scrim"></div>
       <div class="rc-ios-install-card" role="dialog" aria-modal="true" aria-labelledby="ios-install-heading">
@@ -899,6 +925,8 @@
 
   <script src="vendor/leaflet/leaflet.js"></script>
   <script src="static/js/util.js"></script>
+  <script src="static/js/info.js"></script>
+  <script src="static/js/update.js"></script>
   <script src="static/js/icons.js"></script>
   <script src="static/js/coords.js"></script>
   <script src="static/js/background.js"></script>
@@ -931,10 +959,16 @@
   <script src="static/js/pwa.js"></script>
   <script>
     // Cache the shell so the app opens instantly; the forecast is never cached.
+    // The registration is handed to RC.update rather than dropped: a cached
+    // app that cannot notice a new build is a phone stuck three deploys back.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("sw.js").catch(function () {});
+        navigator.serviceWorker.register("sw.js").then(function (reg) {
+          RC.update.init(reg);
+        }, function () { RC.update.init(null); });
       });
+    } else {
+      RC.update.init(null);
     }
   </script>
 </body>

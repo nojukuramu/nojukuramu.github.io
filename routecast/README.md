@@ -55,6 +55,16 @@ Live at <https://nojukuramu.github.io/routecast/>.
   **how lately you rode it**. The speed one is the one that surprises people. Colour is
   assigned by rank rather than by value, so the map always says something instead of
   painting one commute red and the rest of your life blue.
+- **A panel that says one line.** Every switch and every field used to carry a paragraph
+  explaining itself. The paragraphs were good and there were far too many of them — the PUBs
+  pane was four screens of prose before it was anything else. The explanations now live behind
+  a small **(i)** beside the thing they explain, which is the right place for them in both
+  directions: somebody who knows what a PUB is never reads it again, and somebody who does not
+  can find it without leaving the screen.
+- **It tells you when it has been updated.** A cached app with no update path is a phone
+  quietly running a build from three deploys ago. RouteCast watches for a new version, offers it
+  in one dismissible line, and — crucially — **never applies it on its own**: a service worker
+  swapping the code out halfway to somewhere is not an improvement. See below.
 - **Gear and riding advice** derived from the actual numbers, not generic filler.
 - **An ETA that has been told the truth.** The routing engine's own timings are
   free-flow: no traffic, no signals, no junction delay. That optimism used to
@@ -565,6 +575,34 @@ works, and the third is what everybody assumes is happening and is not:
 There is a switch for all of it in *You*, and it is honest: turned off, the app behaves
 exactly as it did before any of this existed.
 
+## Updates
+
+A service worker makes an app open instantly and work with no signal by serving a copy of itself
+from a cache. The cost of that is the one failure nobody reports as a bug: a phone running an old
+build, with a fix in it the rider was told about and cannot see.
+
+The shape is the one [The Wolf Game](../the-wolf-game/) and [KaraokeNatin](../karaokenatin/)
+already use in this repository — including the `"skip-waiting"` message, so all three apps'
+service workers answer the same word. Reusing it was the point; see the repository's
+[`CLAUDE.md`](../CLAUDE.md).
+
+What RouteCast adds is the half a navigator specifically needs: **an update never takes over
+mid-ride.** `sw.js` used to call `skipWaiting()` inside `install`, which means a deploy could
+swap the code out from under somebody halfway to somewhere. It no longer does. A new worker
+installs, parks itself in `waiting`, and the page offers it. The rider decides when — and if a
+ride is running, reloading is confirmed first, because a reload ends it.
+
+A new version is noticed on load, every 30 minutes while the page is visible, whenever the page
+comes back from hidden, and whenever the network returns. Each check is one conditional request
+for `sw.js`, which is a few hundred bytes when nothing has changed. The offer is one line above
+the map with a **Reload** and a dismiss; *You* carries the version number permanently and a
+manual **Check for updates** for the rider who has been told a fix exists and would rather go and
+get it.
+
+One number covers all of it: the page declares `RC_VERSION`, `sw.js` carries the same value as
+its cache name, and `tools/validate.js` refuses to let the two drift apart. Bumping it is what
+publishes an update.
+
 ## Honest limitations
 
 - **OSRM has no motorcycle profile.** Motorcycle routes are the driving profile with
@@ -575,6 +613,9 @@ exactly as it did before any of this existed.
 - **A forecast is a forecast.** Ten hours out it is a strong hint; three days out it is a
   mood. The further along the route, the more the arrival-time forecast is guessing.
 - Points beyond the 16-day forecast horizon are shown as "no data" rather than invented.
+- **An update needs a reload, and a reload ends a ride.** Nothing can be hot-swapped into a
+  running page, so a new version waits until the rider is ready for it rather than interrupting.
+  A phone that never reloads stays on its build indefinitely, which is the correct trade.
 - **Nothing survives the browser being closed.** Everything in *Running with the screen
   off* keeps a ride alive through a locked screen, another app and a phone in a pocket.
   None of it — and nothing any web page can do — keeps it alive once the browser itself is
@@ -665,6 +706,9 @@ routecast/
   static/js/
     util.js                 formatting, storage, fetch with timeout/retry, rate-limit queue,
                                           bearings and the course tracker every mode shares
+    info.js                 RC.info     — the sheet every (i) opens, and all the long copy
+    update.js               RC.update   — noticing a new build, and offering it rather than
+                                          applying it
     icons.js                inline SVG weather and UI icons
     background.js           RC.background — wake lock, silence, worker heartbeat: the ride
                                           keeps running with the screen off
@@ -739,6 +783,13 @@ road a second time makes one segment hotter rather than inventing a second one; 
 two riders in the same region derive the same PUB area code while riders in different
 regions do not, that an area code can never be mistaken for a ride code, and that a
 stranger cannot claim to be at 99,999 km/h or facing 905 degrees.
+
+Two invariants that are cheap to check and expensive to lose are checked as text: that the
+version the page reports and the version the worker serves are the same number, and that every
+`skipWaiting()` in the service worker is one the page asked for — an update that installs itself
+is the bug the whole mechanism replaces. The info sheet is checked the same way: every **(i)** in
+the page has to name a topic that exists, no topic may be unreachable, and no hint in the panel
+may have grown back into a paragraph.
 
 The QR encoder is checked there too, against the tables in ISO/IEC 18004 rather than
 against itself: that every version leaves exactly the standard number of free data modules,

@@ -2492,3 +2492,163 @@ code { font-family: var(--mono); font-size: .92em; }
     bottom: calc(var(--safe-b) + var(--gut));
   }
 }
+
+/* ============================================================
+   The (i) button, and the sheet it opens
+
+   The panel used to explain itself in paragraphs. It now explains itself in
+   one line each, with the paragraph one tap away — which is the only way both
+   readers get what they want: the rider who knows never reads it again, and
+   the rider who does not can find it without leaving the screen.
+
+   The button is deliberately small and quiet. It is a footnote marker, not a
+   control: it must never compete with the switch it sits beside.
+   ============================================================ */
+.rc-infobtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 5px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  vertical-align: -4px;
+  flex: none;
+}
+.rc-infobtn svg { width: 15px; height: 15px; display: block; }
+.rc-infobtn:hover, .rc-infobtn:focus-visible { color: var(--matcha); background: var(--matcha-soft); }
+
+/* Inside a section heading the marker sits after the words and before
+   anything else the heading carries (a count, a state pill), and it must not
+   be stretched by the heading's own flex. */
+.rc-section-h .rc-infobtn { margin-right: 2px; }
+
+.rc-info {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: end center;
+}
+.rc-info[hidden] { display: none; }
+.rc-info-scrim { position: absolute; inset: 0; background: rgba(12, 16, 10, .45); }
+
+/* A sheet from the bottom rather than a dialog in the middle: it is opened
+   from a panel that is already a bottom sheet, and a card that appears under
+   the thumb that summoned it is a card nobody has to reach for. */
+.rc-info-card {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: min(72vh, 620px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  box-shadow: var(--shadow-float);
+  padding: 14px 16px calc(16px + var(--safe-b));
+}
+.rc-info-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.rc-info-title {
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  margin: 2px 0 0;
+}
+.rc-info-body {
+  overflow-y: auto;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.rc-info-body p { margin: 0 0 10px; }
+.rc-info-body p:last-child { margin-bottom: 0; }
+.rc-info-body b { color: var(--ink); font-weight: 600; }
+.rc-info-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  background: var(--surface-2);
+  border-radius: 5px;
+  padding: 1px 4px;
+}
+
+@media (min-width: 900px) {
+  /* On a screen with room, it is a dialog rather than a sheet: there is no
+     thumb at the bottom edge to reach for. */
+  .rc-info { place-items: center; }
+  .rc-info-card { border-bottom: 1px solid var(--line); border-radius: 18px; padding-bottom: 16px; }
+}
+
+/* ============================================================
+   A new version is waiting
+
+   The one thing allowed over the map without being asked for, so it is one
+   line high, it says what it is in two words, and the way out of it is a
+   button rather than a wait.
+   ============================================================ */
+.rc-update {
+  position: absolute;
+  top: calc(var(--safe-t) + 8px + var(--rail-h) + 8px);
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  z-index: 640;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 6px 0 11px;
+  border-radius: 11px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--matcha);
+  color: var(--glass-ink);
+  box-shadow: var(--shadow-float);
+  font-size: 13px;
+}
+.rc-update[hidden] { display: none; }
+.rc-update > svg { width: 18px; height: 18px; flex: none; color: var(--matcha); }
+.rc-update-text { flex: 1; min-width: 0; font-weight: 600; }
+.rc-update-go {
+  flex: none;
+  height: 26px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--matcha);
+  color: var(--matcha-ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rc-update-later {
+  flex: none;
+  width: 26px; height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  display: grid; place-items: center;
+}
+.rc-update-later svg { width: 15px; height: 15px; }
+
+/* While a ride is running the map is doing a job, and the turn banner already
+   owns the line under the rail. The bar moves below it rather than on top. */
+:root[data-mode="nav"] .rc-update,
+:root[data-mode="free"] .rc-update {
+  top: calc(var(--safe-t) + 8px + var(--rail-h) + 8px + 46px);
+}

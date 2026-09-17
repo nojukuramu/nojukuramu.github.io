@@ -113,10 +113,11 @@ RC.pubsui = (function () {
     if (pill) pill.setAttribute("data-state", state.key);
     text("pubs-state-text", state.text);
 
+    // One line. The paragraph that used to live here is the "pubs-area" topic,
+    // one tap away behind the (i) on the Area label.
     text("pubs-area-note", snap.role === "host"
-      ? "Nobody else was holding this area, so your phone is. It relays everyone's position and holds " +
-        "nothing: when you go dark, the next rider picks it up."
-      : "Your name and position, to about a hundred metres, are going to everyone in this area.");
+      ? "Your phone is holding this area for everyone in it."
+      : "You are visible to this area.");
 
     renderPeople();
     renderRooms();
@@ -129,8 +130,7 @@ RC.pubsui = (function () {
     text("pubs-people-count", list.length ? String(list.length) : "");
 
     if (!list.length) {
-      box.innerHTML = '<p class="rc-chat-sys">Nobody else out here right now. ' +
-        "You are the first one on this stretch with PUBs on.</p>";
+      box.innerHTML = '<p class="rc-chat-sys">Nobody else out here right now.</p>';
       return;
     }
 
@@ -176,8 +176,7 @@ RC.pubsui = (function () {
     text("pubs-rooms-count", rooms.length ? String(rooms.length) : "");
 
     if (!rooms.length) {
-      box.innerHTML = '<p class="rc-chat-sys">No PUB open around here. Open one and it shows up on ' +
-        "everybody else's list.</p>";
+      box.innerHTML = '<p class="rc-chat-sys">No PUB open around here.</p>';
       return;
     }
     var html = "";
@@ -216,7 +215,7 @@ RC.pubsui = (function () {
     text("pubs-room-state-text", state.text);
     text("pubs-room-note", snap.code + " · " + snap.people +
       (snap.people === 1 ? " person" : " people") +
-      (snap.role === "host" ? " · it closes when you leave" : ""));
+      (snap.role === "host" ? " · yours" : ""));
 
     var log = el("pubs-chat-log");
     if (log) {
@@ -240,14 +239,14 @@ RC.pubsui = (function () {
     renderRooms();
   }
 
+  /* The ignore list only exists on the screen once there is something in it.
+     An empty list explaining itself is a paragraph nobody asked for; the (i)
+     beside it says what Ignore does for anyone who wants to know. */
   function renderBlocked() {
     var n = RC.pubs.blockedCount();
-    text("pubs-blocked-note", n
-      ? "You are ignoring " + n + (n === 1 ? " rider" : " riders") +
-        ". They cannot appear on your map or in a room you are in."
-      : "You are not ignoring anybody. If somebody out there is a nuisance, Ignore drops them where " +
-        "their messages arrive — not merely out of a list.");
-    show("pubs-unblock", n > 0);
+    show("pubs-blocked-block", n > 0);
+    if (!n) return;
+    text("pubs-blocked-note", "Ignoring " + n + (n === 1 ? " rider." : " riders."));
   }
 
   function renderAll() {
@@ -266,8 +265,8 @@ RC.pubsui = (function () {
     var name = input ? input.value : "";
     bridge.setStatus("Finding the area…", "busy");
     RC.pubs.start(name).then(function () {
-      bridge.setStatus("PUBs is on. You are visible to this area.", "");
-      bridge.flashStatus(5000);
+      bridge.setStatus("PUBs is on — you are visible.", "");
+      bridge.flashStatus(4000);
       renderAll();
     }, function (err) {
       bridge.setStatus(err && err.message ? err.message : "Could not go public.", "error");
@@ -276,8 +275,8 @@ RC.pubsui = (function () {
 
   function stopPubs() {
     RC.pubs.stop();
-    bridge.setStatus("PUBs is off. Nothing is leaving this phone.", "");
-    bridge.flashStatus(4000);
+    bridge.setStatus("PUBs is off.", "");
+    bridge.flashStatus(3000);
     renderAll();
   }
 
@@ -304,8 +303,8 @@ RC.pubsui = (function () {
     var input = el("pubs-room-name");
     RC.pubs.openRoom(input ? input.value : "", nameForRoom()).then(function (code) {
       if (input) input.value = "";
-      bridge.setStatus("Your PUB is open — " + code + ". Anyone nearby can walk in.", "");
-      bridge.flashStatus(6000);
+      bridge.setStatus("PUB open — " + code, "");
+      bridge.flashStatus(5000);
       renderAll();
     }, function (err) {
       bridge.setStatus(err && err.message ? err.message : "Could not open a PUB.", "error");

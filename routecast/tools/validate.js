@@ -261,6 +261,74 @@ section("Static: script manifest");
   var bumped = /var CACHE = "routecast-v(\d+)"/.exec(sw);
   check("the service worker cache name is versioned", !!bumped && Number(bumped[1]) >= 5,
         bumped ? "v" + bumped[1] : "no CACHE constant");
+
+  /* The page tells the rider which version they are on and the worker decides
+     which one they actually get. Those two disagreeing is a version line that
+     lies, which is worse than not having one — so they are one number. */
+  var pageV = /window\.RC_VERSION\s*=\s*"([^"]+)"/.exec(html);
+  check("the page declares its version", !!pageV, pageV ? pageV[1] : "no RC_VERSION");
+  check("the page and the service worker agree on it",
+        !!pageV && !!bumped && pageV[1] === bumped[1],
+        (pageV ? pageV[1] : "?") + " vs " + (bumped ? bumped[1] : "?"));
+
+  /* An update that installs itself is the bug this whole mechanism replaces:
+     skipWaiting() inside install swaps the code out from under a rider
+     mid-ride. The handover must be the page's decision, which is the message
+     handler — and the same word the other apps in this repository use. */
+  /* Read the CODE, not the prose: the install handler carries a comment
+     explaining why skipWaiting() is not there, and a check that cannot tell
+     the two apart would fail on its own explanation. */
+  var swCode = sw.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  /* Every skipWaiting() in the worker must be the one the page asked for. A
+     window-based check cannot say that — the install handler and the message
+     handler are neighbours — so the test is per occurrence: each one is
+     preceded by the "skip-waiting" message it answers. */
+  var handovers = swCode.split("skipWaiting");
+  var unasked = 0;
+  for (var h = 0; h < handovers.length - 1; h++) {
+    if (handovers[h].slice(-120).indexOf("skip-waiting") < 0) unasked++;
+  }
+  check("the service worker never takes over on its own", unasked === 0,
+        unasked + " unprompted skipWaiting()");
+  check("it hands over when the page asks",
+        /addEventListener\("message"[\s\S]{0,160}skip-waiting[\s\S]{0,80}skipWaiting/.test(swCode));
+})();
+
+section("Static: the info sheet");
+(function () {
+  var html = read("index.html");
+  var info = read("static/js/info.js");
+
+  /* Every (i) in the page has to name a topic that exists, or it is a button
+     that opens nothing — and the copy lives in one file precisely so that a
+     rename cannot quietly orphan half of them. */
+  var topics = {};
+  var rt = /^\s{4}"?([a-z][a-z-]*)"?:\s*\{\s*$/gm, mt;
+  while ((mt = rt.exec(info))) topics[mt[1]] = true;
+  check("the registry holds topics", Object.keys(topics).length >= 8,
+        Object.keys(topics).length + " found");
+
+  var used = [];
+  var ru = /data-info="([^"]+)"/g, mu;
+  while ((mu = ru.exec(html))) used.push(mu[1]);
+  check("the page uses the info sheet", used.length >= 8, used.length + " buttons");
+
+  var orphan = used.filter(function (k) { return !topics[k]; });
+  check("every (i) names a topic that exists", orphan.length === 0, orphan.join(", "));
+
+  var unused = Object.keys(topics).filter(function (k) { return used.indexOf(k) < 0; });
+  check("no topic is unreachable", unused.length === 0, unused.join(", "));
+
+  /* The point of the exercise: the pane says one line and the sheet says the
+     rest. A hint that has grown back into a paragraph is a regression. */
+  var long = [];
+  var rp = /<p class="rc-field-hint"[^>]*>([\s\S]*?)<\/p>/g, mp;
+  while ((mp = rp.exec(html))) {
+    var t = mp[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (t.length > 110) long.push(t.slice(0, 60) + "…");
+  }
+  check("no hint in the panel has grown back into a paragraph",
+        long.length === 0, long.join(" | "));
 })();
 
 section("Static: theme tokens");
