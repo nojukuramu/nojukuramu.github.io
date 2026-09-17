@@ -1268,9 +1268,8 @@
     if (!box) return;
     var st = RC.history.stats();
     if (!st.edges && !st.trips) {
-      box.innerHTML = '<p class="rc-history-empty">Nothing recorded yet. Navigate a route — or just hit ' +
-        'Free drive — and RouteCast remembers the roads you actually took, never the ones it merely ' +
-        'suggested, so later trips can prefer them. It stays on this device.</p>';
+      box.innerHTML = '<p class="rc-history-empty">Nothing recorded yet. Ride, and the roads ' +
+        'write themselves down here.</p>';
       return;
     }
 
@@ -1741,8 +1740,7 @@
     if (!box) return;
     var d = RC.heat.describe();
     if (!d || !d.segments) {
-      box.innerHTML = '<p class="rc-history-empty">Nothing recorded yet. Ride — planned or free — ' +
-        "and the roads write themselves down.</p>";
+      box.innerHTML = '<p class="rc-history-empty">Nothing recorded yet.</p>';
       return;
     }
     var bits = [
@@ -1787,19 +1785,52 @@
     var toggle = RC.el("background-on");
     if (toggle) toggle.checked = RC.background.isEnabled();
     if (!note) return;
-    if (!RC.background.isEnabled()) {
-      note.textContent = "Off: the screen sleeps when your phone says it should, and a ride in a " +
-        "pocket may stop recording until you look at it again.";
-      return;
+    // Three states, one line each. The paragraph is the "background" topic.
+    if (!RC.background.isEnabled()) { note.textContent = "Off — a ride in a pocket may stop."; return; }
+    note.textContent = RC.background.held()
+      ? "Running — this ride survives the screen going off."
+      : "Ready. It starts with the next ride.";
+  }
+
+  /* ---------------------------------------------------------
+     The version, and asking about it
+
+     The bar over the map is RC.update's, and it only ever appears when there
+     genuinely is a new build waiting. This is the other half: a line in the
+     You tab saying what you are running, and a button for the rider who has
+     been told a fix exists and wants to go and get it rather than wait for
+     the next check.
+     --------------------------------------------------------- */
+  function initVersionUi() {
+    var btn = RC.el("version-check");
+    if (btn) btn.addEventListener("click", function () {
+      if (RC.update.isReady()) { RC.update.apply(); return; }
+      setStatus("Checking for updates…", "busy");
+      RC.update.check().then(function (result) {
+        if (result === "ready") { setStatus("", ""); renderVersionPanel(); return; }
+        setStatus(
+          result === "downloading" ? "A new version is downloading."
+          : result === "offline" ? "Could not check — try again when you are online."
+          : result === "unsupported" ? "This browser cannot check; reload the page instead."
+          : "You are on the latest version.", result === "offline" ? "error" : "");
+        flashStatus(4000);
+        renderVersionPanel();
+      });
+    });
+    RC.update.onState(renderVersionPanel);
+    renderVersionPanel();
+  }
+
+  function renderVersionPanel() {
+    var st = RC.update.state();
+    var note = RC.el("version-note");
+    if (note) {
+      note.textContent = st.ready
+        ? "Version " + st.version + " — a newer one is ready."
+        : "Version " + st.version + (st.supported ? "" : " — this browser does not cache the app.");
     }
-    var held = RC.background.held();
-    note.textContent = held
-      ? "Running. The screen is held awake while you are looking at it, and the ride keeps recording, " +
-        "keeps sending your position and keeps its odometer when it goes in a pocket. What no web app " +
-        "can survive is the browser itself being closed."
-      : "A ride, a free drive or a room will keep going with the screen off. It holds the display awake " +
-        "while it is in front of you and keeps the page running when it is not — but nothing can keep " +
-        "it alive once the browser itself is closed.";
+    var btn = RC.el("version-check");
+    if (btn) btn.textContent = st.ready ? "Reload to update" : "Check for updates";
   }
 
   /* ---------------------------------------------------------
@@ -1925,7 +1956,10 @@
     if (scroll) scroll.scrollTop = 0;
     if (name === "group") RC.groupui.refresh();
     if (name === "marks") renderMarks();
-    if (name === "you") { renderHistoryPanel(); renderFreeSummary(); renderHeatPanel(); renderBackgroundPanel(); }
+    if (name === "you") {
+      renderHistoryPanel(); renderFreeSummary(); renderHeatPanel();
+      renderBackgroundPanel(); renderVersionPanel();
+    }
     if (name === "pubs") RC.pubsui.render();
   }
 
@@ -2791,6 +2825,10 @@
     });
     initHeatUi();
     initBackgroundUi();
+    initVersionUi();
+    // The sheet every (i) in the panel opens. Delegated, so the lists that are
+    // rebuilt on each render need no wiring of their own.
+    RC.info.init();
 
     setVehicle(state.vehicle);
     setAvoidMotorways(state.avoidMotorways, true);

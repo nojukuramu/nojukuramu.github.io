@@ -1,7 +1,12 @@
 /* RouteCast service worker — caches the shell so the app opens instantly and
    survives a flaky connection. Forecast, routing and geocoding calls always go
-   to the network; stale weather is worse than no weather. */
-var CACHE = "routecast-v10";
+   to the network; stale weather is worse than no weather.
+
+   CACHE is the app's version, and the page carries the same number as
+   RC_VERSION; tools/validate.js refuses to let the two drift apart. Bumping it
+   is what publishes an update: a changed sw.js is what a browser notices, and
+   a new cache name is what makes the old shell go away. */
+var CACHE = "routecast-v11";
 var SHELL = [
   "./",
   "./index.html",
@@ -14,6 +19,8 @@ var SHELL = [
   "./static/apple-touch-icon.png",
   "./static/css/app.css",
   "./static/js/util.js",
+  "./static/js/info.js",
+  "./static/js/update.js",
   "./static/js/icons.js",
   "./static/js/coords.js",
   "./static/js/background.js",
@@ -54,9 +61,18 @@ var SHELL = [
 ];
 
 self.addEventListener("install", function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () {
-    return self.skipWaiting();
-  }));
+  /* Deliberately no skipWaiting() here, and this is the whole point of the
+     change. It used to be there, which meant a deploy could swap the code out
+     from under somebody halfway through a ride — new scripts against an old
+     page, or a reload at the worst possible moment. A finished install now
+     parks this worker in "waiting" until either every tab of the old build has
+     gone, or the page asks for the handover with "skip-waiting" below because
+     the rider pressed Reload. */
+  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }));
+});
+
+self.addEventListener("message", function (e) {
+  if (e.data === "skip-waiting") self.skipWaiting();
 });
 
 self.addEventListener("activate", function (e) {

@@ -81,6 +81,13 @@ editing this:
   screen space while `getTotalLength()` reports user units, so the dash cycles exactly one period
   and the letters only ever look finished.
 
+
+## Working here
+
+Standing instructions for changes to any project in this repository — reuse before you build,
+every installable PWA gets an update path, and keep the interface quiet — are in
+[`CLAUDE.md`](CLAUDE.md).
+
 ## Projects
 
 | Path | Project | Description |

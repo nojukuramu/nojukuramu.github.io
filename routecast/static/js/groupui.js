@@ -905,15 +905,14 @@ RC.groupui = (function () {
 
     var noteEl = el("group-voice-note");
     if (noteEl) {
+      /* One line each. The four-way explanation these used to carry is the
+         "voice" topic behind the (i) on the heading. */
       noteEl.textContent = !can
-        ? "This browser will not share a microphone, so you can listen but not talk."
-        : isLive
-          ? "Hold the microphone button beside the map controls. The room hears you while you speak."
-          : liveMode && alone
-            ? "Hold the microphone button beside the map controls. Hands-free works on your own too — the mic stays open and whoever joins next hears you straight away."
-            : liveMode
-              ? "Hold the microphone button beside the map controls. The room hears you as soon as the link is up."
-              : "This link has no live audio path, so the room hears each burst once you let the button go.";
+        ? "No microphone here — you can listen, not talk."
+        : isLive ? "Hold the microphone button by the map controls."
+        : liveMode && alone ? "Hold the mic button. Hands-free works on your own too."
+        : liveMode ? "Hold the mic button — the room hears you once the link is up."
+        : "Recorded bursts: nobody hears you until you let go.";
     }
   }
 
