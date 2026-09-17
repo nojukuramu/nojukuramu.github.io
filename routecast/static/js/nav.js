@@ -178,32 +178,35 @@ RC.nav = (function () {
     return prev + (next - prev) * SPEED_SMOOTHING;
   }
 
-  /* ---------- wake lock ---------- */
+  /* ---------- staying alive ----------
+     The wake lock used to live here, and it was half a wake lock: taken at
+     the start, lost the first time the page was hidden, and re-taken only if
+     the rider happened to come back to the tab. Everything about keeping a
+     ride running with the screen off now belongs to RC.background — one
+     owner, one set of holds, and the same behaviour whether the ride is a
+     planned route, a free drive, or both inside a group room. See
+     static/js/background.js. */
 
-  function releaseWakeLock() {
-    if (st && st.wakeLock) {
-      try { st.wakeLock.release(); } catch (e) {}
-      st.wakeLock = null;
-    }
+  function holdBackground() {
+    if (RC.background) RC.background.hold("nav");
   }
 
-  function acquireWakeLock() {
-    if (!st || !st.active) return;
-    try {
-      if (navigator.wakeLock && navigator.wakeLock.request) {
-        navigator.wakeLock.request("screen").then(function (lock) {
-          if (!st || !st.active) { try { lock.release(); } catch (e) {} return; }
-          st.wakeLock = lock;
-        }, function () { /* ignore — not fatal */ });
-      }
-    } catch (e) { /* Wake Lock API not available — ignore */ }
+  function releaseBackground() {
+    if (RC.background) RC.background.release("nav");
   }
 
-  function onVisibilityChange() {
+  /* A geolocation watch can die quietly in a frozen page: no error, no
+     callback, just nothing. Re-arming it when the page comes back from a long
+     freeze is cheap, and the alternative is a dashboard that has stopped
+     without saying so. */
+  function rearmWatch() {
+    if (!st || !st.active || !navigator.geolocation) return;
+    if (st.lastFixAt && Date.now() - st.lastFixAt < 30000) return;
+    try { if (st.watchId != null) navigator.geolocation.clearWatch(st.watchId); } catch (e) {}
     try {
-      if (document.visibilityState === "visible" && st && st.active && !st.wakeLock) {
-        acquireWakeLock();
-      }
+      st.watchId = navigator.geolocation.watchPosition(handlePosition, handleError, {
+        enableHighAccuracy: true, maximumAge: 2000, timeout: 15000
+      });
     } catch (e) {}
   }
 
@@ -261,7 +264,12 @@ RC.nav = (function () {
   function canGoOnline() {
     try {
       if (navigator.onLine === false) return false;
-      if (document.visibilityState === "hidden") return false;
+      // A hidden page used to be barred outright. It still is when the rider
+      // has turned background running off — that is what turning it off
+      // means — but a ride that is deliberately running in a pocket should
+      // come back out of it with a current forecast, not a stale one.
+      if (document.visibilityState === "hidden" &&
+          !(RC.background && RC.background.held() && RC.background.isEnabled())) return false;
     } catch (e) {}
     return true;
   }
@@ -409,7 +417,7 @@ RC.nav = (function () {
 
       var speedKmh = (typeof coords.speed === "number" && coords.speed != null && !isNaN(coords.speed))
         ? Math.max(0, coords.speed * 3.6) : null;
-      var headingDeg = (typeof coords.heading === "number" && !isNaN(coords.heading)) ? coords.heading : null;
+      var gpsHeadingDeg = (typeof coords.heading === "number" && !isNaN(coords.heading)) ? coords.heading : null;
 
       /* A chipset that never reports speed is common enough on cheap phones
          and on desktop. Derive it from consecutive fixes rather than showing
@@ -425,7 +433,16 @@ RC.nav = (function () {
           if (derived < MAX_PLAUSIBLE_KMH) speedKmh = derived;
         }
       }
+      /* Which way the vehicle is pointing, worked out BEFORE lastFix is
+         moved on — the tracker keeps its own anchor, but the ordering here is
+         what makes the two agree about the same pair of fixes. A chipset with
+         no course of its own is the common case, not the exotic one, and a
+         null heading is what left course-up rotation pinned to north on half
+         the phones that ever ran this. See RC.courseTracker. */
+      var headingDeg = st.course.push(lat, lon, fixNow.getTime(), gpsHeadingDeg, speedKmh);
+
       st.lastFix = { lat: lat, lon: lon, t: fixNow.getTime() };
+      st.lastFixAt = fixNow.getTime();
 
       st.smoothedSpeedKmh = smoothSpeed(st.smoothedSpeedKmh, speedKmh);
       if (speedKmh != null && speedKmh > st.maxSpeedKmh && speedKmh < 400) st.maxSpeedKmh = speedKmh;
@@ -454,6 +471,10 @@ RC.nav = (function () {
         avgSpeedKmh: avgKmh,
         elapsedS: elapsedS,
         courseDeg: headingDeg == null ? segmentBearing(st.route, proj.index) : headingDeg,
+        // The road's own bearing, always — the last-resort heading for the
+        // map when neither the chipset nor two fixes can say anything, and
+        // the one that is right even at a dead stop in a queue.
+        routeBearingDeg: segmentBearing(st.route, proj.index),
         elevationM: terrain ? terrain.elevationM : gpsAltitudeM,
         elevationSource: terrain ? "dem" : (gpsAltitudeM == null ? null : "gps"),
         gradePct: terrain ? terrain.gradePct : null,
@@ -541,11 +562,9 @@ RC.nav = (function () {
       try { navigator.geolocation.clearWatch(st.watchId); } catch (e) {}
       st.watchId = null;
     }
-    releaseWakeLock();
-    if (st.visListenerAttached) {
-      try { document.removeEventListener("visibilitychange", onVisibilityChange); } catch (e) {}
-      st.visListenerAttached = false;
-    }
+    releaseBackground();
+    if (st.unwatchThaw) { st.unwatchThaw(); st.unwatchThaw = null; }
+    if (st.unwatchShow) { st.unwatchShow(); st.unwatchShow = null; }
     st.active = false;
   }
 
@@ -574,8 +593,9 @@ RC.nav = (function () {
         vehicle: opts.vehicle || "car",
         map: opts.map || null,
         watchId: null,
-        wakeLock: null,
-        visListenerAttached: false,
+        lastFixAt: 0,
+        unwatchThaw: null,
+        unwatchShow: null,
         stepStarts: buildStepIndex(route),
         profile: opts.profile || null,
         recordHistory: opts.recordHistory !== false,
@@ -583,6 +603,7 @@ RC.nav = (function () {
         plannedDurationS: route.cumDur[route.cumDur.length - 1] || 0,
         rideStartedAt: 0,
         lastFix: null,
+        course: RC.courseTracker(),
         smoothedSpeedKmh: null,
         maxSpeedKmh: 0,
         lastMatchIndex: 0,
@@ -625,11 +646,11 @@ RC.nav = (function () {
         try { RC.history.startSession(st.vehicle); } catch (e) {}
       }
 
-      acquireWakeLock();
-      try {
-        document.addEventListener("visibilitychange", onVisibilityChange);
-        st.visListenerAttached = true;
-      } catch (e) {}
+      holdBackground();
+      if (RC.background) {
+        st.unwatchThaw = RC.background.on("thaw", rearmWatch);
+        st.unwatchShow = RC.background.on("show", rearmWatch);
+      }
     });
   }
 

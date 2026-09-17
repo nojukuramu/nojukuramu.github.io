@@ -56,6 +56,8 @@ RC.compass = (function () {
   var SENSOR_MIN_INTERVAL_MS = 100;
   var BREAKOUT_PX = 24;        // drag this far while rotated -> back to north-up
 
+  var STOP_HOLD_MS = 25000;    // after moving, hold the travel course this long
+
   var map = null, mapEl = null, wrapEl = null;
   var mode = "north";
   var targetBearing = 0;       // where we want the map rotated to
@@ -64,6 +66,7 @@ RC.compass = (function () {
   var frame = null;
   var sensorAttached = false, lastSensorTs = 0, sensorHeading = null;
   var gpsCourse = null, gpsMoving = false, routeBearing = null;
+  var lastMovingTs = 0;        // when the vehicle was last convincingly moving
   var savedInteractions = null;
   var onModeChange = null;
 
@@ -77,8 +80,24 @@ RC.compass = (function () {
 
   /* ---------- heading selection ---------- */
 
+  /* The order is not a preference list, it is a claim about which source is
+     telling the truth at this instant.
+
+     While the vehicle is moving, its course over ground is the truth and the
+     magnetometer is a rumour — it is sitting inside a fairing, next to an
+     engine and a phone charger, and it will happily insist the bike is
+     pointing thirty degrees off the road it is visibly on.
+
+     The case that needed care is the one between those two: STOPPED AT A
+     LIGHT. There is no course over ground at a standstill, so the old order
+     handed the map straight to the magnetometer — and the map would swing
+     while the bike had not moved an inch. So a travel course is held for
+     STOP_HOLD_MS after the last real movement. Long enough to cover a red
+     light and a fuel stop; short enough that a phone genuinely picked up and
+     turned around eventually gets its compass back. */
   function currentHeading() {
     if (gpsMoving && gpsCourse != null) return gpsCourse;
+    if (gpsCourse != null && Date.now() - lastMovingTs < STOP_HOLD_MS) return gpsCourse;
     if (sensorHeading != null) return sensorHeading;
     if (gpsCourse != null) return gpsCourse;
     if (routeBearing != null) return routeBearing;
@@ -275,12 +294,13 @@ RC.compass = (function () {
   function setCourse(courseDeg, speedKmh, routeBearingDeg) {
     gpsCourse = (typeof courseDeg === "number" && !isNaN(courseDeg)) ? norm(courseDeg) : null;
     gpsMoving = typeof speedKmh === "number" && speedKmh >= MOVING_KMH;
+    if (gpsMoving && gpsCourse != null) lastMovingTs = Date.now();
     routeBearing = (typeof routeBearingDeg === "number" && !isNaN(routeBearingDeg)) ? norm(routeBearingDeg) : null;
     recompute();
   }
 
   function reset() {
-    gpsCourse = null; gpsMoving = false; routeBearing = null;
+    gpsCourse = null; gpsMoving = false; routeBearing = null; lastMovingTs = 0;
   }
 
   function init(opts) {

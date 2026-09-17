@@ -51,6 +51,10 @@
 
   // Live navigation
   var riderMarker = null, riderArrow = null, lastHudRenderTs = 0, lastFreeTrackTs = 0;
+  // The last place this phone knew it was, whoever produced it. Cheap, and it
+  // saves every panel that wants "how far away is that" from starting a
+  // geolocation watch of its own.
+  var lastOwnFix = null;
   var navTargets = [];
   var navRerouteToken = 0;
 
@@ -1543,7 +1547,13 @@
 
   /* How much room the bottom overlay is taking. The map controls, the
      re-centre pill and the alert all clear it, in every mode, without any of
-     them having to know which overlay is up. */
+     them having to know which overlay is up.
+
+     Two numbers, not one, and the difference matters:
+       --rc-hud-h     the dashboard alone. The rail of other riders stacks
+                      directly on top of it, so that is what it measures from.
+       --rc-bottom-h  everything at the bottom, rail included. That is what
+                      the controls and the re-centre pill clear. */
   function updateBottomVar() {
     var el = state.mode === "plan" ? RC.el("dock") : RC.el("hud");
     var h = 0;
@@ -1554,8 +1564,20 @@
         window.matchMedia("(orientation: landscape) and (max-height: 620px)").matches;
       if (!(landscapeColumn && el.id === "hud")) h = Math.round(rect.height) + 6;
     }
-    document.documentElement.style.setProperty("--rc-bottom-h", h + "px");
+    var root = document.documentElement;
+    root.style.setProperty("--rc-hud-h", h + "px");
+
+    var rail = RC.el("mates-rail");
+    var railH = 0;
+    if (rail && !rail.hidden) railH = Math.round(rail.getBoundingClientRect().height) + 4;
+    root.style.setProperty("--rc-bottom-h", (h + railH) + "px");
   }
+
+  /* The rail changes height whenever a rider joins, leaves or drops off the
+     screen, and everything below it is positioned from that height. Exposed
+     so RC.groupui can say so the moment it redraws, rather than leaving the
+     map controls sitting under a row that has just appeared. */
+  RC.onMatesRailChange = updateBottomVar;
 
   function renderRecentre(following) {
     var btn = RC.el("recentre");
@@ -1604,6 +1626,26 @@
     RC.follow.setZoom(map.getZoom());
   }
 
+  /* Course-up is a way of riding, not a per-trip whim: a rider who wants the
+     map turned wants it turned on every ride, and having to reach for the
+     compass button after every start was the other half of "it just locks on
+     north". The mode itself still drops back to north between rides — the
+     planner is read north-up, and a map that spins while you are looking for
+     a fuel stop helps nobody — but the PREFERENCE is remembered and re-applied
+     the moment the next ride starts. */
+  function rememberCompassMode(mode) {
+    RC.store.set("compassMode", mode === "course" ? "course" : "north");
+  }
+
+  function restoreCompassMode() {
+    if (RC.store.get("compassMode", "north") !== "course") return;
+    // gesture:false: asking iOS for the magnetometer needs a tap, and there is
+    // not one here. GPS course needs no permission and is the better source at
+    // riding speed anyway, so course-up works regardless; the magnetometer
+    // joins in next time the button is tapped.
+    RC.compass.setMode("course", { gesture: false });
+  }
+
   function onCompassModeChange(mode) {
     renderCompassBtn(mode);
     // Course-up rotates the map element about its centre, so the rider has
@@ -1621,6 +1663,143 @@
     btn.setAttribute("data-mode", mode);
     btn.setAttribute("aria-label", label);
     btn.title = label;
+  }
+
+  /* ---------------------------------------------------------
+     The heat map
+
+     The switch, the four questions, the legend, and one paragraph of what the
+     record actually contains. The drawing itself is RC.heat's business; this
+     is only the panel and the map button, which have to agree with each other
+     and with whatever the layer is currently doing.
+     --------------------------------------------------------- */
+  function initHeatUi() {
+    var toggle = RC.el("heat-on");
+    if (toggle) toggle.addEventListener("change", function () {
+      if (this.checked) {
+        // show() refuses when there is not enough recorded road to say
+        // anything, and says so; the switch must follow the truth.
+        if (!RC.heat.show()) this.checked = false;
+      } else {
+        RC.heat.hide();
+      }
+      renderHeatPanel();
+    });
+
+    var btn = RC.el("ctl-heat");
+    if (btn) btn.addEventListener("click", function () {
+      RC.heat.toggle();
+      renderHeatPanel();
+    });
+
+    var segs = document.querySelectorAll("[data-metric]");
+    for (var i = 0; i < segs.length; i++) {
+      segs[i].addEventListener("click", function () {
+        RC.heat.setMetric(this.getAttribute("data-metric"));
+        renderHeatPanel();
+      });
+    }
+    renderHeatPanel();
+  }
+
+  function renderHeatPanel() {
+    var st = RC.heat.state();
+    var def = RC.heat.METRICS[st.metric] || RC.heat.METRICS.visits;
+
+    var toggle = RC.el("heat-on");
+    if (toggle) toggle.checked = st.on;
+    var btn = RC.el("ctl-heat");
+    if (btn) btn.setAttribute("aria-pressed", st.on ? "true" : "false");
+
+    var segs = document.querySelectorAll("[data-metric]");
+    for (var i = 0; i < segs.length; i++) {
+      var on = segs[i].getAttribute("data-metric") === st.metric;
+      segs[i].setAttribute("aria-pressed", on ? "true" : "false");
+    }
+    var note = RC.el("heat-metric-note");
+    if (note) note.textContent = def.note;
+
+    // The legend is built from the same ramp the layer draws with, so the two
+    // cannot drift apart when somebody retunes the colours.
+    var legend = RC.el("heat-legend");
+    if (legend) {
+      var ends = st.metric === "speed" ? ["quickest", "slowest"]
+        : st.metric === "dwell" ? ["straight through", "longest held up"]
+        : st.metric === "recent" ? ["longest ago", "most recent"]
+        : ["ridden once", "ridden most"];
+      var html = '<span class="rc-heat-end">' + RC.escapeHtml(ends[0]) + "</span>";
+      html += '<span class="rc-heat-ramp">';
+      for (var r = 0; r < RC.heat.RAMP.length; r++) {
+        html += '<i style="background:' + RC.heat.RAMP[r] + '"></i>';
+      }
+      html += "</span>";
+      html += '<span class="rc-heat-end">' + RC.escapeHtml(ends[1]) + "</span>";
+      legend.innerHTML = html;
+    }
+
+    var box = RC.el("heat-summary");
+    if (!box) return;
+    var d = RC.heat.describe();
+    if (!d || !d.segments) {
+      box.innerHTML = '<p class="rc-history-empty">Nothing recorded yet. Ride — planned or free — ' +
+        "and the roads write themselves down.</p>";
+      return;
+    }
+    var bits = [
+      { k: "Stretches", v: String(d.segments) },
+      { k: "Distance", v: d.distance },
+      { k: "Time on the road", v: d.time }
+    ];
+    if (d.pace) bits.push({ k: "Your real pace", v: d.pace });
+    if (d.busiest > 1) bits.push({ k: "Most ridden", v: d.busiest + " times" });
+    if (d.slowest) bits.push({ k: "Slowest stretch", v: d.slowest });
+
+    // Same two-column grid the rest of the You tab reads in, rather than a
+    // fourth way of laying out a list of facts.
+    var out = '<div class="rc-detail-grid">';
+    for (var b = 0; b < bits.length; b++) {
+      out += '<div class="rc-detail-k">' + RC.escapeHtml(bits[b].k) + "</div>" +
+             '<div class="rc-detail-v">' + RC.escapeHtml(bits[b].v) + "</div>";
+    }
+    out += "</div>";
+    box.innerHTML = out;
+  }
+
+  /* ---------------------------------------------------------
+     Running in a pocket
+     --------------------------------------------------------- */
+  function initBackgroundUi() {
+    var toggle = RC.el("background-on");
+    if (toggle) {
+      toggle.checked = RC.background.isEnabled();
+      toggle.addEventListener("change", function () {
+        RC.background.setEnabled(this.checked);
+        renderBackgroundPanel();
+      });
+    }
+    RC.background.on("enabled", renderBackgroundPanel);
+    RC.background.on("show", renderBackgroundPanel);
+    renderBackgroundPanel();
+  }
+
+  function renderBackgroundPanel() {
+    var note = RC.el("background-note");
+    var toggle = RC.el("background-on");
+    if (toggle) toggle.checked = RC.background.isEnabled();
+    if (!note) return;
+    if (!RC.background.isEnabled()) {
+      note.textContent = "Off: the screen sleeps when your phone says it should, and a ride in a " +
+        "pocket may stop recording until you look at it again.";
+      return;
+    }
+    var held = RC.background.held();
+    note.textContent = held
+      ? "Running. The screen is held awake while you are looking at it, and the ride keeps recording, " +
+        "keeps sending your position and keeps its odometer when it goes in a pocket. What no web app " +
+        "can survive is the browser itself being closed."
+      : "A ride, a free drive or a room will keep going with the screen off. It holds the display awake " +
+        "while it is in front of you and keeps the page running when it is not — but nothing can keep " +
+        "it alive once the browser itself is closed.";
   }
 
   /* ---------------------------------------------------------
@@ -1746,7 +1925,8 @@
     if (scroll) scroll.scrollTop = 0;
     if (name === "group") RC.groupui.refresh();
     if (name === "marks") renderMarks();
-    if (name === "you") { renderHistoryPanel(); renderFreeSummary(); }
+    if (name === "you") { renderHistoryPanel(); renderFreeSummary(); renderHeatPanel(); renderBackgroundPanel(); }
+    if (name === "pubs") RC.pubsui.render();
   }
 
   /* A drag on the sheet's head closes it or springs it back — two outcomes,
@@ -1884,6 +2064,7 @@
       setStatus("", "");
       setMode("nav");
       RC.follow.enable({ zoom: Math.max(map.getZoom(), NAV_ZOOM) });
+      restoreCompassMode();
     }, function (err) {
       setStatus(err && err.message ? err.message : "Could not start navigation.", "error");
       setMode("plan");
@@ -1901,6 +2082,8 @@
     if (riderMarker) { map.removeLayer(riderMarker); riderMarker = null; riderArrow = null; }
     setMode("plan");
     renderHistoryPanel();
+    RC.heat.invalidate();
+    renderHeatPanel();
     if (learned) {
       var pct = Math.round((learned.actualS / learned.plannedS - 1) * 100);
       setStatus(pct === 0
@@ -2017,6 +2200,7 @@
         freeTrackLayer.setLatLngs([]);
       }
       RC.follow.enable({ zoom: Math.max(map.getZoom(), NAV_ZOOM) });
+      restoreCompassMode();
     }, function (err) {
       setStatus(err && err.message ? err.message : "Could not start recording.", "error");
       setMode("plan");
@@ -2033,6 +2217,8 @@
     setMode("plan");
     renderHistoryPanel();
     renderFreeSummary();
+    RC.heat.invalidate();
+    renderHeatPanel();
     if (summary && summary.distanceM > 200) {
       setStatus("Ride recorded — " + RC.fmtDist(summary.distanceM, state.units) + " in " +
         RC.fmtDur(summary.elapsedS) + ". The roads are yours now.", "");
@@ -2342,6 +2528,7 @@
      apart is what stopped the map fighting the rider's thumb. */
   function updateRiderMarker(lat, lon, courseDeg) {
     if (!map) return;
+    lastOwnFix = { lat: lat, lon: lon, courseDeg: courseDeg };
     var latlng = [lat, lon];
     if (!riderMarker) {
       riderMarker = L.marker(latlng, {
@@ -2366,7 +2553,7 @@
   }
 
   RC.nav.onUpdate = function (ns) {
-    RC.compass.setCourse(ns.headingDeg, ns.speedKmh, ns.courseDeg);
+    RC.compass.setCourse(ns.headingDeg, ns.speedKmh, ns.routeBearingDeg);
     renderNavHud(ns);
     updateRiderMarker(ns.lat, ns.lon, ns.courseDeg);
     dropPassedTargets(ns.distanceAlong);
@@ -2431,7 +2618,9 @@
     });
 
     RC.el("ctl-locate").addEventListener("click", locateOnMap);
-    RC.el("ctl-compass").addEventListener("click", function () { RC.compass.cycle(); });
+    RC.el("ctl-compass").addEventListener("click", function () {
+      RC.compass.cycle().then(rememberCompassMode, function () {});
+    });
     RC.el("ctl-overview").addEventListener("click", showOverview);
     RC.el("ctl-mark").addEventListener("click", markMapCentre);
     RC.el("ctl-zoom-in").addEventListener("click", function () { zoomBy(1); });
@@ -2567,8 +2756,41 @@
       flashStatus: flashStatus,
       openPanel: openPanel,
       closePanel: closePanel,
-      isPanelOpen: isPanelOpen
+      isPanelOpen: isPanelOpen,
+      // The rail of other riders only exists while this phone is actually
+      // riding; on the planning screen the map has the whole viewport and
+      // there is nothing to stack above.
+      mode: function () { return state.mode; }
     });
+
+    /* PUBs is the public road, drawn over the same map and kept as far away
+       from the ride's own machinery as the two ideas are from each other. */
+    RC.pubsui.init({
+      map: map,
+      units: function () { return state.units; },
+      setStatus: setStatus,
+      flashStatus: flashStatus,
+      myFix: function () {
+        // Whichever of the three watches is running; PUBs keeps its own too,
+        // but the panel wants a distance the moment the pane is opened.
+        return RC.group.myFix() || lastOwnFix;
+      },
+      openPubs: function () { openPanel("pubs"); }
+    });
+
+    /* The heat map is a second reading of the same record the planner uses,
+       so it takes the map and nothing else. */
+    RC.heat.init({
+      map: map,
+      bridge: {
+        units: function () { return state.units; },
+        setStatus: setStatus,
+        flashStatus: flashStatus
+      },
+      onChange: renderHeatPanel
+    });
+    initHeatUi();
+    initBackgroundUi();
 
     setVehicle(state.vehicle);
     setAvoidMotorways(state.avoidMotorways, true);
