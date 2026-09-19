@@ -24,7 +24,7 @@
 
   <!-- The app's version, declared once. sw.js carries the same number as its
        cache name, and tools/validate.js refuses to let the two drift apart. -->
-  <script>window.RC_VERSION = "11";</script>
+  <script>window.RC_VERSION = "12";</script>
 
   <!-- Set theme before paint to avoid a flash -->
   <script>
@@ -149,6 +149,9 @@
       <button type="button" class="rc-mapbtn rc-heatbtn" id="ctl-heat" aria-label="Show the heat map of your roads" title="Show the heat map of your roads" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18.5c2.4 0 2.4-3.4 4.8-3.4s2.4 3.4 4.8 3.4 2.4-3.4 4.8-3.4c1.2 0 1.8.8 2.4 1.7"/><path d="M4 12.6c2.4 0 2.4-3.4 4.8-3.4s2.4 3.4 4.8 3.4 2.4-3.4 4.8-3.4c1.2 0 1.8.9 2.4 1.7"/><path d="M4 6.7c2.4 0 2.4-3.4 4.8-3.4"/></svg>
       </button>
+      <button type="button" class="rc-mapbtn" id="ctl-layers" aria-label="Choose the map" title="Choose the map">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2 21 8l-9 4.8L3 8l9-4.8Z"/><path d="m3 12.6 9 4.8 9-4.8"/><path d="m3 17.2 9 4.8 9-4.8"/></svg>
+      </button>
       <button type="button" class="rc-mapbtn" id="ctl-mark" aria-label="Save this spot as a mark" title="Save this spot as a mark">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-4-6.5 4v-16a1 1 0 0 1 1-1Z"/></svg>
       </button>
@@ -260,6 +263,7 @@
           <button type="button" class="rc-tab" id="tab-group" role="tab" aria-selected="false" data-pane="group">Ride</button>
           <button type="button" class="rc-tab" id="tab-pubs" role="tab" aria-selected="false" data-pane="pubs">Pubs</button>
           <button type="button" class="rc-tab" id="tab-marks" role="tab" aria-selected="false" data-pane="marks">Marks</button>
+          <button type="button" class="rc-tab" id="tab-layers" role="tab" aria-selected="false" data-pane="layers">Layers</button>
           <button type="button" class="rc-tab" id="tab-you" role="tab" aria-selected="false" data-pane="you">You</button>
         </nav>
         <button type="button" class="rc-panel-close" id="panel-close" aria-label="Close the planner">
@@ -786,17 +790,36 @@
           <div id="marks-list" class="rc-saved-list"></div>
         </section>
 
-        <!-- ===== You ===== -->
-        <section class="rc-pane" id="pane-you" role="tabpanel" aria-labelledby="tab-you" hidden>
-          <section id="history-panel" class="rc-block">
+        <!-- ===== Layers =====
+             What the map is made of: the ground it is drawn from, the map a
+             ride gets, and the things RouteCast draws over the top. The two
+             lists are built from the style catalogue at run time — a map in
+             the catalogue with no row here is a map nobody can pick. -->
+        <section class="rc-pane" id="pane-layers" role="tabpanel" aria-labelledby="tab-layers" hidden>
+          <section class="rc-block">
             <h2 class="rc-section-h">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.2 4.6v3.8H7"/><path d="M12 7.6V12l3 1.9"/></svg>
-              Your roads
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2 21 8l-9 4.8L3 8l9-4.8Z"/><path d="m3 12.6 9 4.8 9-4.8"/><path d="m3 17.2 9 4.8 9-4.8"/></svg>
+              Base map<button type="button" class="rc-infobtn" data-info="layers" aria-label="What the base map changes" title="What the base map changes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button>
             </h2>
-            <div id="history-summary" class="rc-history-summary"></div>
-            <div class="rc-history-actions">
-              <button type="button" class="rc-textbtn rc-textbtn-quiet" id="history-clear">Forget my recorded roads</button>
-            </div>
+            <p class="rc-field-hint">What the ground is drawn from while you plan.</p>
+            <div class="rc-baselist" id="base-list" role="radiogroup" aria-label="Base map"></div>
+          </section>
+
+          <section class="rc-block">
+            <h2 class="rc-section-h">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16.4h16"/><path d="M6.2 16.4 8 9.4a2 2 0 0 1 1.9-1.5h4.2A2 2 0 0 1 16 9.4l1.8 7"/><circle cx="7.6" cy="18.6" r="1.7"/><circle cx="16.4" cy="18.6" r="1.7"/></svg>
+              While driving<button type="button" class="rc-infobtn" data-info="drive-camera" aria-label="What the drive camera does" title="What the drive camera does"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button>
+            </h2>
+            <p class="rc-field-hint">The map a ride switches to on its own.</p>
+            <div class="rc-baselist" id="drive-base-list" role="radiogroup" aria-label="Map while driving"></div>
+            <label class="rc-switch">
+              <span class="rc-switch-text">
+                <b>Ride behind the camera</b>
+                <i>Tilted, turning with you, buildings up.</i>
+              </span>
+              <input type="checkbox" id="drive3d-on" checked />
+            </label>
+            <p class="rc-field-hint" id="drive3d-note"></p>
           </section>
 
           <!-- ===== the heat map =====
@@ -829,6 +852,21 @@
 
             <div class="rc-heat-legend" id="heat-legend" aria-hidden="true"></div>
             <div id="heat-summary" class="rc-history-summary"></div>
+          </section>
+
+        </section>
+
+        <!-- ===== You ===== -->
+        <section class="rc-pane" id="pane-you" role="tabpanel" aria-labelledby="tab-you" hidden>
+          <section id="history-panel" class="rc-block">
+            <h2 class="rc-section-h">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.2 4.6v3.8H7"/><path d="M12 7.6V12l3 1.9"/></svg>
+              Your roads
+            </h2>
+            <div id="history-summary" class="rc-history-summary"></div>
+            <div class="rc-history-actions">
+              <button type="button" class="rc-textbtn rc-textbtn-quiet" id="history-clear">Forget my recorded roads</button>
+            </div>
           </section>
 
           <!-- ===== running in a pocket ===== -->
@@ -873,7 +911,8 @@
             Map data &copy; <a href="https://www.openstreetmap.org/copyright" rel="noopener" target="_blank">OpenStreetMap</a> contributors &middot;
             Routing by <a href="https://project-osrm.org/" rel="noopener" target="_blank">OSRM</a> &middot;
             Search by <a href="https://nominatim.org/" rel="noopener" target="_blank">Nominatim</a> &middot;
-            Forecasts and terrain by <a href="https://open-meteo.com/" rel="noopener" target="_blank">Open-Meteo</a>
+            Forecasts and terrain by <a href="https://open-meteo.com/" rel="noopener" target="_blank">Open-Meteo</a> &middot;
+            Vector maps by <a href="https://openfreemap.org/" rel="noopener" target="_blank">OpenFreeMap</a>, drawn with <a href="https://maplibre.org/" rel="noopener" target="_blank">MapLibre</a>
           </p>
         </section>
       </div>
@@ -955,6 +994,10 @@
   <script src="static/js/free.js"></script>
   <script src="static/js/follow.js"></script>
   <script src="static/js/compass.js"></script>
+  <script src="static/js/mapstyles.js"></script>
+  <script src="static/js/gl.js"></script>
+  <script src="static/js/layers.js"></script>
+  <script src="static/js/layersui.js"></script>
   <script src="static/js/app.js"></script>
   <script src="static/js/pwa.js"></script>
   <script>

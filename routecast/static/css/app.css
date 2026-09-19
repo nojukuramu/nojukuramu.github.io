@@ -289,6 +289,101 @@ code { font-family: var(--mono); font-size: .92em; }
 
 .rc-map .leaflet-tile-pane { filter: var(--map-filter); }
 
+/* ============================================================
+   The vector engine
+
+   MapLibre's canvas is not a Leaflet layer: it sits underneath every Leaflet
+   pane, filling the same box, and gl.js keeps the two looking at the same
+   place. It is deliberately outside the tile pane, so the dark-mode filter
+   that inverts a raster map never touches a vector style that was designed
+   dark in the first place.
+   ============================================================ */
+/* Two class names deep on purpose: MapLibre puts .maplibregl-map on its own
+   container, and that rule sets position:relative — which, at equal
+   specificity and later in the cascade, collapses this box to nothing. */
+.rc-map .rc-gl {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+.rc-gl canvas { outline: none; }
+
+/* While the camera is tilted, Leaflet's flat overlays cannot be in the right
+   place — they are drawn for a map seen from directly above. So the whole
+   Leaflet pane stack goes, and the vector engine draws the route and the
+   rider itself. Every gesture still lands on the container, which is why the
+   map still zooms. */
+:root[data-gl3d="on"] .rc-map .leaflet-map-pane { display: none; }
+
+/* The rider in the chase view is not a marker on a map: it is the fixed
+   point the whole picture is drawn around, so it is positioned in screen
+   space and never rotates. gl.js sets the drop below centre. */
+.rc-gl-rider {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 450;
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  color: var(--matcha);
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .45));
+}
+.rc-gl-rider svg { display: block; width: 100%; height: 100%; }
+
+/* ============================================================
+   The map chooser
+
+   One row per map, each carrying a thumbnail painted in that map's own
+   palette. The names are decoration; the squares are the control.
+   ============================================================ */
+.rc-baselist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rc-base {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-height: 52px;
+}
+.rc-base:hover { border-color: var(--line-strong); }
+.rc-base[aria-checked="true"] {
+  border-color: var(--matcha);
+  box-shadow: inset 0 0 0 1px var(--matcha);
+}
+.rc-base-swatch {
+  flex: none;
+  width: 44px;
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.rc-base-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rc-base-text b { font-size: 13.5px; font-weight: 600; color: var(--ink-soft); }
+.rc-base-text i {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.rc-base-tick { flex: none; width: 18px; height: 18px; color: var(--matcha); opacity: 0; }
+.rc-base-tick svg { width: 100%; height: 100%; }
+.rc-base[aria-checked="true"] .rc-base-tick { opacity: 1; }
+
 .leaflet-container { background: var(--bg-tint); font-family: var(--sans); }
 .leaflet-control-attribution { display: none; }
 .leaflet-control-zoom { display: none; }

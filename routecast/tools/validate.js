@@ -146,7 +146,8 @@ section("Static: SVG well-formedness");
 
   // Whatever is assembled at run time, its tags still have to balance in the
   // source: one closing </svg> for every <svg, in every file that writes any.
-  ["index.html", "static/js/app.js", "static/js/icons.js"].forEach(function (rel) {
+  ["index.html", "static/js/app.js", "static/js/icons.js", "static/js/layersui.js",
+   "static/js/gl.js"].forEach(function (rel) {
     var text = read(rel);
     var opens = (text.match(/<svg\b/g) || []).length;
     var closes = (text.match(/<\/svg>/g) || []).length;
@@ -329,6 +330,101 @@ section("Static: the info sheet");
   }
   check("no hint in the panel has grown back into a paragraph",
         long.length === 0, long.join(" | "));
+})();
+
+section("Static: the basemaps");
+(function () {
+  /* mapstyles.js is pure data and one generator, so it can simply be run:
+     checking the catalogue by reading it with a regex would be checking the
+     file rather than the styles it actually produces. */
+  var ctx = { console: console, Math: Math, JSON: JSON };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(read("static/js/mapstyles.js"), ctx, { filename: "mapstyles.js" });
+  var RC = ctx.RC;
+  var list = RC.mapstyles.list();
+
+  var ids = {}, dupe = [];
+  list.forEach(function (b) { if (ids[b.id]) dupe.push(b.id); ids[b.id] = true; });
+  check("the catalogue offers a spread of maps", list.length >= 6, list.length + " maps");
+  check("no two maps share an id", dupe.length === 0, dupe.join(", "));
+  check("the map everybody recognises is still there and still raster",
+        !!ids.osm && RC.mapstyles.get("osm").kind === "raster");
+
+  var vector = list.filter(function (b) { return b.kind === "gl"; });
+  check("there is more than one vector map to choose from", vector.length >= 4,
+        vector.length + " vector maps");
+
+  var problems = [];
+  vector.forEach(function (b) {
+    var spec = RC.mapstyles.spec(b.id);
+    if (!spec || spec.version !== 8) { problems.push(b.id + ": not a style"); return; }
+    if (!spec.glyphs) problems.push(b.id + ": no glyphs");
+    if (!spec.sources || !spec.sources.openmaptiles ||
+        spec.sources.openmaptiles.type !== "vector") problems.push(b.id + ": no vector source");
+    if (!spec.layers || spec.layers.length < 10) problems.push(b.id + ": too few layers");
+    var seen = {};
+    (spec.layers || []).forEach(function (l) {
+      if (!l.id || !l.type) problems.push(b.id + ": a layer with no id or type");
+      if (seen[l.id]) problems.push(b.id + ": duplicate layer " + l.id);
+      seen[l.id] = true;
+      if (l.type !== "background" && (!l.source || !l["source-layer"])) {
+        problems.push(b.id + "/" + l.id + ": no source");
+      }
+    });
+    // The whole point of the vector map, and it has to be in every one of them.
+    var ext = (spec.layers || []).filter(function (l) { return l.type === "fill-extrusion"; })[0];
+    if (!ext) problems.push(b.id + ": no 3D buildings");
+    else if (!ext.layout || ext.layout.visibility !== "none") {
+      // A flat map must not pay to extrude geometry nobody can see the side of.
+      problems.push(b.id + ": buildings are not switched off by default");
+    }
+  });
+  check("every vector map builds a style MapLibre could load", problems.length === 0,
+        problems.slice(0, 4).join("; "));
+
+  /* The house rule, enforced rather than trusted: a key in a public script is
+     a donation, not a secret. Nothing in a style may carry one. */
+  var keyed = [];
+  list.forEach(function (b) {
+    var text = JSON.stringify(b.kind === "gl" ? RC.mapstyles.spec(b.id) : b);
+    if (/[?&](key|access_token|apikey|api_key|token)=/i.test(text)) keyed.push(b.id);
+  });
+  check("no map asks for an API key", keyed.length === 0, keyed.join(", "));
+
+  var missing = [];
+  var NEEDED = ["land", "water", "roadCase", "roadMinor", "roadSecondary", "roadPrimary", "motorway"];
+  vector.forEach(function (b) {
+    NEEDED.forEach(function (k) { if (!b.palette[k]) missing.push(b.id + "." + k); });
+  });
+  check("every palette defines the colours the generator reads",
+        missing.length === 0, missing.join(", "));
+
+  var noPreview = list.filter(function (b) { return !RC.mapstyles.preview(b.id); });
+  check("every map can draw its own thumbnail", noPreview.length === 0,
+        noPreview.map(function (b) { return b.id; }).join(", "));
+
+  /* "The map you get when a ride starts" is the feature; a raster default
+     would make the camera silently do nothing. */
+  var layers = read("static/js/layers.js");
+  var dflt = /DEFAULT_DRIVE_BASE\s*=\s*"([^"]+)"/.exec(layers);
+  check("the drive map defaults to a vector one",
+        !!dflt && !!RC.mapstyles.get(dflt[1]) && RC.mapstyles.get(dflt[1]).kind === "gl",
+        dflt ? dflt[1] : "no default");
+
+  /* The camera rotates the map by taking the heading off the compass. If
+     either half of that handshake is renamed, course-up in 3D quietly stops
+     turning — which looks like a bug in the GPS, not in a rename. */
+  check("the compass can hand its heading to a camera",
+        /setRenderer:\s*setRenderer/.test(read("static/js/compass.js")));
+  check("the camera accepts it", /setBearing:\s*function/.test(read("static/js/gl.js")));
+  check("and the two are actually wired together",
+        /RC\.compass\.setRenderer\(RC\.gl\.setBearing\)/.test(layers));
+
+  /* The engine is a megabyte. It is fetched when a vector map is picked, and
+     never on load — which is only true while nothing puts it in the page. */
+  check("the 3D engine is not loaded up front",
+        read("index.html").indexOf("maplibre-gl.js") < 0);
 })();
 
 section("Static: theme tokens");
