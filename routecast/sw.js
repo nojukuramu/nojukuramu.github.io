@@ -6,7 +6,7 @@
    RC_VERSION; tools/validate.js refuses to let the two drift apart. Bumping it
    is what publishes an update: a changed sw.js is what a browser notices, and
    a new cache name is what makes the old shell go away. */
-var CACHE = "routecast-v11";
+var CACHE = "routecast-v12";
 var SHELL = [
   "./",
   "./index.html",
@@ -49,6 +49,10 @@ var SHELL = [
   "./static/js/free.js",
   "./static/js/follow.js",
   "./static/js/compass.js",
+  "./static/js/mapstyles.js",
+  "./static/js/gl.js",
+  "./static/js/layers.js",
+  "./static/js/layersui.js",
   "./static/js/app.js",
   "./static/js/pwa.js",
   "./vendor/leaflet/leaflet.js",
@@ -58,6 +62,12 @@ var SHELL = [
   "./vendor/leaflet/images/marker-shadow.png",
   "./vendor/leaflet/images/layers.png",
   "./vendor/leaflet/images/layers-2x.png"
+  /* MapLibre is deliberately NOT here. It is a megabyte, it is only fetched
+     when somebody picks a vector map, and making every install pay for it up
+     front — on a phone, on mobile data, before the app has drawn anything —
+     would be a worse trade than fetching it late. The runtime handler below
+     caches it like any other same-origin file the first time it is used, so
+     the second ride has it offline. */
 ];
 
 self.addEventListener("install", function (e) {

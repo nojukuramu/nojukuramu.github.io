@@ -55,6 +55,16 @@ Live at <https://nojukuramu.github.io/routecast/>.
   **how lately you rode it**. The speed one is the one that surprises people. Colour is
   assigned by rank rather than by value, so the map always says something instead of
   painting one commute red and the rest of your life blue.
+- **Layers, and a map that rides with you.** The *Layers* tab is where the map itself
+  lives: seven base maps and the draws that sit over them. **Standard** is the
+  OpenStreetMap map the app has always had. The other six are **vector** maps drawn by
+  MapLibre GL — which is what buys the thing a picture of a map cannot do: a camera that
+  tilts. Start a ride on one and the view drops in behind you, the buildings stand up, and
+  the map turns as you do, which is a different instrument from a flat map with a little
+  arrow on it. Four of the six are deliberately game-minimap flat — no names, five or six
+  colours, the road network carrying the whole picture — because that is the most readable
+  a map ever gets at a glance through a visor. The map you plan on and the map you ride on
+  are two separate choices, because they are two different jobs.
 - **A panel that says one line.** Every switch and every field used to carry a paragraph
   explaining itself. The paragraphs were good and there were far too many of them — the PUBs
   pane was four screens of prose before it was anything else. The explanations now live behind
@@ -225,6 +235,8 @@ with no backend to hide a secret in.
 | Purpose | Service | Notes |
 |---------|---------|-------|
 | Map tiles | [OpenStreetMap](https://www.openstreetmap.org/copyright) | standard tile server |
+| Vector tiles | [OpenFreeMap](https://openfreemap.org/) | OpenMapTiles schema, whole planet, no key and no account |
+| Vector rendering | [MapLibre GL JS](https://maplibre.org/) | vendored, and only downloaded when a vector map is picked |
 | Place search | [Nominatim](https://nominatim.org/) | throttled to 1 request/second, as their usage policy requires |
 | Routing | [OSRM demo server](https://project-osrm.org/) | `driving` profile, with alternatives |
 | Forecast | [Open-Meteo](https://open-meteo.com/) | hourly, up to 16 days, batched by location |
@@ -631,6 +643,23 @@ publishes an update.
   chain the planner uses, so it shows the roads you use and not the lane you were in —
   and a stretch with no usable speed is left out of the speed view rather than parked at
   one end of the ramp pretending to be the slowest thing on the map.
+- **The 3D view hides the flat overlays, and says so.** A tilted camera and Leaflet's
+  overlays cannot both be right: the overlays are drawn for a map seen from directly above.
+  So while the camera is up, the vector engine draws the route (in the colours the forecast
+  gave it) and the rider, and the weather chips, other riders, your marks and the heat map
+  are not on the map. They come back the instant the ride ends or the camera is turned off.
+  The turn banner, the dashboard, the voice room and the ways-back card are unaffected.
+- **Vector maps need a connection the first time, twice over.** The engine is about a
+  megabyte and is fetched when a vector map is first picked — not on load, and warmed as
+  soon as a route is on the screen, so it is rarely the thing you are waiting on at the
+  kerb. The tiles themselves are fetched as you ride, like any other map: the service
+  worker caches the shell, never the map. Out of range of both, the app falls back to
+  whatever is cached and says what happened rather than showing a blank rectangle.
+- **The vector maps are RouteCast's own, over somebody else's data.** Every style here is
+  generated from one palette at run time rather than fetched, which is why a new look costs
+  twenty colours. It also means they will never match a commercial cartographer's: there
+  are no shields, no one-way arrows and no building numbers, because those cost layers that
+  a map read at a glance does not want anyway.
 - **Course-up is a riding mode, not a browsing mode.** Leaflet has no rotation of its own, so the
   map element is rotated with a CSS transform — which means Leaflet's pointer maths no longer
   matches what you see. Rather than let dragging drift off-axis, dragging is disabled while
@@ -695,7 +724,7 @@ publishes an update.
 ## How it is built
 
 Plain HTML, CSS and JavaScript in the style of the rest of this site — no build step, no
-framework, no bundler. Leaflet is vendored locally in `vendor/`.
+framework, no bundler. Leaflet and MapLibre GL are vendored locally in `vendor/`.
 
 ```
 routecast/
@@ -739,7 +768,16 @@ routecast/
                                           reroute and forecast-refresh gating, ride recording
     free.js                 RC.free     — free driving: the dashboard and the recorder, no route
     follow.js               RC.follow   — the camera: who owns the map, you or the app
-    compass.js              RC.compass  — heading sources, north-up / course-up map rotation
+    compass.js              RC.compass  — heading sources, north-up / course-up map rotation,
+                                          and handing the heading to a real camera when there
+                                          is one
+    mapstyles.js            RC.mapstyles— the basemap catalogue: one style generator, a palette
+                                          per map, no style document fetched from anybody
+    gl.js                   RC.gl       — MapLibre under Leaflet: the basemap swap, and the
+                                          tilted camera that rides behind you
+    layers.js               RC.layers   — which map is up, which one a ride switches to, and
+                                          what the vector engine is given to draw
+    layersui.js             RC.layersui — the chooser: a row per map, each in its own palette
     app.js                  the glue: map, form, the render pipeline, the draggable sheet
     pwa.js                  install prompt and the iOS add-to-home-screen fallback
   tools/validate.js         static + pure-module suite: `node tools/validate.js`

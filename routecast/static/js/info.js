@@ -151,6 +151,39 @@ RC.info = (function () {
         "that does not.</p>"
     },
 
+    layers: {
+      title: "The base map",
+      body:
+        "<p>What the ground under everything else is drawn from. The route, the weather " +
+        "chips, your marks and everybody else on the ride sit on top of it and do not " +
+        "change with it.</p>" +
+        "<p><b>Standard</b> is the plain OpenStreetMap map, drawn as pictures. Everything " +
+        "below it is drawn from <b>vector</b> data instead, which is what allows a tilted " +
+        "camera, buildings with height, and a palette that is ours rather than a tile " +
+        "server\u0027s.</p>" +
+        "<p>The four flat-coloured ones are minimaps: no names, few colours, and the road " +
+        "network carrying the whole picture. They are the easiest maps here to read at a " +
+        "glance, which is the trick every game minimap is playing.</p>" +
+        "<p>Vector maps come from OpenFreeMap, which serves the planet with no key and no " +
+        "account. The first one you pick downloads the engine, about a megabyte, once.</p>"
+    },
+
+    "drive-camera": {
+      title: "Riding behind the camera",
+      body:
+        "<p>Start a ride on a 3D map and the view tilts in behind you: the road ahead runs " +
+        "up the screen, the buildings stand up, and the map turns as you do.</p>" +
+        "<p>The turning is the same compass the flat map uses \u2014 north-up and course-up " +
+        "still mean what they meant, and the compass button still switches between them.</p>" +
+        "<p><b>What it costs.</b> A tilted camera and flat overlays cannot both be right, so " +
+        "while the camera is up RouteCast draws the route and your position itself, and the " +
+        "weather chips, other riders, your marks and the heat map are not on the map. They " +
+        "come back the moment the ride ends or you turn the camera off \u2014 the turn " +
+        "banner, the dashboard and the voice room are unaffected either way.</p>" +
+        "<p>It needs a browser that can draw 3D. If yours cannot, the map stays flat and " +
+        "says so rather than going blank.</p>"
+    },
+
     heat: {
       title: "The heat map",
       body:

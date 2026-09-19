@@ -46,7 +46,7 @@
     freeSummary: null
   };
 
-  var map, tileLayer, routeLayers = [], dotLayer, chipLayer, endpointLayer, markLayer, activeRequest = null;
+  var map, routeLayers = [], dotLayer, chipLayer, endpointLayer, markLayer, activeRequest = null;
   var freeTrackLayer = null;
 
   // Live navigation
@@ -73,10 +73,17 @@
   function initMap() {
     map = L.map("map", { zoomControl: false, attributionControl: false })
       .setView([MAP_START.lat, MAP_START.lon], MAP_START.zoom);
-    tileLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      crossOrigin: true
-    }).addTo(map);
+
+    /* The ground the app is drawn on belongs to RC.layers now — raster tiles
+       or a vector style, whichever is chosen, and a different one again once
+       a ride starts. Everything below still talks to Leaflet and never has
+       to know which is up. */
+    RC.layers.init({
+      map: map,
+      bridge: { setStatus: setStatus, flashStatus: flashStatus },
+      onChange: function () { RC.layersui.render(); }
+    });
+
     dotLayer = L.layerGroup().addTo(map);
     chipLayer = L.layerGroup().addTo(map);
     markLayer = L.layerGroup().addTo(map);
@@ -575,6 +582,9 @@
   function render() {
     var empty = RC.el("empty-state");
     if (empty) empty.hidden = true;
+    // A route on the screen is a ride about to start; the 3D engine can be
+    // in the cache by then instead of downloading at the kerb.
+    RC.layers.warm();
     drawRoute();
     drawWeatherMarkers();
     renderSummary();
@@ -631,7 +641,13 @@
     for (var i = 0; i < routeLayers.length; i++) map.removeLayer(routeLayers[i]);
     routeLayers = [];
     var route = state.routes[state.routeIndex];
-    if (!route) return;
+    if (!route) { RC.layers.setRoute(null); return; }
+
+    /* The same segments, in the same colours, collected as plain coordinates
+       for the 3D view. Handed over rather than recomputed there: two pieces
+       of code colouring one route by the weather is two pieces of code that
+       can disagree about it. */
+    var glSegs = [];
 
     for (var a = 0; a < state.routes.length; a++) {
       if (a === state.routeIndex) continue;
@@ -648,6 +664,7 @@
     var cps = state.checkpoints;
     if (cps.length < 2) {
       routeLayers.push(L.polyline(route.coords, { color: themeColors().accent, weight: 5 }).addTo(map));
+      glSegs.push({ coords: route.coords, color: themeColors().accent });
     } else {
       for (var c = 0; c < cps.length - 1; c++) {
         var seg = route.coords.slice(cps[c].i, cps[c + 1].i + 1);
@@ -656,8 +673,10 @@
         var rank = { clear: 0, watch: 1, caution: 2, danger: 3 };
         var worse = rank[lb] > rank[la] ? lb : la;
         routeLayers.push(L.polyline(seg, { color: colorFor(worse), weight: 5, opacity: 0.95 }).addTo(map));
+        glSegs.push({ coords: seg, color: colorFor(worse) });
       }
     }
+    RC.layers.setRoute(glSegs);
     if (!opts || opts.fit !== false) {
       RC.follow.silently(function () {
         map.fitBounds(L.latLngBounds(route.coords).pad(0.12));
@@ -1487,6 +1506,7 @@
     }
     for (var r = 0; r < routeLayers.length; r++) map.removeLayer(routeLayers[r]);
     routeLayers = [];
+    RC.layers.setRoute(null);
     dotLayer.clearLayers();
     chipLayer.clearLayers();
     endpointLayer.clearLayers();
@@ -1957,10 +1977,11 @@
     if (name === "group") RC.groupui.refresh();
     if (name === "marks") renderMarks();
     if (name === "you") {
-      renderHistoryPanel(); renderFreeSummary(); renderHeatPanel();
+      renderHistoryPanel(); renderFreeSummary();
       renderBackgroundPanel(); renderVersionPanel();
     }
     if (name === "pubs") RC.pubsui.render();
+    if (name === "layers") { RC.layersui.render(); renderHeatPanel(); }
   }
 
   /* A drag on the sheet's head closes it or springs it back — two outcomes,
@@ -2041,6 +2062,10 @@
     var railTitle = RC.el("rail-title");
     if (railTitle) railTitle.textContent = mode === "plan" ? "Plan" : (mode === "free" ? "Free drive" : "Trip");
     if (mode !== "plan") closePanel();
+    /* A ride gets its own map and its own camera; planning gets the one the
+       rider picked. This is the whole of the switch — layers.js decides
+       whether that means changing anything. */
+    if (mode === "plan") RC.layers.leaveDrive(); else RC.layers.enterDrive();
     lastHudRenderTs = 0;
     hudPodKeys = "";
     drawMarks();
@@ -2584,6 +2609,8 @@
     }
 
     RC.follow.setTarget(lat, lon, { rotated: RC.compass.isRotated(), minZoom: NAV_ZOOM });
+    // The camera behind the machine, when one is up. A no-op otherwise.
+    RC.layers.rider(lat, lon, courseDeg);
   }
 
   RC.nav.onUpdate = function (ns) {
@@ -2657,6 +2684,9 @@
     });
     RC.el("ctl-overview").addEventListener("click", showOverview);
     RC.el("ctl-mark").addEventListener("click", markMapCentre);
+    // The map chooser is two taps deep in a panel otherwise, and choosing a
+    // map is something you do while looking at the map.
+    RC.el("ctl-layers").addEventListener("click", function () { openPanel("layers"); });
     RC.el("ctl-zoom-in").addEventListener("click", function () { zoomBy(1); });
     RC.el("ctl-zoom-out").addEventListener("click", function () { zoomBy(-1); });
     RC.el("recentre").addEventListener("click", function () { RC.follow.recenter(); });
@@ -2824,6 +2854,7 @@
       onChange: renderHeatPanel
     });
     initHeatUi();
+    RC.layersui.init();
     initBackgroundUi();
     initVersionUi();
     // The sheet every (i) in the panel opens. Delegated, so the lists that are

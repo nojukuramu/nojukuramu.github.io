@@ -69,6 +69,13 @@ RC.compass = (function () {
   var lastMovingTs = 0;        // when the vehicle was last convincingly moving
   var savedInteractions = null;
   var onModeChange = null;
+  /* Something else may be able to rotate the map properly — the GL drive
+     camera can, because it rotates the CAMERA rather than the element. When
+     one claims the job here, the CSS transform and the diagonal-sized
+     element that go with the Leaflet trick are not applied at all, and the
+     smoothed heading is handed over instead. The mode, the button and the
+     choice of heading source are unchanged either way. */
+  var renderer = null;
 
   function norm(deg) { return ((deg % 360) + 360) % 360; }
 
@@ -131,7 +138,12 @@ RC.compass = (function () {
       var settled = smoothBearing === targetBearing;
       if (settled || Math.abs(delta(appliedBearing, smoothBearing)) >= MIN_STEP_DEG) {
         appliedBearing = smoothBearing;
-        document.documentElement.style.setProperty("--rc-bearing", appliedBearing.toFixed(1) + "deg");
+        if (renderer) {
+          // The map is rotated by -heading; a camera wants the heading.
+          try { renderer(norm(-appliedBearing)); } catch (e) {}
+        } else {
+          document.documentElement.style.setProperty("--rc-bearing", appliedBearing.toFixed(1) + "deg");
+        }
       }
       if (!settled) schedule();
     });
@@ -270,11 +282,14 @@ RC.compass = (function () {
 
     function commit(sensorOk) {
       mode = next;
-      var rotated = mode === "course";
+      var rotated = mode === "course" && !renderer;
       document.documentElement.setAttribute("data-rotate", rotated ? "on" : "off");
       applyGeometry(rotated);
       setInteractions(rotated);
-      if (rotated && sensorOk) attachSensor(); else detachSensor();
+      // Course-up wants the magnetometer whether the map is being turned by
+      // a CSS transform or by a camera, so this follows the MODE, not the
+      // transform.
+      if (mode === "course" && sensorOk) attachSensor(); else detachSensor();
       recompute();
       if (!rotated) setTarget(0);
       if (typeof onModeChange === "function") { try { onModeChange(mode); } catch (e) {} }
@@ -288,6 +303,23 @@ RC.compass = (function () {
   }
 
   function cycle() { return setMode(mode === "course" ? "north" : "course"); }
+
+  /* Hand the rotation to a real camera, or take it back. Taking it back has
+     to undo the element geometry the CSS trick needs, so it goes through
+     the same code the mode switch does rather than a second copy of it. */
+  function setRenderer(fn) {
+    renderer = (typeof fn === "function") ? fn : null;
+    var rotated = mode === "course" && !renderer;
+    document.documentElement.setAttribute("data-rotate", rotated ? "on" : "off");
+    if (!rotated) document.documentElement.style.setProperty("--rc-bearing", "0deg");
+    applyGeometry(rotated);
+    setInteractions(rotated);
+    // The magnetometer is just as useful to a camera as to a transform —
+    // it is what keeps the view honest while stopped at a light.
+    if (mode === "course") attachSensor();
+    recompute();
+    schedule();
+  }
 
   /* Fed from RC.nav on every fix. speedKmh decides whether the GPS course is
      worth trusting over the magnetometer. */
@@ -328,7 +360,11 @@ RC.compass = (function () {
     setCourse: setCourse,
     reset: reset,
     getMode: function () { return mode; },
+    setRenderer: setRenderer,
     getBearing: function () { return appliedBearing; },
+    /* "Is the rider centred and the map turning under them" — which is true
+       in course-up whoever is doing the turning, and is what the camera
+       asks before deciding to jump rather than pan. */
     isRotated: function () { return mode === "course"; }
   };
 })();
