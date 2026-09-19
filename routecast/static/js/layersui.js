@@ -86,7 +86,7 @@ RC.layersui = (function () {
       } else if (driveDef && driveDef.kind !== "gl") {
         note.textContent = "Pick a 3D map above to ride behind the camera.";
       } else if (st.camera) {
-        note.textContent = "Camera is up. Weather chips and other riders come back when you stop.";
+        note.textContent = "Camera is up. Drag, pinch or twist to look around; Re-centre comes back.";
       } else {
         note.textContent = "Tilts behind you and stands the buildings up once a ride starts.";
       }

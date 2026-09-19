@@ -61,7 +61,11 @@ Live at <https://nojukuramu.github.io/routecast/>.
   MapLibre GL — which is what buys the thing a picture of a map cannot do: a camera that
   tilts. Start a ride on one and the view drops in behind you, the buildings stand up, and
   the map turns as you do, which is a different instrument from a flat map with a little
-  arrow on it. Four of the six are deliberately game-minimap flat — no names, five or six
+  arrow on it. It is not a cage either: drag, pinch, twist and tilt all work while riding,
+  and whatever you leave the camera at is where the chase resumes. Everything the flat map
+  draws is drawn in the scene with it — the route in the colours the forecast gave it, the
+  weather chips, your marks, the other riders and the heat map, each icon scaled by how far
+  away it actually is. Four of the six are deliberately game-minimap flat — no names, five or six
   colours, the road network carrying the whole picture — because that is the most readable
   a map ever gets at a glance through a visor. The map you plan on and the map you ride on
   are two separate choices, because they are two different jobs.
@@ -643,12 +647,13 @@ publishes an update.
   chain the planner uses, so it shows the roads you use and not the lane you were in —
   and a stretch with no usable speed is left out of the speed view rather than parked at
   one end of the ramp pretending to be the slowest thing on the map.
-- **The 3D view hides the flat overlays, and says so.** A tilted camera and Leaflet's
-  overlays cannot both be right: the overlays are drawn for a map seen from directly above.
-  So while the camera is up, the vector engine draws the route (in the colours the forecast
-  gave it) and the rider, and the weather chips, other riders, your marks and the heat map
-  are not on the map. They come back the instant the ride ends or the camera is turned off.
-  The turn banner, the dashboard, the voice room and the ways-back card are unaffected.
+- **The 3D view redraws the overlays rather than sharing them.** A tilted camera and
+  Leaflet's overlays cannot both be right: the overlays are drawn for a map seen from
+  directly above. So while the camera is up, the vector engine mirrors Leaflet's own layers
+  into the scene — the same polylines with the same colours, the same marker markup — which
+  means a feature that draws itself flat is in the 3D view for free, and also that anything
+  Leaflet cannot describe as a line or a marker (a canvas overlay, a raster layer) would not
+  be. Nothing in the app is in that category today.
 - **Vector maps need a connection the first time, twice over.** The engine is about a
   megabyte and is fetched when a vector map is first picked — not on load, and warmed as
   soon as a route is on the screen, so it is rarely the thing you are waiting on at the
@@ -782,6 +787,8 @@ routecast/
     pwa.js                  install prompt and the iOS add-to-home-screen fallback
   tools/validate.js         static + pure-module suite: `node tools/validate.js`
   tools/group-e2e.js        two real browsers, one room: `node tools/group-e2e.js`
+  tools/map3d-e2e.js        the tilted map in a real browser: the camera, the gestures,
+                            the mirror, and putting it all away again
   tools/voice-latency.js    three browsers, one room, a stopwatch on the voice path
   tools/broker.js           a local stand-in for the public broker; not shipped
   tools/stun.js             a STUN server, ~150 lines, with a dead mode and a slow one
@@ -791,10 +798,13 @@ routecast/
 ## Testing
 
 ```
-node tools/validate.js
+node tools/validate.js      # static + pure modules, no dependencies
+node tools/map3d-e2e.js     # the 3D view, in a real browser (needs playwright)
 ```
 
-No dependencies, no build step. It runs two halves. The static half reads the source as
+`validate.js` has no dependencies and no build step; the end-to-end runs drive a real
+Chromium through Playwright, which is why they are separate commands rather than part of
+it. It runs two halves. The static half reads the source as
 text: no emoji anywhere (every glyph in this app is an inline SVG, deliberately), every
 SVG well formed, every element id the JavaScript reaches for present in `index.html`,
 every script the page loads also in the service worker's shell, every `var(--token)`
@@ -812,6 +822,26 @@ rather than as one degree four minutes in the Gulf of Guinea while a street addr
 as neither, that a mark re-saved on the same spot renames rather than duplicates, and that
 a free ride's odometer refuses a parked phone's jitter, a step inside its own error circle
 and a teleport alike.
+
+The tilted map gets both kinds of check, because it needs both. The static half builds
+every vector style in the catalogue and refuses one without a source, glyphs, unique layer
+ids or 3D buildings that ship switched off; refuses any map carrying an API key; insists
+the drive default is a vector one, since a raster default would make the camera silently do
+nothing; and holds the handful of invariants that have each broken the feature once already
+— the camera must stay a heartbeat rather than a frame loop (a frame loop fights MapLibre
+for the camera, and the map stops being draggable), the camera's own moves must not be
+mistaken for the rider's, a gesture must go through the same arbitration a drag on the flat
+map does, and a mirrored marker must be scaled on its inner element rather than on the one
+MapLibre rewrites every frame.
+
+`tools/map3d-e2e.js` checks what only a GPU and a real finger can: that the view tilts and
+turns to the heading, that the rider is drawn as geometry on the road, that a drag moves the
+map and hands it to the rider, that Re-centre hands it back, that a two-finger twist turns
+it and a two-finger drag tilts it and the tilt then sticks, that Leaflet's marks and heat
+map are mirrored into the scene and scaled by distance, that changing the map mid-ride does
+not leave the rider in an empty world, and that leaving the ride takes every mirrored thing
+away again. It serves the page from disk and refuses every outside request, so it also
+proves the vector map comes up with no tile server at all.
 
 It also checks the things the newer features would be expensive to get wrong: that a
 moving vehicle has a heading even when the chipset reports none and a parked one does not,
