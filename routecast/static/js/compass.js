@@ -256,15 +256,23 @@ RC.compass = (function () {
     } catch (e) {}
   }
 
-  /* A drag on a rotated map means "let me look around" — honour it by
-     dropping to north-up rather than ignoring the gesture. */
+  /* A drag on a CSS-rotated map means "let me look around", and the only
+     way to honour it is to drop to north-up: Leaflet's dragging is off
+     while the element is rotated, because its pointer maths no longer
+     matches what is on the screen.
+
+     None of that is true of a real camera. When a renderer has the
+     rotation, a drag pans the tilted map exactly as it should, and
+     breaking out of course-up would be throwing away the heading for no
+     reason — so the breakout only exists while the CSS trick is what is
+     doing the turning. */
   var pointerStart = null;
   function onPointerDown(e) {
-    if (mode !== "course") return;
+    if (mode !== "course" || renderer) return;
     pointerStart = { x: e.clientX, y: e.clientY };
   }
   function onPointerMove(e) {
-    if (!pointerStart || mode !== "course") return;
+    if (!pointerStart || mode !== "course" || renderer) return;
     var dx = e.clientX - pointerStart.x, dy = e.clientY - pointerStart.y;
     if (dx * dx + dy * dy > BREAKOUT_PX * BREAKOUT_PX) {
       pointerStart = null;

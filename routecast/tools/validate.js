@@ -427,6 +427,61 @@ section("Static: the basemaps");
         read("index.html").indexOf("maplibre-gl.js") < 0);
 })();
 
+section("Static: the 3D view");
+(function () {
+  var glSrc = read("static/js/gl.js");
+  var appSrc = read("static/js/app.js");
+  var compassSrc = read("static/js/compass.js");
+  var followSrc = read("static/js/follow.js");
+
+  /* The tilted view draws Leaflet's own overlays by mirroring them. Two
+     things have to stay true for that to be worth having, and both of them
+     have broken once already. */
+  check("the mirror carries both the lines and the markers",
+        /instanceof L\.Polyline/.test(glSrc) && /instanceof L\.Marker/.test(glSrc));
+  check("a layer can opt out of being mirrored", /rcSkipGl/.test(glSrc));
+  check("and the rider does, because it is drawn as geometry instead",
+        /rcSkipGl:\s*true/.test(appSrc) && /rc-rider-arrow/.test(glSrc));
+
+  /* MapLibre writes its own transform on a marker's element on every frame,
+     so a scale set there survives until the next one. This is the bug the
+     end-to-end run caught; a one-line check is cheaper than finding it
+     twice. */
+  check("a mirrored marker is scaled on its inner element",
+        /rec\.inner\.style\.transform/.test(glSrc) && !/rec\.wrap\.style\.transform/.test(glSrc));
+
+  /* A camera that writes the view every frame fires MapLibre's whole move
+     cascade sixty times a second and fights the map's own gesture handlers
+     for the camera — which is how "the 3D map cannot be dragged" happened.
+     The drive camera is a heartbeat, and must stay one. */
+  check("the drive camera is a heartbeat, not a frame loop",
+        glSrc.indexOf("requestAnimationFrame") < 0);
+
+  /* MapLibre fires movestart and the rest for the camera's own moves too.
+     Without this guard the chase switches itself off the instant it starts. */
+  check("the camera's own moves are not mistaken for the rider's",
+        /originalEvent/.test(glSrc) && /fromHand\(e\)/.test(glSrc));
+
+  /* One idea of who owns the map: a gesture on the tilted map raises the
+     same Re-centre pill as a drag on the flat one. */
+  check("a gesture on the 3D map goes through the same camera arbitration",
+        /follow\.looked\(\)/.test(glSrc) && /looked:\s*looked/.test(followSrc));
+
+  /* The breakout exists because Leaflet's pointer maths cannot survive a CSS
+     rotation. A real camera has no such problem, and dropping out of
+     course-up on every pan would throw the heading away for nothing. */
+  check("course-up survives a pan when a camera is doing the turning",
+        /mode !== "course" \|\| renderer/.test(compassSrc));
+
+  // A record of a whole country must not try to become geometry in one pass.
+  check("the mirror has a ceiling", /MAX_LINES/.test(glSrc) && /MAX_MARKERS/.test(glSrc));
+
+  /* The engine is lazy-loaded, so nothing in the page may reach for it
+     before a vector map has been asked for. */
+  check("nothing touches the engine before it is loaded",
+        !/\bmaplibregl\./.test(appSrc) && !/\bmaplibregl\./.test(read("static/js/layers.js")));
+})();
+
 section("Static: theme tokens");
 (function () {
   var css = read("static/css/app.css");

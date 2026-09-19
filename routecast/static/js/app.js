@@ -641,13 +641,7 @@
     for (var i = 0; i < routeLayers.length; i++) map.removeLayer(routeLayers[i]);
     routeLayers = [];
     var route = state.routes[state.routeIndex];
-    if (!route) { RC.layers.setRoute(null); return; }
-
-    /* The same segments, in the same colours, collected as plain coordinates
-       for the 3D view. Handed over rather than recomputed there: two pieces
-       of code colouring one route by the weather is two pieces of code that
-       can disagree about it. */
-    var glSegs = [];
+    if (!route) { RC.layers.sync(); return; }
 
     for (var a = 0; a < state.routes.length; a++) {
       if (a === state.routeIndex) continue;
@@ -664,7 +658,6 @@
     var cps = state.checkpoints;
     if (cps.length < 2) {
       routeLayers.push(L.polyline(route.coords, { color: themeColors().accent, weight: 5 }).addTo(map));
-      glSegs.push({ coords: route.coords, color: themeColors().accent });
     } else {
       for (var c = 0; c < cps.length - 1; c++) {
         var seg = route.coords.slice(cps[c].i, cps[c + 1].i + 1);
@@ -673,10 +666,11 @@
         var rank = { clear: 0, watch: 1, caution: 2, danger: 3 };
         var worse = rank[lb] > rank[la] ? lb : la;
         routeLayers.push(L.polyline(seg, { color: colorFor(worse), weight: 5, opacity: 0.95 }).addTo(map));
-        glSegs.push({ coords: seg, color: colorFor(worse) });
       }
     }
-    RC.layers.setRoute(glSegs);
+    // The 3D view mirrors these very polylines, so it only needs telling
+    // that they changed.
+    RC.layers.sync();
     if (!opts || opts.fit !== false) {
       RC.follow.silently(function () {
         map.fitBounds(L.latLngBounds(route.coords).pad(0.12));
@@ -1462,6 +1456,9 @@
     try { localStorage.setItem("theme", next); } catch (e) {}
     forgetThemeColors();
     if (state.routes.length) { drawRoute({ fit: false }); drawWeatherMarkers(); }
+    // The 3D view draws the rider in the accent, which the two palettes do
+    // not share; nothing else it draws is ours to recolour.
+    RC.layers.sync();
     renderElevation();
     RC.groupui.redraw();
   }
@@ -1506,7 +1503,7 @@
     }
     for (var r = 0; r < routeLayers.length; r++) map.removeLayer(routeLayers[r]);
     routeLayers = [];
-    RC.layers.setRoute(null);
+    RC.layers.sync();
     dotLayer.clearLayers();
     chipLayer.clearLayers();
     endpointLayer.clearLayers();
@@ -1637,6 +1634,9 @@
 
   function zoomBy(delta) {
     if (!map) return;
+    // While the camera is tilted the GL map owns the zoom; Leaflet is told
+    // where it ended up rather than asked where to go.
+    if (RC.layers.zoomBy(delta)) return;
     RC.follow.silently(function () {
       map.setZoomAround(map.getCenter(), map.getZoom() + delta);
     });
@@ -1974,6 +1974,14 @@
     }
     var scroll = RC.el("panel-scroll");
     if (scroll) scroll.scrollTop = 0;
+    /* Seven tabs do not fit across a 320px phone, so the strip scrolls — and
+       a tab selected from somewhere else (the map's Layers button, say) could
+       be highlighted somewhere off the side of it, which reads as the button
+       having done nothing. */
+    var active = document.querySelector(".rc-tab.is-active");
+    if (active && active.scrollIntoView) {
+      try { active.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) {}
+    }
     if (name === "group") RC.groupui.refresh();
     if (name === "marks") renderMarks();
     if (name === "you") {
@@ -2593,7 +2601,11 @@
       riderMarker = L.marker(latlng, {
         icon: L.divIcon({ className: "", html: riderIconHtml(), iconSize: [26, 26], iconAnchor: [13, 13] }),
         zIndexOffset: 1000,
-        keyboard: false
+        keyboard: false,
+        /* The 3D view draws the rider as geometry on the road surface, so
+           mirroring this flat one as well would stand a second rider on top
+           of the first. */
+        rcSkipGl: true
       }).addTo(map);
       riderArrow = null;
     } else {

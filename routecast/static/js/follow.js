@@ -249,6 +249,17 @@ RC.follow = (function () {
     if (typeof z === "number" && !isNaN(z)) preferredZoom = z;
   }
 
+  /* "The rider just looked somewhere else", said by something that is not a
+     Leaflet drag — the 3D camera's own drag, twist, tilt and pinch. Exactly
+     what onDragStart does, because it means exactly the same thing: stop
+     following, raise the Re-centre pill, and come back on your own after
+     RESUME_MS if nothing else happens. Having one idea of who owns the map
+     is the reason the flat map and the tilted one behave the same. */
+  function looked() {
+    markGesture();
+    disengage();
+  }
+
   // The Re-centre control, and anything else that means "put me back".
   function recenter(opts) {
     if (!enabled) return false;
@@ -284,6 +295,7 @@ RC.follow = (function () {
     disable: disable,
     setZoom: setZoom,
     setTarget: setTarget,
+    looked: looked,
     recenter: recenter,
     release: release,
     silently: silently,

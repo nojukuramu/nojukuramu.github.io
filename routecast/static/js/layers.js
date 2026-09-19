@@ -56,7 +56,6 @@ RC.layers = (function () {
   var drive3d = true;
   var driving = false;
   var onChange = null;
-  var lastRoute = null;
 
   function say(msg) {
     if (!bridge || !bridge.setStatus) return;
@@ -134,7 +133,7 @@ RC.layers = (function () {
     /* The compass keeps choosing the heading and keeps smoothing it; it
        just writes it to the camera now instead of to a CSS transform. */
     RC.compass.setRenderer(RC.gl.setBearing);
-    if (lastRoute) RC.gl.setRoute(lastRoute);
+    RC.gl.sync();
   }
 
   function cameraOff() {
@@ -155,7 +154,10 @@ RC.layers = (function () {
       if (!RC.mapstyles.has(driveBase)) driveBase = DEFAULT_DRIVE_BASE;
 
       document.documentElement.setAttribute("data-gl3d", "off");
-      RC.gl.init({ map: map, onChange: fire });
+      /* The camera asks RC.follow who owns the map, rather than keeping a
+         second opinion about it: a gesture on the tilted map raises the
+         same Re-centre pill as a drag on the flat one. */
+      RC.gl.init({ map: map, follow: RC.follow, onChange: fire });
       return apply(base);
     },
 
@@ -225,13 +227,14 @@ RC.layers = (function () {
 
     /* ---- what the vector engine is given to draw ---- */
 
-    /** The route exactly as the app coloured it for Leaflet — handed over,
-        never re-derived, so the two views cannot disagree about what the
-        weather is doing on a stretch. */
-    setRoute: function (segments) {
-      lastRoute = segments || null;
-      RC.gl.setRoute(lastRoute);
-    },
+    /** Something the app drew on the flat map changed — a new route, a
+        cleared plan, a theme swap, the heat map coming on. The 3D view
+        mirrors Leaflet's own layers, so it needs telling that they moved,
+        not telling what they are. */
+    sync: function () { RC.gl.sync(); },
+
+    /** The zoom buttons, when the tilted camera has the map. */
+    zoomBy: function (d) { return RC.gl.zoomBy(d); },
 
     rider: function (lat, lon, courseDeg) {
       if (RC.gl.isDriving()) RC.gl.setRider(lat, lon, courseDeg);

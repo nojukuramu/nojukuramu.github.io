@@ -175,11 +175,14 @@ RC.info = (function () {
         "up the screen, the buildings stand up, and the map turns as you do.</p>" +
         "<p>The turning is the same compass the flat map uses \u2014 north-up and course-up " +
         "still mean what they meant, and the compass button still switches between them.</p>" +
-        "<p><b>What it costs.</b> A tilted camera and flat overlays cannot both be right, so " +
-        "while the camera is up RouteCast draws the route and your position itself, and the " +
-        "weather chips, other riders, your marks and the heat map are not on the map. They " +
-        "come back the moment the ride ends or you turn the camera off \u2014 the turn " +
-        "banner, the dashboard and the voice room are unaffected either way.</p>" +
+        "<p><b>It is not a cage.</b> Drag to look ahead, pinch to zoom, twist with two " +
+        "fingers to turn it, drag with two to tilt it. Doing any of that stops the camera " +
+        "following, exactly as dragging the flat map does, and the <b>Re-centre</b> button " +
+        "brings it back \u2014 as does simply leaving it alone for a few seconds.</p>" +
+        "<p>Everything the flat map draws is drawn in the 3D scene too: the route in the " +
+        "colours the forecast gave it, the weather chips, the checkpoint dots, your marks, " +
+        "the other riders and the heat map. Icons nearer to you are drawn larger, because " +
+        "they are.</p>" +
         "<p>It needs a browser that can draw 3D. If yours cannot, the map stays flat and " +
         "says so rather than going blank.</p>"
     },

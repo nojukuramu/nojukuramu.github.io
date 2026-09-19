@@ -317,22 +317,23 @@ code { font-family: var(--mono); font-size: .92em; }
    map still zooms. */
 :root[data-gl3d="on"] .rc-map .leaflet-map-pane { display: none; }
 
-/* The rider in the chase view is not a marker on a map: it is the fixed
-   point the whole picture is drawn around, so it is positioned in screen
-   space and never rotates. gl.js sets the drop below centre. */
-.rc-gl-rider {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  z-index: 450;
-  width: 34px;
-  height: 34px;
-  margin: 0;
-  color: var(--matcha);
+/* Everything the flat map draws is mirrored into the 3D scene as a marker
+   holding the very same markup (see gl.js). The wrapper is the only thing
+   that is ours: gl.js scales it by how far away it is, measured, so an icon
+   at the end of the street is smaller than the one at your wheel.
+
+   The rider is deliberately NOT one of these. It is drawn as geometry on
+   the road surface, so it is foreshortened by the camera like the kerb it
+   is sitting on. */
+.rc-gl-marker {
+  will-change: transform;
   pointer-events: none;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .45));
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .3));
 }
-.rc-gl-rider svg { display: block; width: 100%; height: 100%; }
+.rc-gl-marker-in { transform-origin: 50% 50%; }
+/* A mirrored marker is a copy, and a copy of a name must not be read by a
+   screen reader a second time. */
+.maplibregl-marker { pointer-events: none; }
 
 /* ============================================================
    The map chooser
@@ -1729,6 +1730,18 @@ code { font-family: var(--mono); font-size: .92em; }
 
 @media (min-width: 900px) {
   .rc-hud, .rc-dock { max-width: 760px; }
+}
+
+/* A phone on its side is 360px tall with a rail of eight buttons in it, and
+   the rail grows upwards from the bottom: at full size the top button ends up
+   under the status line. Shrinking the buttons to the size the zoom pair
+   already uses on this screen buys back 60px and keeps every control reachable
+   without a scrolling rail, which is not a thing anybody wants to do at 80. */
+@media (orientation: landscape) and (max-height: 470px) {
+  .rc-map-controls { gap: 5px; }
+  .rc-mapbtn { width: 34px; height: 34px; border-radius: 10px; }
+  .rc-mapbtn svg { width: 17px; height: 17px; }
+  .rc-mapbtn-sm { height: 29px; }
 }
 
 /* Very small phones: give the map back every pixel the chrome can spare. */
