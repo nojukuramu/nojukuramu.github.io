@@ -319,8 +319,24 @@ KM.supa = (function () {
   /* ---------------------------------------------------------
      Auth
      --------------------------------------------------------- */
+  /* Where an email link should land people. Origin and path, never
+     location.href: that can already carry a fragment from a previous link,
+     and GoTrue appends its own to whatever it is handed. */
+  function here() {
+    try { return location.origin + location.pathname; } catch (e) { return ""; }
+  }
+
   function signUp(email, password) {
-    return request("/auth/v1/signup", {
+    /* redirect_to is a QUERY parameter on signup, not a body field, and
+       sending it is what stops the confirmation link falling back to the
+       project's Site URL. That fallback is a real failure and not a
+       hypothetical: Site URL is one value for a whole Supabase project,
+       while this app is one of a dozen sharing an origin on GitHub Pages,
+       so the default sends people to the site root where nothing reads the
+       token. The address still has to be in the project's Redirect URLs
+       allow-list; GoTrue refuses anything that is not. */
+    var back = here();
+    return request("/auth/v1/signup" + (back ? "?redirect_to=" + encodeURIComponent(back) : ""), {
       method: "POST", auth: false, body: { email: email, password: password }
     }).then(function (r) {
       var s = shapeSession(r.body);
@@ -357,8 +373,9 @@ KM.supa = (function () {
   }
 
   function resetPassword(email, redirectTo) {
-    return request("/auth/v1/recover", {
-      method: "POST", auth: false, body: { email: email, redirect_to: redirectTo }
+    var back = redirectTo || here();
+    return request("/auth/v1/recover" + (back ? "?redirect_to=" + encodeURIComponent(back) : ""), {
+      method: "POST", auth: false, body: { email: email, redirect_to: back }
     }).then(function () { return true; });
   }
 
@@ -482,6 +499,7 @@ KM.supa = (function () {
     signOut: signOut,
     resetPassword: resetPassword,
     updatePassword: updatePassword,
+    redirectTarget: here,
     adoptFromUrl: adoptFromUrl,
     landing: function () { return landing; },
     refresh: refresh,

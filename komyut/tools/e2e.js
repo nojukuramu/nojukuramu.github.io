@@ -196,6 +196,7 @@ async function main() {
   const errors = [];
   const cspViolations = [];
   const unexpected = [];
+  const authCalls = [];
   page.on("pageerror", (e) => errors.push(String(e.message)));
   page.on("console", (m) => {
     const t = m.text();
@@ -239,6 +240,13 @@ async function main() {
       }
       if (url.includes("/auth/v1")) {
         const USER = { id: "44444444-4444-4444-4444-444444444444", email: "juan@example.com" };
+        if (url.includes("/auth/v1/signup")) {
+          authCalls.push(url);
+          /* A project with email confirmation ON returns the user and no
+             token at all. That is the case worth simulating: it is the one
+             that sends an email, and the one this section is about. */
+          return route.fulfill(json(USER));
+        }
         /* Who am I, and change my password: both are /auth/v1/user, told
            apart by method the way GoTrue does. */
         if (url.includes("/auth/v1/user")) return route.fulfill(json(USER));
@@ -410,6 +418,35 @@ async function main() {
   check("a refused sign-in says so without naming which half was wrong",
     (await page.textContent("#auth-err")).indexOf("do not match") !== -1);
   check("the password field was cleared", (await page.inputValue("#auth-password")) === "");
+
+  /* ---------------------------------------------------------- */
+  section("Where an email link is told to come back to");
+  /* Placed while the page is still signed out, because the sign-up form is
+     inside #you-out and that is hidden once somebody is in. */
+  await page.click('#auth-mode button[data-mode="up"]');
+  await page.fill("#auth-email", "new@example.com");
+  await page.fill("#auth-password", GOOD_PASSWORD);
+  await page.click("#auth-go");
+  await page.waitForTimeout(600);
+
+  const signupUrl = authCalls[0] || "";
+  const redirectTo = decodeURIComponent((signupUrl.split("redirect_to=")[1] || "").split("&")[0]);
+  check("signing up names a redirect rather than leaving it to Site URL",
+    signupUrl.indexOf("redirect_to=") !== -1,
+    signupUrl || "no signup request seen");
+  check("and the redirect is this app's own page, not the site root",
+    redirectTo.indexOf("/index.html") !== -1, redirectTo);
+  check("the redirect carries no fragment of its own",
+    signupUrl.indexOf("%23") === -1,
+    "GoTrue appends its tokens to whatever it is handed");
+  check("a project that wants the address confirmed is told so, not signed in",
+    (await page.textContent("#auth-note")).indexOf("Check your email") !== -1,
+    await page.textContent("#auth-note"));
+  check("and it drops back to the sign-in form for afterwards",
+    (await page.textContent("#auth-go")) === "Sign in");
+  check("signing up did not sign anybody in",
+    (await page.evaluate(() => KM.supa.signedIn())) === false);
+
 
   /* ---------------------------------------------------------- */
   section("Signing in, and filing a route");

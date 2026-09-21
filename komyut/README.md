@@ -109,22 +109,37 @@ maps, routing, geocoding, forecast — is free and key-less.
    `service_role`) — see the note below about which of these is a secret
    and which is not.
 
-4. **Point the auth redirects at the app.** Authentication → URL
-   Configuration. This one is not optional and it is the step everybody
-   misses: **Site URL** defaults to `http://localhost:3000`, and it is where
-   the link in a confirmation or password-reset email sends people. Left at
-   the default, every one of those emails lands on nothing.
+4. **Allow the app's address to be redirected to.** Authentication → URL
+   Configuration → **Redirect URLs** → Add URL:
+
+   ```
+   https://nojukuramu.github.io/komyut/**
+   ```
+
+   Add `http://localhost:8000/**` (or whatever port you serve on) as well
+   if you work on it locally.
+
+   This list is the part that matters. The app asks GoTrue to send people
+   back to its own page — it passes `redirect_to` on both sign-up and
+   password reset — and GoTrue refuses any address that is not on this
+   list, falling back to **Site URL** instead.
+
+   Site URL is worth setting too, as the backstop for anything that does
+   not name a redirect:
 
    | Field | Set it to |
    |---|---|
    | Site URL | `https://nojukuramu.github.io/komyut/` |
-   | Redirect URLs | `https://nojukuramu.github.io/komyut/**` |
 
-   Add `http://localhost:8000/**` (or whatever port you serve on) to the
-   redirect list as well if you work on it locally. The app reads the
-   tokens out of the fragment those links come back on, signs you in, and
-   wipes them from the address bar; a reset link lands on a "choose a new
-   password" step instead.
+   Note the path. Site URL is one value for the **whole Supabase project**,
+   and this origin carries a dozen apps, so `https://nojukuramu.github.io/`
+   on its own drops people on the site's front page with an access token
+   stuck to the end of the URL and nothing there to read it. That is why
+   the app names its own redirect rather than trusting this setting.
+
+   Whichever route they arrive by, the app reads the tokens out of the
+   fragment those links come back on, signs you in and wipes them from the
+   address bar; a reset link lands on a "choose a new password" step.
 
 5. **Set the auth options you want.** Authentication → Providers → Email.
    Leave email confirmation on and the app says "check your email"; turn it
@@ -271,7 +286,7 @@ to another person, so a few things are mechanical rather than careful:
 ## Checking it
 
 ```
-node tools/validate.js    # 169 checks: static, security, and the pure logic
+node tools/validate.js    # 173 checks: static, security, and the pure logic
 node tools/e2e.js         # the app in a real browser, every service stubbed
 node tools/make-icons.js  # regenerates static/*.png
 ```

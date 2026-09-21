@@ -51,6 +51,15 @@ function section(title) { process.stdout.write("\n" + title + "\n"); }
 
 function read(rel) { return fs.readFileSync(path.join(ROOT, rel), "utf8"); }
 
+/* Source with its comments taken out. Several checks below look for the
+   ABSENCE of something, and the comments in this codebase name the things
+   they warn against — "never use location.href here" would otherwise fail
+   the check that location.href is not used. A check a comment can fool is
+   a check that passes, or fails, for the wrong reason. */
+function stripComments(src) {
+  return src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^\s*\/\/.*$/gm, " ");
+}
+
 function sourceFiles() {
   var out = [];
   function walk(dir) {
@@ -231,9 +240,6 @@ section("Static: updates");
   /* Comments are stripped first: the install handler carries a comment
      explaining why skipWaiting() is NOT there, and a check a comment can
      fool is a check that passes for the wrong reason. */
-  function stripComments(src) {
-    return src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^\s*\/\/.*$/gm, " ");
-  }
   var bareSw = stripComments(SW);
   var installBlock = bareSw.slice(bareSw.indexOf('addEventListener("install"'), bareSw.indexOf('addEventListener("message"'));
   check("the service worker never takes over on its own",
@@ -278,11 +284,25 @@ section("Static: coming back from an email link");
   check("the new password is sent as a PUT to the user, not a sign-in",
     /\/auth\/v1\/user"[\s\S]{0,80}method: "PUT"/.test(supa));
 
+  /* Site URL is ONE value for a whole Supabase project, and this origin
+     carries a dozen apps. A signup that does not say where to come back to
+     sends people to whichever app happens to hold that setting. */
+  check("signup tells GoTrue where to come back to",
+    /\/auth\/v1\/signup" \+ \(back \? "\?redirect_to=/.test(supa),
+    "otherwise the link falls back to the project's Site URL");
+  check("so does the password reset",
+    /\/auth\/v1\/recover" \+ \(back \? "\?redirect_to=/.test(supa));
+  check("both work it out in one place",
+    (supa.match(/var back = /g) || []).length === 2 && /function here\(\)/.test(supa));
+
   /* location.href can already carry a fragment from a previous link, and
      GoTrue appends its own to whatever it is given. */
-  check("the reset redirect is an origin and a path, not the whole URL",
-    /location\.origin \+ location\.pathname/.test(acct) &&
-    !/resetPassword\(email, location\.href\)/.test(acct));
+  check("the redirect is an origin and a path, not the whole URL",
+    /location\.origin \+ location\.pathname/.test(supa) &&
+    !/location\.href/.test(stripComments(supa)));
+  check("the client, not the project setting, decides where a link lands",
+    !/location\.origin \+ location\.pathname/.test(stripComments(acct)),
+    "account.js should ask KM.supa rather than building its own");
 
   /* Two panes deciding the opening tab is how one silently won. */
   check("one function decides which pane an email link opens",

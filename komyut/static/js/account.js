@@ -143,11 +143,9 @@ KM.account = (function () {
   function forgot() {
     var email = KM.sanitize.email(els.email.value);
     if (!KM.sanitize.emailLooksValid(email)) { fail("Type your email address first."); return; }
-    /* Origin and path only. location.href can already carry a fragment from
-       a previous link, and handing GoTrue a redirect that ends in one makes
-       it append its own tokens to it. */
-    var back = location.origin + location.pathname;
-    KM.supa.resetPassword(email, back).then(function () {
+    /* Where to come back to is KM.supa's to decide, so signup and reset
+       cannot end up disagreeing about it. */
+    KM.supa.resetPassword(email).then(function () {
       els.note.textContent = "If that address has an account, a reset link is on its way.";
       els.note.hidden = false;
       els.err.hidden = true;
