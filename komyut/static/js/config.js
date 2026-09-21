@@ -28,11 +28,17 @@ KM.config = {
      Leave blank and the app still runs: the map, the route builder and the
      weather all work offline of any account, and every community surface
      says so rather than failing silently. */
-  SUPABASE_URL: "",
+  SUPABASE_URL: "https://lycnkurjmvbzsxanipzv.supabase.co",
 
-  /* The publishable anon key (Project Settings -> API -> "anon public").
-     NOT the service_role key. */
-  SUPABASE_ANON_KEY: "",
+  /* The publishable key (Project Settings -> API). Newer projects call it
+     "Publishable key" and it starts sb_publishable_; older ones call it
+     "anon public" and it is a JWT. Either works — both are sent as the
+     `apikey` header and, while signed out, as the bearer token, which is
+     what tells Postgres to apply the `anon` role's policies.
+
+     NOT the secret key (sb_secret_ / "service_role"). That one bypasses
+     every policy in supabase/schema.sql and must never be in a browser. */
+  SUPABASE_ANON_KEY: "sb_publishable_M-ZcZkElmVBBdNkZicrYZg_ipcYWj7I",
 
   /* Where the map opens when there is nothing else to go on. Manila, because
      that is who this is for first; a phone that grants location is moved to

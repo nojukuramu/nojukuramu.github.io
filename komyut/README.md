@@ -89,11 +89,14 @@ maps, routing, geocoding, forecast — is free and key-less.
 
    ```js
    SUPABASE_URL:      "https://<your-project>.supabase.co",
-   SUPABASE_ANON_KEY: "<the anon public key>"
+   SUPABASE_ANON_KEY: "<the publishable key>"
    ```
 
-   Project Settings → API. The **anon public** key, not the service_role one.
-   See the note below about why that is not a secret in a public script.
+   Project Settings → API. Newer projects call it the **Publishable key**
+   and it starts `sb_publishable_`; older ones call it **anon public** and
+   it is a JWT. Either works. Not the secret key (`sb_secret_` /
+   `service_role`) — see the note below about which of these is a secret
+   and which is not.
 
 4. **Set the auth options you want.** Authentication → Providers → Email.
    Leave email confirmation on and the app says "check your email"; turn it
@@ -118,15 +121,18 @@ The house rule in this repository is *no API keys, and therefore no service
 that needs one*, and this is worth a word.
 
 That rule exists because a **secret** in a public script is a donation. A
-Supabase **anon key** is not a secret: it is the publishable identifier every
+Supabase **publishable key** is not a secret: it is the identifier every
 browser session is supposed to carry, it is safe to print on a billboard, and
 on its own it grants nothing at all. What decides who may read and write what
 is Row Level Security, enforced in Postgres where the browser cannot reach
 it. Every policy this app relies on is in `supabase/schema.sql` so it can be
 read rather than trusted.
 
-The keys that *would* be a donation — the service_role key, the database
-password, the JWT secret — are not here and must never be.
+The keys that *would* be a donation — the secret key (`sb_secret_` /
+`service_role`), the database password, the JWT secret — are not here and
+must never be. `tools/validate.js` checks the shape of what is in
+`config.js` and fails on anything that is not a publishable key, because
+"we pasted the right one" is not a mechanism either.
 
 ## How it is put together
 
@@ -218,6 +224,10 @@ to another person, so a few things are mechanical rather than careful:
   collapses; text is NFC-normalised. Accents and non-Latin scripts are
   deliberately left alone — a filter that rejects a real place name is a bug,
   not a protection.
+- **The committed key is checked for its shape.** `config.js` is the one
+  file allowed to carry one, so it is the one file looked at properly: the
+  harness fails on a secret key or a session token, and on a `service_role`
+  JWT in particular.
 - **Every limit is enforced twice.** `sanitize.js` applies it in the client
   and the schema repeats it as a `CHECK`, and `tools/validate.js` fails if
   the two ever disagree.
@@ -233,7 +243,7 @@ to another person, so a few things are mechanical rather than careful:
 ## Checking it
 
 ```
-node tools/validate.js    # 154 checks: static, security, and the pure logic
+node tools/validate.js    # 161 checks: static, security, and the pure logic
 node tools/e2e.js         # the app in a real browser, every service stubbed
 node tools/make-icons.js  # regenerates static/*.png
 ```

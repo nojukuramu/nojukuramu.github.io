@@ -150,12 +150,17 @@ function serve() {
     }
     const type = TYPES[path.extname(file)] || "application/octet-stream";
     if (rel === "static/js/config.js") {
-      /* The repository ships config.js blank on purpose. The test fills it
-         in here rather than editing the file, so a run can never leave a
-         key behind in the working tree. */
+      /* Whatever project config.js points at, the test points at its own
+         stub instead — matched by the field name rather than by the value,
+         so this keeps working once somebody has filled the real one in.
+         Nothing is written back, so a run never touches the working tree,
+         and the suite can never reach a real database by accident. */
       const src = fs.readFileSync(file, "utf8")
-        .replace('SUPABASE_URL: ""', 'SUPABASE_URL: "https://test.supabase.co"')
-        .replace('SUPABASE_ANON_KEY: ""', 'SUPABASE_ANON_KEY: "test-anon-key"');
+        .replace(/SUPABASE_URL:\s*"[^"]*"/, 'SUPABASE_URL: "https://test.supabase.co"')
+        .replace(/SUPABASE_ANON_KEY:\s*"[^"]*"/, 'SUPABASE_ANON_KEY: "test-anon-key"');
+      if (src.indexOf("test.supabase.co") === -1) {
+        throw new Error("could not point config.js at the stub — the field names have changed");
+      }
       res.writeHead(200, { "Content-Type": type }).end(src);
       return;
     }

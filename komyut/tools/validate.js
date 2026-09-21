@@ -36,6 +36,9 @@ var vm = require("vm");
 var ROOT = path.join(__dirname, "..");
 var failures = [];
 var checks = 0;
+/* Almost everything here is synchronous. The one check that cannot be — a
+   promise rejection — parks itself here and is awaited before the tally. */
+var pending = [];
 
 function ok(name) { checks++; process.stdout.write("  ✓ " + name + "\n"); }
 function fail(name, detail) {
@@ -490,6 +493,30 @@ section("Security: no secrets, and no room for one");
   check("config.js warns against the service role key", /service_role/.test(cfg));
   check("the app still runs without a database configured", /ready\s*=\s*function/.test(cfg));
 
+  /* config.js is the one file allowed to carry a key, so it is the one
+     file that gets looked at properly. A publishable key is fine here; a
+     service key or a session token is a leak, and the two are told apart
+     by shape rather than by trusting whoever pasted it. */
+  var url = (cfg.match(/SUPABASE_URL:\s*"([^"]*)"/) || [])[1] || "";
+  var anon = (cfg.match(/SUPABASE_ANON_KEY:\s*"([^"]*)"/) || [])[1] || "";
+  check("the project URL is blank or a Supabase https URL",
+    url === "" || /^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url), url);
+  check("the key is blank, or publishable, and never a secret one",
+    anon === "" ||
+    (/^sb_publishable_[A-Za-z0-9_-]+$/.test(anon)) ||
+    (/^eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\./.test(anon) &&
+     Buffer.from(anon.split(".")[1], "base64").toString().indexOf("service_role") === -1),
+    anon ? anon.slice(0, 18) + "\u2026" : "blank");
+  /* The VALUES, not the prose: the comments in config.js name the secret
+     key prefix precisely in order to warn about it, and a check that a
+     warning can trip is a check that gets deleted. */
+  var literals = (cfg.match(/:\s*"([^"]*)"/g) || []).join(" ");
+  check("no value in config.js is a secret key",
+    !/sb_secret_|service_role/.test(literals),
+    "sb_secret_ / service_role bypasses every policy in the schema");
+  check("the CSP allows the origin the config names",
+    url === "" || /connect-src[^;]*supabase\.co/.test(HTML.replace(/\s+/g, " ")));
+
   /* Every module that talks to the database must go through KM.supa, so
      there is one place the token is attached and one place to audit. */
   var direct = [];
@@ -702,8 +729,26 @@ section("Behaviour: talking to PostgREST safely");
     url.indexOf(" ") === -1 && url.indexOf("%2C") !== -1, url);
   check("the query names its table", url.indexOf("/rest/v1/routes?") === 0, url);
 
-  check("a request without a database configured fails cleanly rather than throwing",
-    typeof sandbox.KM.supa.ready === "function" && sandbox.KM.supa.ready() === false);
+  /* Whether config.js happens to be filled in here is not the point; that
+     the unconfigured path is still the polite one is. So it is set both
+     ways rather than read. */
+  var saved = sandbox.KM.config.SUPABASE_URL;
+  sandbox.KM.config.SUPABASE_URL = "";
+  check("an app with no database configured knows it", sandbox.KM.supa.ready() === false);
+
+  /* The URL stays blank until the refusal has actually landed: a query
+     reaches the network on a later microtask than the one that starts it,
+     so restoring the config first would let the request through and the
+     check would pass for the wrong reason. */
+  pending.push(sandbox.KM.supa.from("routes").select("id").run().then(
+    function () { return "resolved"; },
+    function (err) { return err.kind; }
+  ).then(function (kind) {
+    check("a request without a database fails cleanly rather than throwing",
+      kind === "unconfigured", String(kind));
+    sandbox.KM.config.SUPABASE_URL = saved || "https://example.supabase.co";
+    check("and with one configured, it is ready", sandbox.KM.supa.ready() === true);
+  }));
 })();
 
 section("Behaviour: polylines");
@@ -915,9 +960,11 @@ section("Behaviour: formatting");
 /* ============================================================
    Result
    ============================================================ */
-process.stdout.write("\n" + checks + " checks, " + failures.length + " failed\n");
-if (failures.length) {
-  process.stdout.write("\n" + failures.map(function (f) { return "  ✗ " + f; }).join("\n") + "\n");
-  process.exit(1);
-}
-process.stdout.write("All good.\n");
+Promise.all(pending).then(function () {
+  process.stdout.write("\n" + checks + " checks, " + failures.length + " failed\n");
+  if (failures.length) {
+    process.stdout.write("\n" + failures.map(function (f) { return "  ✗ " + f; }).join("\n") + "\n");
+    process.exit(1);
+  }
+  process.stdout.write("All good.\n");
+});
