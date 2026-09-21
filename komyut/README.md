@@ -61,6 +61,12 @@ exactly the same way a tricycle line in Antipolo does.
   the useful question is whether the twenty minutes you spend standing at the
   transfer are the twenty minutes the squall arrives.
 
+- **Email links land somewhere.** A confirmation link signs you in and says
+  so in one line; a reset link lands on a "choose a new password" step; an
+  expired or already-used one says which, rather than dropping you on a page
+  that looks like nothing happened. The tokens those links carry are wiped
+  from the address bar the moment they are read.
+
 - **Read everything signed out.** Search every route, open every one, read
   every comment, plan every trip, with no account at all. An account is for
   *writing* — filing, voting, commenting — so that a vote means one person
@@ -103,11 +109,28 @@ maps, routing, geocoding, forecast — is free and key-less.
    `service_role`) — see the note below about which of these is a secret
    and which is not.
 
-4. **Set the auth options you want.** Authentication → Providers → Email.
+4. **Point the auth redirects at the app.** Authentication → URL
+   Configuration. This one is not optional and it is the step everybody
+   misses: **Site URL** defaults to `http://localhost:3000`, and it is where
+   the link in a confirmation or password-reset email sends people. Left at
+   the default, every one of those emails lands on nothing.
+
+   | Field | Set it to |
+   |---|---|
+   | Site URL | `https://nojukuramu.github.io/komyut/` |
+   | Redirect URLs | `https://nojukuramu.github.io/komyut/**` |
+
+   Add `http://localhost:8000/**` (or whatever port you serve on) to the
+   redirect list as well if you work on it locally. The app reads the
+   tokens out of the fragment those links come back on, signs you in, and
+   wipes them from the address bar; a reset link lands on a "choose a new
+   password" step instead.
+
+5. **Set the auth options you want.** Authentication → Providers → Email.
    Leave email confirmation on and the app says "check your email"; turn it
    off and sign-up signs you straight in. Either works.
 
-5. **Make yourself a moderator**, once you have signed up:
+6. **Make yourself a moderator**, once you have signed up:
 
    ```sql
    update public.profiles set is_moderator = true where handle = 'yourname';
@@ -248,7 +271,7 @@ to another person, so a few things are mechanical rather than careful:
 ## Checking it
 
 ```
-node tools/validate.js    # 161 checks: static, security, and the pure logic
+node tools/validate.js    # 169 checks: static, security, and the pure logic
 node tools/e2e.js         # the app in a real browser, every service stubbed
 node tools/make-icons.js  # regenerates static/*.png
 ```

@@ -27,6 +27,7 @@ KM.account = (function () {
 
   var mode = "in";
   var profileCache = null;
+  var recovering = false;
   var els = {};
 
   function init() {
@@ -54,6 +55,19 @@ KM.account = (function () {
     els.go.addEventListener("click", submit);
     els.password.addEventListener("keydown", function (e) {
       if (e.key === "Enter") submit();
+    });
+
+    els.recover = KM.el("you-recover");
+    els.recoverPw = KM.el("recover-password");
+    els.recoverErr = KM.el("recover-err");
+
+    KM.el("recover-go").addEventListener("click", saveNewPassword);
+    KM.el("recover-cancel").addEventListener("click", function () {
+      recovering = false;
+      paint();
+    });
+    els.recoverPw.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") saveNewPassword();
     });
 
     KM.el("auth-forgot").addEventListener("click", forgot);
@@ -129,7 +143,11 @@ KM.account = (function () {
   function forgot() {
     var email = KM.sanitize.email(els.email.value);
     if (!KM.sanitize.emailLooksValid(email)) { fail("Type your email address first."); return; }
-    KM.supa.resetPassword(email, location.href).then(function () {
+    /* Origin and path only. location.href can already carry a fragment from
+       a previous link, and handing GoTrue a redirect that ends in one makes
+       it append its own tokens to it. */
+    var back = location.origin + location.pathname;
+    KM.supa.resetPassword(email, back).then(function () {
       els.note.textContent = "If that address has an account, a reset link is on its way.";
       els.note.hidden = false;
       els.err.hidden = true;
@@ -146,13 +164,87 @@ KM.account = (function () {
   }
 
   /* ---------------------------------------------------------
+     Arriving on a link from an email
+
+     Called once at boot with whatever KM.supa read out of the URL. Three
+     outcomes, and each says what happened rather than leaving somebody on
+     a page that looks the same as before they clicked.
+     --------------------------------------------------------- */
+  /* Which pane this landing wants open. Answered synchronously and in one
+     place, because the shell has to choose the opening tab before the
+     rest of `landed` has finished its round trip — and when both decided
+     it, whichever ran last won. */
+  function landingTab(landing) {
+    if (!landing) return "find";
+    /* An expired link and a reset both leave something to do in You. A
+       confirmed address leaves nothing to do there, so it stays on Find
+       and says so in one line instead. */
+    if (landing.error || landing.type === "recovery") return "you";
+    return "find";
+  }
+
+  function landed(landing) {
+    if (!landing) return;
+
+    if (landing.error) {
+      recovering = false;
+      paint();
+      fail(landing.error);
+      return;
+    }
+
+    /* The session's user id is fetched a moment after the tokens are read,
+       so everything that depends on knowing who this is waits for it. */
+    var after = landing.ready || Promise.resolve(landing);
+    after.then(function () {
+      profileCache = null;
+      if (landing.type === "recovery") {
+        recovering = true;
+        paint();
+        try { els.recoverPw.focus(); } catch (e) {}
+        return;
+      }
+      paint();
+      KM.app.toast(landing.type === "signup" || landing.type === "email_change"
+        ? "Email confirmed. You are signed in."
+        : "Signed in.");
+      KM.browse.refresh();
+    });
+  }
+
+  function saveNewPassword() {
+    els.recoverErr.hidden = true;
+    var pw = els.recoverPw.value;
+    if (pw.length < 8) {
+      els.recoverErr.textContent = "Use at least eight characters.";
+      els.recoverErr.hidden = false;
+      return;
+    }
+    var btn = KM.el("recover-go");
+    btn.disabled = true;
+    KM.supa.updatePassword(pw).then(function () {
+      els.recoverPw.value = "";
+      btn.disabled = false;
+      recovering = false;
+      paint();
+      KM.app.toast("Password changed. You are signed in.");
+    }, function (err) {
+      els.recoverPw.value = "";
+      btn.disabled = false;
+      els.recoverErr.textContent = err.message;
+      els.recoverErr.hidden = false;
+    });
+  }
+
+  /* ---------------------------------------------------------
      The signed-in half
      --------------------------------------------------------- */
   function paint() {
     if (!els.out) return;
     var signedIn = KM.supa.signedIn();
-    els.out.hidden = signedIn;
-    els.in.hidden = !signedIn;
+    els.recover.hidden = !recovering;
+    els.out.hidden = signedIn || recovering;
+    els.in.hidden = !signedIn || recovering;
 
     var btn = KM.el("account-btn");
     if (btn) {
@@ -168,7 +260,7 @@ KM.account = (function () {
       buildForm.hidden = !signedIn;
     }
 
-    if (!signedIn) return;
+    if (!signedIn || recovering) return;
 
     profile().then(function (p) {
       if (!p) return;
@@ -238,6 +330,8 @@ KM.account = (function () {
     init: init,
     activate: activate,
     paint: paint,
+    landed: landed,
+    landingTab: landingTab,
     profile: profile,
     isModerator: isModerator
   };

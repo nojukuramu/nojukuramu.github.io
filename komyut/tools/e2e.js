@@ -209,7 +209,9 @@ async function main() {
     body: JSON.stringify(body)
   });
 
-  await page.route("**/*", async (route) => {
+  /* Registered on the CONTEXT, not the page: the email-link tests below
+     open fresh pages, and a page-level route would not cover them. */
+  await ctx.route("**/*", async (route) => {
     const url = route.request().url();
     if (url.startsWith(origin)) return route.continue();
 
@@ -236,6 +238,13 @@ async function main() {
         }]));
       }
       if (url.includes("/auth/v1")) {
+        const USER = { id: "44444444-4444-4444-4444-444444444444", email: "juan@example.com" };
+        /* Who am I, and change my password: both are /auth/v1/user, told
+           apart by method the way GoTrue does. */
+        if (url.includes("/auth/v1/user")) return route.fulfill(json(USER));
+        if (url.includes("/auth/v1/recover") || url.includes("/auth/v1/logout")) {
+          return route.fulfill(json({}));
+        }
         /* The first password is wrong and the second is right, so the same
            stub covers both the refusal and the sign-in. */
         const body = route.request().postData() || "";
@@ -245,8 +254,7 @@ async function main() {
         }
         return route.fulfill(json({
           access_token: "test.access.token", refresh_token: "test-refresh",
-          expires_in: 3600,
-          user: { id: "44444444-4444-4444-4444-444444444444", email: "juan@example.com" }
+          expires_in: 3600, user: USER
         }));
       }
       return route.fulfill(json([]));
@@ -552,6 +560,106 @@ async function main() {
   await page.click("#info-close");
   await page.waitForTimeout(200);
   check("and it closes", !(await page.isVisible("#info-sheet")));
+
+  /* ----------------------------------------------------------
+     Coming back from a link in an email.
+
+     GoTrue verifies the token and bounces the browser back to the
+     project's Site URL with the result in the fragment. Each of the three
+     things it can say gets its own fresh page, because this is entirely
+     about what happens during boot.
+     ---------------------------------------------------------- */
+  section("Arriving on a confirmation link");
+  let landN = 0;
+  async function land(hash, opts) {
+    const p2 = await ctx.newPage();
+    const errs = [];
+    p2.on("pageerror", (e) => errs.push(String(e.message)));
+    if (opts && opts.signedOut) {
+      /* Pages in one context share localStorage, and the tests above have
+         signed in. Somebody clicking a link on a browser that has never
+         signed in is a different case and has to be set up as one — so
+         this is the LAST of these to run, since it empties the storage the
+         others rely on. */
+      await p2.goto(origin + "/index.html");
+      await p2.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+    }
+    /* A unique query string, because a navigation that differs only in the
+       fragment is a same-document one: the page would not reload and none
+       of this runs at boot. */
+    await p2.goto(origin + "/index.html?land=" + (++landN) + hash, { waitUntil: "networkidle" });
+    await p2.waitForTimeout(900);
+    return { page: p2, errors: errs };
+  }
+
+  const confirmed = await land("#access_token=a.b.c&refresh_token=r1&expires_in=3600&token_type=bearer&type=signup");
+  check("a confirmed address arrives signed in",
+    await confirmed.page.evaluate(() => KM.supa.signedIn()));
+  check("it says so in one line rather than moving them somewhere",
+    (await confirmed.page.textContent("#toast")).indexOf("confirmed") !== -1,
+    await confirmed.page.textContent("#toast"));
+  check("and it leaves them on Find, because there is nothing to do in You",
+    await confirmed.page.isVisible("#pane-find"));
+  check("it knows who they are",
+    (await confirmed.page.textContent("#you-handle")) === "@juan_dc");
+  check("the tokens are wiped out of the address bar",
+    (await confirmed.page.evaluate(() => location.hash)) === "",
+    await confirmed.page.evaluate(() => location.hash));
+  check("and out of the history entry too",
+    (await confirmed.page.evaluate(() => location.href)).indexOf("access_token") === -1);
+  check("no page errors landing on it", confirmed.errors.length === 0, confirmed.errors.join(" | "));
+  await confirmed.page.close();
+
+  section("Arriving on a password-reset link");
+  const recovery = await land("#access_token=a.b.c&refresh_token=r1&expires_in=3600&type=recovery");
+  check("it asks for a new password", await recovery.page.isVisible("#you-recover"));
+  check("and does not show the account yet", !(await recovery.page.isVisible("#you-in")));
+  check("nor the sign-in form", !(await recovery.page.isVisible("#you-out")));
+  check("the tokens are wiped here too",
+    (await recovery.page.evaluate(() => location.hash)) === "");
+
+  await recovery.page.fill("#recover-password", "short");
+  await recovery.page.click("#recover-go");
+  await recovery.page.waitForTimeout(200);
+  check("a short new password is refused before any request",
+    (await recovery.page.textContent("#recover-err")).indexOf("eight") !== -1);
+
+  await recovery.page.fill("#recover-password", "a-longer-one-9");
+  await recovery.page.click("#recover-go");
+  await recovery.page.waitForTimeout(700);
+  check("a good one is saved and drops you into the account",
+    await recovery.page.isVisible("#you-in"));
+  check("the new password is not left in the field",
+    (await recovery.page.inputValue("#recover-password")) === "");
+  await recovery.page.close();
+
+  section("Arriving on a link that has expired");
+  const EXPIRED = "#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired";
+  /* A link failing is not a reason to throw away a working session, so the
+     signed-in case goes first — and before the one below, which empties
+     this origin's storage. */
+  const expiredWhileIn = await land(EXPIRED);
+  check("an expired link leaves an existing session alone",
+    await expiredWhileIn.page.evaluate(() => KM.supa.signedIn()));
+  check("and still says the link did not work",
+    (await expiredWhileIn.page.textContent("#auth-err")).indexOf("expired") !== -1,
+    await expiredWhileIn.page.textContent("#auth-err"));
+  await expiredWhileIn.page.close();
+
+  const expired = await land(EXPIRED, { signedOut: true });
+  check("it says so in words somebody can act on",
+    (await expired.page.textContent("#auth-err")).indexOf("expired") !== -1,
+    await expired.page.textContent("#auth-err"));
+  check("it does not claim to have signed anybody in",
+    (await expired.page.evaluate(() => KM.supa.signedIn())) === false);
+  check("it offers the sign-in form to try again from",
+    await expired.page.isVisible("#you-out"));
+  check("it does not ask for a new password on a link that never worked",
+    !(await expired.page.isVisible("#you-recover")));
+  check("and it still clears the fragment",
+    (await expired.page.evaluate(() => location.hash)) === "");
+  check("no page errors on a failed link", expired.errors.length === 0, expired.errors.join(" | "));
+  await expired.page.close();
 
   section("Nothing went anywhere it should not have");
   check("no request to an address the test did not expect",

@@ -49,9 +49,13 @@ KM.app = (function () {
     KM.supa.init();
     KM.account.paint();
 
-    /* The sheet starts open on Find, because an app that opens on a bare
-       map is an app that asks "now what". */
-    openTab("find", { open: true });
+    /* The sheet starts open, because an app that opens on a bare map is an
+       app that asks "now what". Which pane depends on how we got here:
+       KM.supa.init() has just read the URL for a confirmation or reset
+       link, and one of those has something to do in You. */
+    var landing = KM.supa.landing();
+    openTab(KM.account.landingTab(landing), { open: true });
+    KM.account.landed(landing);
 
     /* A phone rotating, or a keyboard appearing, changes the map's box. */
     window.addEventListener("resize", KM.debounce(function () { KM.map.invalidate(); }, 200));
