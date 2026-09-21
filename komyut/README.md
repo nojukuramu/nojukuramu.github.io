@@ -78,12 +78,17 @@ maps, routing, geocoding, forecast — is free and key-less.
 
 1. **Make a project.** Any region; the free tier is plenty.
 
-2. **Run the schema.** Open the SQL editor and run
-   [`supabase/schema.sql`](supabase/schema.sql) whole. It creates the tables,
-   the triggers that keep the vote counts honest, the Row Level Security
-   policies, and the four functions the app calls. It is written to be
-   re-runnable, so applying it again after an edit is safe and will not drop
-   anybody's routes.
+2. **Run the schema.** In the dashboard, **SQL Editor → New query**, paste
+   the whole of [`supabase/schema.sql`](supabase/schema.sql), and **Run**.
+   It is one script — do not run it a piece at a time — and it takes a
+   couple of seconds. It creates the tables, the triggers that keep the
+   vote counts honest, the Row Level Security policies and the functions
+   the app calls. It is written to be re-runnable, so running it again
+   after an edit is safe and will not drop anybody's routes.
+
+   Then run [`supabase/verify.sql`](supabase/verify.sql) the same way. It
+   writes nothing and returns a list of what the database now has; every
+   row should say `ok`.
 
 3. **Fill in two values** in [`static/js/config.js`](static/js/config.js):
 
