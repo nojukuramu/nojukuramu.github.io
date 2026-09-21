@@ -1,0 +1,1049 @@
+/* ============================================================
+   KomyutApp — app shell and everything drawn into it
+
+   Mobile first, and that is not a slogan here: this app is used one-handed,
+   standing up, in the sun, deciding which jeepney to flag down. Every
+   decision below falls out of that.
+
+   The layout rule, and it is the only one that matters
+   ---------------------------------------------------
+   THE MAP IS THE SCREEN. Everything else floats over it:
+
+     * a rail of buttons across the top — buttons, not a bar, so the map is
+       draggable in the gaps between them
+     * a tab bar along the bottom, four targets, each one comfortably a
+       thumb wide
+     * one sheet that rises over the bottom of the map when you ask for it
+       and goes away when you are done. Two states, open and closed, moved
+       by named buttons. Nothing snaps, nothing is half open, and nothing
+       is ever left mid-air by a gesture the browser dropped.
+
+   The palette
+   -----------
+   One accent — a deep jeepney-terminal teal — and a warm paper light theme
+   against a deep dark one. Both themes define the SAME set of tokens;
+   tools/validate.js fails the build if one of them grows a token the other
+   does not have, because a half-translated palette is how a dark theme ends
+   up with one white card in it.
+   ============================================================ */
+
+:root {
+  --bg:          #F4F6F3;
+  --bg-tint:     #E8EDE7;
+  --surface:     #FFFFFF;
+  --surface-2:   #F0F3EE;
+  --ink:         #16211D;
+  --ink-soft:    #33403A;
+  --muted:       #5F6E67;
+  --faint:       #8D9A93;
+  --line:        #DCE3DD;
+  --line-strong: #C3CEC6;
+
+  --komyut:       #1F7A6B;
+  --komyut-hover: #176256;
+  --komyut-soft:  #DCEDE8;
+  --komyut-ink:   #FFFFFF;
+
+  /* The floating layer. Everything over the map is drawn from these three,
+     so the whole overlay set reads as one material and a theme change never
+     leaves half of it in the wrong skin. */
+  --glass:        rgba(255, 255, 255, .88);
+  --glass-strong: rgba(255, 255, 255, .97);
+  --glass-line:   rgba(22, 33, 29, .10);
+  --glass-ink:    #16211D;
+
+  --shadow-sm: 0 1px 2px rgba(22, 33, 29, .06);
+  --shadow:    0 4px 16px -6px rgba(22, 33, 29, .18);
+  --shadow-lg: 0 20px 50px -18px rgba(22, 33, 29, .30);
+
+  --radius:    12px;
+  --radius-sm: 8px;
+  --radius-lg: 20px;
+  --ease:      cubic-bezier(.22, 1, .36, 1);
+
+  --sans: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* The reliability bands, and the weather severity that shares them.
+     Deliberately off the accent hue: --komyut is a blue-green, so "good"
+     is pushed toward grass so it never reads as a control. */
+  --band-unproven: #97A29B;
+  --band-weak:     #B8892A;
+  --band-fair:     #C08033;
+  --band-good:     #3F8F63;
+  --band-strong:   #2E7D4F;
+
+  --sev-clear:   #3F8F63;
+  --sev-watch:   #B8892A;
+  --sev-caution: #C9702F;
+  --sev-severe:  #B03434;
+
+  --up:   #2E7D4F;
+  --down: #B03434;
+
+  --gut:    12px;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --rail-h: 42px;
+  --tabs-h: 58px;
+  --sheet-h: 62vh;
+
+  color-scheme: light;
+}
+
+/* The dark palette, written once and applied from both the system
+   preference and the explicit toggle. Same tokens, no exceptions. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #101613;
+    --bg-tint:     #141B18;
+    --surface:     #18211D;
+    --surface-2:   #202B26;
+    --ink:         #E8EFEA;
+    --ink-soft:    #C6D2CB;
+    --muted:       #93A29A;
+    --faint:       #6C7A73;
+    --line:        #29352F;
+    --line-strong: #3A4841;
+
+    --komyut:       #4FB3A0;
+    --komyut-hover: #63C4B1;
+    --komyut-soft:  #1B3832;
+    --komyut-ink:   #06130F;
+
+    --glass:        rgba(24, 33, 29, .88);
+    --glass-strong: rgba(24, 33, 29, .97);
+    --glass-line:   rgba(232, 239, 234, .12);
+    --glass-ink:    #E8EFEA;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .40);
+    --shadow:    0 4px 16px -6px rgba(0, 0, 0, .60);
+    --shadow-lg: 0 20px 50px -18px rgba(0, 0, 0, .75);
+
+    --band-unproven: #6C7A73;
+    --band-weak:     #C79A44;
+    --band-fair:     #D0904A;
+    --band-good:     #56AE7C;
+    --band-strong:   #62C089;
+
+    --sev-clear:   #56AE7C;
+    --sev-watch:   #C79A44;
+    --sev-caution: #D98A4F;
+    --sev-severe:  #D46262;
+
+    --up:   #56AE7C;
+    --down: #D46262;
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #101613;
+  --bg-tint:     #141B18;
+  --surface:     #18211D;
+  --surface-2:   #202B26;
+  --ink:         #E8EFEA;
+  --ink-soft:    #C6D2CB;
+  --muted:       #93A29A;
+  --faint:       #6C7A73;
+  --line:        #29352F;
+  --line-strong: #3A4841;
+
+  --komyut:       #4FB3A0;
+  --komyut-hover: #63C4B1;
+  --komyut-soft:  #1B3832;
+  --komyut-ink:   #06130F;
+
+  --glass:        rgba(24, 33, 29, .88);
+  --glass-strong: rgba(24, 33, 29, .97);
+  --glass-line:   rgba(232, 239, 234, .12);
+  --glass-ink:    #E8EFEA;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .40);
+  --shadow:    0 4px 16px -6px rgba(0, 0, 0, .60);
+  --shadow-lg: 0 20px 50px -18px rgba(0, 0, 0, .75);
+
+  --band-unproven: #6C7A73;
+  --band-weak:     #C79A44;
+  --band-fair:     #D0904A;
+  --band-good:     #56AE7C;
+  --band-strong:   #62C089;
+
+  --sev-clear:   #56AE7C;
+  --sev-watch:   #C79A44;
+  --sev-caution: #D98A4F;
+  --sev-severe:  #D46262;
+
+  --up:   #56AE7C;
+  --down: #D46262;
+
+  color-scheme: dark;
+}
+
+/* The map itself is a photograph of a map; in the dark theme it is dimmed
+   rather than inverted, because an inverted map makes water look like land. */
+:root[data-theme="dark"] .leaflet-tile,
+:root:not([data-theme="light"]) .leaflet-tile {
+  filter: brightness(.72) saturate(.78) contrast(1.05);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .leaflet-tile { filter: none; }
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+
+/* The browser's own rule for [hidden] is `display: none` at the lowest
+   possible specificity, so ANY class here that sets a display beats it and
+   the element stays on screen. That is not a hypothetical: it is why the
+   search box's clear button and the "Load more" button were both visible
+   when they had been hidden. Every `hidden` in this app is a statement
+   that the thing is not there, so it wins outright. */
+[hidden] { display: none !important; }
+h1, h2, h3, p, ol, ul { margin: 0; }
+ol, ul { padding: 0; list-style: none; }
+
+.km-app { position: fixed; inset: 0; }
+
+.km-map-wrap, .km-map { position: absolute; inset: 0; }
+.km-map { background: var(--bg-tint); }
+
+/* Leaflet's own chrome has to clear ours. */
+.leaflet-control-container .leaflet-top { top: calc(var(--safe-t) + var(--rail-h) + var(--gut) * 2); }
+.leaflet-control-container .leaflet-bottom { bottom: calc(var(--safe-b) + var(--tabs-h) + 6px); }
+.leaflet-control-attribution {
+  background: var(--glass) !important;
+  color: var(--muted) !important;
+  font-size: 10px;
+  border-radius: 6px 0 0 0;
+}
+.leaflet-control-attribution a { color: var(--muted) !important; }
+.leaflet-bar a {
+  background: var(--glass-strong) !important;
+  color: var(--glass-ink) !important;
+  border-color: var(--glass-line) !important;
+}
+
+/* ============================================================
+   The floating material
+   ============================================================ */
+.km-glass {
+  background: var(--glass);
+  color: var(--glass-ink);
+  border: 1px solid var(--glass-line);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+}
+
+.km-rail {
+  position: absolute;
+  top: calc(var(--safe-t) + var(--gut));
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  z-index: 420;
+  pointer-events: none;
+}
+.km-rail > * { pointer-events: auto; }
+.km-rail-spacer { flex: 1; pointer-events: none; }
+
+.km-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: var(--rail-h);
+  padding: 0 14px 0 11px;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -.01em;
+}
+.km-brand-mark { display: flex; width: 20px; height: 20px; color: var(--komyut); }
+.km-brand-mark svg { width: 100%; height: 100%; }
+
+.km-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--rail-h);
+  height: var(--rail-h);
+  padding: 0;
+  border: 1px solid var(--glass-line);
+  border-radius: 999px;
+  background: var(--glass);
+  color: var(--glass-ink);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  cursor: pointer;
+  transition: transform .14s var(--ease), background .14s var(--ease);
+}
+.km-icon-btn svg { width: 20px; height: 20px; }
+.km-icon-btn:active { transform: scale(.94); }
+.km-icon-btn:disabled { opacity: .45; cursor: default; }
+.km-icon-btn.is-on { background: var(--komyut); color: var(--komyut-ink); border-color: transparent; }
+
+/* ============================================================
+   The update bar — one line, dismissible, never applies itself
+   ============================================================ */
+.km-update {
+  position: absolute;
+  top: calc(var(--safe-t) + var(--gut) + var(--rail-h) + 8px);
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  z-index: 430;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 40px;
+  padding: 0 6px 0 12px;
+  border-radius: 999px;
+  background: var(--komyut);
+  color: var(--komyut-ink);
+  box-shadow: var(--shadow);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.km-update[hidden] { display: none; }
+.km-update-icon { display: flex; width: 18px; height: 18px; }
+.km-update-icon svg { width: 100%; height: 100%; }
+.km-update-text { flex: 1; min-width: 0; }
+.km-update-go {
+  border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--komyut-ink); color: var(--komyut);
+  padding: 6px 13px; font-size: 13px; font-weight: 600;
+}
+.km-update-later {
+  border: 0; background: transparent; color: inherit; cursor: pointer;
+  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+  border-radius: 999px; opacity: .8;
+}
+.km-update-later svg { width: 17px; height: 17px; }
+
+/* ============================================================
+   Placing a pin: the pin is fixed, the map moves under it
+   ============================================================ */
+.km-pick { position: absolute; inset: 0; pointer-events: none; z-index: 410; }
+.km-pick-pin {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -100%);
+  color: var(--komyut);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .3));
+}
+.km-pick-pin svg { width: 44px; height: 44px; display: block; }
+.km-pick-shadow {
+  position: absolute; left: 50%; bottom: -4px;
+  width: 12px; height: 5px; margin-left: -6px;
+  border-radius: 50%; background: rgba(0, 0, 0, .28);
+}
+
+.km-pickbar {
+  position: absolute;
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  bottom: calc(var(--safe-b) + var(--tabs-h) + var(--gut));
+  z-index: 460;
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 10px 10px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.km-pickbar[hidden] { display: none; }
+.km-pickbar-text { flex: 1; min-width: 0; font-size: 13.5px; color: var(--muted); }
+
+/* ============================================================
+   The toast — one short line at a time
+   ============================================================ */
+.km-toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--safe-b) + var(--tabs-h) + var(--sheet-h) * 0 + 78px);
+  transform: translateX(-50%);
+  z-index: 700;
+  max-width: min(92vw, 420px);
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 13.5px;
+  font-weight: 500;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+.km-toast[hidden] { display: none; }
+
+/* ============================================================
+   The sheet
+   ============================================================ */
+.km-sheet {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(var(--safe-b) + var(--tabs-h));
+  z-index: 440;
+  max-height: var(--sheet-h);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(101%);
+  transition: transform .28s var(--ease);
+}
+.km-sheet[data-open="true"] { transform: translateY(0); }
+[data-picking="true"] .km-sheet { transform: translateY(101%); }
+
+.km-sheet-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px var(--gut) 8px;
+  border-bottom: 1px solid var(--line);
+}
+.km-sheet-title { flex: 1; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.km-sheet-close {
+  width: 32px; height: 32px; border: 0; border-radius: 999px;
+  background: var(--surface-2); color: var(--muted);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.km-sheet-close svg { width: 17px; height: 17px; }
+
+.km-sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 12px var(--gut) calc(var(--gut) + 8px);
+}
+
+/* ============================================================
+   The tab bar
+   ============================================================ */
+.km-tabs {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  z-index: 450;
+  height: calc(var(--safe-b) + var(--tabs-h));
+  padding-bottom: var(--safe-b);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--glass-strong);
+  border-top: 1px solid var(--glass-line);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+}
+.km-tab {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; border: 0; background: transparent; cursor: pointer;
+  color: var(--muted); padding: 0;
+}
+.km-tab-icon { display: flex; width: 22px; height: 22px; }
+.km-tab-icon svg { width: 100%; height: 100%; }
+.km-tab-label { font-size: 10.5px; font-weight: 600; letter-spacing: .01em; }
+.km-tab.is-on { color: var(--komyut); }
+
+/* ============================================================
+   Form furniture
+   ============================================================ */
+.km-label {
+  display: block;
+  margin: 14px 0 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: .01em;
+}
+
+.km-input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 15px;         /* never below 16px-ish on iOS or it zooms; 15 with the meta tag is fine */
+  -webkit-appearance: none;
+  appearance: none;
+}
+.km-input:focus {
+  outline: 2px solid var(--komyut);
+  outline-offset: -1px;
+  background: var(--surface);
+}
+.km-textarea { resize: vertical; min-height: 68px; line-height: 1.45; }
+
+.km-counter { margin: 4px 0 0; font-size: 11.5px; color: var(--faint); text-align: right; }
+.km-err { margin: 8px 0 0; font-size: 13px; color: var(--down); font-weight: 500; }
+.km-note { margin: 8px 0 0; font-size: 13px; color: var(--komyut); font-weight: 500; }
+.km-hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0 14px; }
+.km-h3 { margin: 18px 0 8px; font-size: 13px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
+
+.km-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.km-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.km-row-wrap { flex-wrap: wrap; }
+.km-row-split { justify-content: space-between; }
+
+.km-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 11px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font-size: 14.5px; font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;                    /* a thumb, not a cursor */
+  transition: transform .12s var(--ease), background .14s var(--ease);
+}
+.km-btn:active { transform: scale(.98); }
+.km-btn:disabled { opacity: .55; cursor: default; }
+.km-btn-wide { width: 100%; }
+.km-btn-primary { background: var(--komyut); color: var(--komyut-ink); }
+.km-btn-primary:hover { background: var(--komyut-hover); }
+.km-btn-ghost { background: var(--surface-2); color: var(--ink); border-color: var(--line-strong); }
+.km-btn-quiet { background: transparent; color: var(--muted); }
+.km-btn-danger { background: transparent; color: var(--down); border-color: var(--down); }
+
+.km-linkish {
+  border: 0; background: transparent; color: var(--muted);
+  font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 6px 4px;
+}
+
+/* One short line under a control, never a paragraph. The explanation lives
+   behind the (i) beside it. */
+.km-hint {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.km-i {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; margin-left: 2px;
+  vertical-align: -4px;
+  border: 0; border-radius: 999px;
+  background: var(--surface-2); color: var(--muted);
+  cursor: pointer;
+}
+.km-i svg { width: 14px; height: 14px; }
+
+.km-empty { margin: 14px 0; font-size: 13.5px; color: var(--faint); text-align: center; }
+.km-loading { color: var(--muted); }
+.km-nowrap { white-space: nowrap; }
+
+.km-failure {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 22px 16px; text-align: center; color: var(--muted); font-size: 13.5px;
+}
+.km-failure .km-ico { color: var(--sev-caution); }
+.km-failure .km-ico svg { width: 24px; height: 24px; }
+
+.km-ico { display: inline-flex; align-items: center; justify-content: center; }
+.km-ico svg { width: 16px; height: 16px; }
+.km-tiny svg { width: 13px; height: 13px; }
+
+.km-dot-sep { display: inline-block; width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .45; margin: 0 7px; vertical-align: 3px; }
+
+/* ---------- chips, segments, switches ---------- */
+.km-chips { display: flex; gap: 6px; overflow-x: auto; padding: 12px 0 4px; margin: 0 calc(var(--gut) * -1); padding-left: var(--gut); padding-right: var(--gut); scrollbar-width: none; }
+.km-chips::-webkit-scrollbar { display: none; }
+.km-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  flex: 0 0 auto;
+  padding: 7px 12px 7px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: 13px; font-weight: 500;
+  cursor: pointer; white-space: nowrap;
+}
+.km-chip-icon { display: flex; width: 17px; height: 17px; }
+.km-chip-icon svg { width: 100%; height: 100%; }
+.km-chip.is-on { background: var(--komyut); color: var(--komyut-ink); border-color: transparent; }
+
+.km-segmented {
+  display: inline-flex; padding: 3px; gap: 2px;
+  background: var(--surface-2); border-radius: 999px; border: 1px solid var(--line);
+}
+.km-segmented-wide { display: flex; width: 100%; }
+.km-segmented button {
+  flex: 1; border: 0; background: transparent; cursor: pointer;
+  padding: 7px 14px; border-radius: 999px;
+  font-size: 13px; font-weight: 600; color: var(--muted);
+}
+.km-segmented button.is-on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+
+.km-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--muted); }
+.km-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.km-switch-box {
+  width: 36px; height: 21px; border-radius: 999px;
+  background: var(--line-strong); position: relative; transition: background .16s var(--ease);
+}
+.km-switch-box::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 17px; height: 17px; border-radius: 50%;
+  background: #FFFFFF; box-shadow: var(--shadow-sm);
+  transition: transform .16s var(--ease);
+}
+.km-switch input:checked + .km-switch-box { background: var(--komyut); }
+.km-switch input:checked + .km-switch-box::after { transform: translateX(15px); }
+.km-switch input:focus-visible + .km-switch-box { outline: 2px solid var(--komyut); outline-offset: 2px; }
+
+/* ---------- search field ---------- */
+.km-search { position: relative; display: flex; align-items: center; }
+.km-search .km-input { padding-left: 38px; padding-right: 38px; }
+.km-search-icon {
+  position: absolute; left: 11px; display: flex; width: 18px; height: 18px;
+  color: var(--faint); pointer-events: none;
+}
+.km-search-icon svg { width: 100%; height: 100%; }
+.km-search-clear {
+  position: absolute; right: 4px;
+  width: 32px; height: 32px; box-shadow: none; background: transparent; border: 0;
+}
+.km-search-clear svg { width: 15px; height: 15px; }
+
+/* ============================================================
+   Find: the two place buttons
+   ============================================================ */
+.km-field-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.km-place {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  text-align: left; cursor: pointer;
+  min-height: 46px;
+}
+.km-place-dot { flex: 0 0 auto; width: 11px; height: 11px; border-radius: 50%; border: 3px solid var(--faint); }
+.km-place-dot[data-kind="from"] { border-color: var(--up); }
+.km-place-dot[data-kind="to"] { border-color: var(--sev-caution); }
+.km-place-text {
+  flex: 1; min-width: 0; font-size: 14.5px; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.km-place.is-set .km-place-text { color: var(--ink); font-weight: 500; }
+.km-swap { width: 40px; height: 40px; box-shadow: none; background: var(--surface-2); }
+
+/* ============================================================
+   A route, as a card
+   ============================================================ */
+.km-results { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+
+.km-card {
+  display: flex; align-items: stretch; gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.km-card.is-validated { border-color: var(--komyut); }
+/* A route the community has voted below zero recedes, in the list as well
+   as in the ranking. */
+.km-card.is-down { opacity: .62; }
+.km-card.is-down:hover, .km-card.is-down:focus-within { opacity: 1; }
+
+.km-card-main {
+  flex: 1; min-width: 0;
+  display: block; text-align: left; cursor: pointer;
+  border: 0; background: transparent; padding: 12px;
+}
+.km-card-head { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.km-card-ride { color: var(--komyut); }
+.km-card-ride svg { width: 19px; height: 19px; }
+.km-card-name { font-size: 15px; font-weight: 600; letter-spacing: -.01em; line-height: 1.3; }
+.km-card-od { margin-top: 3px; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+.km-card-arrow svg { width: 13px; height: 13px; opacity: .6; }
+.km-card-facts { margin-top: 5px; font-size: 12.5px; color: var(--muted); }
+.km-card-by { margin-top: 6px; font-size: 11.5px; color: var(--faint); display: flex; align-items: center; flex-wrap: wrap; }
+
+.km-tag {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 7px 2px 5px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase;
+}
+.km-tag svg { width: 12px; height: 12px; }
+.km-tag-validated { background: var(--komyut-soft); color: var(--komyut); }
+
+/* ---------- the reliability meter ---------- */
+.km-meter { display: flex; align-items: center; gap: 7px; margin-top: 7px; flex-wrap: wrap; }
+.km-meter-bar { display: flex; gap: 2px; }
+.km-meter-seg { width: 14px; height: 5px; border-radius: 3px; background: var(--line-strong); }
+.km-meter[data-band="unproven"] .km-meter-seg.is-on { background: var(--band-unproven); }
+.km-meter[data-band="weak"]     .km-meter-seg.is-on { background: var(--band-weak); }
+.km-meter[data-band="fair"]     .km-meter-seg.is-on { background: var(--band-fair); }
+.km-meter[data-band="good"]     .km-meter-seg.is-on { background: var(--band-good); }
+.km-meter[data-band="strong"]   .km-meter-seg.is-on { background: var(--band-strong); }
+.km-meter-label { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.km-meter-why { width: 100%; margin: 3px 0 0; font-size: 11.5px; color: var(--faint); }
+.km-meter-tiny .km-meter-seg { width: 10px; height: 4px; }
+
+/* ---------- votes ---------- */
+.km-vote {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; padding: 6px 8px;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+}
+.km-vote-btn {
+  width: 32px; height: 28px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--faint); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.km-vote-btn svg { width: 17px; height: 17px; }
+.km-vote-up.is-on { color: var(--up); background: color-mix(in srgb, var(--up) 14%, transparent); }
+.km-vote-down.is-on { color: var(--down); background: color-mix(in srgb, var(--down) 14%, transparent); }
+.km-vote-count { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.km-vote.is-negative .km-vote-count { color: var(--down); }
+.km-vote-inline { flex-direction: row; border: 0; background: transparent; padding: 0; gap: 4px; }
+.km-vote-inline .km-vote-btn { width: 28px; height: 26px; }
+
+/* ============================================================
+   The route detail
+   ============================================================ */
+.km-detail, .km-finder {
+  position: absolute; inset: 0;
+  z-index: 600;
+  display: flex; flex-direction: column;
+  background: var(--bg);
+  padding-top: var(--safe-t);
+}
+.km-detail[hidden], .km-finder[hidden] { display: none; }
+
+.km-detail-head, .km-finder-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px var(--gut);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.km-detail-head .km-icon-btn, .km-finder-head .km-icon-btn {
+  box-shadow: none; background: var(--surface-2); width: 38px; height: 38px;
+}
+.km-detail-title {
+  flex: 1; min-width: 0; font-size: 15px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.km-detail-body, .km-finder-body {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 14px var(--gut) calc(var(--safe-b) + 28px);
+}
+
+/* The map is behind the detail sheet, so the sheet keeps the top half of
+   the screen clear on a tall phone by simply starting lower. */
+@media (min-height: 640px) {
+  .km-detail { top: 38vh; border-radius: var(--radius-lg) var(--radius-lg) 0 0; box-shadow: var(--shadow-lg); overflow: hidden; padding-top: 0; }
+}
+
+.km-d-head { padding-bottom: 6px; }
+.km-d-line { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.km-type {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px 3px 7px; border-radius: 999px;
+  background: var(--komyut-soft); color: var(--komyut);
+  font-size: 12px; font-weight: 600;
+}
+.km-type svg { width: 16px; height: 16px; }
+
+.km-d-name { margin-top: 8px; font-size: 21px; font-weight: 700; letter-spacing: -.02em; line-height: 1.22; }
+.km-d-od { margin-top: 5px; font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.km-d-facts { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; }
+.km-d-fact { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--ink-soft); }
+.km-d-fact .km-ico { color: var(--faint); }
+
+.km-d-block { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.km-d-verdict { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.km-d-verdict .km-meter { flex: 1; margin-top: 0; }
+.km-d-vote { flex: 0 0 auto; }
+.km-d-vote .km-vote { border: 1px solid var(--line); border-radius: var(--radius); }
+.km-d-note { margin-top: 8px; font-size: 13px; color: var(--komyut); font-style: italic; }
+.km-d-para { margin-top: 8px; font-size: 14px; color: var(--ink-soft); line-height: 1.55; }
+
+.km-d-stops { display: flex; flex-direction: column; gap: 2px; }
+.km-d-stop { display: flex; align-items: center; gap: 10px; }
+.km-d-stop-n {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--surface-2); color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.km-d-stop-name {
+  flex: 1; min-width: 0; text-align: left; border: 0; background: transparent;
+  padding: 7px 0; font-size: 14px; color: var(--ink-soft); cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ---------- weather strip ---------- */
+.km-wx-row { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0 4px; scrollbar-width: none; }
+.km-wx-row::-webkit-scrollbar { display: none; }
+.km-wx {
+  flex: 0 0 auto; width: 78px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 6px; border-radius: var(--radius);
+  background: var(--surface-2); border: 1px solid var(--line);
+  text-align: center;
+}
+.km-wx-icon { display: flex; width: 26px; height: 26px; color: var(--muted); }
+.km-wx-icon svg { width: 100%; height: 100%; }
+.km-wx-temp { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.km-wx-text { font-size: 10.5px; color: var(--muted); line-height: 1.25; }
+.km-wx-time { font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.km-wx.km-sev-clear   { border-color: color-mix(in srgb, var(--sev-clear) 40%, var(--line)); }
+.km-wx.km-sev-watch   { border-color: var(--sev-watch); }
+.km-wx.km-sev-caution { border-color: var(--sev-caution); }
+.km-wx.km-sev-severe  { border-color: var(--sev-severe); background: color-mix(in srgb, var(--sev-severe) 10%, var(--surface-2)); }
+.km-wx.km-sev-severe .km-wx-icon { color: var(--sev-severe); }
+
+/* ---------- comments ---------- */
+.km-composer { margin: 10px 0 14px; }
+.km-comments { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.km-comment { padding: 11px 12px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--line); }
+.km-comment.is-gone { opacity: .5; }
+.km-comment-head { font-size: 11.5px; color: var(--faint); display: flex; align-items: center; flex-wrap: wrap; }
+.km-comment-who { font-weight: 700; color: var(--muted); }
+.km-comment-body { margin-top: 5px; font-size: 14px; line-height: 1.5; color: var(--ink-soft); white-space: pre-wrap; overflow-wrap: anywhere; }
+.km-comment-foot { margin-top: 7px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* ============================================================
+   The place finder
+   ============================================================ */
+.km-finder-head .km-input { flex: 1; }
+.km-finder-row {
+  display: flex; align-items: center; gap: 11px;
+  width: 100%; padding: 12px 4px; min-height: 52px;
+  border: 0; border-bottom: 1px solid var(--line);
+  background: transparent; text-align: left; cursor: pointer;
+}
+.km-finder-row:disabled { opacity: .5; }
+.km-finder-icon { flex: 0 0 auto; display: flex; width: 20px; height: 20px; color: var(--komyut); }
+.km-finder-icon svg { width: 100%; height: 100%; }
+.km-finder-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14.5px; }
+.km-finder-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.km-finder-addr { font-size: 11.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ============================================================
+   The builder's stop list
+   ============================================================ */
+.km-stops { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.km-stop-empty { padding: 16px 12px; border: 1px dashed var(--line-strong); border-radius: var(--radius); font-size: 13px; color: var(--faint); text-align: center; }
+.km-stop {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px 6px 6px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.km-stop.is-first { border-color: color-mix(in srgb, var(--up) 45%, var(--line)); }
+.km-stop.is-last  { border-color: color-mix(in srgb, var(--sev-caution) 45%, var(--line)); }
+.km-stop-n {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--surface); color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11.5px; font-weight: 700;
+}
+.km-stop.is-first .km-stop-n { background: var(--up); color: #FFFFFF; }
+.km-stop.is-last  .km-stop-n { background: var(--sev-caution); color: #FFFFFF; }
+.km-stop-name {
+  flex: 1; min-width: 0; border: 0; background: transparent; text-align: left;
+  padding: 8px 0; font-size: 14px; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.km-stop-tools { flex: 0 0 auto; display: flex; gap: 2px; }
+.km-stop-tool { width: 34px; height: 34px; box-shadow: none; background: transparent; border: 0; color: var(--muted); }
+.km-stop-tool svg { width: 16px; height: 16px; }
+
+.km-measure { margin-top: 10px; font-size: 13px; color: var(--muted); font-weight: 500; }
+
+/* ============================================================
+   Itineraries
+   ============================================================ */
+.km-itin {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-2); overflow: hidden;
+}
+.km-itin.is-open { border-color: var(--komyut); }
+.km-itin-head { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; padding: 12px; display: block; }
+.km-itin-top { display: flex; align-items: baseline; flex-wrap: wrap; color: var(--muted); font-size: 12.5px; }
+.km-itin-time { font-size: 18px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
+.km-itin-fare { font-weight: 600; color: var(--ink-soft); }
+.km-itin-trust { margin-top: 2px; }
+
+.km-chain { display: flex; align-items: center; gap: 2px; margin-top: 8px; flex-wrap: wrap; }
+.km-chain-leg {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--surface); color: var(--komyut); border: 1px solid var(--line);
+}
+.km-chain-leg.is-walk { color: var(--faint); }
+.km-chain-leg svg { width: 18px; height: 18px; }
+.km-chain-sep { color: var(--faint); }
+.km-chain-sep svg { width: 12px; height: 12px; }
+
+.km-itin-legs { border-top: 1px solid var(--line); padding: 4px 12px 12px; }
+.km-leg { display: flex; gap: 11px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.km-leg:last-child { border-bottom: 0; }
+.km-leg-icon { flex: 0 0 auto; display: flex; width: 24px; height: 24px; color: var(--komyut); }
+.km-leg.is-walk .km-leg-icon { color: var(--faint); }
+.km-leg-icon svg { width: 100%; height: 100%; }
+.km-leg-text { flex: 1; min-width: 0; }
+.km-leg-title { font-size: 14px; font-weight: 600; line-height: 1.35; }
+.km-leg-link { border: 0; background: transparent; padding: 0; text-align: left; color: var(--komyut); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.km-leg-sub { margin-top: 2px; font-size: 12px; color: var(--muted); display: flex; align-items: center; flex-wrap: wrap; }
+
+/* ============================================================
+   You
+   ============================================================ */
+.km-you-head { display: flex; align-items: center; gap: 12px; padding: 4px 0 10px; }
+.km-you-avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--komyut-soft); color: var(--komyut);
+  display: flex; align-items: center; justify-content: center;
+}
+.km-you-avatar svg { width: 24px; height: 24px; }
+.km-you-handle { font-size: 16px; font-weight: 700; }
+.km-you-sub { font-size: 12px; color: var(--muted); }
+.km-version { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.km-about { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+
+/* ============================================================
+   Map marks
+   ============================================================ */
+.km-mark-wrap { background: transparent; border: 0; }
+.km-mark {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 100%; border-radius: 50%;
+  background: var(--mark, #2F6FBF); color: #FFFFFF;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
+  font-size: 11px; font-weight: 700; line-height: 1;
+}
+.km-mark svg { width: 62%; height: 62%; }
+.km-mark-wx { background: #FFFFFF; color: var(--sev-clear); border-color: var(--sev-clear); font-size: 10.5px; }
+.km-mark-wx.km-sev-watch   { color: var(--sev-watch); border-color: var(--sev-watch); }
+.km-mark-wx.km-sev-caution { color: var(--sev-caution); border-color: var(--sev-caution); }
+.km-mark-wx.km-sev-severe  { color: #FFFFFF; background: var(--sev-severe); border-color: #FFFFFF; }
+
+/* ============================================================
+   The info sheet
+   ============================================================ */
+.km-info { position: absolute; inset: 0; z-index: 900; display: flex; align-items: flex-end; justify-content: center; }
+.km-info[hidden] { display: none; }
+.km-info-scrim { position: absolute; inset: 0; background: rgba(8, 14, 12, .45); }
+.km-info-card {
+  position: relative;
+  width: 100%; max-width: 520px; max-height: 76vh;
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: var(--shadow-lg);
+  padding-bottom: var(--safe-b);
+}
+.km-info-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px var(--gut) 10px;
+  border-bottom: 1px solid var(--line);
+}
+.km-info-head h3 { flex: 1; font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.km-info-head .km-icon-btn { box-shadow: none; background: var(--surface-2); width: 34px; height: 34px; }
+.km-info-body {
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 12px var(--gut) 20px;
+  font-size: 14px; line-height: 1.6; color: var(--ink-soft);
+}
+.km-info-body p { margin: 0 0 10px; }
+.km-info-body p:last-child { margin-bottom: 0; }
+.km-info-body b { color: var(--ink); font-weight: 600; }
+.km-info-body code { font-family: var(--mono); font-size: 12.5px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+
+/* ============================================================
+   Wider screens
+
+   Not a redesign: the same overlay set, moved off the bottom edge and
+   given a maximum width, because a sheet stretched across a laptop is a
+   sheet with a metre of empty space in the middle of every line.
+   ============================================================ */
+@media (min-width: 720px) {
+  :root { --gut: 16px; --sheet-h: calc(100vh - 140px); }
+
+  .km-sheet {
+    left: var(--gut); right: auto; bottom: var(--gut);
+    top: calc(var(--safe-t) + var(--rail-h) + var(--gut) * 2 + 8px);
+    width: 400px;
+    max-height: none;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--line);
+    transform: translateX(calc(-100% - var(--gut) * 2));
+  }
+  .km-sheet[data-open="true"] { transform: translateX(0); }
+  [data-picking="true"] .km-sheet { transform: translateX(calc(-100% - var(--gut) * 2)); }
+
+  .km-tabs {
+    left: var(--gut); right: auto; bottom: auto;
+    top: calc(var(--safe-t) + var(--gut));
+    width: 400px; height: var(--rail-h);
+    padding-bottom: 0;
+    border-radius: 999px; border: 1px solid var(--glass-line);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .km-tab { flex-direction: row; gap: 6px; }
+  .km-tab-icon { width: 17px; height: 17px; }
+  .km-tab-label { font-size: 12px; }
+
+  .km-rail { left: calc(var(--gut) * 2 + 400px); }
+  .km-brand { display: none; }
+
+  .km-detail {
+    top: var(--gut); bottom: var(--gut); left: auto;
+    right: var(--gut); width: 420px;
+    border-radius: var(--radius-lg); overflow: hidden;
+    border: 1px solid var(--line);
+  }
+  .km-finder {
+    top: var(--gut); bottom: var(--gut); left: var(--gut);
+    width: 400px; right: auto;
+    border-radius: var(--radius-lg); overflow: hidden;
+    border: 1px solid var(--line);
+  }
+  .km-pickbar { left: 50%; right: auto; transform: translateX(-50%); bottom: var(--gut); width: min(520px, 90vw); }
+  .km-toast { bottom: calc(var(--gut) + 70px); }
+  .km-update { left: calc(var(--gut) * 2 + 400px); top: calc(var(--safe-t) + var(--gut) + var(--rail-h) + 8px); }
+  .leaflet-control-container .leaflet-bottom { bottom: 6px; }
+}
+
+/* Somebody who has asked for less motion gets less of it. The sheet still
+   moves — it has to, or it appears from nowhere — but everything else is
+   instant. */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .01ms !important; transition-duration: .08s !important; }
+}

@@ -83,6 +83,7 @@ next time that app is touched — reusing `routecast/static/js/update.js` or
 | App | Worker waits | Page prompts |
 |-----|--------------|--------------|
 | `routecast` | yes | yes |
+| `komyut` | yes | yes |
 | `the-wolf-game` | yes | yes |
 | `karaokenatin` | yes | yes |
 | `task-notes` | yes | **no** — the worker waits for a handover nobody ever asks for |

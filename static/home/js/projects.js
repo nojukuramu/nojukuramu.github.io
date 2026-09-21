@@ -264,6 +264,46 @@
       c.globalAlpha = 1;
     },
 
+    /* a route of stops, with something running along it and each stop
+       lighting as it is reached — which is the app: the line is the
+       knowledge, and the stops are what people wrote down */
+    stops: function (c, w, h, p, a) {
+      var y = h * 0.56, x0 = w * 0.10, x1 = w * 0.90;
+      c.strokeStyle = "rgba(255,243,226,.24)"; c.lineWidth = 3;
+      c.lineCap = "round";
+      c.beginPath(); c.moveTo(x0, y); c.lineTo(x1, y); c.stroke();
+
+      var t = (p * 0.24) % 1;
+      var vx = x0 + (x1 - x0) * t;
+
+      for (var i = 0; i < 5; i++) {
+        var sx = x0 + (x1 - x0) * (i / 4);
+        var reached = vx >= sx - 2;
+        c.fillStyle = reached ? a : "rgba(255,243,226,.28)";
+        c.beginPath(); c.arc(sx, y, reached ? 4.4 : 3.2, 0, 6.283); c.fill();
+        if (reached) {
+          /* a vote rising off the stop it just left */
+          var age = Math.min(1, (vx - sx) / ((x1 - x0) / 4));
+          c.globalAlpha = 0.5 * (1 - age);
+          c.strokeStyle = a; c.lineWidth = 1.6;
+          c.beginPath();
+          c.moveTo(sx, y - 8 - age * 14);
+          c.lineTo(sx, y - 15 - age * 14);
+          c.moveTo(sx - 3.4, y - 11.6 - age * 14);
+          c.lineTo(sx, y - 15.4 - age * 14);
+          c.lineTo(sx + 3.4, y - 11.6 - age * 14);
+          c.stroke();
+          c.globalAlpha = 1;
+        }
+      }
+
+      c.fillStyle = "#FFF3E2";
+      c.beginPath(); c.roundRect(vx - 9, y - 16, 18, 10, 3); c.fill();
+      c.fillStyle = a;
+      c.beginPath(); c.arc(vx - 4.5, y - 5, 2.2, 0, 6.283); c.fill();
+      c.beginPath(); c.arc(vx + 4.5, y - 5, 2.2, 0, 6.283); c.fill();
+    },
+
     /* four strings, and a bow across them */
     strings: function (c, w, h, p, a) {
       for (var i = 0; i < 4; i++) {
@@ -335,6 +375,10 @@
       desc: "Plan a drive, then see the weather waiting along it.",
       hi: ["Every checkpoint forecast for the hour you arrive there", "Gear advice for a bike, not just a temperature", "Tells you if leaving an hour later dodges the rain"],
       tags: ["Leaflet", "OpenStreetMap", "forecast"] },
+    { name: "KomyutApp", href: "komyut/", badge: "Commute", accent: "#4FB3A0", kind: "together", motif: "stops",
+      desc: "Jeepney and tricycle routes, filed by the people who ride them.",
+      hi: ["Anybody can file a route; the votes decide which ones stand", "Plans a trip across them, transfers and all", "Fares, a reliability meter, and the weather along the line"],
+      tags: ["Supabase", "OpenStreetMap", "community"] },
     { name: "ARCO", href: "arco/", badge: "Instrument", accent: "#E0A24C", kind: "sound", motif: "strings",
       desc: "A two-thumb instrument for a phone held sideways.",
       hi: ["One thumb sweeps the scale, the other plucks or bows", "Four modelled strings, and tilt shapes the tone", "Learn a melody once, play it in all twelve keys"],

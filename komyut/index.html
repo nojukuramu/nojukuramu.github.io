@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>KomyutApp — community commute routes</title>
+  <meta name="description" content="Community-built commute routes for the Philippines and anywhere else: jeepney, tricycle, bus and train lines people filed themselves, with transfers, fares, votes and the weather waiting along the way." />
+
+  <!-- ==========================================================
+       The security policy, and why it is this tight.
+
+       This is the first app in this repository that shows one person's
+       typing to another person, so the usual "it is all local anyway"
+       does not apply. The policy below is the ceiling under which a
+       mistake elsewhere has to stay:
+
+         script-src 'self'   — no inline script at all, not even the
+                               theme bootstrap (see static/js/boot.js),
+                               and nothing from a CDN. An injected
+                               <script> in a route name cannot run, and
+                               neither can an inline handler.
+         object-src 'none'   — no plugins, no <embed>.
+         base-uri 'self'     — a <base> tag cannot be used to repoint
+                               every relative URL on the page.
+         form-action 'none'  — nothing on this page posts anywhere; the
+                               app talks over fetch.
+         connect-src         — the four services this app is allowed to
+                               speak to, and no others.
+
+       style-src carries 'unsafe-inline' because Leaflet positions every
+       tile and marker by writing to element.style, which the policy
+       counts as an inline style. That is a real loosening and it is the
+       one the library forces; it does not permit script.
+       ========================================================== -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none';
+    script-src 'self';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data: blob: https://*.tile.openstreetmap.org https://tile.openstreetmap.org;
+    connect-src 'self' https://*.supabase.co https://api.open-meteo.com https://nominatim.openstreetmap.org https://router.project-osrm.org;
+    manifest-src 'self';
+    worker-src 'self';
+    base-uri 'self';
+    form-action 'none';
+    object-src 'none';
+    frame-src 'none'" />
+
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta name="theme-color" content="#F4F6F3" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#101613" media="(prefers-color-scheme: dark)" />
+  <meta name="color-scheme" content="light dark" />
+
+  <meta property="og:title" content="KomyutApp — community commute routes" />
+  <meta property="og:description" content="Jeepney, tricycle, bus and train routes filed by the people who ride them. Search them, vote on them, and plan a trip across them." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://nojukuramu.github.io/komyut/" />
+  <link rel="canonical" href="https://nojukuramu.github.io/komyut/" />
+
+  <link rel="icon" href="static/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="static/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="KomyutApp" />
+
+  <script src="static/js/boot.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="static/css/app.css" />
+</head>
+
+<body>
+  <!-- ==========================================================
+       Mobile first, and that is the whole layout rule: the map is
+       the screen, one rail of buttons floats at the top, one bar of
+       tabs sits at the bottom, and everything else is a sheet that
+       rises over the map when you ask for it and goes away when you
+       are done. Nothing is half-open, nothing reflows the map, and
+       no pane owns the middle of the display.
+       ========================================================== -->
+  <div class="km-app" id="app">
+
+    <div class="km-map-wrap" id="map-wrap">
+      <div id="map" class="km-map"></div>
+
+      <!-- The pin lives inside the map because it is drawn at 50%/50% of
+           its box, and that box has to be the map or it points at a
+           coordinate it is not over. -->
+      <div id="pick-root" class="km-pick" hidden>
+        <div class="km-pick-pin" id="pick-pin" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21.5s-6.8-6.3-6.8-11.3a6.8 6.8 0 1 1 13.6 0c0 5-6.8 11.3-6.8 11.3Z"/><circle cx="12" cy="10.2" r="2.3"/></svg>
+          <span class="km-pick-shadow"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- top rail ---------- -->
+    <div class="km-rail" id="rail-top">
+      <div class="km-glass km-brand" id="rail-title-wrap">
+        <span class="km-brand-mark" id="rail-icon" aria-hidden="true"></span>
+        <span class="km-brand-text" id="rail-title">KomyutApp</span>
+      </div>
+
+      <div class="km-rail-spacer"></div>
+
+      <button type="button" class="km-glass km-icon-btn" id="locate-btn" aria-label="Go to where I am" title="Go to where I am"></button>
+      <button type="button" class="km-glass km-icon-btn" id="install-btn" aria-label="Install KomyutApp" title="Install KomyutApp" hidden></button>
+      <button type="button" class="km-glass km-icon-btn" id="theme-btn" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
+      <button type="button" class="km-glass km-icon-btn km-account-btn" id="account-btn" aria-label="Your account" title="Your account"></button>
+    </div>
+
+    <!-- ---------- a new version is waiting ----------
+         The only thing allowed over the map unprompted, and it earns that
+         by being one line high and dismissible. It never applies itself. -->
+    <div class="km-update" id="update-bar" role="status" hidden>
+      <span class="km-update-icon" id="update-icon" aria-hidden="true"></span>
+      <span class="km-update-text">New version ready</span>
+      <button type="button" class="km-update-go" id="update-go">Reload</button>
+      <button type="button" class="km-update-later" id="update-later" aria-label="Not now" title="Not now">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+
+    <!-- ---------- the pin bar, while placing something ---------- -->
+    <div class="km-pickbar" id="pick-bar" hidden>
+      <span class="km-pickbar-text" id="pick-label">Drag the map to place the pin</span>
+      <button type="button" class="km-btn km-btn-ghost" id="pick-cancel">Cancel</button>
+      <button type="button" class="km-btn km-btn-primary" id="pick-confirm">Set here</button>
+    </div>
+
+    <!-- ---------- one short line at a time ---------- -->
+    <div class="km-toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <!-- ==========================================================
+         The sheet. Four panes, one open at a time, opened and closed
+         by the tab bar below it.
+         ========================================================== -->
+    <div class="km-sheet" id="sheet" data-open="false" aria-hidden="true">
+      <div class="km-sheet-head">
+        <h2 class="km-sheet-title" id="sheet-title">Find a trip</h2>
+        <button type="button" class="km-sheet-close" id="sheet-close" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+
+      <div class="km-sheet-body" id="sheet-body">
+
+        <!-- ---------- PANE: find a trip ---------- -->
+        <section class="km-pane" id="pane-find" data-pane="find">
+          <div class="km-field-row">
+            <button type="button" class="km-place" id="find-from" data-role="origin">
+              <span class="km-place-dot" data-kind="from"></span>
+              <span class="km-place-text" id="find-from-text">Where you are</span>
+            </button>
+            <button type="button" class="km-icon-btn km-swap" id="find-swap" aria-label="Swap start and end" title="Swap"></button>
+          </div>
+          <div class="km-field-row">
+            <button type="button" class="km-place" id="find-to" data-role="destination">
+              <span class="km-place-dot" data-kind="to"></span>
+              <span class="km-place-text" id="find-to-text">Where you are going</span>
+            </button>
+          </div>
+
+          <p class="km-hint">
+            Built from routes people filed themselves.
+            <button type="button" class="km-i" data-info="planner" aria-label="How trips are found"></button>
+          </p>
+
+          <div class="km-row">
+            <button type="button" class="km-btn km-btn-primary km-btn-wide" id="find-go">Find routes</button>
+          </div>
+
+          <div class="km-results" id="find-results"></div>
+          <div class="km-empty" id="find-empty">Pick a start and an end.</div>
+        </section>
+
+        <!-- ---------- PANE: browse ---------- -->
+        <section class="km-pane" id="pane-browse" data-pane="browse" hidden>
+          <div class="km-search">
+            <span class="km-search-icon" id="browse-search-icon" aria-hidden="true"></span>
+            <input type="search" id="browse-q" class="km-input" placeholder="Route, place or city" autocomplete="off"
+                   maxlength="120" enterkeyhint="search" aria-label="Search routes" />
+            <button type="button" class="km-icon-btn km-search-clear" id="browse-clear" aria-label="Clear" hidden></button>
+          </div>
+
+          <div class="km-chips" id="browse-types" role="group" aria-label="Kind of ride"></div>
+
+          <div class="km-row km-row-split">
+            <div class="km-segmented" id="browse-sort" role="group" aria-label="Order">
+              <button type="button" data-sort="best" class="is-on">Best</button>
+              <button type="button" data-sort="top">Top</button>
+              <button type="button" data-sort="new">New</button>
+            </div>
+            <label class="km-switch">
+              <input type="checkbox" id="browse-validated" />
+              <span class="km-switch-box" aria-hidden="true"></span>
+              <span class="km-switch-label">Validated only</span>
+            </label>
+          </div>
+          <p class="km-hint">
+            Routes the community voted down sink out of the way.
+            <button type="button" class="km-i" data-info="votes" aria-label="How votes work"></button>
+          </p>
+
+          <div class="km-results" id="browse-results"></div>
+          <div class="km-empty" id="browse-empty">Search, or just scroll.</div>
+          <button type="button" class="km-btn km-btn-ghost km-btn-wide" id="browse-more" hidden>Load more</button>
+        </section>
+
+        <!-- ---------- PANE: build a route ---------- -->
+        <section class="km-pane" id="pane-build" data-pane="build" hidden>
+          <div class="km-locked" id="build-locked" hidden>
+            <p class="km-empty">Sign in to file a route.</p>
+            <button type="button" class="km-btn km-btn-primary km-btn-wide" id="build-signin">Sign in</button>
+          </div>
+
+          <div id="build-form">
+            <p class="km-hint">
+              Drop the stops in order. The line between them draws itself.
+              <button type="button" class="km-i" data-info="building" aria-label="How to build a route"></button>
+            </p>
+
+            <ol class="km-stops" id="build-stops"></ol>
+
+            <div class="km-row km-row-wrap">
+              <button type="button" class="km-btn km-btn-primary" id="build-add-pin">Add stop on map</button>
+              <button type="button" class="km-btn km-btn-ghost" id="build-add-search">Search a place</button>
+              <button type="button" class="km-btn km-btn-ghost" id="build-add-here">Add where I am</button>
+            </div>
+
+            <div class="km-measure" id="build-measure" hidden>
+              <span id="build-distance"></span><span class="km-dot-sep"></span><span id="build-duration"></span>
+            </div>
+
+            <div class="km-chips" id="build-types" role="group" aria-label="Kind of ride"></div>
+
+            <label class="km-label" for="build-name">Name</label>
+            <input type="text" id="build-name" class="km-input" maxlength="90"
+                   placeholder="e.g. Cubao to Montalban, via Batasan" autocomplete="off" />
+            <p class="km-err" id="build-name-err" hidden></p>
+
+            <div class="km-grid2">
+              <div>
+                <label class="km-label" for="build-fare-min">Fare from</label>
+                <input type="number" id="build-fare-min" class="km-input" min="0" max="100000" step="0.25" inputmode="decimal" placeholder="13" />
+              </div>
+              <div>
+                <label class="km-label" for="build-fare-max">to</label>
+                <input type="number" id="build-fare-max" class="km-input" min="0" max="100000" step="0.25" inputmode="decimal" placeholder="45" />
+              </div>
+            </div>
+
+            <div class="km-grid2">
+              <div>
+                <label class="km-label" for="build-city">City or area</label>
+                <input type="text" id="build-city" class="km-input" maxlength="60" placeholder="Quezon City" autocomplete="off" />
+              </div>
+              <div>
+                <label class="km-label" for="build-country">Country</label>
+                <input type="text" id="build-country" class="km-input" maxlength="2" placeholder="PH" autocomplete="off" />
+              </div>
+            </div>
+
+            <label class="km-label" for="build-desc">Anything worth knowing</label>
+            <textarea id="build-desc" class="km-input km-textarea" maxlength="600" rows="3"
+                      placeholder="Where it waits, when it stops running, which sign to look for."></textarea>
+            <p class="km-counter" id="build-desc-count">0 / 600</p>
+
+            <div class="km-row km-row-wrap">
+              <button type="button" class="km-btn km-btn-primary km-btn-wide" id="build-save">File this route</button>
+              <button type="button" class="km-btn km-btn-ghost" id="build-reset">Start over</button>
+            </div>
+            <p class="km-err" id="build-err" hidden></p>
+          </div>
+        </section>
+
+        <!-- ---------- PANE: you ---------- -->
+        <section class="km-pane" id="pane-you" data-pane="you" hidden>
+          <div id="you-out">
+            <p class="km-hint">
+              Reading needs no account. Voting, commenting and filing routes do.
+              <button type="button" class="km-i" data-info="account" aria-label="What an account is for"></button>
+            </p>
+
+            <div class="km-segmented km-segmented-wide" id="auth-mode" role="group" aria-label="Sign in or join">
+              <button type="button" data-mode="in" class="is-on">Sign in</button>
+              <button type="button" data-mode="up">Join</button>
+            </div>
+
+            <label class="km-label" for="auth-email">Email</label>
+            <input type="email" id="auth-email" class="km-input" autocomplete="email" maxlength="254" placeholder="you@example.com" />
+
+            <label class="km-label" for="auth-password">Password</label>
+            <input type="password" id="auth-password" class="km-input" autocomplete="current-password" maxlength="200" placeholder="At least 8 characters" />
+
+            <button type="button" class="km-btn km-btn-primary km-btn-wide" id="auth-go">Sign in</button>
+            <button type="button" class="km-btn km-btn-quiet km-btn-wide" id="auth-forgot">Forgot the password</button>
+            <p class="km-err" id="auth-err" hidden></p>
+            <p class="km-note" id="auth-note" hidden></p>
+          </div>
+
+          <div id="you-in" hidden>
+            <div class="km-you-head">
+              <span class="km-you-avatar" id="you-avatar" aria-hidden="true"></span>
+              <div>
+                <p class="km-you-handle" id="you-handle"></p>
+                <p class="km-you-sub" id="you-sub"></p>
+              </div>
+            </div>
+
+            <label class="km-label" for="you-handle-input">Your handle</label>
+            <input type="text" id="you-handle-input" class="km-input" maxlength="24" autocomplete="username" />
+            <p class="km-hint">Letters, numbers and underscore. This is what other people see.</p>
+            <button type="button" class="km-btn km-btn-ghost km-btn-wide" id="you-handle-save">Save handle</button>
+            <p class="km-err" id="you-err" hidden></p>
+
+            <h3 class="km-h3">Routes you filed</h3>
+            <div class="km-results" id="you-routes"></div>
+            <div class="km-empty" id="you-routes-empty">Nothing yet.</div>
+
+            <button type="button" class="km-btn km-btn-quiet km-btn-wide" id="auth-signout">Sign out</button>
+          </div>
+
+          <hr class="km-hr" />
+          <div class="km-about">
+            <p class="km-version">KomyutApp <span id="version-text">v?</span>
+              <button type="button" class="km-i" data-info="update" aria-label="How updates work"></button>
+            </p>
+            <button type="button" class="km-btn km-btn-quiet" id="update-check">Check for updates</button>
+            <p class="km-hint" id="update-state"></p>
+            <p class="km-hint">
+              Maps <span class="km-nowrap">&copy; OpenStreetMap contributors</span>. Forecast by Open-Meteo.
+              <button type="button" class="km-i" data-info="privacy" aria-label="What this app shares"></button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+    </div>
+
+    <!-- ---------- the tab bar ---------- -->
+    <nav class="km-tabs" id="tabs" aria-label="Sections">
+      <button type="button" class="km-tab is-on" data-tab="find">
+        <span class="km-tab-icon" aria-hidden="true"></span><span class="km-tab-label">Find</span>
+      </button>
+      <button type="button" class="km-tab" data-tab="browse">
+        <span class="km-tab-icon" aria-hidden="true"></span><span class="km-tab-label">Routes</span>
+      </button>
+      <button type="button" class="km-tab" data-tab="build">
+        <span class="km-tab-icon" aria-hidden="true"></span><span class="km-tab-label">Build</span>
+      </button>
+      <button type="button" class="km-tab" data-tab="you">
+        <span class="km-tab-icon" aria-hidden="true"></span><span class="km-tab-label">You</span>
+      </button>
+    </nav>
+
+    <!-- ==========================================================
+         The route detail. A full-height sheet of its own, because a
+         route with its votes, its comments and its weather is not a
+         card — and because it must be closable back to exactly where
+         the list was.
+         ========================================================== -->
+    <div class="km-detail" id="detail" hidden>
+      <div class="km-detail-head">
+        <button type="button" class="km-icon-btn" id="detail-back" aria-label="Back"></button>
+        <span class="km-detail-title" id="detail-title"></span>
+        <button type="button" class="km-icon-btn" id="detail-report" aria-label="Report this route" title="Report this route"></button>
+      </div>
+      <div class="km-detail-body" id="detail-body"></div>
+    </div>
+
+    <!-- ==========================================================
+         The place search sheet. One field, one list, used by the
+         trip planner and the route builder alike.
+         ========================================================== -->
+    <div class="km-finder" id="finder" hidden>
+      <div class="km-finder-head">
+        <button type="button" class="km-icon-btn" id="finder-back" aria-label="Back"></button>
+        <input type="search" id="finder-q" class="km-input" placeholder="Search a place" autocomplete="off"
+               maxlength="120" enterkeyhint="search" aria-label="Search for a place" />
+      </div>
+      <div class="km-finder-body" id="finder-body">
+        <button type="button" class="km-finder-row" id="finder-here">
+          <span class="km-finder-icon" aria-hidden="true"></span>
+          <span class="km-finder-text">Where I am now</span>
+        </button>
+        <button type="button" class="km-finder-row" id="finder-pin">
+          <span class="km-finder-icon" aria-hidden="true"></span>
+          <span class="km-finder-text">Drop a pin on the map</span>
+        </button>
+        <div id="finder-results"></div>
+      </div>
+    </div>
+
+    <!-- ==========================================================
+         The info sheet. One sheet, one registry of topics in
+         static/js/info.js, delegated clicks — so the copy lives in
+         one place and the markup stays short.
+         ========================================================== -->
+    <div class="km-info" id="info-sheet" hidden>
+      <div class="km-info-scrim" id="info-scrim"></div>
+      <div class="km-info-card" role="dialog" aria-modal="true" aria-labelledby="info-title">
+        <div class="km-info-head">
+          <h3 id="info-title"></h3>
+          <button type="button" class="km-icon-btn" id="info-close" aria-label="Close"></button>
+        </div>
+        <div class="km-info-body" id="info-body"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="static/js/util.js"></script>
+  <script src="static/js/sanitize.js"></script>
+  <script src="static/js/config.js"></script>
+  <script src="static/js/icons.js"></script>
+  <script src="static/js/info.js"></script>
+  <script src="static/js/update.js"></script>
+  <script src="static/js/supa.js"></script>
+  <script src="static/js/transit.js"></script>
+  <script src="static/js/geocode.js"></script>
+  <script src="static/js/router.js"></script>
+  <script src="static/js/weather.js"></script>
+  <script src="static/js/routes.js"></script>
+  <script src="static/js/plan.js"></script>
+  <script src="static/js/map.js"></script>
+  <script src="static/js/ui.js"></script>
+  <script src="static/js/finder.js"></script>
+  <script src="static/js/detail.js"></script>
+  <script src="static/js/browse.js"></script>
+  <script src="static/js/builder.js"></script>
+  <script src="static/js/planner.js"></script>
+  <script src="static/js/account.js"></script>
+  <script src="static/js/app.js"></script>
+  <script src="static/js/pwa.js"></script>
+</body>
+</html>
