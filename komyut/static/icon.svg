@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="KomyutApp">
+  <!-- The same three shapes tools/make-icons.js rasterises into the PNGs:
+       a plate, two stops, and the line between them. -->
+  <rect width="512" height="512" rx="113" fill="#1F7A6B"/>
+  <g fill="none" stroke="#F4F6F3" stroke-width="48" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M157 158 L353 164 L354 355"/>
+  </g>
+  <circle cx="157" cy="158" r="48" fill="#144F46" stroke="#F4F6F3" stroke-width="34"/>
+  <circle cx="354" cy="355" r="56" fill="#F4F6F3"/>
+</svg>

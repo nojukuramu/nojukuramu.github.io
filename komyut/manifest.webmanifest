@@ -1,0 +1,20 @@
+{
+  "name": "KomyutApp — community commute routes",
+  "short_name": "KomyutApp",
+  "description": "Jeepney, tricycle, bus, train and ferry routes filed by the people who ride them. Search them, vote on them, and plan a trip across them, transfers included.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#F4F6F3",
+  "theme_color": "#1F7A6B",
+  "categories": ["navigation", "travel", "social"],
+  "icons": [
+    { "src": "static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "static/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
