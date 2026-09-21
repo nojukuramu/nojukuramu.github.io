@@ -258,6 +258,41 @@ section("Static: updates");
     /url\.origin !== self\.location\.origin/.test(SW));
 })();
 
+section("Static: coming back from an email link");
+(function () {
+  var supa = read("static/js/supa.js");
+  var acct = read("static/js/account.js");
+
+  check("the app reads the fragment a confirmation link comes back on",
+    /location\.hash/.test(supa) && /access_token/.test(supa),
+    "otherwise a confirmed address lands on a page that ignores it");
+  check("and wipes the tokens out of the URL afterwards",
+    /history\.replaceState/.test(supa),
+    "a token left in the address bar is a token in the history and in screenshots");
+  check("an expired or reused link is reported in words",
+    /error_description/.test(supa) && /expired/.test(supa));
+
+  check("a reset link leads somewhere that can set a password",
+    /updatePassword/.test(supa) && /updatePassword/.test(acct) &&
+    HTML.indexOf('id="recover-password"') !== -1);
+  check("the new password is sent as a PUT to the user, not a sign-in",
+    /\/auth\/v1\/user"[\s\S]{0,80}method: "PUT"/.test(supa));
+
+  /* location.href can already carry a fragment from a previous link, and
+     GoTrue appends its own to whatever it is given. */
+  check("the reset redirect is an origin and a path, not the whole URL",
+    /location\.origin \+ location\.pathname/.test(acct) &&
+    !/resetPassword\(email, location\.href\)/.test(acct));
+
+  /* Two panes deciding the opening tab is how one silently won. */
+  check("one function decides which pane an email link opens",
+    /function landingTab/.test(acct) &&
+    (read("static/js/app.js").match(/KM\.account\.landingTab/g) || []).length === 1);
+  check("and the landing is read before the opening tab is chosen",
+    read("static/js/app.js").indexOf("KM.supa.landing()") <
+    read("static/js/app.js").indexOf("KM.account.landed("));
+})();
+
 section("Static: the info sheet");
 (function () {
   var sandbox = makeSandbox(["static/js/info.js"], { needDom: true });

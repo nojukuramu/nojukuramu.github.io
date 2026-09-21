@@ -362,11 +362,103 @@ KM.supa = (function () {
     }).then(function () { return true; });
   }
 
+  function updatePassword(password) {
+    if (!session) return Promise.reject(KM.error("That reset link has expired. Ask for another.", "auth"));
+    return request("/auth/v1/user", {
+      method: "PUT", body: { password: password }
+    }).then(function (r) { return r.body; });
+  }
+
+  /* ---------------------------------------------------------
+     Coming back from a link in an email
+
+     A confirmation or reset link goes to GoTrue, which verifies the token
+     and then bounces the browser to the project's Site URL with the result
+     in the FRAGMENT:
+
+         .../komyut/#access_token=...&refresh_token=...&type=recovery
+
+     or, when it went wrong:
+
+         .../komyut/#error=access_denied&error_code=otp_expired&...
+
+     The fragment is never sent to a server, which is why GoTrue uses it,
+     and it is also why this has to be read here rather than anywhere else.
+
+     Two things happen the moment it is read. The session is adopted, so
+     somebody who just confirmed their address arrives signed in rather
+     than being asked to type the password they only just chose. And the
+     fragment is wiped from the address bar with replaceState, so the
+     tokens are not left sitting in the URL, in the back/forward history,
+     or in a screenshot of the address bar. --------------------------------------------------------- */
+  function adoptFromUrl() {
+    var raw = "";
+    try { raw = String(location.hash || "").replace(/^#/, ""); } catch (e) { return null; }
+    if (!raw || raw.indexOf("=") === -1) return null;
+
+    var params = {};
+    raw.split("&").forEach(function (pair) {
+      var i = pair.indexOf("=");
+      if (i === -1) return;
+      try {
+        params[decodeURIComponent(pair.slice(0, i))] = decodeURIComponent(pair.slice(i + 1).replace(/\+/g, " "));
+      } catch (e) {}
+    });
+
+    function clean() {
+      try { history.replaceState(null, "", location.pathname + location.search); }
+      catch (e) { try { location.hash = ""; } catch (e2) {} }
+    }
+
+    if (params.error || params.error_description) {
+      clean();
+      /* GoTrue's own wording is written for whoever built the project.
+         The two that actually happen to people get a sentence each. */
+      var code = params.error_code || "";
+      var message = /expired/.test(code + " " + (params.error_description || ""))
+        ? "That link has expired. Ask for a new one."
+        : (/access_denied/.test(params.error || "")
+            ? "That link has already been used."
+            : "That link did not work. Ask for a new one.");
+      return { error: message, code: code };
+    }
+
+    if (!params.access_token || !params.refresh_token) return null;
+
+    save({
+      access_token: params.access_token,
+      refresh_token: params.refresh_token,
+      expires_at: Date.now() + (Number(params.expires_in || 3600) * 1000),
+      user: null
+    });
+    clean();
+
+    /* The user object does not come back in the fragment, only the tokens,
+       so it is fetched once here. Everything downstream reads
+       KM.supa.userId(), and a session with no id in it would fail every
+       one of those quietly. */
+    var landing = { type: params.type || "signin" };
+    landing.ready = request("/auth/v1/user", { method: "GET" }).then(function (r) {
+      if (r.body && r.body.id && session) {
+        session.user = { id: r.body.id, email: r.body.email };
+        save(session);
+      }
+      return landing;
+    }, function () { return landing; });
+
+    return landing;
+  }
+
   /* ---------------------------------------------------------
      Boot
      --------------------------------------------------------- */
+  var landing = null;
+
   function init() {
-    session = load();
+    /* The URL is read BEFORE storage: arriving on an email link should
+       replace whatever session this browser was holding, not lose to it. */
+    landing = adoptFromUrl();
+    session = session || load();
     if (session) {
       listeners.forEach(function (fn) { try { fn(session); } catch (e) {} });
       /* Do not block the app on it; a stale token simply refreshes in the
@@ -389,6 +481,9 @@ KM.supa = (function () {
     signIn: signIn,
     signOut: signOut,
     resetPassword: resetPassword,
+    updatePassword: updatePassword,
+    adoptFromUrl: adoptFromUrl,
+    landing: function () { return landing; },
     refresh: refresh,
     onChange: onChange,
     session: function () { return session; },

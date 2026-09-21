@@ -303,6 +303,19 @@
             <p class="km-note" id="auth-note" hidden></p>
           </div>
 
+          <!-- Arrived on a password-reset link. Shown instead of both the
+               sign-in form and the account, because at this moment there is
+               exactly one thing to do. -->
+          <div id="you-recover" hidden>
+            <p class="km-note">That link worked. Choose a new password.</p>
+            <label class="km-label" for="recover-password">New password</label>
+            <input type="password" id="recover-password" class="km-input" autocomplete="new-password"
+                   maxlength="200" placeholder="At least 8 characters" />
+            <button type="button" class="km-btn km-btn-primary km-btn-wide" id="recover-go">Save new password</button>
+            <button type="button" class="km-btn km-btn-quiet km-btn-wide" id="recover-cancel">Not now</button>
+            <p class="km-err" id="recover-err" hidden></p>
+          </div>
+
           <div id="you-in" hidden>
             <div class="km-you-head">
               <span class="km-you-avatar" id="you-avatar" aria-hidden="true"></span>
