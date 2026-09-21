@@ -19,7 +19,7 @@
   /* The app's version, declared once. sw.js carries the same number in its
      cache name and tools/validate.js refuses to let the two drift apart.
      Bumping it is what publishes an update. */
-  window.KM_VERSION = "1";
+  window.KM_VERSION = "2";
 
   try {
     var saved = localStorage.getItem("km:theme");

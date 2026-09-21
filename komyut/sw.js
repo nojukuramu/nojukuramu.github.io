@@ -11,7 +11,7 @@
    drift apart. Bumping it is what publishes an update: a changed sw.js is
    what a browser notices, and a new cache name is what makes the old shell
    go away. */
-var CACHE = "komyut-v1";
+var CACHE = "komyut-v2";
 var SHELL = [
   "./",
   "./index.html",
