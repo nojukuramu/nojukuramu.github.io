@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — shared helpers
+   TheCommuters — shared helpers
 
    Lifted from routecast/static/js/util.js with the namespace changed from
    RC to KM, the formatters this app needs added (fares, vote counts,

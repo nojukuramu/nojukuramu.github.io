@@ -1,5 +1,5 @@
 -- ============================================================
--- KomyutApp — did schema.sql actually take?
+-- TheCommuters — did schema.sql actually take?
 --
 -- Run this in the Supabase SQL editor AFTER schema.sql. It writes nothing
 -- and changes nothing; it just asks the database what it has, so "I think
@@ -16,7 +16,8 @@ with expected_tables(name) as (
 ),
 expected_functions(name) as (
   values ('search_routes'), ('routes_in_bbox'),
-         ('cast_route_vote'), ('cast_comment_vote'), ('is_moderator')
+         ('cast_route_vote'), ('cast_comment_vote'), ('is_moderator'),
+         ('ensure_profile'), ('pick_handle')
 )
 
 select 'table' as kind, e.name,
@@ -50,6 +51,17 @@ select 'trigger', 'routes_guard_trg',
        case when not exists (
          select 1 from pg_trigger where tgname = 'routes_guard_trg'
        ) then 'MISSING (vote counts and the validated tag would be writable)' else 'ok' end
+
+union all
+
+select 'data', 'members with no profile',
+       case when (select count(*) from auth.users u
+                  where not exists (select 1 from public.profiles p where p.id = u.id)) = 0
+            then 'ok'
+            else (select count(*) from auth.users u
+                  where not exists (select 1 from public.profiles p where p.id = u.id))::text
+                 || ' MISSING (run schema.sql again; it backfills them)'
+       end
 
 union all
 

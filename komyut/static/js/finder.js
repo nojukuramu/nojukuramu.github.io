@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — picking a place
+   TheCommuters — picking a place
 
    One sheet, used by the trip planner and the route builder alike, with
    three ways to name a point and no preference between them:

@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — app shell and everything drawn into it
+   TheCommuters — app shell and everything drawn into it
 
    Mobile first, and that is not a slogan here: this app is used one-handed,
    standing up, in the sun, deciding which jeepney to flag down. Every
@@ -934,6 +934,165 @@ ol, ul { padding: 0; list-style: none; }
 .km-you-sub { font-size: 12px; color: var(--muted); }
 .km-version { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .km-about { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.km-you-welcome { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 6px 0 14px; }
+.km-you-welcome .km-you-avatar { width: 56px; height: 56px; margin-bottom: 8px; }
+.km-you-welcome .km-you-avatar svg { width: 30px; height: 30px; }
+.km-you-welcome .km-hint { margin-top: 4px; }
+.km-you-email { margin: 0 0 10px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.km-mt8 { margin-top: 8px; }
+.km-field-status + .km-btn { margin-top: 10px; }
+.km-failure .km-i { margin: 0; }
+
+/* ============================================================
+   The sign-in page
+
+   A page, not a sheet: it covers the map entirely on a phone, and on a
+   wide screen it is a card in the middle of a dimmed map. Above the route
+   detail (a vote arrow in the detail can open it) and below the toast and
+   the info sheet, which both have to be readable over it.
+   ============================================================ */
+.km-auth {
+  position: absolute; inset: 0;
+  z-index: 650;
+  display: flex; flex-direction: column;
+  background: var(--bg);
+  padding-top: var(--safe-t);
+}
+/* Leaflet stacks its controls at z-index 1000 inside the map, above
+   anything the app layers over it, so the map steps out entirely while
+   this page is up rather than showing its zoom buttons through it. */
+[data-auth="open"] .km-map-wrap { visibility: hidden; }
+.km-auth-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px var(--gut);
+}
+.km-auth-head .km-icon-btn { box-shadow: none; background: var(--surface-2); width: 38px; height: 38px; }
+.km-auth-head-title { font-size: 14px; font-weight: 700; color: var(--muted); letter-spacing: .01em; }
+
+.km-auth-body {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 4px var(--gut) calc(var(--safe-b) + 28px);
+}
+.km-auth-card { max-width: 420px; margin: 0 auto; }
+
+.km-auth-mark {
+  width: 56px; height: 56px; margin: 6px auto 12px;
+  border-radius: 18px;
+  background: var(--komyut); color: var(--komyut-ink);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--shadow);
+}
+.km-auth-mark svg { width: 32px; height: 32px; }
+.km-auth-title { margin: 0; font-size: 22px; font-weight: 700; text-align: center; letter-spacing: -.01em; }
+.km-auth-sub { margin: 6px 0 16px; font-size: 13.5px; color: var(--muted); text-align: center; line-height: 1.45; }
+.km-auth .km-segmented { margin-bottom: 4px; }
+
+/* A field with room for things inside it: a prefix, a verdict mark, the
+   show-password eye. */
+.km-field-wrap { position: relative; }
+.km-field-wrap .km-input { transition: border-color .14s var(--ease); }
+.km-field-wrap.is-bad .km-input { border-color: var(--down); }
+.km-field-wrap.is-good .km-input { border-color: var(--up); }
+.km-field-prefix {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  font-size: 15px; font-weight: 600; color: var(--faint); pointer-events: none;
+}
+.km-input-prefixed { padding-left: 28px; }
+.km-field-state {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; display: flex; pointer-events: none;
+  color: var(--faint);
+}
+.km-field-state svg { width: 100%; height: 100%; }
+.km-field-wrap.is-good .km-field-state { color: var(--up); }
+.km-field-wrap.is-bad .km-field-state { color: var(--down); }
+.km-field-wrap .km-field-state + .km-input,
+.km-field-wrap .km-input:not(.km-input-reveal) { padding-right: 38px; }
+
+.km-input-reveal { padding-right: 50px; }
+.km-reveal {
+  position: absolute; right: 0; top: 0; bottom: 0;
+  width: 46px; min-height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  border: 0; background: transparent; color: var(--muted); cursor: pointer;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.km-reveal svg { width: 20px; height: 20px; }
+.km-reveal[aria-pressed="true"] { color: var(--komyut); }
+
+.km-field-status { margin: 5px 0 0; min-height: 17px; font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+.km-field-status:empty { min-height: 0; margin: 0; }
+.km-field-status.is-bad { color: var(--down); font-weight: 500; }
+.km-field-status.is-good { color: var(--up); font-weight: 500; }
+.km-caps { color: var(--sev-caution); font-weight: 600; }
+
+/* Four bars that fill with the score, coloured from the reliability
+   bands so "strong" here and "strong" on a route mean the same green. */
+.km-strength { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.km-strength-bar { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.km-strength-bar span { height: 5px; border-radius: 3px; background: var(--line); transition: background .18s var(--ease); }
+.km-strength-label { min-width: 64px; font-size: 12px; font-weight: 600; color: var(--muted); text-align: right; }
+.km-strength[data-score="1"] .km-strength-bar span:nth-child(-n+1) { background: var(--down); }
+.km-strength[data-score="2"] .km-strength-bar span:nth-child(-n+2) { background: var(--band-fair); }
+.km-strength[data-score="3"] .km-strength-bar span:nth-child(-n+3) { background: var(--band-good); }
+.km-strength[data-score="4"] .km-strength-bar span:nth-child(-n+4) { background: var(--band-strong); }
+.km-strength[data-score="1"] .km-strength-label { color: var(--down); }
+.km-strength[data-score="4"] .km-strength-label { color: var(--band-strong); }
+
+.km-rules {
+  list-style: none; margin: 8px 0 0; padding: 0;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px;
+}
+.km-rule { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--faint); transition: color .14s var(--ease); }
+.km-rule-mark {
+  flex: none; width: 16px; height: 16px; border-radius: 50%;
+  border: 1.5px solid var(--line-strong); color: transparent;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .14s var(--ease), border-color .14s var(--ease);
+}
+.km-rule-mark svg { width: 11px; height: 11px; }
+.km-rule.is-ok { color: var(--ink-soft); }
+.km-rule.is-ok .km-rule-mark { background: var(--up); border-color: var(--up); color: #FFFFFF; }
+
+.km-auth-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-top: 14px;
+}
+.km-auth-row .km-linkish { color: var(--komyut); min-height: 44px; }
+
+.km-check {
+  position: relative;
+  display: flex; align-items: flex-start; gap: 10px;
+  margin-top: 16px; cursor: pointer;
+  font-size: 13px; line-height: 1.4; color: var(--ink-soft);
+}
+.km-check input { position: absolute; opacity: 0; width: 0; height: 0; }
+.km-check-box {
+  flex: none; width: 20px; height: 20px; margin-top: 1px;
+  border: 1.5px solid var(--line-strong); border-radius: 6px;
+  background: var(--surface);
+  transition: background .14s var(--ease), border-color .14s var(--ease);
+}
+.km-check input:checked + .km-check-box {
+  background: var(--komyut); border-color: var(--komyut);
+  box-shadow: inset 0 0 0 3px var(--surface);
+}
+.km-check input:focus-visible + .km-check-box { outline: 2px solid var(--komyut); outline-offset: 2px; }
+.km-check-label { flex: 1; }
+
+.km-auth-go { margin-top: 18px; }
+.km-auth-go.is-waiting { opacity: .6; }
+.km-auth-go.is-busy { cursor: progress; }
+
+.km-auth-foot {
+  margin: 18px 0 0; text-align: center;
+  font-size: 13px; color: var(--muted);
+}
+.km-linkish-accent { color: var(--komyut); font-size: 13px; }
+
+.km-auth-sent { text-align: center; }
+.km-auth-sent-to { margin: 0 0 6px; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.km-auth-sent .km-btn { margin-top: 10px; }
 
 /* ============================================================
    Map marks
@@ -1034,6 +1193,12 @@ ol, ul { padding: 0; list-style: none; }
     width: 400px; right: auto;
     border-radius: var(--radius-lg); overflow: hidden;
     border: 1px solid var(--line);
+  }
+  .km-auth-body { display: flex; align-items: flex-start; justify-content: center; padding-top: 5vh; }
+  .km-auth-card {
+    width: 420px; padding: 24px 24px 20px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
   }
   .km-pickbar { left: 50%; right: auto; transform: translateX(-50%); bottom: var(--gut); width: min(520px, 90vw); }
   .km-toast { bottom: calc(var(--gut) + 70px); }

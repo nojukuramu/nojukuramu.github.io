@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — filing a route
+   TheCommuters — filing a route
 
    The hard part of this screen is not the form, it is the stops. Somebody
    describing a jeepney line from memory is not drawing a shape; they are
@@ -69,7 +69,7 @@ KM.builder = (function () {
       if (stops.length && !window.confirm("Throw away this route and start over?")) return;
       reset();
     });
-    KM.el("build-signin").addEventListener("click", function () { KM.app.openTab("you"); });
+    KM.el("build-signin").addEventListener("click", function () { KM.account.signIn(); });
 
     els.desc.addEventListener("input", function () {
       els.descCount.textContent = els.desc.value.length + " / " + KM.sanitize.LIMITS.routeDescription;
@@ -323,8 +323,8 @@ KM.builder = (function () {
     els.nameErr.hidden = true;
 
     if (!KM.supa.signedIn()) {
-      KM.app.openTab("you");
       KM.app.toast("Sign in to file a route.");
+      KM.account.signIn();
       return;
     }
     if (!routed) {

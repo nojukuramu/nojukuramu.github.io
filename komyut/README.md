@@ -1,6 +1,8 @@
-# KomyutApp
+# TheCommuters
 
-A social app for directions.
+A social app for directions. (Formerly KomyutApp; it still lives at
+`/komyut/`, so installed copies and the email links already sent keep
+working.)
 
 Almost nothing in the Philippines is on a published timetable. The jeepney
 that gets you from Cubao to Montalban exists, runs a route everybody who
@@ -8,7 +10,7 @@ rides it knows, charges a fare everybody who rides it knows — and is written
 down nowhere. The knowledge is real, it is just held by people rather than by
 an operator.
 
-KomyutApp is somewhere to put it. Anybody can **file a route**: list the
+TheCommuters is somewhere to put it. Anybody can **file a route**: list the
 stops in order, say what kind of ride it is, say what it costs. Anybody can
 **vote on one**, which is how a route that has been rerouted or has quietly
 stopped running sinks out of the way. And once there are routes in an area,
@@ -61,6 +63,16 @@ exactly the same way a tricycle line in Antipolo does.
   the useful question is whether the twenty minutes you spend standing at the
   transfer are the twenty minutes the squall arrives.
 
+- **A proper sign-in page.** Signing in, creating an account, "forgot my
+  password", "check your inbox", a new password from a reset link, choosing
+  a handle and changing a password are one full-screen page with a step for
+  each. Every field is checked as it is typed and says so beside itself:
+  the handle says whether it is free, the password ticks off its rules and
+  fills a strength meter, the confirmation says whether it matches. A
+  password can be shown, Caps Lock is noticed, "keep me signed in" decides
+  whether the session outlives the tab, "send it again" counts down rather
+  than being refused, and "sign out on every device" is one button.
+
 - **Email links land somewhere.** A confirmation link signs you in and says
   so in one line; a reset link lands on a "choose a new password" step; an
   expired or already-used one says which, rather than dropping you on a page
@@ -74,7 +86,7 @@ exactly the same way a tricycle line in Antipolo does.
 
 - **It installs, and it tells you when it has been updated.** A cached app
   with no update path is a phone quietly running a build from three deploys
-  ago. KomyutApp watches for a new version, offers it in one dismissible
+  ago. TheCommuters watches for a new version, offers it in one dismissible
   line, and never applies it on its own.
 
 ## Setting it up
@@ -95,6 +107,13 @@ maps, routing, geocoding, forecast — is free and key-less.
    Then run [`supabase/verify.sql`](supabase/verify.sql) the same way. It
    writes nothing and returns a list of what the database now has; every
    row should say `ok`.
+
+   If the app says **"The community database is not set up yet"**, this is
+   the step it means: PostgREST answered with a 404, which only ever means
+   it has no such table or function. Run `schema.sql` again (it also
+   reloads PostgREST's schema cache and gives a profile to any account
+   that signed up before it existed), and check **Settings → Data API**
+   lists `public` among the exposed schemas.
 
 3. **Fill in two values** in [`static/js/config.js`](static/js/config.js):
 
@@ -217,6 +236,7 @@ The rest:
 | `static/js/map.js` | the one module that touches Leaflet |
 | `static/js/ui.js` | the card, the meter, the vote control |
 | `static/js/builder.js` `detail.js` `browse.js` `planner.js` `account.js` `finder.js` | the five panes and the place picker |
+| `static/js/auth.js` | the sign-in page: every step, checked as it is typed |
 | `static/js/app.js` | the shell: tabs, sheet, toast, pin picking |
 
 ### The journey search, briefly

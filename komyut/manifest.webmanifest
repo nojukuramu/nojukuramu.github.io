@@ -1,6 +1,6 @@
 {
-  "name": "KomyutApp — community commute routes",
-  "short_name": "KomyutApp",
+  "name": "TheCommuters — community commute routes",
+  "short_name": "TheCommuters",
   "description": "Jeepney, tricycle, bus, train and ferry routes filed by the people who ride them. Search them, vote on them, and plan a trip across them, transfers included.",
   "start_url": "./",
   "scope": "./",

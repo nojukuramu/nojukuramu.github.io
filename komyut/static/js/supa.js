@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — the Supabase client, written out rather than vendored
+   TheCommuters — the Supabase client, written out rather than vendored
 
    Supabase publishes a JavaScript SDK. It is not used here, and that is a
    decision rather than an oversight: the house rule in this repository is
@@ -64,16 +64,35 @@ KM.supa = (function () {
      reaches the DOM as markup, and a Content-Security-Policy in index.html
      forbids inline and third-party script outright.
      --------------------------------------------------------- */
+  /* "Keep me signed in", unticked, puts the session in sessionStorage
+     instead: it survives a reload and dies with the tab, which is what
+     somebody signing in on a borrowed phone at a terminal is asking for.
+     The choice itself is remembered, the session only where it was told. */
+  function remembers() { return KM.store.get("remember", true) !== false; }
+  function setRemember(on) { KM.store.set("remember", !!on); }
+
+  function tabGet() {
+    try { var raw = sessionStorage.getItem("km:" + SESSION_KEY); return raw ? JSON.parse(raw) : null; }
+    catch (e) { return null; }
+  }
+  function tabSet(v) {
+    try {
+      if (v) sessionStorage.setItem("km:" + SESSION_KEY, JSON.stringify(v));
+      else sessionStorage.removeItem("km:" + SESSION_KEY);
+    } catch (e) {}
+  }
+
   function load() {
-    var s = KM.store.get(SESSION_KEY, null);
+    var s = KM.store.get(SESSION_KEY, null) || tabGet();
     if (!s || !s.access_token || !s.refresh_token) return null;
     return s;
   }
 
   function save(s) {
     session = s;
-    if (s) KM.store.set(SESSION_KEY, s);
-    else KM.store.remove(SESSION_KEY);
+    if (s && remembers()) { KM.store.set(SESSION_KEY, s); tabSet(null); }
+    else if (s) { tabSet(s); KM.store.remove(SESSION_KEY); }
+    else { KM.store.remove(SESSION_KEY); tabSet(null); }
     listeners.forEach(function (fn) { try { fn(session); } catch (e) {} });
   }
 
@@ -100,7 +119,7 @@ KM.supa = (function () {
     opts = opts || {};
     if (!ready()) {
       return Promise.reject(KM.error(
-        "KomyutApp is not connected to a community database yet.", "unconfigured"));
+        "TheCommuters is not connected to a community database yet.", "unconfigured"));
     }
 
     var url = base() + path;
@@ -111,7 +130,7 @@ KM.supa = (function () {
     /* Anonymous calls still send the anon key as the bearer — that is what
        PostgREST reads to decide the `anon` role, and it is what makes the
        read-only policies in the schema apply to a signed-out visitor. */
-    var token = (opts.auth === false) ? key() : ((session && session.access_token) || key());
+    var token = opts.token || ((opts.auth === false) ? key() : ((session && session.access_token) || key()));
     headers.Authorization = "Bearer " + token;
 
     var ctrl = ("AbortController" in window) ? new AbortController() : null;
@@ -130,7 +149,7 @@ KM.supa = (function () {
         : res.text().catch(function () { return null; });
       return parse.then(function (body) {
         if (res.ok) return { body: body, headers: res.headers, status: res.status };
-        throw describe(res.status, body);
+        throw describe(res.status, body, path);
       });
     }, function (err) {
       clearTimeout(timer);
@@ -142,9 +161,24 @@ KM.supa = (function () {
   /* Turn a Postgres or GoTrue failure into something a person can act on.
      The raw messages are written for whoever wrote the schema, not for
      whoever is standing at a jeepney stop. */
-  function describe(status, body) {
+  function describe(status, body, path) {
     var code = (body && (body.code || body.error_code)) || "";
     var raw = (body && (body.message || body.msg || body.error_description || body.error)) || "";
+
+    /* A 404 from the REST API is never "that row does not exist" — a query
+       that matches nothing is a 200 with an empty list. It means PostgREST
+       has no such table or function: schema.sql has not been run on this
+       project, its cache is stale, or the public schema is not exposed.
+       This used to surface as a bare "Not found." under the account, which
+       read as the app's fault and pointed nowhere. Say what is missing. */
+    if (code === "PGRST205" || code === "PGRST202" ||
+        (status === 404 && /^\/rest\//.test(path || ""))) {
+      var what = /(?:table '|function )(?:public\.)?([a-z_]+)/i.exec(raw);
+      var e = KM.error("The community database is not set up yet" +
+        (what ? " (no \u201c" + what[1] + "\u201d)." : "."), "setup", status, code);
+      e.detail = raw;
+      return e;
+    }
 
     if (code === "23505") return KM.error("That already exists.", "conflict", status, code);
     if (code === "23514") return KM.error("Some of that does not fit what the database allows.", "invalid", status, code);
@@ -169,6 +203,18 @@ KM.supa = (function () {
     }
     if (/email/i.test(raw) && /confirm/i.test(raw)) {
       return KM.error("Check your email and confirm the address first.", "unconfirmed", status, code);
+    }
+    if (code === "same_password" || /different from the old/i.test(raw)) {
+      return KM.error("That is already your password.", "invalid", status, code);
+    }
+    if (code === "weak_password" || /weak/i.test(raw)) {
+      return KM.error("That password is too easy to guess.", "invalid", status, code);
+    }
+    if (code === "reauthentication_needed" || /reauthenticat/i.test(raw)) {
+      return KM.error("Sign out and back in, then change it.", "auth", status, code);
+    }
+    if (/only request this after|security purposes/i.test(raw)) {
+      return KM.error("Too many requests. Give it a minute.", "rate", status, code);
     }
     return KM.error(raw || ("Request failed (" + status + ")"), "http", status, code);
   }
@@ -326,7 +372,11 @@ KM.supa = (function () {
     try { return location.origin + location.pathname; } catch (e) { return ""; }
   }
 
-  function signUp(email, password) {
+  /* The handle rides along as user metadata; the database trigger that
+     makes the profile uses it if it has the right shape and is free, and
+     falls back to one of its own otherwise, so a race for a name never
+     fails the sign-up itself. */
+  function signUp(email, password, handle) {
     /* redirect_to is a QUERY parameter on signup, not a body field, and
        sending it is what stops the confirmation link falling back to the
        project's Site URL. That fallback is a real failure and not a
@@ -337,7 +387,8 @@ KM.supa = (function () {
        allow-list; GoTrue refuses anything that is not. */
     var back = here();
     return request("/auth/v1/signup" + (back ? "?redirect_to=" + encodeURIComponent(back) : ""), {
-      method: "POST", auth: false, body: { email: email, password: password }
+      method: "POST", auth: false,
+      body: { email: email, password: password, data: handle ? { handle: handle } : {} }
     }).then(function (r) {
       var s = shapeSession(r.body);
       /* A project with email confirmation on returns a user and NO token.
@@ -359,15 +410,31 @@ KM.supa = (function () {
     });
   }
 
-  function signOut() {
+  /* Sending the confirmation email again, for the address that never got
+     it or let it expire. Same redirect as the first one, named the same
+     way, for the same reason. */
+  function resendSignup(email) {
+    var back = here();
+    return request("/auth/v1/resend" + (back ? "?redirect_to=" + encodeURIComponent(back) : ""), {
+      method: "POST", auth: false, body: { type: "signup", email: email }
+    }).then(function () { return true; });
+  }
+
+  /* `everywhere` ends every session this account holds, on every device —
+     the button for "I signed in on a phone I no longer have". */
+  function signOut(everywhere) {
     var had = session;
     /* Clear locally FIRST. A logout that leaves the token in place because
        the network was down is a logout that did not happen. */
     save(null);
     if (!had) return Promise.resolve(true);
-    return request("/auth/v1/logout", {
+    return request("/auth/v1/logout" + (everywhere ? "?scope=global" : ""), {
       method: "POST",
       body: {},
+      /* The session was cleared locally a line ago, so its token is passed
+         in by hand: without it GoTrue is told to log out the anon key and
+         the session carries on server-side. */
+      token: had.access_token,
       timeout: 6000
     }).then(function () { return true; }, function () { return true; });
   }
@@ -495,7 +562,10 @@ KM.supa = (function () {
     request: request,
 
     signUp: signUp,
+    resendSignup: resendSignup,
     signIn: signIn,
+    remembers: remembers,
+    setRemember: setRemember,
     signOut: signOut,
     resetPassword: resetPassword,
     updatePassword: updatePassword,
@@ -510,6 +580,9 @@ KM.supa = (function () {
 
     /* Exposed for the validation harness, which checks that a value
        carrying PostgREST's own punctuation survives as one value. */
-    _quote: quote
+    _quote: quote,
+    /* And that a 404 from PostgREST is reported as the missing schema it
+       is, rather than as a bare "Not found." */
+    _describe: describe
   };
 })();

@@ -375,7 +375,7 @@
       desc: "Plan a drive, then see the weather waiting along it.",
       hi: ["Every checkpoint forecast for the hour you arrive there", "Gear advice for a bike, not just a temperature", "Tells you if leaving an hour later dodges the rain"],
       tags: ["Leaflet", "OpenStreetMap", "forecast"] },
-    { name: "KomyutApp", href: "komyut/", badge: "Commute", accent: "#4FB3A0", kind: "together", motif: "stops",
+    { name: "TheCommuters", href: "komyut/", badge: "Commute", accent: "#4FB3A0", kind: "together", motif: "stops",
       desc: "Jeepney and tricycle routes, filed by the people who ride them.",
       hi: ["Anybody can file a route; the votes decide which ones stand", "Plans a trip across them, transfers and all", "Fares, a reliability meter, and the weather along the line"],
       tags: ["Supabase", "OpenStreetMap", "community"] },

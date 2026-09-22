@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — the shell
+   TheCommuters — the shell
 
    Boots the modules in order, owns the sheet and the tab bar, and provides
    the two things every other module needs and none of them should own:
@@ -40,6 +40,7 @@ KM.app = (function () {
     KM.planner.init();
     KM.browse.init();
     KM.builder.init();
+    KM.auth.init();
     KM.account.init();
 
     wireTabs();

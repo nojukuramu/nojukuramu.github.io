@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — inline SVG icon set
+   TheCommuters — inline SVG icon set
 
    The repository rule is no emoji: every glyph is drawn. The stroke style
    is the one RouteCast and the parent site already use — viewBox 0 0 24 24,
@@ -113,7 +113,11 @@ KM.icons = (function () {
     info: wrap('<circle cx="12" cy="12" r="8.6"/><path d="M12 11v5.4M12 7.8h.01"/>'),
     menu: wrap('<path d="M4 7h16M4 12h16M4 17h10"/>'),
     weatherpin: wrap('<path d="M6.5 15.5a3.6 3.6 0 0 1-.4-7.2A5 5 0 0 1 15.9 6.6a3.9 3.9 0 0 1-.4 8.9Z"/><path d="M8.6 18.4 7.6 21M12 18.4 11 21M15.4 18.4 14.4 21"/>'),
-    install: wrap('<path d="M12 3v12.5M7 11l5 5 5-5"/><path d="M4.5 17.5V19a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-1.5"/>')
+    install: wrap('<path d="M12 3v12.5M7 11l5 5 5-5"/><path d="M4.5 17.5V19a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-1.5"/>'),
+    eye: wrap('<path d="M2.4 12s3.5-6.6 9.6-6.6 9.6 6.6 9.6 6.6-3.5 6.6-9.6 6.6S2.4 12 2.4 12Z"/><circle cx="12" cy="12" r="2.9"/>'),
+    eyeoff: wrap('<path d="M9.9 5.6A9.9 9.9 0 0 1 12 5.4c6.1 0 9.6 6.6 9.6 6.6a17 17 0 0 1-2.6 3.4M6.4 6.9C3.8 8.6 2.4 12 2.4 12s3.5 6.6 9.6 6.6a9.3 9.3 0 0 0 4.9-1.4"/><path d="M9.9 9.9a2.9 2.9 0 0 0 4.2 4.1M3.5 3.5l17 17"/>'),
+    mail: wrap('<rect x="3" y="5.4" width="18" height="13.2" rx="2"/><path d="m3.6 6.6 8.4 6.6 8.4-6.6"/>'),
+    lock: wrap('<rect x="4.8" y="10.6" width="14.4" height="10" rx="2"/><path d="M8 10.6V7.8a4 4 0 0 1 8 0v2.8"/>')
   };
 
   /* ---------- weather, unchanged from RouteCast ---------- */

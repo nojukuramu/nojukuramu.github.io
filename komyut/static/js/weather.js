@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — the weather waiting along the line
+   TheCommuters — the weather waiting along the line
 
    The same idea RouteCast is built on, applied to a commute rather than a
    drive: a route is broken into checkpoints, each checkpoint is given the

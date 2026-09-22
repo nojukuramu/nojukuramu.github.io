@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — the info sheet
+   TheCommuters — the info sheet
 
    The same mechanism RouteCast uses (routecast/static/js/info.js), lifted
    with the namespace changed and its own topics: one sheet, one scrim, one
@@ -25,7 +25,7 @@ KM.info = (function () {
     planner: {
       title: "How a trip is found",
       body:
-        "<p>KomyutApp does not know any routes of its own. It chains together the ones " +
+        "<p>TheCommuters does not know any routes of its own. It chains together the ones " +
         "<b>people filed themselves</b> — so a trip is only as good as what the community " +
         "has written down for your area.</p>" +
         "<p>It looks for a route you can walk to, one you can walk from, and where necessary " +
@@ -89,7 +89,25 @@ KM.info = (function () {
         "comment, plan every trip, signed out.</p>" +
         "<p>An account is for <b>writing</b>: filing a route, voting, and commenting — so " +
         "that a vote means one person and a route has somebody's name against it.</p>" +
-        "<p>An email and a password is all of it. There is no profile to fill in.</p>"
+        "<p>An email, a handle and a password is all of it. There is no profile to fill in.</p>" +
+        "<p>Your <b>handle</b>, and every route and comment you post, are public. Your email " +
+        "is not: nobody but you can read it.</p>" +
+        "<p><b>Keep me signed in</b> remembers you on this device. Untick it on a phone that " +
+        "is not yours, and closing the tab signs you out.</p>"
+    },
+
+    setup: {
+      title: "The database is not set up",
+      body:
+        "<p>The app reached its Supabase project, but the project has no table or function " +
+        "by that name. Signing in still works, because accounts live in Supabase itself; " +
+        "everything else is refused.</p>" +
+        "<p>The fix is on the project, not on this phone. In the Supabase dashboard:</p>" +
+        "<p><b>1.</b> SQL Editor, New query: paste all of <b>supabase/schema.sql</b> and Run " +
+        "it as one script. It is safe to run again.</p>" +
+        "<p><b>2.</b> Run <b>supabase/verify.sql</b> the same way. Every row should say ok.</p>" +
+        "<p><b>3.</b> Settings, Data API: <b>public</b> must be among the exposed schemas.</p>" +
+        "<p>Then reload this page.</p>"
     },
 
     weather: {
@@ -129,7 +147,7 @@ KM.info = (function () {
     update: {
       title: "Updates",
       body:
-        "<p>KomyutApp installs its own copy so it opens instantly and works with no signal. " +
+        "<p>TheCommuters installs its own copy so it opens instantly and works with no signal. " +
         "That copy is replaced when a new version is published.</p>" +
         "<p>A new version is never applied on its own — it waits, and the bar at the top " +
         "offers it. Reloading takes a second and keeps a half-finished route.</p>"

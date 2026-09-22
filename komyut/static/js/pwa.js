@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — installing, and staying up to date
+   TheCommuters — installing, and staying up to date
 
    Registers the service worker and hands the registration to KM.update,
    which owns the whole "a new version is waiting" conversation. Nothing

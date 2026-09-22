@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* ============================================================
-   KomyutApp — the app in a real browser
+   TheCommuters — the app in a real browser
    `node tools/e2e.js`
 
    tools/validate.js can check that the wiring is wired and that the pure
@@ -197,6 +197,11 @@ async function main() {
   const cspViolations = [];
   const unexpected = [];
   const authCalls = [];
+  const signupBodies = [];
+  /* Flipped by the "database not set up" section: PostgREST answering a
+     table it does not know with the 404 that used to reach the screen as a
+     bare "Not found." */
+  const flags = { schemaMissing: false, profileCreated: false };
   page.on("pageerror", (e) => errors.push(String(e.message)));
   page.on("console", (m) => {
     const t = m.text();
@@ -223,6 +228,24 @@ async function main() {
       return route.fulfill({ status: 200, contentType: "image/png", body: PNG_1x1 });
     }
     if (url.includes("test.supabase.co")) {
+      if (flags.schemaMissing && url.includes("/rest/v1/routes")) {
+        return route.fulfill({ status: 404, contentType: "application/json",
+          headers: { "Access-Control-Allow-Origin": "*" },
+          body: JSON.stringify({ code: "PGRST205", details: null, hint: null,
+            message: "Could not find the table 'public.routes' in the schema cache" }) });
+      }
+      if (url.includes("/rpc/ensure_profile")) {
+        return route.fulfill(json([{
+          id: "44444444-4444-4444-4444-444444444444", handle: "juan_dc", display_name: null,
+          is_moderator: false, created_at: new Date(Date.now() - 30 * 86400000).toISOString(),
+          created: flags.profileCreated
+        }]));
+      }
+      /* "Is this handle free?" — one name is taken, every other is free. */
+      if (url.includes("/profiles") && url.includes("handle=eq.")) {
+        return route.fulfill(json(url.includes("handle=eq.taken_one")
+          ? [{ id: "99999999-9999-9999-9999-999999999999" }] : []));
+      }
       if (url.includes("/rpc/search_routes")) return route.fulfill(json([ROUTE_ROW]));
       if (url.includes("/rpc/routes_in_bbox")) return route.fulfill(json([FULL_ROUTE]));
       if (url.includes("/rpc/cast_route_vote")) {
@@ -242,6 +265,7 @@ async function main() {
         const USER = { id: "44444444-4444-4444-4444-444444444444", email: "juan@example.com" };
         if (url.includes("/auth/v1/signup")) {
           authCalls.push(url);
+          signupBodies.push(route.request().postData() || "");
           /* A project with email confirmation ON returns the user and no
              token at all. That is the case worth simulating: it is the one
              that sends an email, and the one this section is about. */
@@ -250,6 +274,10 @@ async function main() {
         /* Who am I, and change my password: both are /auth/v1/user, told
            apart by method the way GoTrue does. */
         if (url.includes("/auth/v1/user")) return route.fulfill(json(USER));
+        if (url.includes("/auth/v1/resend")) {
+          authCalls.push(url);
+          return route.fulfill(json({}));
+        }
         if (url.includes("/auth/v1/recover") || url.includes("/auth/v1/logout")) {
           return route.fulfill(json({}));
         }
@@ -403,32 +431,127 @@ async function main() {
   check("the builder is locked behind sign-in", await page.isVisible("#build-locked"));
   check("and the form is not offered", !(await page.isVisible("#build-form")));
 
+  await page.click("#build-signin");
+  await page.waitForTimeout(300);
+  check("the locked builder opens the sign-in page", await page.isVisible("#auth"));
+  await page.click("#auth-back");
+  await page.waitForTimeout(200);
+  check("and the back arrow closes it", !(await page.isVisible("#auth")));
+
   await page.click('.km-tab[data-tab="you"]');
   await page.waitForTimeout(300);
   check("the You pane offers sign in", await page.isVisible("#you-out"));
+  check("and does not carry a form of its own", !(await page.isVisible("#auth-email")));
+
+  section("The sign-in page");
+  await page.click("#you-signin");
+  await page.waitForTimeout(300);
+  check("it is a page over everything", await page.isVisible("#auth"));
+  check("it opens on sign in", (await page.getAttribute("#auth", "data-mode")) === "signin");
+  check("sign in asks for no confirmation", !(await page.isVisible("#auth-confirm")));
+  check("and shows no strength meter", !(await page.isVisible("#auth-strength")));
+  check("\"keep me signed in\" is offered, and on", await page.isChecked("#auth-remember"));
+  check("the submit button is dimmed while the form is empty",
+    (await page.getAttribute("#auth-go", "data-ready")) === "false");
+  await shot(page, "signin");
+
   await page.fill("#auth-email", "not-an-email");
+  await page.fill("#auth-password", "whatever1");
   await page.click("#auth-go");
   await page.waitForTimeout(200);
   check("a bad address is refused before any request",
     (await page.textContent("#auth-err")).indexOf("email address") !== -1);
+  check("and the field itself says so",
+    (await page.textContent("#auth-email-status")).indexOf("email address") !== -1);
+
+  await page.fill("#auth-password", "hunter");
+  await page.click("#auth-reveal");
+  check("the password can be shown", (await page.getAttribute("#auth-password", "type")) === "text");
+  await page.click("#auth-reveal");
+  check("and hidden again", (await page.getAttribute("#auth-password", "type")) === "password");
+
   await page.fill("#auth-email", "juan@example.com");
   await page.fill("#auth-password", BAD_PASSWORD);
+  check("a filled-in form is no longer dimmed",
+    (await page.getAttribute("#auth-go", "data-ready")) === "true");
   await page.click("#auth-go");
   await page.waitForTimeout(600);
   check("a refused sign-in says so without naming which half was wrong",
     (await page.textContent("#auth-err")).indexOf("do not match") !== -1);
   check("the password field was cleared", (await page.inputValue("#auth-password")) === "");
 
+  await page.click("#auth-forgot");
+  await page.waitForTimeout(200);
+  check("\"forgot password\" is a step of its own",
+    (await page.getAttribute("#auth", "data-mode")) === "forgot" && !(await page.isVisible("#auth-password")));
+  check("and it keeps the address already typed",
+    (await page.inputValue("#auth-email")) === "juan@example.com");
+
   /* ---------------------------------------------------------- */
-  section("Where an email link is told to come back to");
-  /* Placed while the page is still signed out, because the sign-up form is
-     inside #you-out and that is hidden once somebody is in. */
-  await page.click('#auth-mode button[data-mode="up"]');
+  section("Creating an account");
+  await page.click("#auth-foot-go");
+  await page.waitForTimeout(150);
+  await page.click('#auth-switch button[data-to="signup"]');
+  await page.waitForTimeout(200);
+  check("sign up asks for a handle", await page.isVisible("#auth-handle"));
+  check("and for the password twice", await page.isVisible("#auth-confirm"));
+  check("with the rules on show", await page.locator("#auth-rules .km-rule").count() === 4);
+  check("the password manager is told this is a new password",
+    (await page.getAttribute("#auth-password", "autocomplete")) === "new-password");
+
+  await page.fill("#auth-handle", "Juan DC");
+  check("a handle is folded to what will be saved as it is typed",
+    (await page.inputValue("#auth-handle")) === "juandc", await page.inputValue("#auth-handle"));
+  await page.waitForTimeout(700);
+  check("a free handle says so",
+    (await page.textContent("#auth-handle-status")).indexOf("available") !== -1,
+    await page.textContent("#auth-handle-status"));
+  await page.fill("#auth-handle", "taken_one");
+  await page.waitForTimeout(700);
+  check("a taken one says so too",
+    (await page.textContent("#auth-handle-status")).indexOf("taken") !== -1,
+    await page.textContent("#auth-handle-status"));
+  await page.fill("#auth-handle", "new_rider");
+  await page.waitForTimeout(700);
+
   await page.fill("#auth-email", "new@example.com");
+  await page.fill("#auth-password", "abc");
+  check("the rules tick as the password is typed",
+    await page.locator("#auth-rules .km-rule.is-ok").count() === 2);
+  check("and the meter calls it what it is",
+    (await page.getAttribute("#auth-strength", "data-score")) === "0");
   await page.fill("#auth-password", GOOD_PASSWORD);
+  check("a good one ticks every rule",
+    await page.locator("#auth-rules .km-rule.is-ok").count() === 4);
+  check("and fills the meter",
+    Number(await page.getAttribute("#auth-strength", "data-score")) >= 3);
+
+  await page.fill("#auth-confirm", GOOD_PASSWORD + "x");
+  await page.locator("#auth-confirm").blur();
+  await page.waitForTimeout(100);
+  check("a mismatched confirmation is flagged as it is typed",
+    (await page.textContent("#auth-confirm-status")).indexOf("do not match") !== -1);
+  await page.click("#auth-go");
+  await page.waitForTimeout(300);
+  check("and refused before any request", authCalls.length === 0, authCalls.join(" "));
+
+  await page.fill("#auth-confirm", GOOD_PASSWORD);
+  check("a matching one says so",
+    (await page.textContent("#auth-confirm-status")).indexOf("match") !== -1);
+  await page.click("#auth-go");
+  await page.waitForTimeout(300);
+  check("the public-handle box has to be ticked first",
+    authCalls.length === 0 && (await page.textContent("#auth-err")).indexOf("Tick") !== -1);
+
+  await page.click(".km-check-box");
+  await shot(page, "signup");
+  check("the password was never reset by the refusals",
+    (await page.inputValue("#auth-password")) === GOOD_PASSWORD);
   await page.click("#auth-go");
   await page.waitForTimeout(600);
 
+  /* ---------------------------------------------------------- */
+  section("Where an email link is told to come back to");
   const signupUrl = authCalls[0] || "";
   const redirectTo = decodeURIComponent((signupUrl.split("redirect_to=")[1] || "").split("&")[0]);
   check("signing up names a redirect rather than leaving it to Site URL",
@@ -439,22 +562,53 @@ async function main() {
   check("the redirect carries no fragment of its own",
     signupUrl.indexOf("%23") === -1,
     "GoTrue appends its tokens to whatever it is handed");
+  check("the chosen handle goes with the sign-up",
+    (signupBodies[0] || "").indexOf('"handle":"new_rider"') !== -1, signupBodies[0]);
   check("a project that wants the address confirmed is told so, not signed in",
-    (await page.textContent("#auth-note")).indexOf("Check your email") !== -1,
-    await page.textContent("#auth-note"));
-  check("and it drops back to the sign-in form for afterwards",
-    (await page.textContent("#auth-go")) === "Sign in");
+    (await page.getAttribute("#auth", "data-mode")) === "sent" &&
+    (await page.textContent("#auth-sent-to")).indexOf("new@example.com") !== -1,
+    await page.textContent("#auth-sent-to"));
+  check("sending it again waits out a cooldown rather than being refused",
+    (await page.isDisabled("#auth-resend")) &&
+    /\d+s/.test(await page.textContent("#auth-resend")),
+    await page.textContent("#auth-resend"));
   check("signing up did not sign anybody in",
     (await page.evaluate(() => KM.supa.signedIn())) === false);
+  check("no password is left in either field",
+    (await page.inputValue("#auth-password")) === "" && (await page.inputValue("#auth-confirm")) === "");
+  await shot(page, "sent");
 
+  await page.click("#auth-sent-back");
+  await page.waitForTimeout(200);
+  check("and it goes back to sign in for afterwards",
+    (await page.getAttribute("#auth", "data-mode")) === "signin");
 
   /* ---------------------------------------------------------- */
   section("Signing in, and filing a route");
+  await page.fill("#auth-email", "juan@example.com");
   await page.fill("#auth-password", GOOD_PASSWORD);
   await page.click("#auth-go");
   await page.waitForTimeout(800);
+  check("the sign-in page closes", !(await page.isVisible("#auth")));
   check("signed in", await page.isVisible("#you-in"));
   check("the handle is shown", (await page.textContent("#you-handle")) === "@juan_dc");
+  check("the session is kept, as the box said",
+    await page.evaluate(() => !!localStorage.getItem("km:session")));
+  check("the email is shown to its owner",
+    (await page.textContent("#you-email")) === "juan@example.com");
+
+  await page.click("#you-password");
+  await page.waitForTimeout(200);
+  check("changing the password is the same page",
+    (await page.getAttribute("#auth", "data-mode")) === "change");
+  await page.fill("#auth-password", "another-one-42");
+  await page.fill("#auth-confirm", "another-one-42");
+  await page.click("#auth-go");
+  await page.waitForTimeout(600);
+  check("and it closes when the password is saved",
+    !(await page.isVisible("#auth")) &&
+    (await page.textContent("#toast")).indexOf("Password changed") !== -1,
+    await page.textContent("#toast"));
 
   await page.click('.km-tab[data-tab="build"]');
   await page.waitForTimeout(400);
@@ -649,25 +803,32 @@ async function main() {
 
   section("Arriving on a password-reset link");
   const recovery = await land("#access_token=a.b.c&refresh_token=r1&expires_in=3600&type=recovery");
-  check("it asks for a new password", await recovery.page.isVisible("#you-recover"));
+  check("it asks for a new password",
+    (await recovery.page.isVisible("#auth")) &&
+    (await recovery.page.getAttribute("#auth", "data-mode")) === "reset");
+  check("twice, like any new password", await recovery.page.isVisible("#auth-confirm"));
   check("and does not show the account yet", !(await recovery.page.isVisible("#you-in")));
-  check("nor the sign-in form", !(await recovery.page.isVisible("#you-out")));
+  check("nor the sign-in form", !(await recovery.page.isVisible("#auth-email")));
   check("the tokens are wiped here too",
     (await recovery.page.evaluate(() => location.hash)) === "");
 
-  await recovery.page.fill("#recover-password", "short");
-  await recovery.page.click("#recover-go");
+  await recovery.page.fill("#auth-password", "short");
+  await recovery.page.fill("#auth-confirm", "short");
+  await recovery.page.click("#auth-go");
   await recovery.page.waitForTimeout(200);
   check("a short new password is refused before any request",
-    (await recovery.page.textContent("#recover-err")).indexOf("eight") !== -1);
+    (await recovery.page.textContent("#auth-err")).indexOf("list") !== -1 &&
+    (await recovery.page.isVisible("#auth")),
+    await recovery.page.textContent("#auth-err"));
 
-  await recovery.page.fill("#recover-password", "a-longer-one-9");
-  await recovery.page.click("#recover-go");
+  await recovery.page.fill("#auth-password", "a-longer-one-9");
+  await recovery.page.fill("#auth-confirm", "a-longer-one-9");
+  await recovery.page.click("#auth-go");
   await recovery.page.waitForTimeout(700);
   check("a good one is saved and drops you into the account",
-    await recovery.page.isVisible("#you-in"));
+    !(await recovery.page.isVisible("#auth")) && await recovery.page.isVisible("#you-in"));
   check("the new password is not left in the field",
-    (await recovery.page.inputValue("#recover-password")) === "");
+    (await recovery.page.inputValue("#auth-password")) === "");
   await recovery.page.close();
 
   section("Arriving on a link that has expired");
@@ -690,13 +851,54 @@ async function main() {
   check("it does not claim to have signed anybody in",
     (await expired.page.evaluate(() => KM.supa.signedIn())) === false);
   check("it offers the sign-in form to try again from",
-    await expired.page.isVisible("#you-out"));
+    (await expired.page.isVisible("#auth-email")) &&
+    (await expired.page.getAttribute("#auth", "data-mode")) === "signin");
   check("it does not ask for a new password on a link that never worked",
-    !(await expired.page.isVisible("#you-recover")));
+    (await expired.page.getAttribute("#auth", "data-mode")) !== "reset");
   check("and it still clears the fragment",
     (await expired.page.evaluate(() => location.hash)) === "");
   check("no page errors on a failed link", expired.errors.length === 0, expired.errors.join(" | "));
   await expired.page.close();
+
+  section("An account that had no profile is given one, and asked for a handle");
+  flags.profileCreated = true;
+  const repaired = await land("#access_token=a.b.c&refresh_token=r1&expires_in=3600&token_type=bearer&type=signup");
+  check("the handle step opens by itself",
+    (await repaired.page.isVisible("#auth")) &&
+    (await repaired.page.getAttribute("#auth", "data-mode")) === "handle");
+  check("with the handle the database picked, ready to change",
+    (await repaired.page.inputValue("#auth-handle")) === "juan_dc");
+  await repaired.page.fill("#auth-handle", "juan_rides");
+  await repaired.page.waitForTimeout(700);
+  await repaired.page.click("#auth-go");
+  await repaired.page.waitForTimeout(600);
+  check("saving it closes the page", !(await repaired.page.isVisible("#auth")));
+  check("no page errors along the way", repaired.errors.length === 0, repaired.errors.join(" | "));
+  await repaired.page.close();
+  flags.profileCreated = false;
+
+  section("A database with no schema says so");
+  flags.schemaMissing = true;
+  const bare = await land("#nothing");
+  await bare.page.evaluate(() => {
+    KM.supa.onChange(() => {});
+    localStorage.setItem("km:session", JSON.stringify({
+      access_token: "a.b.c", refresh_token: "r1", expires_at: Date.now() + 3600000,
+      user: { id: "44444444-4444-4444-4444-444444444444", email: "juan@example.com" }
+    }));
+  });
+  await bare.page.reload({ waitUntil: "networkidle" });
+  await bare.page.click('.km-tab[data-tab="you"]');
+  await bare.page.waitForSelector("#you-routes .km-failure", { timeout: 5000 });
+  const said = await bare.page.textContent("#you-routes .km-failure");
+  check("the routes you filed say the database is not set up, not \"Not found.\"",
+    said.indexOf("not set up") !== -1 && said.indexOf("Not found") === -1, said);
+  check("and name what is missing", said.indexOf("routes") !== -1, said);
+  check("with the fix one (i) away",
+    await bare.page.locator('#you-routes .km-failure [data-info="setup"]').count() === 1);
+  await shot(bare.page, "setup");
+  await bare.page.close();
+  flags.schemaMissing = false;
 
   section("Nothing went anywhere it should not have");
   check("no request to an address the test did not expect",

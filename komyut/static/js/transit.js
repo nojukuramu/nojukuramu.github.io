@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — what kind of ride it is, and how much to trust it
+   TheCommuters — what kind of ride it is, and how much to trust it
 
    Two pure tables and one pure function, kept together because they are the
    app's whole opinion about community data and they are the part most worth

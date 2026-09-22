@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — the community's routes, as data
+   TheCommuters — the community's routes, as data
 
    Everything that reads or writes a route, a vote, a comment or a profile
    goes through here. Nothing in this file touches the DOM, and nothing
@@ -302,15 +302,53 @@ KM.routes = (function () {
       .eq("id", userId).single().run();
   }
 
+  /* The signed-in member's own profile, made if it is missing. An account
+     created before schema.sql was run has none, and without this it could
+     sign in, "save" a handle that matched no row, and then be refused
+     everywhere else with nothing on screen to say why. */
+  function ensureProfile() {
+    if (!KM.supa.userId()) return Promise.resolve(null);
+    return KM.supa.rpc("ensure_profile", {}).then(function (rows) {
+      return (rows || [])[0] || null;
+    });
+  }
+
+  /* Whether somebody else already has this handle. Case-insensitive, as the
+     column is citext. `null` means "could not tell", which the sign-up page
+     treats as a shrug rather than a refusal: the database has the last word
+     on uniqueness either way. */
+  function handleTaken(handle) {
+    var h = S().handle(handle);
+    if (S().handleError(h)) return Promise.resolve(null);
+    var me = KM.supa.userId();
+    return KM.supa.from("profiles").select("id").eq("handle", h).limit(1).run()
+      .then(function (rows) {
+        return !!(rows && rows.length && rows[0].id !== me);
+      }, function () { return null; });
+  }
+
   function setHandle(handle, displayName) {
     var me = KM.supa.userId();
     if (!me) return Promise.reject(KM.error("Sign in first.", "auth"));
     var h = S().handle(handle);
     var err = S().handleError(h);
     if (err) return Promise.reject(KM.error(err, "invalid"));
-    return KM.supa.update("profiles", { id: me }, {
+    var patch = {
       handle: h,
       display_name: displayName ? S().line(displayName, S().LIMITS.displayName) : null
+    };
+    /* A PATCH that matches no row is a 200 with nothing in it, not an
+       error — which is exactly how a missing profile used to pass for a
+       saved handle. So an empty answer makes the profile and tries once
+       more, and a second empty answer is reported as the failure it is. */
+    return KM.supa.update("profiles", { id: me }, patch).then(function (row) {
+      if (row) return row;
+      return ensureProfile().then(function () {
+        return KM.supa.update("profiles", { id: me }, patch);
+      }).then(function (row2) {
+        if (!row2) throw KM.error("Your profile could not be saved. Sign out and in again.", "missing");
+        return row2;
+      });
     });
   }
 
@@ -336,6 +374,8 @@ KM.routes = (function () {
     myCommentVotes: myCommentVotes,
     report: report,
     profile: profile,
+    ensureProfile: ensureProfile,
+    handleTaken: handleTaken,
     setHandle: setHandle
   };
 })();

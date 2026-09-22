@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — the pieces every list is built from
+   TheCommuters — the pieces every list is built from
 
    A route appears in four places: the browse list, the search results, the
    planner's itineraries and your own filed routes. They are the same
@@ -134,7 +134,7 @@ KM.ui = (function () {
     function cast(v) {
       if (!KM.supa.signedIn()) {
         KM.app.toast("Sign in to vote.");
-        KM.app.openTab("you");
+        KM.account.signIn();
         return;
       }
       var before = { my: state.my, up: state.up, down: state.down };
@@ -253,6 +253,16 @@ KM.ui = (function () {
     var box = KM.mk("div", "km-failure");
     box.appendChild(icon("alert"));
     box.appendChild(KM.mk("p", null, (err && err.message) || "Something went wrong."));
+    /* A database with no schema is not something "Try again" fixes, and the
+       fix is a paragraph — so it is one (i) away rather than on the pane. */
+    if (err && err.kind === "setup") {
+      var more = KM.mk("button", "km-i");
+      more.type = "button";
+      more.setAttribute("data-info", "setup");
+      more.setAttribute("aria-label", "How to fix this");
+      box.appendChild(more);
+      KM.glyph(more, "info");
+    }
     if (retry) {
       var btn = KM.mk("button", "km-btn km-btn-ghost", "Try again");
       btn.type = "button";

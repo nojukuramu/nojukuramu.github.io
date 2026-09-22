@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — the map, and everything drawn on it
+   TheCommuters — the map, and everything drawn on it
 
    One Leaflet map, four layer groups, and a rule: every other module asks
    this one to draw, and nothing else touches L directly. That is what keeps
