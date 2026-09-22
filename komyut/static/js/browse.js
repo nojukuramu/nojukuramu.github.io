@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — searching what the community has filed
+   TheCommuters — searching what the community has filed
 
    A search box, a row of ride-type chips, three orderings and a switch for
    the validated tag. The ranking itself is not here — it is in the

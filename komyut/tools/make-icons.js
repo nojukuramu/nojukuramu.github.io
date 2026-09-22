@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* ============================================================
-   KomyutApp — the app icons, generated rather than drawn by hand
+   TheCommuters — the app icons, generated rather than drawn by hand
    `node tools/make-icons.js`
 
    The repository has no image toolchain and no build step, and the icon is

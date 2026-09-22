@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — noticing that a new version exists
+   TheCommuters — noticing that a new version exists
 
    Lifted whole from routecast/static/js/update.js, with the namespace
    changed from RC to KM and the "is a ride in progress" question replaced

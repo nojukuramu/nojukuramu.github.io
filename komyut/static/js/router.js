@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — routing between the stops somebody dropped
+   TheCommuters — routing between the stops somebody dropped
 
    Upstream: the OSRM demo server (https://router.project-osrm.org), free
    and key-less, same instance RouteCast uses. This file keeps RouteCast's
@@ -10,7 +10,7 @@
 
    What is different here, and why
    -------------------------------
-   RouteCast plans A to B for one vehicle. KomyutApp builds a LINE: an
+   RouteCast plans A to B for one vehicle. TheCommuters builds a LINE: an
    ordered list of stops that somebody is describing from memory, where the
    order is the point and the shape between them is the part the router
    fills in. So:

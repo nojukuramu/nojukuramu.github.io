@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>KomyutApp — community commute routes</title>
+  <title>TheCommuters — community commute routes</title>
   <meta name="description" content="Community-built commute routes for the Philippines and anywhere else: jeepney, tricycle, bus and train lines people filed themselves, with transfers, fares, votes and the weather waiting along the way." />
 
   <!-- ==========================================================
@@ -51,7 +51,7 @@
   <meta name="theme-color" content="#101613" media="(prefers-color-scheme: dark)" />
   <meta name="color-scheme" content="light dark" />
 
-  <meta property="og:title" content="KomyutApp — community commute routes" />
+  <meta property="og:title" content="TheCommuters — community commute routes" />
   <meta property="og:description" content="Jeepney, tricycle, bus and train routes filed by the people who ride them. Search them, vote on them, and plan a trip across them." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://nojukuramu.github.io/komyut/" />
@@ -61,7 +61,7 @@
   <link rel="apple-touch-icon" href="static/apple-touch-icon.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="KomyutApp" />
+  <meta name="apple-mobile-web-app-title" content="TheCommuters" />
 
   <script src="static/js/boot.js"></script>
 
@@ -102,13 +102,13 @@
     <div class="km-rail" id="rail-top">
       <div class="km-glass km-brand" id="rail-title-wrap">
         <span class="km-brand-mark" id="rail-icon" aria-hidden="true"></span>
-        <span class="km-brand-text" id="rail-title">KomyutApp</span>
+        <span class="km-brand-text" id="rail-title">TheCommuters</span>
       </div>
 
       <div class="km-rail-spacer"></div>
 
       <button type="button" class="km-glass km-icon-btn" id="locate-btn" aria-label="Go to where I am" title="Go to where I am"></button>
-      <button type="button" class="km-glass km-icon-btn" id="install-btn" aria-label="Install KomyutApp" title="Install KomyutApp" hidden></button>
+      <button type="button" class="km-glass km-icon-btn" id="install-btn" aria-label="Install TheCommuters" title="Install TheCommuters" hidden></button>
       <button type="button" class="km-glass km-icon-btn" id="theme-btn" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
       <button type="button" class="km-glass km-icon-btn km-account-btn" id="account-btn" aria-label="Your account" title="Your account"></button>
     </div>
@@ -281,39 +281,16 @@
         <!-- ---------- PANE: you ---------- -->
         <section class="km-pane" id="pane-you" data-pane="you" hidden>
           <div id="you-out">
-            <p class="km-hint">
-              Reading needs no account. Voting, commenting and filing routes do.
-              <button type="button" class="km-i" data-info="account" aria-label="What an account is for"></button>
-            </p>
-
-            <div class="km-segmented km-segmented-wide" id="auth-mode" role="group" aria-label="Sign in or join">
-              <button type="button" data-mode="in" class="is-on">Sign in</button>
-              <button type="button" data-mode="up">Join</button>
+            <div class="km-you-welcome">
+              <span class="km-you-avatar" id="you-out-mark" aria-hidden="true"></span>
+              <p class="km-you-handle">Join TheCommuters</p>
+              <p class="km-hint">
+                Reading needs no account. Voting, commenting and filing routes do.
+                <button type="button" class="km-i" data-info="account" aria-label="What an account is for"></button>
+              </p>
             </div>
-
-            <label class="km-label" for="auth-email">Email</label>
-            <input type="email" id="auth-email" class="km-input" autocomplete="email" maxlength="254" placeholder="you@example.com" />
-
-            <label class="km-label" for="auth-password">Password</label>
-            <input type="password" id="auth-password" class="km-input" autocomplete="current-password" maxlength="200" placeholder="At least 8 characters" />
-
-            <button type="button" class="km-btn km-btn-primary km-btn-wide" id="auth-go">Sign in</button>
-            <button type="button" class="km-btn km-btn-quiet km-btn-wide" id="auth-forgot">Forgot the password</button>
-            <p class="km-err" id="auth-err" hidden></p>
-            <p class="km-note" id="auth-note" hidden></p>
-          </div>
-
-          <!-- Arrived on a password-reset link. Shown instead of both the
-               sign-in form and the account, because at this moment there is
-               exactly one thing to do. -->
-          <div id="you-recover" hidden>
-            <p class="km-note">That link worked. Choose a new password.</p>
-            <label class="km-label" for="recover-password">New password</label>
-            <input type="password" id="recover-password" class="km-input" autocomplete="new-password"
-                   maxlength="200" placeholder="At least 8 characters" />
-            <button type="button" class="km-btn km-btn-primary km-btn-wide" id="recover-go">Save new password</button>
-            <button type="button" class="km-btn km-btn-quiet km-btn-wide" id="recover-cancel">Not now</button>
-            <p class="km-err" id="recover-err" hidden></p>
+            <button type="button" class="km-btn km-btn-primary km-btn-wide" id="you-signin">Sign in</button>
+            <button type="button" class="km-btn km-btn-ghost km-btn-wide km-mt8" id="you-signup">Create an account</button>
           </div>
 
           <div id="you-in" hidden>
@@ -326,8 +303,11 @@
             </div>
 
             <label class="km-label" for="you-handle-input">Your handle</label>
-            <input type="text" id="you-handle-input" class="km-input" maxlength="24" autocomplete="username" />
-            <p class="km-hint">Letters, numbers and underscore. This is what other people see.</p>
+            <div class="km-field-wrap">
+              <input type="text" id="you-handle-input" class="km-input" maxlength="24" autocomplete="username"
+                     autocapitalize="none" spellcheck="false" />
+            </div>
+            <p class="km-field-status" id="you-handle-status">Letters, numbers and underscore. This is what other people see.</p>
             <button type="button" class="km-btn km-btn-ghost km-btn-wide" id="you-handle-save">Save handle</button>
             <p class="km-err" id="you-err" hidden></p>
 
@@ -335,12 +315,16 @@
             <div class="km-results" id="you-routes"></div>
             <div class="km-empty" id="you-routes-empty">Nothing yet.</div>
 
-            <button type="button" class="km-btn km-btn-quiet km-btn-wide" id="auth-signout">Sign out</button>
+            <h3 class="km-h3">Account</h3>
+            <p class="km-you-email" id="you-email"></p>
+            <button type="button" class="km-btn km-btn-ghost km-btn-wide" id="you-password">Change password</button>
+            <button type="button" class="km-btn km-btn-ghost km-btn-wide km-mt8" id="auth-signout">Sign out</button>
+            <button type="button" class="km-btn km-btn-quiet km-btn-wide" id="auth-signout-all">Sign out on every device</button>
           </div>
 
           <hr class="km-hr" />
           <div class="km-about">
-            <p class="km-version">KomyutApp <span id="version-text">v?</span>
+            <p class="km-version">TheCommuters <span id="version-text">v?</span>
               <button type="button" class="km-i" data-info="update" aria-label="How updates work"></button>
             </p>
             <button type="button" class="km-btn km-btn-quiet" id="update-check">Check for updates</button>
@@ -384,6 +368,113 @@
         <button type="button" class="km-icon-btn" id="detail-report" aria-label="Report this route" title="Report this route"></button>
       </div>
       <div class="km-detail-body" id="detail-body"></div>
+    </div>
+
+    <!-- ==========================================================
+         Signing in, joining, and every step around them — a page of its
+         own rather than a corner of the You pane, because each of these
+         is the only thing somebody is doing while they do it. One form,
+         several modes; static/js/auth.js decides which fields a mode
+         shows (data-modes below) and checks each one as it is typed.
+         ========================================================== -->
+    <div class="km-auth" id="auth" data-mode="signin" hidden>
+      <div class="km-auth-head">
+        <button type="button" class="km-icon-btn" id="auth-back" aria-label="Back"></button>
+        <span class="km-auth-head-title">TheCommuters</span>
+      </div>
+
+      <div class="km-auth-body">
+        <form class="km-auth-card" id="auth-form" novalidate autocomplete="on">
+          <div class="km-auth-mark" id="auth-mark" aria-hidden="true"></div>
+          <h2 class="km-auth-title" id="auth-title">Welcome back</h2>
+          <p class="km-auth-sub" id="auth-sub">Sign in to vote, comment and file routes.</p>
+
+          <div class="km-segmented km-segmented-wide" id="auth-switch" role="tablist" aria-label="Sign in or create an account" data-modes="signin signup">
+            <button type="button" role="tab" data-to="signin" class="is-on">Sign in</button>
+            <button type="button" role="tab" data-to="signup">Create account</button>
+          </div>
+
+          <!-- ---------- "check your inbox" ---------- -->
+          <div class="km-auth-sent" data-modes="sent">
+            <p class="km-auth-sent-to" id="auth-sent-to"></p>
+            <p class="km-hint">The link signs you in. Check spam if it is not there in a minute.</p>
+            <button type="button" class="km-btn km-btn-ghost km-btn-wide" id="auth-resend">Send it again</button>
+            <button type="button" class="km-btn km-btn-quiet km-btn-wide" id="auth-sent-back">Back to sign in</button>
+          </div>
+
+          <div class="km-auth-field" data-modes="signup handle">
+            <label class="km-label" for="auth-handle">Handle</label>
+            <div class="km-field-wrap">
+              <span class="km-field-prefix" aria-hidden="true">@</span>
+              <input type="text" id="auth-handle" class="km-input km-input-prefixed" maxlength="24"
+                     autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="juan_dc" />
+              <span class="km-field-state" id="auth-handle-state" aria-hidden="true"></span>
+            </div>
+            <p class="km-field-status" id="auth-handle-status" aria-live="polite">What other people see. Letters, numbers and _.</p>
+          </div>
+
+          <div class="km-auth-field" data-modes="signin signup forgot">
+            <label class="km-label" for="auth-email">Email</label>
+            <div class="km-field-wrap">
+              <input type="email" id="auth-email" class="km-input" autocomplete="email" maxlength="254"
+                     inputmode="email" autocapitalize="none" spellcheck="false" placeholder="you@example.com" />
+              <span class="km-field-state" id="auth-email-state" aria-hidden="true"></span>
+            </div>
+            <p class="km-field-status" id="auth-email-status" aria-live="polite"></p>
+          </div>
+
+          <div class="km-auth-field" data-modes="signin signup reset change">
+            <label class="km-label" for="auth-password" id="auth-password-label">Password</label>
+            <div class="km-field-wrap">
+              <input type="password" id="auth-password" class="km-input km-input-reveal" autocomplete="current-password"
+                     maxlength="200" placeholder="Your password" />
+              <button type="button" class="km-reveal" id="auth-reveal" aria-label="Show password" aria-pressed="false"></button>
+            </div>
+            <p class="km-field-status km-caps" id="auth-caps" hidden>Caps Lock is on.</p>
+
+            <div class="km-strength" id="auth-strength" data-modes="signup reset change" data-score="0">
+              <div class="km-strength-bar" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+              <span class="km-strength-label" id="auth-strength-label">Too short</span>
+            </div>
+            <ul class="km-rules" id="auth-rules" data-modes="signup reset change" aria-live="polite"></ul>
+          </div>
+
+          <div class="km-auth-field" data-modes="signup reset change">
+            <label class="km-label" for="auth-confirm">Confirm password</label>
+            <div class="km-field-wrap">
+              <input type="password" id="auth-confirm" class="km-input" autocomplete="new-password"
+                     maxlength="200" placeholder="Type it again" />
+              <span class="km-field-state" id="auth-confirm-state" aria-hidden="true"></span>
+            </div>
+            <p class="km-field-status" id="auth-confirm-status" aria-live="polite"></p>
+          </div>
+
+          <div class="km-auth-row" data-modes="signin">
+            <label class="km-switch">
+              <input type="checkbox" id="auth-remember" checked />
+              <span class="km-switch-box" aria-hidden="true"></span>
+              <span class="km-switch-label">Keep me signed in</span>
+            </label>
+            <button type="button" class="km-linkish" id="auth-forgot">Forgot password?</button>
+          </div>
+
+          <label class="km-check" data-modes="signup">
+            <input type="checkbox" id="auth-terms" />
+            <span class="km-check-box" aria-hidden="true"></span>
+            <span class="km-check-label">I understand my handle, routes and comments are public.</span>
+            <button type="button" class="km-i" data-info="account" aria-label="What an account is for"></button>
+          </label>
+
+          <button type="submit" class="km-btn km-btn-primary km-btn-wide km-auth-go" id="auth-go" data-modes="signin signup forgot reset handle change">Sign in</button>
+          <p class="km-err" id="auth-err" role="alert" hidden></p>
+          <p class="km-note" id="auth-note" role="status" hidden></p>
+
+          <p class="km-auth-foot" data-modes="signin signup forgot reset handle change">
+            <span id="auth-foot-text">New here?</span>
+            <button type="button" class="km-linkish km-linkish-accent" id="auth-foot-go">Create an account</button>
+          </p>
+        </form>
+      </div>
     </div>
 
     <!-- ==========================================================
@@ -448,6 +539,7 @@
   <script src="static/js/browse.js"></script>
   <script src="static/js/builder.js"></script>
   <script src="static/js/planner.js"></script>
+  <script src="static/js/auth.js"></script>
   <script src="static/js/account.js"></script>
   <script src="static/js/app.js"></script>
   <script src="static/js/pwa.js"></script>

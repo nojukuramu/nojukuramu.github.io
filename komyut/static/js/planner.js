@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — the trip planner, as a screen
+   TheCommuters — the trip planner, as a screen
 
    Two buttons that name places, one button that finds the routes, and a
    list of itineraries. The search itself lives in static/js/plan.js; this

@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — what a stranger is allowed to write down
+   TheCommuters — what a stranger is allowed to write down
 
    This app is the first thing in this repository where one person's typing
    is shown to another person. Everything else here is either local to the
@@ -126,6 +126,49 @@ KM.sanitize = (function () {
     return /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(v);
   }
 
+  /* What a new password has to be, as a list the sign-up page can tick off
+     while it is typed, plus a strength score for the meter.
+
+     The rules are the ones that stop the passwords people actually lose
+     accounts to — short, all one kind of character, or the address itself
+     — and nothing more. No "one symbol and one capital": those rules make
+     `Password1!`, not strong passwords. Length is what the meter rewards.
+
+     Signing IN is never held to these; somebody whose password predates a
+     rule must still be able to get into their account. */
+  var PASSWORD_MIN = 8;
+  function passwordCheck(pw, email, handleValue) {
+    pw = String(pw || "");
+    var lower = pw.toLowerCase();
+    var local = String(email || "").toLowerCase().split("@")[0];
+    var h = String(handleValue || "").toLowerCase();
+    var personal = (local.length >= 3 && lower.indexOf(local) !== -1) ||
+                   (h.length >= 3 && lower.indexOf(h) !== -1);
+    var rules = [
+      { id: "length", ok: pw.length >= PASSWORD_MIN, label: "At least " + PASSWORD_MIN + " characters" },
+      { id: "letter", ok: /[a-z]/i.test(pw), label: "A letter" },
+      { id: "number", ok: /[0-9]/.test(pw), label: "A number" },
+      { id: "personal", ok: pw.length > 0 && !personal, label: "Not your email or handle" }
+    ];
+    var ok = rules.every(function (r) { return r.ok; });
+
+    var score = 0;
+    if (pw.length >= PASSWORD_MIN) score++;
+    if (pw.length >= 12) score++;
+    if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
+    if (/[^a-z0-9]/i.test(pw)) score++;
+    if (/(.)\1{2,}/.test(pw) || /^(?:password|qwerty|123456|abc123)/i.test(pw)) score = Math.min(score, 1);
+    if (!ok) score = Math.min(score, 1);
+    if (!pw.length) score = 0;
+
+    return {
+      ok: ok,
+      rules: rules,
+      score: score,
+      label: ["Too short", "Weak", "Fair", "Good", "Strong"][score]
+    };
+  }
+
   /* A coordinate that came from a text field, a pasted link or the network.
      Returns null rather than a NaN that would poison a polyline later. */
   function coord(lat, lon) {
@@ -178,6 +221,8 @@ KM.sanitize = (function () {
     handleError: handleError,
     email: email,
     emailLooksValid: emailLooksValid,
+    PASSWORD_MIN: PASSWORD_MIN,
+    passwordCheck: passwordCheck,
     coord: coord,
     fare: fare,
     countryCode: countryCode,

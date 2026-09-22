@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* ============================================================
-   KomyutApp — validation harness
+   TheCommuters — validation harness
    `node tools/validate.js`
 
    Three halves, and all of them have to pass before anything ships.
@@ -278,9 +278,11 @@ section("Static: coming back from an email link");
   check("an expired or reused link is reported in words",
     /error_description/.test(supa) && /expired/.test(supa));
 
+  var authJs = read("static/js/auth.js");
   check("a reset link leads somewhere that can set a password",
-    /updatePassword/.test(supa) && /updatePassword/.test(acct) &&
-    HTML.indexOf('id="recover-password"') !== -1);
+    /updatePassword/.test(supa) && /updatePassword/.test(authJs) &&
+    /KM\.auth\.open\("reset"/.test(acct) &&
+    /data-modes="[^"]*\breset\b[^"]*"[\s\S]{0,400}id="auth-password"/.test(HTML));
   check("the new password is sent as a PUT to the user, not a sign-in",
     /\/auth\/v1\/user"[\s\S]{0,80}method: "PUT"/.test(supa));
 
@@ -292,8 +294,13 @@ section("Static: coming back from an email link");
     "otherwise the link falls back to the project's Site URL");
   check("so does the password reset",
     /\/auth\/v1\/recover" \+ \(back \? "\?redirect_to=/.test(supa));
-  check("both work it out in one place",
-    (supa.match(/var back = /g) || []).length === 2 && /function here\(\)/.test(supa));
+  check("so does sending the confirmation again",
+    /\/auth\/v1\/resend" \+ \(back \? "\?redirect_to=/.test(supa));
+  check("every one of them works it out in one place",
+    (supa.match(/var back = /g) || []).length === (supa.match(/"\?redirect_to="/g) || []).length &&
+    (supa.match(/var back = (?:redirectTo \|\| )?here\(\)/g) || []).length ===
+      (supa.match(/var back = /g) || []).length &&
+    /function here\(\)/.test(supa));
 
   /* location.href can already carry a fragment from a previous link, and
      GoTrue appends its own to whatever it is given. */
@@ -311,6 +318,48 @@ section("Static: coming back from an email link");
   check("and the landing is read before the opening tab is chosen",
     read("static/js/app.js").indexOf("KM.supa.landing()") <
     read("static/js/app.js").indexOf("KM.account.landed("));
+})();
+
+section("Static: the sign-in page");
+(function () {
+  var authJs = read("static/js/auth.js");
+  var acct = read("static/js/account.js");
+  var supa = read("static/js/supa.js");
+
+  check("it is a page of its own, not a corner of the You pane",
+    /<div class="km-auth" id="auth"/.test(HTML) && HTML.indexOf('id="auth-email"') > HTML.indexOf('id="auth"'));
+  check("signing up asks for the password twice",
+    /data-modes="[^"]*\bsignup\b[^"]*">\s*<label[^>]*for="auth-confirm"/.test(HTML));
+  check("and refuses a mismatch before any request",
+    /c !== pw/.test(authJs) && /do not match/.test(authJs));
+  check("a new password is held to the shared rules, not a second copy of them",
+    /KM\.sanitize\.passwordCheck/.test(authJs) && !/\.length\s*<\s*8/.test(stripComments(authJs)));
+  check("signing IN is never held to them",
+    /mode === "signin"[\s\S]{0,120}pw \? null/.test(authJs),
+    "a password that predates a rule must still open its account");
+  check("the password can be shown, and Caps Lock is noticed",
+    HTML.indexOf('id="auth-reveal"') !== -1 && /getModifierState\("CapsLock"\)/.test(authJs));
+  check("password managers are told which password is which",
+    /auto: "current-password"/.test(authJs) && /auto: "new-password"/.test(authJs));
+  check("the password fields are cleared on every way out",
+    /function clearSecrets/.test(authJs) &&
+    (authJs.match(/clearSecrets\(\)/g) || []).length >= 4);
+  check("the handle is chosen at sign-up and sent as metadata",
+    /data: handle \? \{ handle: handle \}/.test(supa));
+  check("the resend button waits rather than being refused",
+    /RESEND_COOLDOWN_S/.test(authJs) && /resendSignup/.test(authJs));
+  check("\"keep me signed in\" decides where the session is kept",
+    /sessionStorage/.test(supa) && /function remembers/.test(supa) && /setRemember/.test(authJs));
+  check("sign-out tells the server whose session to end",
+    /token: had\.access_token/.test(supa),
+    "the local session is cleared first, so the request would otherwise carry the anon key");
+  check("every sign-in makes sure a profile exists behind it",
+    /function afterSignIn/.test(acct) && /ensureProfile/.test(acct) &&
+    /ensure_profile/.test(read("static/js/routes.js")));
+  check("nothing else in the app sends people to the You tab to sign in",
+    ["builder.js", "detail.js", "ui.js"].every(function (n) {
+      return !/toast\("Sign in[^)]*\);\s*KM\.app\.openTab\("you"\)/.test(read("static/js/" + n));
+    }));
 })();
 
 section("Static: the info sheet");
@@ -612,6 +661,16 @@ section("Security: the client and the database agree");
     /on conflict \(route_id, user_id\) do update/.test(sql));
   check("negative votes are pushed down in the ranking",
     /least\(3\.0, ln\(1 \+ greatest\(-r\.score, 0\)\)/.test(sql));
+  check("a member with no profile is repaired, not stranded",
+    /create or replace function public\.ensure_profile\(\)/.test(sql) &&
+    /grant execute on function public\.ensure_profile\(\) to authenticated/.test(sql) &&
+    /for u in select[\s\S]{0,200}from auth\.users/.test(sql));
+  check("the handle asked for at sign-up is honoured",
+    /raw_user_meta_data ->> 'handle'/.test(sql));
+  check("the handle picker is not callable from the API",
+    /revoke execute on function public\.pick_handle\(text, text\) from public, anon, authenticated/.test(sql));
+  check("running the schema reloads PostgREST's cache",
+    /notify pgrst, 'reload schema'/.test(sql));
   check("anon is granted no write anywhere",
     !/grant (insert|update|delete)[^;]*to[^;]*\banon\b/.test(sql));
 
@@ -705,6 +764,14 @@ section("Behaviour: the sanitiser");
   check("a block keeps paragraphs but not a wall of blank lines",
     S.block("a\n\n\n\n\nb") === "a\n\nb");
 
+  check("a short password fails the rules", !S.passwordCheck("abc123").ok);
+  check("a password of one kind of character fails them", !S.passwordCheck("abcdefghij").ok);
+  check("a password with the address in it fails them",
+    !S.passwordCheck("juan12345", "juan@example.com").ok);
+  check("a reasonable password passes", S.passwordCheck("correct-horse-9", "juan@example.com").ok);
+  check("length is what the meter rewards",
+    S.passwordCheck("correct-horse-battery-9").score > S.passwordCheck("corrhor9").score);
+  check("a repeated run is never called strong", S.passwordCheck("aaaaaaaa1").score <= 1);
   check("a handle is narrowed to its alphabet", S.handle("Juan Dela Cruz!") === "juandelacruz");
   check("a handle that starts with a digit is rejected", !!S.handleError("1juan"));
   check("a short handle is rejected", !!S.handleError("ab"));
@@ -778,6 +845,22 @@ section("Behaviour: talking to PostgREST safely");
   check("a quote inside a value is escaped", q('say "hi"').indexOf('\\"') !== -1);
   check("an empty value is still a value", q("") === '""');
   check("a plain value is left alone", q("jeepney") === "jeepney");
+
+  var d = sandbox.KM.supa._describe;
+  var missingTable = d(404, { code: "PGRST205",
+    message: "Could not find the table 'public.routes' in the schema cache" }, "/rest/v1/routes?select=id");
+  check("a table PostgREST does not know is reported as setup, not \"Not found.\"",
+    missingTable.kind === "setup" && /not set up/.test(missingTable.message) && /routes/.test(missingTable.message),
+    missingTable.message);
+  var missingFn = d(404, { code: "PGRST202",
+    message: "Could not find the function public.ensure_profile without parameters in the schema cache" },
+    "/rest/v1/rpc/ensure_profile");
+  check("so is a function it does not know, by name",
+    missingFn.kind === "setup" && /ensure_profile/.test(missingFn.message), missingFn.message);
+  check("a bare 404 from the REST API is too",
+    d(404, null, "/rest/v1/profiles?id=eq.x").kind === "setup");
+  check("an empty result is not an error at all, so it is not mapped here",
+    d(409, { code: "23505" }, "/rest/v1/profiles").kind === "conflict");
 
   var url = sandbox.KM.supa.from("routes").select("id,name").eq("city", "Cubao, QC").limit(5)._url();
   check("the whole filter is percent-encoded",

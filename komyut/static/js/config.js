@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — where the community's data lives
+   TheCommuters — where the community's data lives
 
    The house rule in this repository is "no API keys, and therefore no
    service that needs one", and this file needs a word about why it is not

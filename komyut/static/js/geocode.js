@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — geocoding
+   TheCommuters — geocoding
    Lifted from routecast/static/js/geocode.js, namespace changed, with a
    Philippines-first bias added to the default search.
 

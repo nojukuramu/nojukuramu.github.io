@@ -1,5 +1,5 @@
 -- ============================================================
--- KomyutApp — the whole database, in one file
+-- TheCommuters — the whole database, in one file
 --
 -- Run this once in the Supabase SQL editor (Dashboard -> SQL -> New query).
 -- It is written to be re-runnable: everything is `if not exists` or
@@ -54,12 +54,15 @@ create table if not exists public.profiles (
   constraint display_name_len check (display_name is null or char_length(display_name) between 1 and 40)
 );
 
--- A handle derived from the email's local part, with a numeric suffix if it
--- is taken. Members can change it afterwards; what matters is that one
--- exists from the first second.
-create or replace function public.handle_new_user()
-returns trigger
+-- The handle a new member gets. The one they asked for on the sign-up page
+-- (sent as user metadata) if it has the right shape and is free; otherwise
+-- one derived from the email's local part, with a numeric suffix if it is
+-- taken. Members can change it afterwards; what matters is that one exists
+-- from the first second.
+create or replace function public.pick_handle(wanted text, email text)
+returns text
 language plpgsql
+stable
 security definer
 set search_path = public
 as $$
@@ -68,8 +71,14 @@ declare
   candidate text;
   n int := 0;
 begin
-  base := lower(regexp_replace(split_part(coalesce(new.email, 'komyuter'), '@', 1), '[^a-z0-9_]', '', 'g'));
-  if base !~ '^[a-z]' then base := 'k' || base; end if;
+  wanted := lower(coalesce(wanted, ''));
+  if wanted ~ '^[a-z][a-z0-9_]{2,23}$'
+     and not exists (select 1 from public.profiles p where p.handle = wanted) then
+    return wanted;
+  end if;
+
+  base := lower(regexp_replace(split_part(coalesce(email, 'commuter'), '@', 1), '[^a-z0-9_]', '', 'g'));
+  if base !~ '^[a-z]' then base := 'c' || base; end if;
   base := left(base, 20);
   if char_length(base) < 3 then base := base || 'ter'; end if;
 
@@ -78,8 +87,19 @@ begin
     n := n + 1;
     candidate := left(base, 20) || n::text;
   end loop;
+  return candidate;
+end;
+$$;
 
-  insert into public.profiles (id, handle) values (new.id, candidate)
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, handle)
+  values (new.id, public.pick_handle(new.raw_user_meta_data ->> 'handle', new.email))
   on conflict (id) do nothing;
   return new;
 end;
@@ -89,6 +109,61 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- The account that signed up BEFORE this file was run has no profile: the
+-- trigger above did not exist yet to make one. Every write in the app hangs
+-- off a profile, so that member could sign in, save a handle that silently
+-- matched no row, and then fail everywhere. Two repairs, both idempotent:
+-- a backfill now, and a function the app calls on sign-in so a gap that
+-- appears later closes itself.
+-- One insert per member rather than one insert for all of them: a single
+-- statement cannot see its own rows, so two addresses with the same local
+-- part would both be handed the same handle and the unique index would
+-- fail the whole script.
+do $$
+declare
+  u record;
+begin
+  for u in select au.id, au.email, au.raw_user_meta_data
+           from auth.users au
+           where not exists (select 1 from public.profiles p where p.id = au.id)
+  loop
+    insert into public.profiles (id, handle)
+    values (u.id, public.pick_handle(u.raw_user_meta_data ->> 'handle', u.email))
+    on conflict (id) do nothing;
+  end loop;
+end;
+$$;
+
+-- Returns the caller's profile, making it first if it is missing. `created`
+-- tells the app to offer the "choose your handle" step, since a handle made
+-- here was picked by the database rather than by the person.
+create or replace function public.ensure_profile()
+returns table (id uuid, handle text, display_name text, is_moderator boolean,
+               created_at timestamptz, created boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  me uuid := auth.uid();
+  made boolean := false;
+begin
+  if me is null then
+    raise exception 'not signed in' using errcode = '42501';
+  end if;
+  if not exists (select 1 from public.profiles p where p.id = me) then
+    insert into public.profiles (id, handle)
+    select u.id, public.pick_handle(u.raw_user_meta_data ->> 'handle', u.email)
+    from auth.users u where u.id = me
+    on conflict on constraint profiles_pkey do nothing;
+    made := true;
+  end if;
+  return query
+    select p.id, p.handle::text, p.display_name, p.is_moderator, p.created_at, made
+    from public.profiles p where p.id = me;
+end;
+$$;
 
 
 -- ------------------------------------------------------------
@@ -794,6 +869,17 @@ grant execute on function public.routes_in_bbox(double precision, double precisi
 grant execute on function public.cast_route_vote(uuid, integer) to authenticated;
 grant execute on function public.cast_comment_vote(uuid, integer) to authenticated;
 grant execute on function public.is_moderator() to anon, authenticated;
+revoke execute on function public.ensure_profile() from public, anon;
+grant execute on function public.ensure_profile() to authenticated;
+-- pick_handle reads every handle to find a free one; it is for the trigger
+-- and ensure_profile, not for the API.
+revoke execute on function public.pick_handle(text, text) from public, anon, authenticated;
+
+-- PostgREST answers from a cached picture of the schema, and a table or
+-- function it has not noticed yet is a 404 — which the app used to show as
+-- a bare "Not found." after sign-in. Supabase usually reloads the cache on
+-- its own; this makes sure, so running this file is always enough.
+notify pgrst, 'reload schema';
 
 
 -- ------------------------------------------------------------

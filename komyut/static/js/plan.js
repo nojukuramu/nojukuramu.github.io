@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — getting from a pin to a pin on other people's routes
+   TheCommuters — getting from a pin to a pin on other people's routes
 
    This is the part that makes the app a navigator rather than a list. You
    drop two pins (or use where you are standing), and it works out which

@@ -1,4 +1,4 @@
-/* KomyutApp service worker — caches the shell so the app opens instantly and
+/* TheCommuters service worker — caches the shell so the app opens instantly and
    survives a flaky connection, which on a Philippine commute is most of it.
 
    The pattern is the one the-wolf-game, karaokenatin and routecast already
@@ -11,7 +11,7 @@
    drift apart. Bumping it is what publishes an update: a changed sw.js is
    what a browser notices, and a new cache name is what makes the old shell
    go away. */
-var CACHE = "komyut-v3";
+var CACHE = "komyut-v4";
 var SHELL = [
   "./",
   "./index.html",
@@ -44,6 +44,7 @@ var SHELL = [
   "./static/js/browse.js",
   "./static/js/builder.js",
   "./static/js/planner.js",
+  "./static/js/auth.js",
   "./static/js/account.js",
   "./static/js/app.js",
   "./static/js/pwa.js",

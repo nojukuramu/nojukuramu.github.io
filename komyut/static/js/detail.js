@@ -1,5 +1,5 @@
 /* ============================================================
-   KomyutApp — one route, in full
+   TheCommuters — one route, in full
 
    Opened from anywhere a route appears. It draws the line on the map,
    shows what the community has said about it, reads the weather along it,
@@ -362,6 +362,16 @@ KM.detail = (function () {
     } else {
       var prompt = KM.mk("p", "km-hint", "Sign in to join in. Reading needs no account.");
       talk.appendChild(prompt);
+      var join = KM.mk("button", "km-btn km-btn-ghost km-btn-wide", "Sign in to comment");
+      join.type = "button";
+      join.addEventListener("click", function () {
+        /* Back to this same route once they are in, with the comment box
+           where the button was. */
+        KM.auth.open("signin", { onClose: function () {
+          if (KM.supa.signedIn() && isOpen() && current && current.id === route.id) loadComments(current);
+        } });
+      });
+      talk.appendChild(join);
     }
 
     var list = KM.mk("div", "km-comments");
@@ -488,7 +498,7 @@ KM.detail = (function () {
   function report(route) {
     if (!KM.supa.signedIn()) {
       KM.app.toast("Sign in to report a route.");
-      KM.app.openTab("you");
+      KM.account.signIn();
       return;
     }
     var labels = REASONS.map(function (r, i) { return (i + 1) + ") " + r[1]; }).join("\n");

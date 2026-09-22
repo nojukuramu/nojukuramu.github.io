@@ -1,21 +1,23 @@
 /* ============================================================
-   KomyutApp — the account, and what it is for
+   TheCommuters — the account, and what it is for
 
-   The login here is deliberately the smallest thing that answers the one
-   question the app has to answer: is this person allowed to write. Email
-   and a password, no social sign-in, no profile to fill in, no onboarding.
-   Reading the whole database needs no account at all, and the pane says so
-   before it asks for anything.
+   The account is the smallest thing that answers the one question the app
+   has to answer: is this person allowed to write. Reading the whole
+   database needs no account at all, and the pane says so before it asks
+   for anything.
+
+   The forms themselves — sign in, create an account, reset, the rest —
+   live on their own page in static/js/auth.js. This module is the You
+   pane on either side of them, the landing from an email link, and the
+   profile behind the handle.
 
    What this module is careful about
    ---------------------------------
-   * **The password field is never written down.** Not to storage, not to a
-     variable that outlives the request, and it is cleared the moment the
-     call returns either way.
-   * **A failed sign-in does not say which half was wrong.** Supabase does
-     not tell us, and the wording here does not invent a distinction: "that
-     email and password do not match" is the whole truth and it does not
-     confirm to a stranger that an address has an account.
+   * **Every signed-in member has a profile.** An account made before
+     schema.sql was run has none, and used to be able to sign in, "save" a
+     handle that matched no row, and then meet a bare "Not found." under
+     its own routes. A sign-in now asks the database to make the profile if
+     it is missing, and offers the handle step when it had to.
    * **Signing out clears the session first and tells the server second.** A
      sign-out that leaves the token in place because the network was down
      is a sign-out that did not happen.
@@ -25,54 +27,34 @@ var KM = KM || {};
 KM.account = (function () {
   "use strict";
 
-  var mode = "in";
   var profileCache = null;
   var recovering = false;
   var els = {};
+  var handleWatch = null;
 
   function init() {
     els.out = KM.el("you-out");
     els.in = KM.el("you-in");
-    els.email = KM.el("auth-email");
-    els.password = KM.el("auth-password");
-    els.go = KM.el("auth-go");
-    els.err = KM.el("auth-err");
-    els.note = KM.el("auth-note");
-    els.modeEl = KM.el("auth-mode");
     els.handleInput = KM.el("you-handle-input");
     els.youErr = KM.el("you-err");
     els.routes = KM.el("you-routes");
     els.routesEmpty = KM.el("you-routes-empty");
 
     KM.glyph(KM.el("you-avatar"), "user");
+    KM.glyph(KM.el("you-out-mark"), "user");
 
-    els.modeEl.addEventListener("click", function (e) {
-      var btn = e.target.closest("button[data-mode]");
-      if (!btn) return;
-      setMode(btn.getAttribute("data-mode"));
+    KM.el("you-signin").addEventListener("click", function () { signIn("signin"); });
+    KM.el("you-signup").addEventListener("click", function () { signIn("signup"); });
+    KM.el("you-password").addEventListener("click", function () { KM.auth.open("change"); });
+    KM.el("auth-signout").addEventListener("click", function () { signOut(false); });
+    KM.el("auth-signout-all").addEventListener("click", function () {
+      if (window.confirm("Sign out on every device, including this one?")) signOut(true);
     });
-
-    els.go.addEventListener("click", submit);
-    els.password.addEventListener("keydown", function (e) {
-      if (e.key === "Enter") submit();
-    });
-
-    els.recover = KM.el("you-recover");
-    els.recoverPw = KM.el("recover-password");
-    els.recoverErr = KM.el("recover-err");
-
-    KM.el("recover-go").addEventListener("click", saveNewPassword);
-    KM.el("recover-cancel").addEventListener("click", function () {
-      recovering = false;
-      paint();
-    });
-    els.recoverPw.addEventListener("keydown", function (e) {
-      if (e.key === "Enter") saveNewPassword();
-    });
-
-    KM.el("auth-forgot").addEventListener("click", forgot);
-    KM.el("auth-signout").addEventListener("click", signOut);
     KM.el("you-handle-save").addEventListener("click", saveHandle);
+    els.handleInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") saveHandle();
+    });
+    handleWatch = KM.auth.watchHandle(els.handleInput, KM.el("you-handle-status"), null, null);
 
     KM.supa.onChange(function () {
       profileCache = null;
@@ -80,84 +62,42 @@ KM.account = (function () {
     });
   }
 
-  function setMode(next) {
-    mode = next === "up" ? "up" : "in";
-    Array.prototype.forEach.call(els.modeEl.querySelectorAll("button"), function (b) {
-      b.classList.toggle("is-on", b.getAttribute("data-mode") === mode);
-    });
-    els.go.textContent = mode === "up" ? "Create the account" : "Sign in";
-    els.password.setAttribute("autocomplete", mode === "up" ? "new-password" : "current-password");
-    els.err.hidden = true;
-    els.note.hidden = true;
+  /* The one door into the sign-in page from anywhere in the app: the You
+     pane, a vote arrow, the comment box, the locked builder. */
+  function signIn(mode) {
+    KM.auth.open(mode || "signin");
   }
 
-  function submit() {
-    var email = KM.sanitize.email(els.email.value);
-    var password = els.password.value;
-
-    els.err.hidden = true;
-    els.note.hidden = true;
-
-    if (!KM.sanitize.emailLooksValid(email)) { fail("That does not look like an email address."); return; }
-    if (password.length < 8) {
-      fail(mode === "up" ? "Use at least eight characters." : "That email and password do not match.");
-      return;
-    }
-    if (!KM.supa.ready()) { fail("This app is not connected to a community database yet."); return; }
-
-    els.go.disabled = true;
-    els.go.textContent = mode === "up" ? "Creating…" : "Signing in…";
-
-    var op = mode === "up" ? KM.supa.signUp(email, password) : KM.supa.signIn(email, password);
-
-    op.then(function (result) {
-      els.password.value = "";
-      els.go.disabled = false;
-      setMode(mode);
-
-      if (mode === "up" && result && result.confirmed === false) {
-        /* Email confirmation is on for this project. That is a success and
-           has to read like one, or people try again and hit "already
-           registered". */
-        els.note.textContent = "Account made. Check your email to confirm the address, then sign in.";
-        els.note.hidden = false;
-        setMode("in");
-        return;
-      }
-      KM.app.toast("Signed in.");
-      paint();
-      KM.browse.refresh();
-    }, function (err) {
-      els.password.value = "";
-      els.go.disabled = false;
-      setMode(mode);
-      fail(err.message);
-    });
-  }
-
-  function fail(msg) {
-    els.err.textContent = msg;
-    els.err.hidden = false;
-  }
-
-  function forgot() {
-    var email = KM.sanitize.email(els.email.value);
-    if (!KM.sanitize.emailLooksValid(email)) { fail("Type your email address first."); return; }
-    /* Where to come back to is KM.supa's to decide, so signup and reset
-       cannot end up disagreeing about it. */
-    KM.supa.resetPassword(email).then(function () {
-      els.note.textContent = "If that address has an account, a reset link is on its way.";
-      els.note.hidden = false;
-      els.err.hidden = true;
-    }, function (err) { fail(err.message); });
-  }
-
-  function signOut() {
-    KM.supa.signOut().then(function () {
+  function signOut(everywhere) {
+    KM.supa.signOut(everywhere).then(function () {
       profileCache = null;
-      KM.app.toast("Signed out.");
+      KM.app.toast(everywhere ? "Signed out everywhere." : "Signed out.");
       paint();
       KM.browse.refresh();
+    });
+  }
+
+  /* After any sign-in, however it happened: the form, a sign-up that
+     needed no confirmation, or an email link. Makes sure there is a
+     profile behind the session, and offers the handle step when the
+     database had to invent one. */
+  function afterSignIn() {
+    profileCache = null;
+    paint();
+    KM.browse.refresh();
+    if (!KM.supa.userId()) return;
+    KM.routes.ensureProfile().then(function (p) {
+      if (!p) return;
+      profileCache = p;
+      paint();
+      if (p.created && !KM.auth.isOpen()) {
+        KM.auth.open("handle", { handle: p.handle });
+      }
+    }, function (err) {
+      /* Older databases have no ensure_profile; the plain read in paint()
+         still works there, so only a missing-schema answer is worth
+         saying out loud. */
+      if (err && err.kind === "setup") showYouError(err);
     });
   }
 
@@ -187,7 +127,7 @@ KM.account = (function () {
     if (landing.error) {
       recovering = false;
       paint();
-      fail(landing.error);
+      KM.auth.open("signin", { error: landing.error });
       return;
     }
 
@@ -199,38 +139,15 @@ KM.account = (function () {
       if (landing.type === "recovery") {
         recovering = true;
         paint();
-        try { els.recoverPw.focus(); } catch (e) {}
+        KM.auth.open("reset", {
+          onClose: function () { recovering = false; paint(); }
+        });
         return;
       }
-      paint();
       KM.app.toast(landing.type === "signup" || landing.type === "email_change"
         ? "Email confirmed. You are signed in."
         : "Signed in.");
-      KM.browse.refresh();
-    });
-  }
-
-  function saveNewPassword() {
-    els.recoverErr.hidden = true;
-    var pw = els.recoverPw.value;
-    if (pw.length < 8) {
-      els.recoverErr.textContent = "Use at least eight characters.";
-      els.recoverErr.hidden = false;
-      return;
-    }
-    var btn = KM.el("recover-go");
-    btn.disabled = true;
-    KM.supa.updatePassword(pw).then(function () {
-      els.recoverPw.value = "";
-      btn.disabled = false;
-      recovering = false;
-      paint();
-      KM.app.toast("Password changed. You are signed in.");
-    }, function (err) {
-      els.recoverPw.value = "";
-      btn.disabled = false;
-      els.recoverErr.textContent = err.message;
-      els.recoverErr.hidden = false;
+      afterSignIn();
     });
   }
 
@@ -240,8 +157,9 @@ KM.account = (function () {
   function paint() {
     if (!els.out) return;
     var signedIn = KM.supa.signedIn();
-    els.recover.hidden = !recovering;
-    els.out.hidden = signedIn || recovering;
+    /* While a reset link is being acted on, the session is real but the
+       person has not chosen a password yet; the account waits for that. */
+    els.out.hidden = signedIn;
     els.in.hidden = !signedIn || recovering;
 
     var btn = KM.el("account-btn");
@@ -260,13 +178,18 @@ KM.account = (function () {
 
     if (!signedIn || recovering) return;
 
+    var sess = KM.supa.session();
+    KM.el("you-email").textContent = (sess && sess.user && sess.user.email) || "";
+
     profile().then(function (p) {
       if (!p) return;
       KM.el("you-handle").textContent = "@" + p.handle;
-      KM.el("you-sub").textContent = (p.is_moderator ? "Moderator · " : "") +
+      KM.el("you-sub").textContent = (p.is_moderator ? "Moderator \u00b7 " : "") +
         "Joined " + KM.fmtAgo(p.created_at);
-      els.handleInput.value = p.handle;
-    }, function () {});
+      if (document.activeElement !== els.handleInput) els.handleInput.value = p.handle;
+    }, function (err) {
+      if (err && err.kind === "setup") showYouError(err);
+    });
 
     loadMine();
   }
@@ -276,9 +199,26 @@ KM.account = (function () {
     var me = KM.supa.userId();
     if (!me) return Promise.resolve(null);
     return KM.routes.profile(me).then(function (p) {
-      profileCache = p;
-      return p;
+      if (p) { profileCache = p; return p; }
+      /* Signed in with no profile row: make it rather than show a blank
+         header and a handle field that saves into nothing. */
+      return KM.routes.ensureProfile().then(function (made) {
+        profileCache = made;
+        return made;
+      }, function () { return null; });
     });
+  }
+
+  /* The handle step on the sign-in page saves through KM.routes directly;
+     this is how the pane behind it hears about the new name. */
+  function profileChanged(p) {
+    profileCache = p || null;
+    paint();
+  }
+
+  function showYouError(err) {
+    els.youErr.textContent = err.message;
+    els.youErr.hidden = false;
   }
 
   function isModerator() {
@@ -287,11 +227,17 @@ KM.account = (function () {
 
   function saveHandle() {
     els.youErr.hidden = true;
+    var v = handleWatch.verdict();
+    if (v && !v.quiet) { showYouError({ message: v.msg }); return; }
+    var btn = KM.el("you-handle-save");
+    btn.disabled = true;
     KM.routes.setHandle(els.handleInput.value, null).then(function (p) {
+      btn.disabled = false;
       profileCache = p;
       KM.app.toast("Handle saved.");
       paint();
     }, function (err) {
+      btn.disabled = false;
       els.youErr.textContent = err.kind === "conflict" ? "Somebody already has that handle." : err.message;
       els.youErr.hidden = false;
     });
@@ -328,6 +274,9 @@ KM.account = (function () {
     init: init,
     activate: activate,
     paint: paint,
+    signIn: signIn,
+    afterSignIn: afterSignIn,
+    profileChanged: profileChanged,
     landed: landed,
     landingTab: landingTab,
     profile: profile,
