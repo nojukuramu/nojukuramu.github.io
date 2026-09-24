@@ -3,6 +3,18 @@
 All 3D models shipped in `assets/models/` are **CC0** (public domain, no attribution
 required). Sources and per-asset authorship are listed below for transparency.
 
+## What ships in version 2
+
+Version 2 keeps the environment models that read well from above — Kenney's
+rocks, pines, mushrooms and bushes, the chest, the fountain and the watchtower —
+and retires every character model. The first version dressed its mage and its
+enemies in recoloured CC0 pirates, zombies and a cyborg because no CC0 wizard or
+creature set could be found; they never looked like one world. The mage, every
+enemy, the Wardens, the Loom Heart, the Anchors, the portal and the geodes are
+now built from primitives in code (`js/models.js`), as are the broadleaf trees,
+crystals, ruined columns, ice spikes and grass tufts (`js/world.js`). Every
+sound is synthesised (`js/audio.js`); there are no audio files.
+
 ## pmndrs/market-assets (https://github.com/pmndrs/market-assets)
 
 These models were sourced as Draco-compressed embedded glTF (`model.gltf`) from the
@@ -15,77 +27,48 @@ not need a Draco decoder.
 
 | File | Market-assets name | Author (per info.json) | License |
 |---|---|---|---|
-| `tree-a.glb` | Low Poly Tree | saravieira | CC0 |
 | `tree-b.glb` | Tree (tall pine) | Kenney | CC0 |
 | `tree-pine-a.glb` | Tree (short pine) | Kenney | CC0 |
 | `rock-a.glb` | Foundation Rock | Kenney | CC0 |
 | `rock-b.glb` | Foundation Stone | Kenney | CC0 |
 | `rock-c.glb` | Foundation Large Rock | Kenney | CC0 |
 | `rock-large.glb` | Foundation Large Stone | Kenney | CC0 |
-| `lava-rock.glb` | Foundation Large Rock (reused for Ember theme) | Kenney | CC0 |
 | `chest.glb` | Cannon Chest | Kenney | CC0 |
 | `pillar.glb` | Tower (crenellated watchtower/turret) | Kenney | CC0 |
 | `mushroom-a.glb` | Mushroom | Kenney | CC0 |
 | `mushroom-b.glb` | Mushroom Half | Kenney | CC0 |
-| `player-mage.glb` | Pirate Captain | Kenney | CC0 |
-| `enemy-brute.glb` | Pirate Officer | Kenney | CC0 |
-| `enemy-boss.glb` | Pirate Crew | Kenney | CC0 |
-| `table.glb` | Table | saravieira | CC0 |
-| `enemy-rusher.glb` | Zombie (variant 1) | Kenney | CC0 |
-| `enemy-swarmer.glb` | Zombie (variant 2) | Kenney | CC0 |
-| `enemy-caster.glb` | Female Cyborg | Kenney | CC0 |
-
-**Round 2 characters -- repose note:** `enemy-rusher.glb`, `enemy-swarmer.glb`, and
-`enemy-caster.glb` come from a 60-node Mixamo-style skinned rig shared by market-assets'
-whole "characters" family, shipped upstream with **zero baked animation clips** (the bind
-pose is a full T-pose, arms straight out to the sides). Shipping that as a static mesh
-would render as a stiff scarecrow in-game, so a custom script
-(`repose.py`/`decode2.py`, not included in the repo -- scratchpad tooling) performed full
-linear-blend skinning to bake a relaxed arms-down idle pose (shoulders rotated ~75°
-about the world Z axis at the shoulder joint's bind-pose pivot, blended per-vertex using
-the source's own joint weights and inverse-bind matrices), then dropped the skin/joints
-entirely. The shipped GLBs have **no skin, no joints, no animations** -- they are fully
-static meshes, verified by scanning each file's JSON chunk for a `skins` array (absent
-in all three).
-
-**Round 2 characters -- role substitution honesty:** none of the reachable CC0 sources
-had a robed/wizard humanoid, a non-humanoid tiny critter (slime/bee/spider/bat), or a
-distinctly "bulky ogre/golem-shaped" body mesh. `player-mage`, `enemy-brute`, and
-`enemy-boss` reuse the three color/headwear variants of market-assets' blocky "pirate"
-family (captain/officer/crew) as the closest available stand-ins; `enemy-swarmer` reuses
-the same rig/pose as `enemy-rusher` with a different skin (zombie variant 2) rather than
-being left unfilled, since no true tiny-critter asset could be found. See
-`curator2-report.md` for the full reasoning and what was rejected (a CC0 Dragon and a CC0
-"Coronavirus" model were both tried for `enemy-boss`/`enemy-swarmer` but rejected: their
-source meshes were 100k-350k triangles / 7-9 MB each, and mesh decimation via
-`fast-simplification` produced broken/degenerate geometry at any size that would fit the
-budget).
 
 ## Kenney.nl (via KenneyNL GitHub Starter Kits)
 
-Sourced by shallow-cloning `github.com/KenneyNL/Starter-Kit-3D-Platformer`,
-`Starter-Kit-City-Builder`, and `Starter-Kit-FPS`. Each kit's `README.md` states
-explicitly: *"Sprites and 3D Models (CC0 licensed)"* and *"Assets included in this
-package (2D sprites, 3D models and sound effects) are CC0 licensed"*. The repos'
+Sourced by shallow-cloning `github.com/KenneyNL/Starter-Kit-3D-Platformer` and
+`Starter-Kit-City-Builder`. Each kit's `README.md` states explicitly: *"Assets included
+in this package (2D sprites, 3D models and sound effects) are CC0 licensed"*. The repos'
 `LICENSE.md` (MIT) covers the accompanying starter-kit code; the art assets themselves
 are Kenney's standard CC0 release. All are copied unmodified.
 
 | File | Source kit / original filename | License |
 |---|---|---|
-| `banner.glb` | Starter-Kit-3D-Platformer / `flag.glb` | CC0 |
 | `grass-a.glb` | Starter-Kit-3D-Platformer / `grass-small.glb` | CC0 |
 | `grass-b.glb` | Starter-Kit-3D-Platformer / `grass.glb` | CC0 |
 | `shrine.glb` | Starter-Kit-City-Builder / `pavement-fountain.glb` | CC0 |
-| `barricade.glb` | Starter-Kit-FPS / `wall-low.glb` | CC0 |
-| `ruin-wall.glb` | Starter-Kit-FPS / `wall-high.glb` | CC0 |
 
 All Kenney assets by Kenney Vleugels (kenney.nl).
 
+Retired in version 2 (removed from the repository, recorded here for provenance):
+`player-mage`, `enemy-brute`, `enemy-boss` (pmndrs pirates, Kenney, CC0), `enemy-rusher`,
+`enemy-swarmer`, `enemy-caster` (pmndrs characters, Kenney, CC0), `tree-a` and `table`
+(pmndrs, saravieira, CC0), `lava-rock` (a duplicate of `rock-c`), and `banner`,
+`barricade`, `ruin-wall` (Kenney starter kits, CC0).
+
 ## three.js (vendor/)
 
-`vendor/build/three.module.min.js`, `vendor/examples/jsm/loaders/GLTFLoader.js`, and
-`vendor/examples/jsm/utils/BufferGeometryUtils.js` are three.js r160.1, MIT licensed.
-Full license text: `vendor/LICENSE-three.txt`.
+`vendor/build/three.module.min.js`, `vendor/examples/jsm/loaders/GLTFLoader.js`,
+`vendor/examples/jsm/utils/BufferGeometryUtils.js`, and — new in version 2, for the
+bloom on High graphics — `vendor/examples/jsm/postprocessing/` (EffectComposer,
+RenderPass, UnrealBloomPass, OutputPass, ShaderPass, MaskPass, Pass) with the shaders
+they need in `vendor/examples/jsm/shaders/` (CopyShader, LuminosityHighPassShader,
+OutputShader) are three.js r160, MIT licensed, copied unmodified from the `three@0.160.0`
+npm package. Full license text: `vendor/LICENSE-three.txt`.
 
 ## Ground textures (`assets/textures/`, round 2) -- sourced from mrdoob/three.js
 
@@ -120,11 +103,8 @@ all unreachable (proxy 403), consistent with the known network policy.
 
 ## Summary
 
-- Total models shipped: 26 (19 from round 1 + 7 new in round 2)
-- Round 2 new model bytes: ~603 KB (budget was 3 MB)
-- Round 2 new texture bytes: ~238 KB (budget was 1.5 MB)
-- License: predominantly CC0. Round 2 added 1 CC-BY-3.0 texture (`ground-grass.png`,
-  attributed above) and 3 MIT-licensed textures (three.js repo-level, no per-file
-  readme.txt); everything else (all round-2 models) is CC0. No attribution is legally
-  required for the CC0 assets, but authorship is recorded above for provenance; the
-  CC-BY-3.0 asset's attribution above satisfies its license requirement.
+- Models shipped: 13, all CC0 (about 0.3 MB). Twelve earlier models were retired in
+  version 2; see above.
+- Textures: 5 ground detail tiles (~238 KB): one CC-BY-3.0 (`ground-grass.png`,
+  attributed above), one CC0, three MIT (three.js repository).
+- Characters, effects and sound: made in code, no assets.

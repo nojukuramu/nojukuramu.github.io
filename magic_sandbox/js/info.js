@@ -1,0 +1,191 @@
+/* ============================================================
+   Magic Sandbox — the info sheet
+
+   Lifted from RouteCast (routecast/static/js/info.js) with the namespace
+   changed and the topics rewritten for this game: one sheet, one scrim, one
+   registry, delegated clicks on anything carrying data-info="<key>". The
+   house rule it exists for is the same one — the interface says one line,
+   and the explanation lives behind a small (i) beside the thing it explains.
+
+   Copy lives here rather than in index.html so the same explanation can be
+   reached from the spellbook, the pause menu and the title screen without
+   three copies drifting apart. Bodies are trusted HTML written in this file;
+   nothing from storage or the network ever reaches the sheet.
+   ============================================================ */
+
+import { icon } from "./icons.js";
+
+const k = (s) => '<kbd>' + s + '</kbd>';
+
+const TOPICS = {
+  howto: {
+    title: "How to play",
+    body:
+      "<p>Climb the Loom Tower: ten floating floors, two per land. Odd floors end when you " +
+      "sever three <b>Anchors</b>; even floors end at a <b>Warden</b>. Floor ten is the Loom Heart.</p>" +
+      "<p>Kill things to level up. Every level offers three <b>boons</b> — pick one. Wardens " +
+      "raise your <b>circle rank</b>, which lets you draw bigger spells.</p>" +
+      "<p>Every attack is shown on the ground before it lands. Red means move; " +
+      "a dash passes straight through danger.</p>" +
+      "<p>Floors 1, 3, 5, 7 and 9 are <b>landings</b>: if you fall, you can start again from the " +
+      "last one with the level and boons you arrived with.</p>"
+  },
+  controls: {
+    title: "Controls",
+    body:
+      "<p><b>Keyboard and mouse</b><br>" + k("W A S D") + " move · aim with the mouse · hold " + k("Left click") + " to cast<br>" +
+      k("1") + "–" + k("4") + " or the wheel choose a spell · " + k("Space") + " dash · " + k("F") + " or " + k("Right click") + " trigger<br>" +
+      k("E") + " interact · " + k("Q") + " potion · " + k("B") + " spellbook · " + k("Esc") + " pause</p>" +
+      "<p><b>Touch</b><br>Left thumb anywhere on the left half moves. On the right half, drag to aim and cast; " +
+      "hold still to cast at the nearest enemy; tap for a single shot. Buttons for dash, potion and trigger sit by your right thumb.</p>" +
+      "<p><b>Gamepad</b><br>Left stick move · right stick aim · RT cast · LT trigger · A dash · X interact · Y potion · " +
+      "LB/RB change spell · Start pause · Back spellbook.</p>"
+  },
+  spells: {
+    title: "Drawing a spell",
+    body:
+      "<p>A spell is a drawing on a page. Four things can go on it:</p>" +
+      "<p>" + icon("toolGlyph") + " <b>Glyphs</b> — trace a closed shape through the ring's dots. " +
+      "The number of sides is the element: <b>3 Air</b>, <b>4 Fire</b>, <b>5 Earth</b>, <b>6 Water</b>. " +
+      "More glyphs hit harder and cost more.</p>" +
+      "<p>" + icon("toolSeal") + " <b>Seals</b> — drag out a circle anywhere. Each seal is a muzzle; its size is its form " +
+      "(Needle, Bolt, Orb, Nova) and its position is where the shot leaves from.</p>" +
+      "<p>" + icon("toolRune") + " <b>Runes</b> — tap a seal's rim. Each rune is one shot in that direction. The top of " +
+      "the page is where you aim. A seal with no runes fires straight ahead.</p>" +
+      "<p>" + icon("layers") + " <b>Layers</b> — a second page fires out of every shot of the first when it lands, or " +
+      "when you pull the trigger.</p>"
+  },
+  elements: {
+    title: "Elements",
+    body:
+      "<p>" + icon("fire") + " <b>Fire</b> (4 sides) — burns, and splashes where it lands.</p>" +
+      "<p>" + icon("water") + " <b>Water</b> (6 sides) — chills. Three chills freeze.</p>" +
+      "<p>" + icon("earth") + " <b>Earth</b> (5 sides) — heavy: hits harder, pierces, shoves; flies slower.</p>" +
+      "<p>" + icon("air") + " <b>Air</b> (3 sides) — fast and far, pushes hard, ricochets once off rocks and trees.</p>" +
+      "<p>A page with no glyphs fires plain <b>Arcane</b> bolts: cheap, and weak.</p>"
+  },
+  forms: {
+    title: "Forms",
+    body:
+      "<p>The size of a seal decides its form. The page is the ruler: the gap between two dots is about a Needle.</p>" +
+      "<p>" + icon("needle") + " <b>Needle</b> — small seal. Fast, long, pierces two.</p>" +
+      "<p>" + icon("bolt") + " <b>Bolt</b> — medium seal. The all-rounder.</p>" +
+      "<p>" + icon("orb") + " <b>Orb</b> — large seal. Slow, heavy, bursts where it lands.</p>" +
+      "<p>" + icon("nova") + " <b>Nova</b> — huge seal. No flight at all: a ring bursts out around where the seal sits. " +
+      "Runes on a Nova do nothing.</p>"
+  },
+  reactions: {
+    title: "Reactions",
+    body:
+      "<p>Two different elements in one layer react:</p>" +
+      "<p>" + icon("steam") + " <b>Steam</b> fire + water — a scalding cloud.<br>" +
+      icon("magma") + " <b>Magma</b> fire + earth — a burning pool.<br>" +
+      icon("wildfire") + " <b>Wildfire</b> fire + air — much bigger blasts.<br>" +
+      icon("mire") + " <b>Mire</b> water + earth — mud that bogs enemies down.<br>" +
+      icon("storm") + " <b>Storm</b> water + air — lightning jumps to nearby enemies.<br>" +
+      icon("shrapnel") + " <b>Shrapnel</b> earth + air — shatters into shards.</p>" +
+      "<p>Draw three or four elements and every pair reacts. Your grimoire remembers what you have found.</p>"
+  },
+  balance: {
+    title: "Balance",
+    body:
+      "<p>A page that mirrors itself left to right flies true. A lopsided one still works, but its shots " +
+      "scatter and hit up to a quarter softer.</p>" +
+      "<p>Every glyph corner, seal and rune counts. The easiest way to a balanced page is to draw things in pairs.</p>"
+  },
+  rank: {
+    title: "Circle rank",
+    body:
+      "<p>Your rank decides how much one page can hold: glyphs and seals per layer, runes per seal, how many layers, " +
+      "how much power, and how many shots one cast may make.</p>" +
+      "<p>You start at rank 1. Every Warden you defeat drops a thread that raises it by one, up to 5. " +
+      "The Sandbox always runs at rank 5, so you can design ahead — a page beyond your rank shows a lock until you reach it.</p>"
+  },
+  power: {
+    title: "Power",
+    body: "<p>Power turns a layer up: more damage, bigger shots, a longer reach — and a steeper mana cost. " +
+      "Your circle rank sets how high it goes.</p>"
+  },
+  sandbox: {
+    title: "The Sandbox",
+    body:
+      "<p>A quiet island to try pages on. Straw dummies show your damage per second; the side panel " +
+      "summons any enemy in front of you, or a Warden.</p>" +
+      "<p>Everything is unlocked (rank 5), mana is endless and you cannot fall — both can be switched off. " +
+      "Nothing here counts toward your climb, but your spellbook is shared, so a page drawn here is ready in the tower.</p>"
+  },
+  update: {
+    title: "Updates",
+    body:
+      "<p>Magic Sandbox installs its own copy so it opens instantly and plays offline. That copy is replaced " +
+      "when a new version is published.</p>" +
+      "<p>A new version never swaps itself in mid-floor. It waits, and the bar at the top offers it; reloading keeps " +
+      "your spellbook, grimoire, settings and your last landing.</p>"
+  },
+  quality: {
+    title: "Graphics",
+    body:
+      "<p><b>Auto</b> starts at High on computers and Medium on phones, and steps down once by itself if the game " +
+      "cannot keep a smooth frame rate.</p><p><b>High</b> adds glow to spells. <b>Medium</b> keeps soft shadows. " +
+      "<b>Low</b> drops both and renders at a lower resolution — for older phones.</p>"
+  },
+  privacy: {
+    title: "What is stored",
+    body:
+      "<p>Your spellbook, grimoire, settings, best climb and last landing — in this browser only, under one key. " +
+      "Nothing is sent anywhere, and there are no accounts.</p>"
+  }
+};
+
+let sheet = null, scrim = null, titleEl = null, bodyEl = null, lastFocus = null;
+const el = (id) => document.getElementById(id);
+
+function ensure() {
+  if (sheet) return true;
+  sheet = el("info-sheet"); scrim = el("info-scrim"); titleEl = el("info-title"); bodyEl = el("info-body");
+  return !!(sheet && titleEl && bodyEl);
+}
+
+export function open(key) {
+  if (!ensure()) return false;
+  const topic = TOPICS[key];
+  if (!topic) return false;
+  try { lastFocus = document.activeElement; } catch (e) { lastFocus = null; }
+  titleEl.textContent = topic.title;
+  bodyEl.innerHTML = topic.body;
+  sheet.hidden = false;
+  if (scrim) scrim.hidden = false;
+  const close = el("info-close");
+  if (close && close.focus) { try { close.focus(); } catch (e) {} }
+  return true;
+}
+
+export function close() {
+  if (!ensure() || sheet.hidden) return false;
+  sheet.hidden = true;
+  if (scrim) scrim.hidden = true;
+  if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
+  lastFocus = null;
+  return true;
+}
+export function isOpen() { return ensure() && !sheet.hidden; }
+
+export function init() {
+  if (!ensure()) return;
+  const closeBtn = el("info-close");
+  if (closeBtn) closeBtn.addEventListener("click", close);
+  if (scrim) scrim.addEventListener("click", close);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && isOpen()) { e.stopImmediatePropagation(); close(); } }, true);
+  /* Delegated: the spellbook and the menus rebuild their markup constantly,
+     and re-wiring every (i) on each render is how a button ends up dead. */
+  document.addEventListener("click", (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest("[data-info]") : null;
+    if (!btn) return;
+    e.preventDefault();
+    open(btn.getAttribute("data-info"));
+  });
+}
+
+export const has = (key) => !!TOPICS[key];
+/* For the validator: every data-info in the page must name a topic here. */
+export const keys = () => Object.keys(TOPICS);
