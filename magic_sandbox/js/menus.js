@@ -71,14 +71,23 @@ function leaveTitle() { document.body.classList.remove("atTitle"); hideAll(); }
 /* ---------------------------------------------------------------
    Pause
    --------------------------------------------------------------- */
+/* Escape (or Start, or the pause button) always closes whatever is on top
+   first: the (i) sheet, then the spellbook, then a sub-screen. Only with
+   nothing open does it pause — and at the title there is nothing to pause. */
 export function togglePause() {
-  if (S.mode === "title" || S.over) return;
   if (info.isOpen()) { info.close(); return; }
-  if (forge.isOpen()) { forge.closeBook(); syncPause(); return; }
+  if (forge.isOpen()) { closeBookHere(); return; }
   if (!$("scr-boons").hidden) return;                 // a choice must be made
+  if (S.mode === "title") { if (stack.length > 1) back(); return; }
+  if (S.over) return;
   if (stack.length) { back(); return; }
   renderPause();
   show("pause");
+}
+function closeBookHere() {
+  forge.closeBook();
+  syncPause();
+  if (S.mode === "title") show("title");
 }
 function renderPause() {
   const P = S.player;
@@ -95,7 +104,8 @@ function renderPause() {
 export function toggleBook() {
   if (S.over || !$("scr-boons").hidden) return;
   if (info.isOpen()) info.close();
-  if (forge.isOpen()) { forge.closeBook(); syncPause(); return; }
+  if (forge.isOpen()) { closeBookHere(); return; }
+  hideAll();
   forge.openBook();
   syncPause();
 }
@@ -244,7 +254,7 @@ export function init() {
     applySettings(); renderSettings(); renderTitle();
     if (S.player) S.player.recompile();
   });
-  forge.setCloseHandler(() => { forge.closeBook(); syncPause(); if (S.mode === "title") show("title"); });
+  forge.setCloseHandler(closeBookHere);
   addEventListener("keydown", (e) => {
     if (!$("scr-boons").hidden) {
       const d = /^Digit([1-3])$/.exec(e.code);

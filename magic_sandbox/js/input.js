@@ -36,7 +36,11 @@ export function initInput(h) {
   document.body.dataset.device = device;
 
   addEventListener("keydown", (e) => {
-    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) {
+      // typing a spell's name is typing, except Escape, which still closes
+      if (e.key !== "Escape") return;
+      e.target.blur();
+    }
     if (e.repeat) { if (["Tab", "Space"].includes(e.code)) e.preventDefault(); return; }
     setDevice("mouse");
     keys.add(e.code);

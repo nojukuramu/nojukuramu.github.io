@@ -129,7 +129,7 @@ function addChest(x, z) {
   S.props.push({ kind: "chest", x, z, mesh, glow, col, used: false, label: "Open the chest" });
 }
 function addShrine(x, z) {
-  let mesh = modelInstance("shrine", 1.5, { emissive: 0x7f6cff, ei: 0.25 });
+  let mesh = modelInstance("shrine", 1.5, { emissive: 0x7f6cff, ei: 0.06 });
   if (!mesh) {
     mesh = new THREE.Group();
     const b = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 0.5, 8), std(0x5a6070));

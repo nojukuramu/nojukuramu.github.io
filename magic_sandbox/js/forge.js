@@ -251,7 +251,10 @@ function move(e) {
   const p = toDesign(e);
   F.cursor = p;
   if (F.path && !F.tapPath && F.pointers.size) {
-    const n = nearestNode(p, 26 / Math.max(0.7, F.zoom));
+    // While dragging, a dot is only picked up when the pointer really passes
+    // over it. A 60-degree edge (0 to 2) runs 21 units from the dot it skips,
+    // so anything wider than that turned every pentagon into a dodecagon.
+    const n = nearestNode(p, Math.min(15, 26 / Math.max(0.7, F.zoom)));
     const last = F.path[F.path.length - 1];
     if (n >= 0 && n !== last) {
       if (n === F.path[0] && F.path.length >= 3) { const nodes = F.path; F.path = null; addGlyph(nodes); hint(); return; }
@@ -621,7 +624,8 @@ export function init() {
   $("toolClear").addEventListener("click", () => { const l = L(); if (!l.glyphs.length && !l.seals.length) return; snapshot(); l.glyphs = []; l.seals = []; commit(); renderAll(); });
   $("toolView").addEventListener("click", () => { F.zoom = 1; F.panX = F.panY = 0; draw(); });
   $("power").addEventListener("input", (e) => { const v = clamp(+e.target.value | 0, 1, lim().power); if (v !== L().power) { snapshot(); L().power = v; commit(); } });
-  $("spellName").addEventListener("input", (e) => { design().name = e.target.value.slice(0, MAX_NAME); save.setSpell(F.slot, design()); if (S.player) S.player.recompile(); renderSlots(); });
+  $("spellName").addEventListener("input", (e) => { design().name = e.target.value.slice(0, MAX_NAME); save.setSpell(F.slot, design()); if (S.player) S.player.recompile(); renderPanel(); });
+  $("spellName").addEventListener("keydown", (e) => { if (e.key === "Enter") e.target.blur(); });
   $("bookClose").addEventListener("click", () => { if (F.onClose) F.onClose(); else closeBook(); });
   $("bookPresets").addEventListener("click", openPresets);
   $("presetsClose").addEventListener("click", () => { $("presets").hidden = true; });
