@@ -16,11 +16,12 @@
 <meta name="apple-mobile-web-app-title" content="Magic Sandbox">
 <link rel="stylesheet" href="css/game.css">
 <!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
-<script>window.MS_VERSION = "2";</script>
+<script>window.MS_VERSION = "3";</script>
 <script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
 </head>
 <body class="atTitle">
 <canvas id="gl"></canvas>
+<canvas id="fog" hidden></canvas>
 <div id="touchzone"></div>
 <div id="numbers"></div>
 <div id="vignette"></div>
@@ -28,6 +29,7 @@
 
 <!-- ============ HUD ============ -->
 <div id="hud" hidden>
+  <div id="tags"></div>
   <div id="hudTL">
     <div class="vit">
       <div class="lvl" title="Level">
@@ -56,6 +58,7 @@
   <div id="sandboxPanel"></div>
   <div id="spellbar"></div>
   <div id="coach" hidden></div>
+  <div id="netLine" hidden></div>
   <div id="triggerHint" hidden></div>
   <div id="dps" hidden></div>
   <div id="prompt"></div>
@@ -142,6 +145,10 @@
     <div class="tbtns">
       <button id="btnContinue" class="btn primary wide" hidden><span>Continue</span><small></small></button>
       <button id="btnNew" class="btn primary wide">New climb</button>
+      <div class="trow">
+        <button id="btnMulti" class="btn"><i data-icon="users"></i>Multiplayer</button>
+        <button id="btnQuickTitle" class="btn"><i data-icon="quick"></i>Quick join</button>
+      </div>
       <button id="btnSandbox" class="btn wide"><i data-icon="cube"></i>Sandbox</button>
       <button id="btnBookTitle" class="btn wide"><i data-icon="book"></i>Spellbook</button>
       <div class="trow">
@@ -159,6 +166,8 @@
   <div class="panel">
     <h2>Paused</h2>
     <p id="pauseStats" class="muted"></p>
+    <p id="pauseLive" class="muted" hidden>The match goes on while this is open.</p>
+    <div id="pauseBoard" hidden></div>
     <div id="pauseBoons"></div>
     <div id="sandboxOpts" hidden>
       <label class="tog"><input type="checkbox" id="optInfMana"><span>Endless mana</span></label>
@@ -173,7 +182,7 @@
         <button class="btn ghost" data-info="controls"><i data-icon="pad"></i>Controls</button>
       </div>
       <button id="btnRestartLanding" class="btn ghost wide" hidden><i data-icon="flag"></i>Back to my landing</button>
-      <button id="btnQuit" class="btn ghost wide"><i data-icon="exit"></i>Leave to the title</button>
+      <button id="btnQuit" class="btn ghost wide"><i data-icon="exit"></i><span>Leave to the title</span></button>
     </div>
   </div>
 </section>
@@ -243,6 +252,86 @@
     <p id="grimCount" class="muted"></p>
     <div id="grimBody"></div>
     <div class="stackbtns"><button id="btnGrimBack" class="btn primary wide">Back</button></div>
+  </div>
+</section>
+
+<!-- ============ multiplayer ============ -->
+<section id="scr-servers" class="screen" hidden>
+  <div class="panel wide">
+    <h2>Multiplayer <button class="info" data-info="multiplayer" aria-label="How multiplayer works"><i data-icon="info"></i></button></h2>
+    <div class="setrow"><label for="mpName">Your name</label><input id="mpName" class="txt" maxlength="16" autocomplete="off" spellcheck="false"></div>
+    <button id="btnQuickJoin" class="btn primary wide"><i data-icon="quick"></i>Quick join</button>
+    <h3 class="sub">Servers <button class="info" data-info="servers" aria-label="About servers"><i data-icon="info"></i></button></h3>
+    <div id="serverList" class="mlist"></div>
+    <div class="coderow"><input id="joinCode" class="txt mono" maxlength="6" placeholder="Room code" autocomplete="off" spellcheck="false" aria-label="Room code"><button id="btnJoinCode" class="btn">Join</button></div>
+    <small id="mpStatus" class="muted"></small>
+    <div class="stackbtns"><button id="btnServersBack" class="btn ghost wide">Back</button></div>
+  </div>
+</section>
+
+<section id="scr-rooms" class="screen" hidden>
+  <div class="panel wide">
+    <h2 id="roomsTitle"></h2>
+    <p id="roomsSub" class="muted"></p>
+    <div id="roomList" class="mlist"></div>
+    <div class="stackbtns">
+      <button id="btnCreateRoom" class="btn primary wide"><i data-icon="plus"></i>Create a room</button>
+      <button id="btnRoomsBack" class="btn ghost wide">Back to the servers</button>
+    </div>
+  </div>
+</section>
+
+<section id="scr-roomset" class="screen" hidden>
+  <div class="panel">
+    <h2 id="roomsetTitle">New room</h2>
+    <div class="setrow"><label for="rsName">Name</label><input id="rsName" class="txt" maxlength="24" autocomplete="off" spellcheck="false"></div>
+    <div class="field">
+      <label>Mode <button class="info" data-info="modes" aria-label="About the modes"><i data-icon="info"></i></button></label>
+      <div id="rsMode" class="seg"></div>
+      <small id="rsModeNote"></small>
+    </div>
+    <div class="setrow" id="rsMapRow"><label for="rsMap">Map</label><select id="rsMap"></select></div>
+    <div class="setrow" id="rsFloorRow"><label for="rsFloor">Start on floor</label><select id="rsFloor"></select></div>
+    <div class="setrow"><label for="rsMax">Players <b id="rsMaxN" class="num"></b></label><input type="range" id="rsMax" min="2" max="8" step="1"></div>
+    <div class="setrow" id="rsTargetRow"><label for="rsTarget"><span id="rsTargetL"></span> <b id="rsTargetN" class="num"></b></label><input type="range" id="rsTarget"></div>
+    <div class="setrow" id="rsRankRow"><label for="rsRank">Circle rank <b id="rsRankN" class="num"></b> <button class="info" data-info="rank" aria-label="About circle rank"><i data-icon="info"></i></button></label><input type="range" id="rsRank" min="1" max="5" step="1"></div>
+    <label class="tog"><input type="checkbox" id="rsFog"><span>Fog of war</span><button class="info" data-info="fog" aria-label="About fog of war"><i data-icon="info"></i></button></label>
+    <label class="tog"><input type="checkbox" id="rsPriv"><span>Private — join by code only</span></label>
+    <div class="stackbtns">
+      <button id="btnRoomsetGo" class="btn primary wide">Create</button>
+      <button id="btnRoomsetBack" class="btn ghost wide">Cancel</button>
+    </div>
+  </div>
+</section>
+
+<section id="scr-room" class="screen" hidden>
+  <div class="panel wide">
+    <div class="roomhead">
+      <div class="rh"><h2 id="roomName"></h2><p id="roomDesc" class="muted"></p></div>
+      <div class="codebox"><small>Code</small><b id="roomCode" class="mono"></b></div>
+    </div>
+    <p id="roomState" class="muted"></p>
+    <div id="roomPlayers"></div>
+    <div class="stackbtns">
+      <button id="btnRoomStart" class="btn primary wide"><i data-icon="play"></i><span>Start</span></button>
+      <button id="btnRoomReady" class="btn primary wide"><span>Ready</span></button>
+      <div class="trow">
+        <button id="btnRoomEdit" class="btn ghost"><i data-icon="gear"></i>Room setup</button>
+        <button id="btnRoomLeave" class="btn ghost"><i data-icon="exit"></i>Leave</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="scr-results" class="screen" hidden>
+  <div class="panel wide">
+    <h2 id="resTitle"></h2>
+    <p id="resSub" class="muted"></p>
+    <div id="resBoard"></div>
+    <div class="stackbtns">
+      <button id="btnResBack" class="btn primary wide">Back to the room</button>
+      <button id="btnResLeave" class="btn ghost wide">Leave the room</button>
+    </div>
   </div>
 </section>
 

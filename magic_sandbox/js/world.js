@@ -11,7 +11,11 @@
  * you are meant to go — the start, the objectives, the portal.
  *
  * Everything is generated from a seed. Rebuilding a floor from the same seed
- * gives the same island, which is what "retry this floor" relies on. */
+ * gives the same island, which is what "retry this floor" relies on — and
+ * what lets every mage in a room build the same floor from one number. A
+ * PVP map ("pvp") is a floor with nothing on it but the land: no camps, no
+ * chests, no portal, and spawn points around the coast, two clusters facing
+ * each other for teams. */
 
 import * as THREE from "three";
 import { mergeGeometries } from "../vendor/examples/jsm/utils/BufferGeometryUtils.js";
@@ -102,7 +106,9 @@ export function buildWorld(opts) {
   const rng = mulberry32(seed);
   const noise = valueNoise(seed & 0xffff);
   const sandbox = kind === "sandbox";
-  const R = sandbox ? 24 : clamp(29 + floor * 1.4, 29, 44);
+  const pvp = kind === "pvp";
+  const bare = sandbox || pvp;
+  const R = sandbox ? 24 : pvp ? clamp(opts.size || 30, 24, 40) : clamp(29 + floor * 1.4, 29, 44);
 
   /* coastline: a wobbly ellipse, never so wobbly that it pinches shut */
   const k = [rng() * TAU, rng() * TAU, rng() * TAU, rng() * TAU];
@@ -122,7 +128,7 @@ export function buildWorld(opts) {
   const spawnA = rng() * TAU;
   const spawn = polar(spawnA, sandbox ? 0.25 : 0.8);
   const portalA = spawnA + Math.PI + (rng() - 0.5) * 0.6;
-  const portal = sandbox ? null : polar(portalA, 0.74);
+  const portal = bare ? null : polar(portalA, 0.74);
   let arena = null;
   if (kind === "warden" || kind === "heart") {
     const c = polar(portalA, 0.3);
@@ -131,7 +137,14 @@ export function buildWorld(opts) {
 
   const reserved = [];     // {x, z, r}: keep props out
   const reserve = (p, r) => { if (p) reserved.push({ x: p.x, z: p.z, r }); };
-  reserve(spawn, 7);
+  reserve(spawn, pvp ? 3 : 7);
+  // PVP: eight points around the coast, and for teams two clusters of four,
+  // one on each side of the island.
+  const spawns = [], teamSpawns = [[], []];
+  if (pvp) {
+    for (let i = 0; i < 8; i++) { const p = polar(spawnA + i / 8 * TAU, 0.72); spawns.push(p); reserve(p, 3); }
+    for (let t = 0; t < 2; t++) for (const d of [-0.28, -0.1, 0.1, 0.28]) { const p = polar(spawnA + t * Math.PI + d, 0.76); teamSpawns[t].push(p); reserve(p, 2.5); }
+  }
   reserve(portal, 5.5);
   if (arena) reserve(arena, arena.r + 1.5);
   const free = (x, z, r) => inside(x, z, r + 1.5) && reserved.every((q) => dist(x, z, q.x, q.z) > q.r + r);
@@ -156,13 +169,13 @@ export function buildWorld(opts) {
     }
   }
   const shrines = [];
-  if (!sandbox) for (let i = 0; i < (floor % 2 === 1 ? 2 : 1); i++) { const p = findSpot(2.5, 120, (q) => dist(q.x, q.z, spawn.x, spawn.z) > 12); if (p) { shrines.push(p); reserve(p, 3.5); } }
+  if (!bare) for (let i = 0; i < (floor % 2 === 1 ? 2 : 1); i++) { const p = findSpot(2.5, 120, (q) => dist(q.x, q.z, spawn.x, spawn.z) > 12); if (p) { shrines.push(p); reserve(p, 3.5); } }
   const chests = [];
-  if (!sandbox) for (let i = 0; i < 2 + (rng() < 0.5 ? 1 : 0); i++) { const p = findSpot(1.5, 120, (q) => dist(q.x, q.z, spawn.x, spawn.z) > 10); if (p) { chests.push(p); reserve(p, 2.5); } }
+  if (!bare) for (let i = 0; i < 2 + (rng() < 0.5 ? 1 : 0); i++) { const p = findSpot(1.5, 120, (q) => dist(q.x, q.z, spawn.x, spawn.z) > 10); if (p) { chests.push(p); reserve(p, 2.5); } }
   const geodes = [];
-  if (!sandbox) for (let i = 0; i < 4 + Math.floor(rng() * 3); i++) { const p = findSpot(1.2, 80); if (p) { geodes.push(p); reserve(p, 2); } }
+  if (!bare) for (let i = 0; i < 4 + Math.floor(rng() * 3); i++) { const p = findSpot(1.2, 80); if (p) { geodes.push(p); reserve(p, 2); } }
   const camps = [];
-  if (!sandbox) {
+  if (!bare) {
     const n = Math.min(10, 5 + Math.floor(floor * 0.6));
     for (let i = 0; i < n; i++) {
       const p = findSpot(2, 200, (q) => dist(q.x, q.z, spawn.x, spawn.z) > 17 && camps.every((o) => dist(q.x, q.z, o.x, o.z) > 9) &&
@@ -191,7 +204,8 @@ export function buildWorld(opts) {
     }
   };
   const hub = arena || { x: 0, z: 0 };
-  trail(spawn, hub); trail(hub, portal);
+  if (pvp) { trail(teamSpawns[0][1], hub); trail(hub, teamSpawns[1][2]); }
+  else { trail(spawn, hub); trail(hub, portal); }
   anchors.forEach((p) => trail(hub, p));
   shrines.forEach((p) => trail(spawn, p));
   const pathD = (x, z) => { let d = 1e9; for (const p of pathPts) d = Math.min(d, (p.x - x) * (p.x - x) + (p.z - z) * (p.z - z)); return Math.sqrt(d); };
@@ -316,7 +330,7 @@ export function buildWorld(opts) {
   }[T.id];
   const pickKind = () => { let r = rng(); for (const [k, w] of bigKinds) { r -= w; if (r <= 0) return k; } return bigKinds[0][0]; };
 
-  const clumps = sandbox ? 7 : Math.round(R * 0.34);
+  const clumps = sandbox ? 7 : Math.round(R * (pvp ? 0.42 : 0.34));
   for (let i = 0; i < clumps; i++) {
     const cpos = findSpot(2, 60);
     if (!cpos) continue;
@@ -538,7 +552,7 @@ export function buildWorld(opts) {
   }
 
   const world = {
-    theme: T, floor, kind, seed, R, radiusAt, inside, spawn, portal, arena, anchors, shrines, chests, geodes, camps, dummies,
+    theme: T, floor, kind, seed, R, radiusAt, inside, spawn, portal, arena, anchors, shrines, chests, geodes, camps, dummies, spawns, teamSpawns,
     group, colliders, hitCollider, resolve, addDynamic, clearLine, update, dispose,
     reveal, isExplored, mapExt, get lightning() { return lightning; }, onThunder: null
   };

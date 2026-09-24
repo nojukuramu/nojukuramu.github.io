@@ -9,16 +9,22 @@
  *
  * Status effects from spells live on the enemy: burning (damage over time),
  * chill (slows, and three stacks freeze), mire (slowed while standing in it)
- * and a Weaver's shield (absorbs damage before health). */
+ * and a Weaver's shield (absorbs damage before health).
+ *
+ * In a multiplayer match every enemy hunts the nearest mage, not "the"
+ * player, and anything that lands on an area lands on every mage in it. Only
+ * the host runs the brains; a client builds the same creatures and moves them
+ * as puppets of the host's snapshots (applySnapshot), so a room agrees on
+ * where every Knot is and when every Golem slams. */
 
 import * as THREE from "three";
-import { S, emit } from "./state.js";
+import { S, emit, players, isClient } from "./state.js";
 import { scene, camera, addShake } from "./gfx.js";
 import * as fx from "./fx.js";
 import { buildEnemy, buildAnchor, buildWarden, buildHeart, halo } from "./models.js";
 import { enemyShot } from "./spells.js";
 import { floorScale, DANGER, ENEMY_SHOT } from "./themes.js";
-import { TAU, clamp, dist, rand, pick, angDiff } from "./util.js";
+import { TAU, clamp, dist, rand, pick, angDiff, damp } from "./util.js";
 
 export const TYPES = {
   mote:    { name: "Mote",    hp: 10,   speed: 6.0, r: 0.38, dmg: 6,  xp: 2,   aggro: 15, kbRes: 1.2 },
@@ -75,7 +81,7 @@ export function spawnEnemy(type, x, z, opts) {
   else if (type === "warden") built = buildWarden(accent);
   else if (type === "heart") built = buildHeart(accent);
   else built = buildEnemy(type, accent);
-  const hp = T.hp * (type === "dummy" ? 1 : sc.hp);
+  const hp = T.hp * (type === "dummy" ? 1 : sc.hp * (S.match && S.match.hpScale ? S.match.hpScale : 1));
   const e = {
     type, name: T.name, x, z, vx: 0, vz: 0, r: T.r, hp, maxHp: hp, dmg: T.dmg * sc.dmg, speed: T.speed,
     xp: Math.round(T.xp * (1 + 0.08 * (S.floor - 1))), kbRes: T.kbRes, aggroR: T.aggro,
@@ -83,10 +89,12 @@ export function spawnEnemy(type, x, z, opts) {
     state: "idle", t: rand(0.5, 2), atkCd: rand(0.6, 2.2), wander: null,
     kbx: 0, kbz: 0, burn: null, chill: 0, chillT: 0, chillSlow: 0, frozen: 0, mire: 0, mireT: 0, shield: 0,
     flashT: 0, hpShowT: 0, pop: 0, anim: rand(0, 10), mesh: built, bar: null, owner: opts.owner || null, spawned: 0,
-    boss: type === "warden" || type === "heart", phase: 0, dmgLog: []
+    boss: type === "warden" || type === "heart", phase: 0, dmgLog: [],
+    nid: opts.nid || ++nidSeq, tgt: null
   };
-  if (!e.boss && type !== "anchor" && type !== "dummy" && type !== "geode" && opts.elite !== false && S.floor >= 3 && Math.random() < 0.06 + S.floor * 0.012) {
-    e.elite = pick(Object.keys(ELITES));
+  if (typeof opts.elite === "string" && ELITES[opts.elite]) e.elite = opts.elite;
+  else if (!e.boss && type !== "anchor" && type !== "dummy" && type !== "geode" && opts.elite !== false && S.floor >= 3 && Math.random() < 0.06 + S.floor * 0.012) e.elite = pick(Object.keys(ELITES));
+  if (e.elite) {
     e.xp *= 2;
     if (e.elite === "swift") e.speed *= 1.45;
     else if (e.elite === "hardy") { e.hp *= 2.2; e.maxHp *= 2.2; e.r *= 1.2; built.root.scale.setScalar(1.25); }
@@ -98,8 +106,11 @@ export function spawnEnemy(type, x, z, opts) {
   scene.add(built.root);
   S.enemies.push(e);
   if (opts.pop) { e.pop = 0.001; fx.burst(x, 0.8, z, accent, 14, 5, { size: 0.35 }); fx.ring(x, z, accent, 0.3, 2, 0.4); }
+  if (S.net.role === "host") emit("netSpawn", e, !!opts.pop);
   return e;
 }
+let nidSeq = 0;
+export function byNid(n) { for (const e of S.enemies) if (e.nid === n) return e; return null; }
 
 /* ---------------------------------------------------------------
    Queries
@@ -121,6 +132,12 @@ let quietNumberT = 0;
 export function hurtEnemy(e, dmg, o) {
   if (!e.alive) return;
   o = o || {};
+  // A client's own spells still strike visibly; the host decides what they cost.
+  if (isClient()) { if (!o.quiet) { e.flashT = 0.1; e.hpShowT = 3; emit("hitEnemy", e, 0); } return; }
+  fx.tapBegin();
+  try { hurtNow(e, dmg, o); } finally { fx.tapEnd(); }
+}
+function hurtNow(e, dmg, o) {
   if (e.invuln) { if (!o.quiet) fx.number(e.x, 2.2, e.z, "immune", "info"); return; }
   if (!e.aggro && e.type !== "geode") alert(e);
   if (e.type === "dummy") {
@@ -175,13 +192,18 @@ function alert(e) {
 
 export function kill(e, silent) {
   if (!e.alive) return;
+  // A death is drawn by every end itself, from the kill message: not copied.
+  const t = fx.tapPause();
+  try { killNow(e, silent); } finally { fx.tapResume(t); }
+}
+function killNow(e, silent) {
   e.alive = false;
   e.dying = e.boss ? 2.2 : e.type === "anchor" ? 1.4 : 0.45;
   e.dieMax = e.dying;
   freeBar(e.bar); e.bar = null;
   setBubble(e, false);
   if (e.collider) e.collider.on = false;
-  if (silent) return;
+  if (silent) { if (S.net.role === "host") emit("netRemove", e); return; }
   const accent = S.world ? S.world.theme.accent : 0xffffff;
   fx.burst(e.x, 1, e.z, accent, e.boss ? 60 : e.type === "anchor" ? 40 : 14, e.boss ? 10 : 6, { size: 0.4 });
   fx.burst(e.x, 1, e.z, 0xffffff, e.boss ? 20 : 6, 4, { size: 0.3 });
@@ -219,12 +241,39 @@ function stop(e) { e.vx = 0; e.vz = 0; }
 /* ---------------------------------------------------------------
    Per frame
    --------------------------------------------------------------- */
+/* The mage an enemy is after: the nearest one standing, though it will not
+   drop the one it is chasing for somebody barely closer. With nobody
+   standing it keeps looking at whoever it had, as the solo game always did. */
+function pickTarget(e) {
+  let best = null, bd = Infinity;
+  const all = players();
+  for (const Q of all) {
+    if (!Q.alive) continue;
+    const d = dist(e.x, e.z, Q.x, Q.z);
+    if (d < bd) { bd = d; best = Q; }
+  }
+  if (best && e.tgt && e.tgt !== best && e.tgt.alive && all.includes(e.tgt) && dist(e.x, e.z, e.tgt.x, e.tgt.z) < bd * 1.3 + 1) best = e.tgt;
+  e.tgt = best || (e.tgt && all.includes(e.tgt) ? e.tgt : all[0] || null);
+  return e.tgt;
+}
+/** Every standing mage inside a circle — for anything that lands on an area. */
+function magesIn(x, z, r) {
+  const out = [];
+  for (const Q of players()) if (Q.alive && dist(x, z, Q.x, Q.z) < r + Q.r) out.push(Q);
+  return out;
+}
+
 export function update(dt) {
-  const P = S.player;
+  if (isClient()) { puppets(dt); return; }
+  fx.tapBegin();
+  try { think(dt); } finally { fx.tapEnd(); }
+}
+function think(dt) {
   quietNumberT -= dt;
   for (let i = S.enemies.length - 1; i >= 0; i--) {
     const e = S.enemies[i];
     if (!e.alive) { if (dieStep(e, dt)) { disposeEnemy(e); S.enemies.splice(i, 1); } continue; }
+    const P = e.type === "dummy" || e.type === "geode" ? S.player : pickTarget(e);
     e.anim += dt;
     if (e.pop > 0 && e.pop < 1) e.pop = Math.min(1, e.pop + dt / 0.3);
     // statuses
@@ -266,13 +315,15 @@ export function update(dt) {
         }
       }
     }
-    // contact damage for the things that bite
-    if (P && P.alive && e.dmg > 0 && (e.type === "mote" || (e.type === "knot" && e.state === "lunge") || (e.boss && e.state === "charge"))) {
-      if (dP < e.r + P.r + 0.15 && !e.bit) {
+    // contact damage for the things that bite — whichever mage they run into
+    if (e.dmg > 0 && !e.bit && (e.type === "mote" || (e.type === "knot" && e.state === "lunge") || (e.boss && e.state === "charge"))) {
+      for (const Q of magesIn(e.x, e.z, e.r + 0.15)) {
         const mult = e.type === "knot" ? 1 : e.boss ? 1.3 : 1;
-        if (P.hurt(e.dmg * mult, aP, "a " + e.name)) {
+        const aQ = Math.atan2(Q.z - e.z, Q.x - e.x);
+        if (Q.hurt(e.dmg * mult, aQ, "a " + e.name)) {
           e.bit = true;
-          if (e.type === "mote") { e.kbx -= Math.cos(aP) * 9; e.kbz -= Math.sin(aP) * 9; e.biteCd = 1; }
+          if (e.type === "mote") { e.kbx -= Math.cos(aQ) * 9; e.kbz -= Math.sin(aQ) * 9; e.biteCd = 1; }
+          break;
         }
       }
     }
@@ -375,7 +426,7 @@ const BRAINS = {
         fx.burst(e.x, 0.3, e.z, 0x9a8f80, 22, 7, { size: 0.45, plain: true, grav: 10 });
         addShake(0.45);
         emit("slam", e);
-        if (P && dist(e.x, e.z, P.x, P.z) < R + P.r) P.hurt(e.dmg, aP, "a Golem's slam", 14);
+        for (const Q of magesIn(e.x, e.z, R)) Q.hurt(e.dmg, Math.atan2(Q.z - e.z, Q.x - e.x), "a Golem's slam", 14);
       }
     } else if (e.state === "rest") {
       stop(e); e.t -= dt; if (e.t <= 0) e.state = "chase";
@@ -546,8 +597,7 @@ const ACTS = {
       fx.ring(e.x, e.z, S.world.theme.accent, 0.5, R + 0.5, 0.5, 0.15);
       fx.burst(e.x, 0.4, e.z, 0xa09080, 30, 9, { size: 0.5, plain: true });
       addShake(0.8); emit("slam", e);
-      const P = S.player;
-      if (P && dist(e.x, e.z, P.x, P.z) < R + P.r) P.hurt(e.dmg * 1.4, aP, "the " + e.name + "'s slam", 18);
+      for (const Q of magesIn(e.x, e.z, R)) Q.hurt(e.dmg * 1.4, Math.atan2(Q.z - e.z, Q.x - e.x), "the " + e.name + "'s slam", 18);
       if (hot(e) >= 1) for (let k = 0; k < 12; k++) enemyShot(e.x, e.z, k / 12 * TAU, 6, e.dmg * 0.6, { src: "the " + e.name });
       a.step = 2; a.t = 0.5;
       return false;
@@ -574,7 +624,7 @@ const ACTS = {
   },
   rain(e, a, dt) {
     stop(e);
-    const P = S.player;
+    const P = e.tgt || S.player;
     if (a.step === 0) { a.step = 1; a.n = 5 + Math.round(hot(e) * 3); a.k = 0; a.t = 0; a.drops = []; }
     a.t -= dt;
     if (a.k < a.n && a.t <= 0 && P) {
@@ -593,7 +643,7 @@ const ACTS = {
         fx.ring(d.x, d.z, S.world.theme.accent, 0.3, 2.1, 0.35);
         fx.emit(d.x, 6, d.z, 0, -40, 0, 0.14, 1.2, 0.4, S.world.theme.accent, 1, 0, 0);
         emit("impact");
-        if (P && dist(d.x, d.z, P.x, P.z) < 1.8 + P.r) P.hurt(e.dmg, Math.atan2(P.z - d.z, P.x - d.x), "the falling sky");
+        for (const Q of magesIn(d.x, d.z, 1.8)) Q.hurt(e.dmg, Math.atan2(Q.z - d.z, Q.x - d.x), "the falling sky");
       }
     }
     return a.k >= a.n && a.drops.every((d) => d.t <= 0);
@@ -611,13 +661,14 @@ const ACTS = {
     }
     a.t -= dt;
     if (a.step === 1 && a.t <= 0) {
-      const P = S.player;
+      const struck = new Set();
       for (const g of a.angs) {
         for (let d = 1; d < 16; d += 0.8) fx.emit(e.x + Math.cos(g) * d, 0.2, e.z + Math.sin(g) * d, 0, rand(3, 6), 0, 0.35, 0.45, 0.05, S.world.theme.accent, 1, 14, 0);
-        if (P) {
-          const px = P.x - e.x, pz = P.z - e.z;
+        for (const Q of players()) {
+          if (!Q.alive || struck.has(Q)) continue;
+          const px = Q.x - e.x, pz = Q.z - e.z;
           const along = px * Math.cos(g) + pz * Math.sin(g), across = Math.abs(-px * Math.sin(g) + pz * Math.cos(g));
-          if (along > 0 && along < 16 && across < 0.55 + P.r) P.hurt(e.dmg * 1.1, g, "the " + e.name + "'s lance");
+          if (along > 0 && along < 16 && across < 0.55 + Q.r) { struck.add(Q); Q.hurt(e.dmg * 1.1, g, "the " + e.name + "'s lance"); }
         }
       }
       addShake(0.4); emit("lances", e);
@@ -656,7 +707,7 @@ const ACTS = {
     return a.t <= 0;
   },
   blink(e, a, dt) {
-    const P = S.player, A = S.world.arena;
+    const P = e.tgt || S.player, A = S.world.arena;
     if (a.step === 0) {
       a.step = 1; a.t = 0.45; e.invuln = true;
       fx.burst(e.x, 1.5, e.z, S.world.theme.accent, 30, 6, { size: 0.4 });
@@ -679,7 +730,7 @@ const ACTS = {
     if (a.step === 2 && a.t <= 0) {
       fx.ring(e.x, e.z, S.world.theme.accent, 0.5, 4.2, 0.45, 0.15);
       addShake(0.6); emit("slam", e);
-      if (P && dist(e.x, e.z, P.x, P.z) < 3.8 + P.r) P.hurt(e.dmg * 1.2, Math.atan2(P.z - e.z, P.x - e.x), "the " + e.name, 14);
+      for (const Q of magesIn(e.x, e.z, 3.8)) Q.hurt(e.dmg * 1.2, Math.atan2(Q.z - e.z, Q.x - e.x), "the " + e.name, 14);
       a.step = 3; a.t = 0.5;
       return false;
     }
@@ -788,7 +839,7 @@ function animate(e, dt, moving, slow) {
 const camQ = new THREE.Quaternion();
 function updateBar(e, dt) {
   e.hpShowT -= dt;
-  const show = !e.boss && e.type !== "dummy" && (e.hpShowT > 0 || e.elite || e.type === "anchor" || e.shield > 0) && e.hp < e.maxHp + 1 && (e.aggro || e.type === "anchor");
+  const show = !e.boss && !e.fogHidden && e.type !== "dummy" && (e.hpShowT > 0 || e.elite || e.type === "anchor" || e.shield > 0) && e.hp < e.maxHp + 1 && (e.aggro || e.type === "anchor");
   if (!show) { if (e.bar) { freeBar(e.bar); e.bar = null; } return; }
   if (!e.bar) e.bar = getBar();
   const w = e.type === "anchor" ? 2.6 : e.type === "golem" ? 1.5 : 1.0;
@@ -849,3 +900,55 @@ export function dummyDps(e) {
   return recent.reduce((s, l) => s + l.d, 0) / span;
 }
 
+
+/* ---------------------------------------------------------------
+   Multiplayer: the host's snapshot of an enemy, and a client's puppet of it
+   --------------------------------------------------------------- */
+const STATES = ["idle", "chase", "wind", "lunge", "rest", "charge", "raise", "weave", "sleep", "intro", "move", "act"];
+const ACTS_N = ["ring", "slam", "charge", "rain", "lances", "summon", "spiral", "blink"];
+const r2 = (v) => Math.round(v * 100) / 100;
+
+/** A compact line for the host's 10 Hz snapshot. */
+export function snapshotOf(e) {
+  const flags = (e.frozen > 0 ? 1 : 0) | (e.chillT > 0 ? 2 : 0) | (e.burn ? 4 : 0) | (e.invuln ? 8 : 0) |
+    (e.mesh.root.visible ? 0 : 16) | (e.aggro ? 32 : 0);
+  return [e.nid, r2(e.x), r2(e.z), r2(e.face), Math.round(e.hp), STATES.indexOf(e.state), e.act ? ACTS_N.indexOf(e.act.name) : -1,
+    e.act ? e.act.step : 0, Math.round(e.t * 10) / 10, e.phase | 0, flags, Math.round(e.shield)];
+}
+/** Take the host's word for where an enemy is and what it is doing. */
+export function applySnapshot(e, a) {
+  if (!e.alive) return;
+  const first = e.nx === undefined;
+  e.nx = a[1]; e.nz = a[2]; e.nface = a[3];
+  if (first || dist(e.x, e.z, e.nx, e.nz) > 5) { e.x = e.nx; e.z = e.nz; e.face = e.nface; }
+  if (a[4] < e.hp - 0.5) e.hpShowT = 3;
+  e.hp = a[4];
+  e.state = STATES[a[5]] || "idle";
+  e.act = a[6] >= 0 ? { name: ACTS_N[a[6]], step: a[7], t: 0 } : null;
+  e.t = a[8]; e.phase = a[9];
+  const f = a[10];
+  e.frozen = f & 1 ? 1 : 0; e.chillT = f & 2 ? 1 : 0; e.burnV = !!(f & 4); e.invuln = !!(f & 8); e.aggro = !!(f & 32);
+  e.mesh.root.visible = !(f & 16) && !e.fogHidden;
+  const had = e.shield > 0;
+  e.shield = a[11];
+  if (had !== e.shield > 0) setBubble(e, e.shield > 0);
+  e.seen = 0;
+}
+function puppets(dt) {
+  for (let i = S.enemies.length - 1; i >= 0; i--) {
+    const e = S.enemies[i];
+    if (!e.alive) { if (dieStep(e, dt)) { disposeEnemy(e); S.enemies.splice(i, 1); } continue; }
+    e.anim += dt;
+    if (e.pop > 0 && e.pop < 1) e.pop = Math.min(1, e.pop + dt / 0.3);
+    const ox = e.x, oz = e.z;
+    if (e.nx !== undefined) {
+      e.x = damp(e.x, e.nx, 12, dt); e.z = damp(e.z, e.nz, 12, dt);
+      e.face += angDiff(e.face, e.nface) * Math.min(1, dt * 12);
+    }
+    e.vx = (e.x - ox) / Math.max(dt, 1e-4); e.vz = (e.z - oz) / Math.max(dt, 1e-4);
+    if (e.burnV && Math.random() < dt * 12) fx.emit(e.x + rand(-0.3, 0.3), 0.8 + rand(0, 1), e.z + rand(-0.3, 0.3), 0, rand(1, 2.2), 0, 0.45, 0.28, 0.02, 0xff7a2a, 1, -1, 0.5);
+    const moving = Math.hypot(e.vx, e.vz) > 0.2;
+    animate(e, dt, moving, e.frozen ? 1 : e.chillT ? 0.4 : 0);
+    updateBar(e, dt);
+  }
+}

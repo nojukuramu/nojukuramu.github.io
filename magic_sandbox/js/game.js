@@ -15,10 +15,17 @@
  *
  *   Wardens raise your circle rank by one, which is what unlocks bigger
  *   pages in the spellbook. Floor ten's Loom Heart is the end; Endless
- *   carries on past it for anyone who wants to see how far a page can go. */
+ *   carries on past it for anyone who wants to see how far a page can go.
+ *
+ *   With friends (a "coop" match) the climb is the same, with three
+ *   differences: the host decides when the floor changes (everyone standing
+ *   near the open portal, or a countdown once anyone is), loot is each mage's
+ *   own — every chest, shrine and dropped orb is there for each of you — and
+ *   a mage who falls watches the others until the next floor stands them up.
+ *   A PVP match ("pvp") is one of the lands with nothing on it but mages. */
 
 import * as THREE from "three";
-import { S, emit, on } from "./state.js";
+import { S, emit, on, isClient, players } from "./state.js";
 import { scene, snapCamera, applyTheme } from "./gfx.js";
 import * as fx from "./fx.js";
 import { buildWorld } from "./world.js";
@@ -31,6 +38,7 @@ import { rollBoons } from "./boons.js";
 import { save } from "./save.js";
 import { MAX_RANK } from "./spellcore.js";
 import { TAU, rand, dist, mulberry32, clamp } from "./util.js";
+import { MAP_BY_ID, MODES } from "./modes.js";
 
 /* ---------------------------------------------------------------
    Pickups: little glowing things that fly to you
@@ -236,9 +244,10 @@ export function buildFloor(floor, seed) {
   S.floor = floor;
   S.seed = seed;
   const sandbox = S.mode === "sandbox";
-  const kind = sandbox ? "sandbox" : floorKind(floor);
-  const theme = sandbox ? THEMES.sanctum : themeForFloor(floor);
-  const W = buildWorld({ floor, seed, kind, theme });
+  const pvp = S.mode === "pvp";
+  const kind = sandbox ? "sandbox" : pvp ? "pvp" : floorKind(floor);
+  const theme = sandbox ? THEMES.sanctum : pvp ? THEMES[S.match.settings.map] || THEMES.verdant : themeForFloor(floor);
+  const W = buildWorld({ floor, seed, kind, theme, size: pvp ? 24 + S.match.settings.max * 1.6 : 0 });
   S.world = W;
   scene.add(W.group);
   applyTheme(theme);
@@ -253,6 +262,15 @@ export function buildFloor(floor, seed) {
   if (sandbox) {
     W.dummies.forEach((d) => enemies.spawnEnemy("dummy", d.x, d.z, { elite: false }));
     S.objective = { kind: "sandbox", text: "Practice freely" };
+  } else if (pvp) {
+    S.objective = { kind: "pvp", text: "" };
+  } else if (isClient()) {
+    // The host sends the enemies, the boss and the objective; the land,
+    // its chests and its shrines are built here from the same seed.
+    W.chests.forEach((c) => addChest(c.x, c.z));
+    W.shrines.forEach((s) => addShrine(s.x, s.z));
+    addPortal(W.portal.x, W.portal.z);
+    S.objective = { kind, done: 0, total: kind === "anchors" ? W.anchors.length : 1 };
   } else {
     W.camps.forEach((c) => campRoster(floor, rng).forEach((t, i) => {
       const a = i / 5 * TAU + rng(), r = 0.8 + rng() * 2.2;
@@ -274,7 +292,7 @@ export function buildFloor(floor, seed) {
   S.objective.text = objectiveText();
   emit("floorStart", floor, theme, kind);
   // Odd floors are landings: remember how you arrived, to come back to.
-  if (!sandbox && floor % 2 === 1) {
+  if (S.mode === "run" && floor % 2 === 1) {
     save.setLanding(Object.assign(P.snapshot(), { floor, time: S.runTime, kills: S.kills }));
   }
 }
@@ -283,6 +301,7 @@ export function objectiveText() {
   const o = S.objective;
   if (!o) return "";
   if (o.kind === "sandbox") return "Practice freely";
+  if (o.kind === "pvp") return o.text || "";
   if (S.portal && S.portal.on) return S.portal.final ? "The crown is open" : "The portal is open";
   if (o.kind === "anchors") return "Sever the Anchors " + o.done + "/" + o.total;
   if (o.kind === "heart") return "Unmake the Loom Heart";
@@ -319,6 +338,71 @@ export function startSandbox() {
   buildFloor(1, 7777);
   emit("runStart", false);
 }
+
+/* ---------------------------------------------------------------
+   Matches (net.js starts them; this only sets the floor)
+   --------------------------------------------------------------- */
+/** A co-op climb. Every mage arrives with a fresh mage, like a new climb. */
+export function startCoop(o) {
+  S.mode = "coop";
+  S.over = false; S.paused = false;
+  S.runTime = 0; S.kills = 0; S.time = 0;
+  // A later start floor comes with the rank its Wardens would have given,
+  // and a boon for each floor skipped, chosen as the climb begins.
+  newPlayer({ rank: Math.min(MAX_RANK, 1 + Math.floor((o.floor - 1) / 2)), level: 1, potions: 2 });
+  S.player.id = S.net.me; S.player.name = o.name || "";
+  transition = null;
+  offerQueue = [];
+  for (let k = 0; k < Math.min(6, o.floor - 1); k++) offerBoons("start");
+  emit("runStart", false);
+}
+/** A PVP match on one of the tower's lands. Everyone is the same mage:
+    level one, no boons, and the circle rank the room was set up with. */
+export function startPvp(o) {
+  S.mode = "pvp";
+  S.over = false; S.paused = false;
+  S.runTime = 0; S.kills = 0; S.time = 0;
+  newPlayer({ rank: S.match.settings.rank, level: 1, potions: 2 });
+  S.player.id = S.net.me; S.player.name = o.name || ""; S.player.team = o.team || 0;
+  transition = null;
+  const map = MAP_BY_ID[S.match.settings.map] || MAP_BY_ID.verdant;
+  buildFloor(1, map.seed);
+  emit("runStart", false);
+}
+/** Where a mage should (re)appear: of the spawn points for their side, the
+    one furthest from any mage who would want them dead. */
+export function spawnPoint(team) {
+  const W = S.world;
+  if (!W) return { x: 0, z: 0 };
+  if (S.mode !== "pvp") return W.spawn;
+  const M = MODES[S.match.mode];
+  const list = M.teams ? W.teamSpawns[team === 1 ? 1 : 0] : W.spawns;
+  let best = list[0], bd = -1;
+  for (const p of list) {
+    let near = 1e9;
+    for (const Q of players()) if (Q.alive && Q !== S.player && (!M.teams || Q.team !== team)) near = Math.min(near, dist(p.x, p.z, Q.x, Q.z));
+    const score = near + Math.random() * 3;
+    if (score > bd) { bd = score; best = p; }
+  }
+  return best;
+}
+/** Co-op: the room is going up. Fade out and hold until the floor arrives. */
+export function coopAscendFade() {
+  if (!transition) { transition = { t: 0, hold: true }; emit("ascend"); }
+  if (S.player) S.player.iframe = 3;
+}
+/** Co-op: build the next floor, from the host's number. */
+export function coopFloor(floor, seed) {
+  const P = S.player;
+  for (const q of S.pickups) if (q.type === "xp" || q.type === "thread" || q.type === "potion") collect(q);
+  if (!P.alive) P.respawn(null, null, 0.5);
+  else P.heal(P.maxHp * 0.35, true);
+  P.mana = P.maxMana;
+  buildFloor(floor, seed);
+  if (!transition) transition = { t: 0.55, built: true };
+  else { transition.built = true; transition.t = Math.max(transition.t, 0.55); }
+}
+export function openPortalNet(final) { openPortal(final); }
 
 export function quitToTitle() {
   clearFloor();
@@ -416,7 +500,10 @@ on("kill", (e) => {
   if (Math.random() < (e.type === "golem" ? 0.5 : 0.18)) drop("hp", e.x, e.z, 8);
   if (Math.random() < 0.3) drop("mana", e.x, e.z, 14);
   if (P.mods.siphon) { P.addMana(4 * P.mods.siphon); P.heal(P.mods.siphon, true); }
-  if (e.type === "anchor") {
+  if (e.type === "anchor" && isClient()) {
+    drop("hp", e.x, e.z, 15);
+    if (Math.random() < 0.5) drop("potion", e.x, e.z, 1);
+  } else if (e.type === "anchor") {
     for (const o of S.enemies) if (o.owner === e && o.alive) enemies.kill(o);
     S.objective.done++;
     drop("hp", e.x, e.z, 15);
@@ -427,14 +514,14 @@ on("kill", (e) => {
   if (e.boss) {
     S.boss = null;
     if (S.mode === "sandbox") { emit("bossDown", e); return; }
-    for (const o of S.enemies) if (o.alive && dist(o.x, o.z, e.x, e.z) < 16) enemies.kill(o);
+    if (!isClient()) for (const o of S.enemies) if (o.alive && dist(o.x, o.z, e.x, e.z) < 16) enemies.kill(o);
     drop("thread", e.x, e.z, 1);
     drop("potion", e.x, e.z, 1);
     for (let k = 0; k < 4; k++) drop("hp", e.x, e.z, 10);
     S.objective.done = 1;
     offerBoons("warden");
     emit("bossDown", e);
-    openPortal(e.type === "heart");
+    if (!isClient()) openPortal(e.type === "heart");
   }
   if (S.objective) S.objective.text = objectiveText();
 });
@@ -481,7 +568,7 @@ export function update(dt, input) {
   const P = S.player;
   if (!P) return;
   S.time += dt;
-  if (S.mode === "run" && !S.over) S.runTime += dt;
+  if ((S.mode === "run" || S.mode === "coop" || S.mode === "pvp") && !S.over) S.runTime += dt;
   if (S.mode === "sandbox") { P.infiniteMana = S.sandbox.infiniteMana; P.noDeath = S.sandbox.noDeath; }
 
   updatePlayer(P, dt, input);
@@ -506,7 +593,8 @@ export function update(dt, input) {
       const a = rand(0, TAU), r = rand(0, 2);
       fx.emit(p.x + Math.cos(a) * r, 0.2, p.z + Math.sin(a) * r, 0, rand(2, 5), 0, 1.2, 0.2, 0.05, p.final ? 0xffd97a : S.world.theme.accent, 1, -1, 0);
     }
-    if (p.on && P.alive && !transition && !S.over && dist(P.x, P.z, p.x, p.z) < 1.9) ascend();
+    // With friends the host moves everyone at once (net.js); alone, you go.
+    if (p.on && P.alive && !transition && !S.over && S.mode !== "coop" && dist(P.x, P.z, p.x, p.z) < 1.9) ascend();
   }
   // props idle
   for (const q of S.props) if (q.glow && !q.used) q.glow.material.opacity = (q.kind === "chest" ? 0.3 : 0.5) + Math.sin(S.time * 2.5 + q.x) * 0.12;
@@ -521,7 +609,8 @@ export function update(dt, input) {
   // transition between floors
   if (transition) {
     transition.t += dt;
-    if (transition.t > 0.55 && !transition.built) {
+    if (transition.hold && !transition.built) transition.t = Math.min(transition.t, 0.55);
+    else if (transition.t > 0.55 && !transition.built) {
       transition.built = true;
       P.heal(P.maxHp * 0.35, true); P.mana = P.maxMana;
       buildFloor(transition.next, (Math.random() * 1e9) | 0);
@@ -530,7 +619,8 @@ export function update(dt, input) {
   }
   emit("fade", transition ? (transition.t < 0.55 ? transition.t / 0.55 : Math.max(0, 1 - (transition.t - 0.55) / 0.55)) : 0);
 
-  if (!P.alive && !deathShown && P.deadT > 1.3) { deathShown = true; S.over = true; emit("deathScreen", P.killedBy); }
+  // With friends a fall is not the end: net.js lets you watch, and stands you up.
+  if (!P.alive && !deathShown && P.deadT > 1.3 && (S.mode === "run" || S.mode === "sandbox")) { deathShown = true; S.over = true; emit("deathScreen", P.killedBy); }
   if (P.alive) deathShown = false;
   pumpOffers();
 }

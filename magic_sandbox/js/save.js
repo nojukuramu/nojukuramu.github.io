@@ -3,7 +3,9 @@
  * Everything lives under a single localStorage key as one JSON object, read
  * once at boot and written whenever something worth keeping changes: your
  * four pages, what you have discovered, your settings, your best climb, and
- * the landing you can retry from. Nothing is sent anywhere.
+ * the landing you can retry from, and the name you go by in multiplayer.
+ * Nothing is sent anywhere — except, once you join a room, your name and
+ * your four pages, to the mages in it.
  *
  * The record is untrusted on the way back in — localStorage is editable by
  * anyone with devtools — so every field is re-validated rather than merged
@@ -30,7 +32,8 @@ function fresh() {
     best: { floor: 0, time: 0, wins: 0 },
     stats: { runs: 0, kills: 0, deaths: 0 },
     landing: null,
-    tutorial: {}
+    tutorial: {},
+    name: ""
   };
 }
 
@@ -52,6 +55,7 @@ function clean(raw) {
   const st = raw.stats || {};
   for (const k of ["runs", "kills", "deaths"]) if (isNum(st[k]) && st[k] >= 0) d.stats[k] = st[k];
   d.landing = cleanLanding(raw.landing);
+  if (typeof raw.name === "string") d.name = raw.name.replace(/[\u0000-\u001f\u007f<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 16);
   if (raw.tutorial && typeof raw.tutorial === "object")
     for (const k in raw.tutorial) if (raw.tutorial[k] === true && /^[a-z]{2,12}$/.test(k)) d.tutorial[k] = true;
   return d;

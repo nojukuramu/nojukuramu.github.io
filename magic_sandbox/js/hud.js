@@ -22,6 +22,7 @@ import { pendingPayloads } from "./spells.js";
 import { device, selectSlot } from "./input.js";
 import { dummyDps } from "./enemies.js";
 import { fmtTime, clamp, escHtml } from "./util.js";
+import { MODES, MAP_BY_ID, hostile } from "./modes.js";
 
 const $ = (id) => document.getElementById(id);
 const cache = {};
@@ -175,8 +176,15 @@ function drawMap() {
     if (!e.alive || e.type === "geode" || e.type === "dummy") continue;
     const known = W.isExplored(e.x, e.z);
     if (e.type === "anchor") { if (known) dot(e.x, e.z, 3.4, "#" + W.theme.accent.toString(16).padStart(6, "0")); continue; }
-    if (e.boss) { dot(e.x, e.z, 4, "#ff4f6a"); continue; }
+    if (e.boss) { if (!e.fogHidden) dot(e.x, e.z, 4, "#ff4f6a"); continue; }
+    if (e.fogHidden) continue;
     if (e.aggro && Math.hypot(e.x - P.x, e.z - P.z) < 22) dot(e.x, e.z, 1.6, "#ff5a74");
+  }
+  // the other mages: friends always, foes only while you can see them
+  for (const Q of S.remotes) {
+    if (!Q.heard || Q.fogHidden) continue;
+    const foe = S.match && hostile(S.match.mode, P, Q);
+    dot(Q.x, Q.z, 2.6, !Q.alive ? "#8a93a0" : foe ? "#ff5a74" : "#7fc1ff");
   }
   // you
   g.save();
@@ -226,7 +234,7 @@ function arrow() {
 let hpTrail = 1, lastHp = 1;
 export function update(dt) {
   const P = S.player;
-  const live = (S.mode === "run" || S.mode === "sandbox") && P;
+  const live = S.mode !== "title" && P;
   set("hud", "hidden", !live);
   set("touchUI", "hidden", !live || device !== "touch");
   if (!live) return;
@@ -252,10 +260,11 @@ export function update(dt) {
   const low = hp < 0.34 ? (0.34 - hp) / 0.34 : 0;
   set("vignette", "opacity", (low * (0.55 + Math.sin(S.time * 5) * 0.2)).toFixed(2));
   // top centre
-  set("floorN", "text", S.mode === "sandbox" ? "Sandbox" : "Floor " + S.floor);
-  set("floorName", "text", S.world ? S.world.theme.name : "");
+  const pvp = S.mode === "pvp" && S.match;
+  set("floorN", "text", S.mode === "sandbox" ? "Sandbox" : pvp ? MODES[S.match.mode].short : "Floor " + S.floor);
+  set("floorName", "text", pvp ? (MAP_BY_ID[S.match.settings.map] || {}).name || "" : S.world ? S.world.theme.name : "");
   set("objective", "text", S.objective ? S.objective.text : "");
-  set("runT", "text", S.mode === "run" ? fmtTime(S.runTime) : "");
+  set("runT", "text", S.mode === "run" || S.mode === "coop" || S.mode === "pvp" ? fmtTime(S.runTime) : "");
   // boss
   const B = S.boss && S.boss.alive && S.boss.state !== "sleep" ? S.boss : null;
   set("bossBar", "hidden", !B);
@@ -270,7 +279,7 @@ export function update(dt) {
   });
   // context buttons
   const target = interactTarget();
-  const pend = pendingPayloads();
+  const pend = pendingPayloads(P);
   set("tUse", "hidden", !target);
   set("tTrigger", "hidden", !pend);
   set("tPotionN", "text", String(P.potions));
@@ -306,16 +315,18 @@ function potionsHtml(P) {
    Events → words
    --------------------------------------------------------------- */
 on("toast", (m, ico) => toast(m, ico));
+on("banner", (t, sub, kind) => banner(t, sub, kind));
 on("floorStart", (floor, theme, kind) => {
   if (S.mode === "sandbox") { banner("The Practice Grounds", "Everything unlocked. Nothing counts.", "calm"); return; }
+  if (S.mode === "pvp" && S.match) { banner(MODES[S.match.mode].name, theme.name); refreshSpellbar(); return; }
   const sub = kind === "anchors" ? "Sever the three Anchors" : kind === "heart" ? "The top of the tower" : "A Warden holds this floor";
-  banner("Floor " + floor + " · " + theme.name, sub + (floor % 2 === 1 ? " · Landing saved" : ""));
+  banner("Floor " + floor + " · " + theme.name, sub + (floor % 2 === 1 && S.mode === "run" ? " · Landing saved" : ""));
   refreshSpellbar();
 });
 on("anchorDown", (d, t) => banner(d >= t ? "The way opens" : "Anchor severed", d + " of " + t, d >= t ? "gold" : ""));
 on("bossIntro", (b) => banner(b.type === "heart" ? "The Loom Heart" : "Warden of " + S.world.theme.name, b.type === "heart" ? "Unmake it" : "", "danger"));
 on("bossPhase", (b) => { if (b.type === "heart") toast("The Heart quickens", "skull"); else toast("The Warden is enraged", "skull"); });
-on("bossDown", (b) => { if (S.mode === "run") banner(b.type === "heart" ? "The Loom is unmade" : "The Warden falls", b.type === "heart" ? "Step into the light" : "Take the thread it drops", "gold"); });
+on("bossDown", (b) => { if (S.mode === "run" || S.mode === "coop") banner(b.type === "heart" ? "The Loom is unmade" : "The Warden falls", b.type === "heart" ? "Step into the light" : "Take the thread it drops", "gold"); });
 on("rankUp", (r) => banner("Circle rank " + r, "Your pages can hold more", "gold"));
 on("portalOpen", (final) => { if (!final) toast("The portal is open", "portal"); });
 on("discover", (kind, id) => {

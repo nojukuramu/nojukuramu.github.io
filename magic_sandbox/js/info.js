@@ -132,8 +132,54 @@ const TOPICS = {
   privacy: {
     title: "What is stored",
     body:
-      "<p>Your spellbook, grimoire, settings, best climb and last landing — in this browser only, under one key. " +
-      "Nothing is sent anywhere, and there are no accounts.</p>"
+      "<p>Your spellbook, grimoire, settings, best climb, last landing and multiplayer name — in this browser only, under one key. " +
+      "There are no accounts.</p>" +
+      "<p>Playing alone sends nothing anywhere. Multiplayer sends only what a room needs, and only once you open it — " +
+      "see <b>Multiplayer</b> in the title's multiplayer screen.</p>"
+  },
+  multiplayer: {
+    title: "Multiplayer",
+    body:
+      "<p>There is no game server. Your browser talks straight to the other mages' browsers. A free public " +
+      "meeting point (a PeerJS broker) only introduces them; it never sees the game.</p>" +
+      "<p><b>What you share.</b> Browsing servers shares nothing but the asking. Joining a room sends your name and " +
+      "your four spell pages to the mages in it. During a match, where your mage is and what it casts. Nothing else, " +
+      "and nothing is kept once the room closes.</p>" +
+      "<p><b>Stopping.</b> Leave is on every multiplayer screen and in the pause menu of every match. Closing the page " +
+      "leaves the room too.</p>" +
+      "<p>Everyone in a room needs the same version of the game. If a room says it runs another one, reload to update.</p>"
+  },
+  servers: {
+    title: "Servers",
+    body:
+      "<p>Each server is a list of rooms, named after one of the tower's lands. They are all the same; pick any, or " +
+      "use <b>Quick join</b> to take the busiest open room anywhere (or open one if nobody is waiting).</p>" +
+      "<p>A server's list is kept by whichever player's browser opened it first. When that player leaves, another " +
+      "takes it over, and the rooms reappear within a few seconds — so a list that looks empty for a moment is " +
+      "just changing hands.</p>" +
+      "<p>A <b>private</b> room is left off the list. Share its six-letter code instead.</p>"
+  },
+  modes: {
+    title: "Modes",
+    body:
+      "<p>" + icon("tower") + " <b>Co-op climb</b> — the tower, together. Enemies are tougher for each mage in the room. " +
+      "Loot is everyone's own: every chest, shrine and orb is there for each of you. A fallen mage watches until the next floor " +
+      "— or until a friend stands beside them for a moment. The floor changes when everyone steps into the portal, or a few " +
+      "seconds after anyone does.</p>" +
+      "<p>" + icon("swords") + " <b>Wipe Out</b> — two teams, one life each per round. The last team standing takes the round; " +
+      "the first to the set number of rounds (4 unless the room says otherwise) wins.</p>" +
+      "<p>" + icon("swords") + " <b>Team deathmatch</b> — two teams, and you come back after a few seconds. The first team to " +
+      "the kill count wins.</p>" +
+      "<p>" + icon("swords") + " <b>Free for all</b> — no teammates. The first mage to the kill count wins.</p>" +
+      "<p>In every fight between mages, everyone starts equal: level one, no boons, and the circle rank the room sets. " +
+      "A spell hits another mage at a little under half the force it hits the Unravelled.</p>"
+  },
+  fog: {
+    title: "Fog of war",
+    body:
+      "<p>You see as far as a lantern reaches, and not through trees, rocks or pillars — they throw shadows away from you. " +
+      "Enemies and other mages in the dark are not drawn at all, not even on the map.</p>" +
+      "<p>Your teammates are always shown.</p>"
   }
 };
 

@@ -2,9 +2,12 @@
  * boon cards, death, victory, the grimoire, and the sandbox's panel.
  *
  * One rule for all of them: they pause the world while open, and closing
- * them is always one button or one Escape away. */
+ * them is always one button or one Escape away. A multiplayer match is the
+ * exception that cannot pause — the room goes on — so there a menu only
+ * takes your hands off the controls (S.uiOpen). The multiplayer screens
+ * themselves are drawn by mpui.js through the same stack. */
 
-import { S, on, emit } from "./state.js";
+import { S, on, emit, online } from "./state.js";
 import { save, DEFAULT_SETTINGS } from "./save.js";
 import { icon, hydrateIcons } from "./icons.js";
 import * as game from "./game.js";
@@ -20,30 +23,38 @@ import { ELEMENTS, ELEMENT_IDS, FORMS, FORM_IDS, REACTIONS, REACTION_IDS, elemen
 import { fmtTime, escHtml } from "./util.js";
 
 const $ = (id) => document.getElementById(id);
-const screens = ["title", "pause", "settings", "boons", "death", "victory", "grimoire"];
+const screens = ["title", "pause", "settings", "boons", "death", "victory", "grimoire", "servers", "rooms", "roomset", "room", "results"];
 let stack = [];
+let escapeGuard = () => false, inRoom = () => false, mpPause = null;
+/** mpui.js: screens Escape must not close (a room is left with its button). */
+export function setHooks(h) { escapeGuard = h.escapeGuard || escapeGuard; inRoom = h.inRoom || inRoom; mpPause = h.pause || null; }
+export function top() { return stack[stack.length - 1] || null; }
+export function isShown(id) { return !$("scr-" + id).hidden; }
 
-function show(id) {
+export function show(id) {
   for (const s of screens) $("scr-" + s).hidden = s !== id;
   stack = stack.filter((x) => x !== id); stack.push(id);
   syncPause();
   const first = $("scr-" + id).querySelector("button:not([disabled])");
   if (first && !matchMedia("(pointer: coarse)").matches) first.focus({ preventScroll: true });
 }
-function hideAll() {
+export function hideAll() {
   for (const s of screens) $("scr-" + s).hidden = true;
   stack = [];
   syncPause();
 }
-function back() {
+export function back() {
   stack.pop();
   const prev = stack[stack.length - 1];
   if (prev) show(prev); else hideAll();
 }
 function anyOpen() { return screens.some((s) => !$("scr-" + s).hidden) || forge.isOpen(); }
-function syncPause() {
+export function syncPause() {
   const was = S.paused;
-  S.paused = S.mode !== "title" && anyOpen();
+  const open = S.mode !== "title" && anyOpen();
+  S.paused = open && !online();
+  S.uiOpen = open && online();
+  if (S.uiOpen) resetInput();
   if (S.paused && !was) resetInput();
   document.body.classList.toggle("paused", S.paused);
 }
@@ -66,7 +77,7 @@ export function toTitle() {
   show("title");
   document.body.classList.add("atTitle");
 }
-function leaveTitle() { document.body.classList.remove("atTitle"); hideAll(); }
+export function leaveTitle() { document.body.classList.remove("atTitle"); hideAll(); }
 
 /* ---------------------------------------------------------------
    Pause
@@ -78,6 +89,7 @@ export function togglePause() {
   if (info.isOpen()) { info.close(); return; }
   if (forge.isOpen()) { closeBookHere(); return; }
   if (!$("scr-boons").hidden) return;                 // a choice must be made
+  if (escapeGuard(top())) return;
   if (S.mode === "title") { if (stack.length > 1) back(); return; }
   if (S.over) return;
   if (stack.length) { back(); return; }
@@ -95,6 +107,10 @@ function renderPause() {
   $("pauseBoons").innerHTML = list.length
     ? list.map((id) => { const b = BOON_BY_ID[id]; return '<span class="boonchip" title="' + escHtml(b.text) + '">' + icon(b.icon) + escHtml(b.name) + (P.boons[id] > 1 ? " " + ROMAN[P.boons[id]] : "") + "</span>"; }).join("")
     : '<span class="muted">No boons yet</span>';
+  $("pauseBoard").hidden = !S.match;
+  $("pauseLive").hidden = !S.match;
+  $("btnQuit").querySelector("span").textContent = S.match ? "Leave the room" : "Leave to the title";
+  if (S.match && mpPause) { mpPause(); $("btnRestartLanding").hidden = true; $("sandboxOpts").hidden = true; return; }
   $("pauseStats").textContent = S.mode === "sandbox" ? "Sandbox" : "Floor " + S.floor + " · level " + (P ? P.level : 1) + " · rank " + (P ? P.rank : 1) + " · " + fmtTime(S.runTime);
   $("btnRestartLanding").hidden = S.mode !== "run" || !save.data.landing;
   $("sandboxOpts").hidden = S.mode !== "sandbox";
@@ -135,7 +151,7 @@ function applySettings() {
    --------------------------------------------------------------- */
 on("offerBoons", (choices, source) => {
   const P = S.player;
-  $("boonsTitle").textContent = source === "chest" ? "The chest holds three threads" : source === "warden" ? "The Warden's gift" : "Level " + P.level;
+  $("boonsTitle").textContent = source === "chest" ? "The chest holds three threads" : source === "warden" ? "The Warden's gift" : source === "start" ? "A head start" : "Level " + P.level;
   $("boonsSub").textContent = "Choose one";
   const box = $("boonCards");
   box.innerHTML = "";
@@ -225,7 +241,11 @@ export function init() {
   click("btnPauseBook", () => { hideAll(); forge.openBook(); syncPause(); });
   click("btnPauseSettings", () => { renderSettings(); show("settings"); });
   click("btnPauseGrimoire", () => { renderGrimoire(); show("grimoire"); });
-  click("btnQuit", () => { if (S.mode === "run" && !confirm("Leave this climb? You can continue later from your last landing.")) return; toTitle(); });
+  click("btnQuit", () => {
+    if (S.match) { emit("mpLeave"); return; }
+    if (S.mode === "run" && !confirm("Leave this climb? You can continue later from your last landing.")) return;
+    toTitle();
+  });
   click("btnRestartLanding", () => { if (!confirm("Go back to your landing on floor " + save.data.landing.floor + "?")) return; hideAll(); game.startRun(true); });
   click("btnSettingsBack", back);
   click("btnGrimBack", back);
@@ -267,4 +287,4 @@ export function init() {
   applySettings();
 }
 
-export function busy() { return S.mode === "run" && !S.over; }
+export function busy() { return (S.mode === "run" && !S.over) || inRoom(); }

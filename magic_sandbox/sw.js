@@ -9,7 +9,7 @@
    Models and textures are not in SHELL: the game fetches all of them at boot,
    and the fetch handler below keeps each one the first time it passes, so a
    second visit is fully offline without making the install wait on them. */
-var CACHE = "msandbox-v2";
+var CACHE = "msandbox-v3";
 var SHELL = [
   "./",
   "./index.html",
@@ -39,6 +39,12 @@ var SHELL = [
   "./js/menus.js",
   "./js/info.js",
   "./js/update.js",
+  "./js/peer.js",
+  "./js/modes.js",
+  "./js/lobby.js",
+  "./js/net.js",
+  "./js/fog.js",
+  "./js/mpui.js",
   "./vendor/build/three.module.min.js",
   "./vendor/examples/jsm/loaders/GLTFLoader.js",
   "./vendor/examples/jsm/utils/BufferGeometryUtils.js",

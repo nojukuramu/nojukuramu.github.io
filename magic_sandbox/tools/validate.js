@@ -19,7 +19,10 @@
       compile to, that every stamp is the element it claims and perfectly
       balanced, that junk from localStorage is refused rather than "fixed",
       that rank limits bite where they should, that every example page
-      compiles, and that the tower is ten floors with a heart on top.
+      compiles, and that the tower is ten floors with a heart on top. And
+      multiplayer's rules (modes.js, lobby.js): room setups and room rows
+      from strangers are cleaned, whole matches of every mode are played
+      through the scoring, and a server can never be mistaken for a room.
 
    No dependencies, no build step.
    ============================================================ */
@@ -121,6 +124,8 @@ const allJs = jsFiles.map(read).join("\n");
       if (!exists(rel)) { fail("import target exists: " + rel); continue; }
       const src = read(rel);
       for (const m of src.matchAll(/(?:import|export)\s[^'"]*?from\s*['"](\.[^'"]+)['"]/g)) queue.push(path.posix.normalize(path.posix.join(path.posix.dirname(rel), m[1])));
+      // side-effect imports too: peer.js is a classic script that lobby.js loads for its global
+      for (const m of src.matchAll(/^import\s*['"](\.[^'"]+)['"]/gm)) queue.push(path.posix.normalize(path.posix.join(path.posix.dirname(rel), m[1])));
     }
     seen.add("vendor/build/three.module.min.js");
     const notShelled = [...seen].filter((f) => !shell.includes(f));
@@ -280,6 +285,78 @@ const allJs = jsFiles.map(read).join("\n");
     check("enemies grow tougher, gently", T.floorScale(1).hp === 1 && T.floorScale(10).hp < 4 && T.floorScale(10).dmg < 2);
     const lim = S.RANKS.slice(1);
     check("each rank holds at least as much as the last", lim.every((r, i) => i === 0 || Object.keys(r).every((k) => r[k] >= lim[i - 1][k])));
+  }
+
+  section("Static: the transport is KaraokeNatin's");
+  {
+    const peer = read("js/peer.js"), kn = fs.readFileSync(path.join(ROOT, "..", "karaokenatin", "js", "peer.js"), "utf8");
+    check("peer.js says where it was lifted from", /Lifted from KaraokeNatin \(karaokenatin\/js\/peer\.js\)/.test(peer));
+    check("its own namespace and peer-id prefix", /global\.MSN = global\.MSN/.test(peer) && /"msbx-" \+ normalizeCode/.test(peer) && !/"kn-"/.test(peer));
+    check("the host reports which broker refused its id", /self\.emit\("id-taken", BROKERS\.indexOf\(cfg\), round\)/.test(peer));
+    // Everything past the header, with the documented changes undone, is KaraokeNatin's file.
+    const body = (t) => t.slice(t.indexOf("(function (global) {"));
+    const undo = body(peer)
+      .replace(/MSN/g, "KN").replace(/MS_BROKERS/g, "KN_BROKERS").replace(/"msbxc-"/g, '"knc-"').replace(/"msbx-"/g, '"kn-"').replace(/msbx-<code>/g, "kn-<code>")
+      .replace(/"ms_"/g, '"kn_"').replace(/"ms"/g, '"kn"').replace(/"\[ms\] /g, '"[kn] ').replace("var ICE = global.MS_ICE || {", "var ICE = {")
+      .replace('\n        self.emit("id-taken", BROKERS.indexOf(cfg), round);', "").replace(", index: BROKERS.indexOf(cfg) }", " }");
+    check("and otherwise the same file, line for line", undo === body(kn), (() => { const a = undo.split("\n"), b = body(kn).split("\n"); const i = a.findIndex((l, k) => l !== b[k]); return "first difference at line " + i + ": " + (a[i] || "").trim().slice(0, 80); })());
+    check("the local broker is KaraokeNatin's too", read("tools/broker.js").includes("Lifted unchanged from karaokenatin/tools/broker.js"));
+  }
+
+  section("Behaviour: multiplayer rules");
+  {
+    const MD = await import(pathToFileURL(path.join(ROOT, "js/modes.js")).href);
+    const LB = await import(pathToFileURL(path.join(ROOT, "js/lobby.js")).href);
+    check("four modes: co-op, Wipe Out, team deathmatch, free for all", ["coop", "wipeout", "tdm", "ffa"].every((m) => MD.MODES[m]) && MD.MODE_IDS.length === 4);
+    check("Wipe Out is four rounds unless the room says otherwise", MD.defaultSettings("wipeout").target === 4);
+    check("every PVP map is one of the tower's lands", MD.MAPS.every((m) => T.THEMES[m.id]));
+    const junk = MD.cleanSettings({ mode: "nope", max: 99, target: -5, rank: 9, map: "moon", name: "<b>" + "x".repeat(60), fog: "yes", floor: 4 });
+    check("a room setup from a stranger is cleaned, not trusted", junk.mode === "coop" && junk.max === MD.MAX_PLAYERS && junk.rank === 5 && junk.map === "verdant" && junk.name.length <= 24 && !/</.test(junk.name) && junk.floor === 1 && junk.fog === true);
+    check("a target is clamped to its mode", MD.cleanSettings({ mode: "tdm", target: 1000 }).target === 60 && MD.cleanSettings({ mode: "wipeout", target: 0 }).target === 1);
+    check("a room row with a bad code is dropped", MD.cleanListing({ code: "AB" }) === null && MD.cleanListing({ code: "ABCDEF", s: {}, n: 3 }).code === "ABCDEF");
+    // free for all: first to the target
+    const teams = { 1: 0, 2: 0, 3: 1, 4: 1 };
+    const teamOf = (id) => teams[id];
+    let sc = MD.newScore([1, 2, 3], 2);
+    MD.recordKill(sc, "ffa", teamOf, 2, 1);
+    const noSelf = MD.recordKill(sc, "ffa", teamOf, 1, 1);
+    const fin = MD.recordKill(sc, "ffa", teamOf, 3, 1);
+    check("free for all: a kill scores, falling on your own spell does not, the target wins", sc.k[1] === 2 && !noSelf.over && fin.over && fin.winner === 1);
+    // team deathmatch: team kills, no friendly credit
+    sc = MD.newScore([1, 2, 3, 4], 2);
+    MD.recordKill(sc, "tdm", teamOf, 2, 1);
+    check("team deathmatch: a teammate's fall scores nothing", sc.tk[0] === 0 && sc.k[1] === 0);
+    MD.recordKill(sc, "tdm", teamOf, 3, 1);
+    const tdm = MD.recordKill(sc, "tdm", teamOf, 4, 2);
+    check("team deathmatch: the team to the target wins", tdm.over && tdm.winner === 0 && sc.tk[0] === 2);
+    // wipe out: rounds
+    sc = MD.newScore([1, 2, 3, 4], 2);
+    const present = [{ id: 1, team: 0 }, { id: 2, team: 0 }, { id: 3, team: 1 }, { id: 4, team: 1 }];
+    check("Wipe Out: nothing is decided while both teams stand", MD.roundCheck(sc, present, [present[0], present[2]]) === null);
+    const r1 = MD.roundCheck(sc, present, [present[0]]);
+    check("Wipe Out: the last team standing takes the round", r1 && r1.round === 0 && !r1.over && sc.r[0] === 1 && sc.round === 2);
+    const r2 = MD.roundCheck(sc, present, []);
+    check("Wipe Out: a round where both fall goes to nobody", r2 && r2.round === -1 && sc.r[0] === 1 && sc.r[1] === 0);
+    const r3 = MD.roundCheck(sc, present, [present[1]]);
+    check("Wipe Out: the target in rounds wins the match", r3 && r3.over && r3.winner === 0);
+    check("hostility: teams spare their own, free for all spares nobody, co-op spares everyone",
+      !MD.hostile("tdm", { id: 1, team: 0 }, { id: 2, team: 0 }) && MD.hostile("tdm", { id: 1, team: 0 }, { id: 3, team: 1 }) &&
+      MD.hostile("ffa", { id: 1, team: 0 }, { id: 2, team: 0 }) && !MD.hostile("ffa", { id: 1 }, { id: 1 }) && !MD.hostile("coop", { id: 1 }, { id: 2 }));
+    const bal = MD.balanceTeams([{ id: 1, team: 0 }, { id: 2, team: 0 }, { id: 3, team: 0 }, { id: 4, team: 0 }]);
+    check("teams are balanced before a match, newest arrivals moving first", bal.filter((p) => p.team === 1).map((p) => p.id).join() === "3,4");
+    const rooms = [
+      { code: "AAAAAA", s: MD.cleanSettings({ max: 4 }), n: 4, phase: "lobby", v: "3" },
+      { code: "BBBBBB", s: MD.cleanSettings({ max: 4 }), n: 1, phase: "playing", v: "3" },
+      { code: "CCCCCC", s: MD.cleanSettings({ max: 4 }), n: 2, phase: "lobby", v: "3" },
+      { code: "DDDDDD", s: MD.cleanSettings({ max: 8 }), n: 5, phase: "lobby", v: "2" },
+      { code: "EEEEEE", s: MD.cleanSettings({ max: 8, priv: true }), n: 5, phase: "lobby", v: "3" }
+    ];
+    check("Quick join skips full, private and other-version rooms, and prefers a room still in its lobby", MD.quickPick(rooms, "3").code === "CCCCCC" && MD.quickPick(rooms, "3", ["CCCCCC"]).code === "BBBBBB" && MD.quickPick([], "3") === null);
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    check("five servers, one per land", LB.SERVERS.length === 5);
+    check("a server's code can never be a room's code", LB.SERVERS.every((sv) => /^[A-Z0-9]{6}$/.test(sv.code) && [...sv.code].some((ch) => !alphabet.includes(ch))));
+    const code = globalThis.MSN.net.makeCode();
+    check("room codes are six characters a person can read aloud", /^[A-HJ-NP-Z2-9]{6}$/.test(code), code);
   }
 
   process.stdout.write("\n" + checks + " checks, " + failures.length + " failed\n");
