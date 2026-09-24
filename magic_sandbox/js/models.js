@@ -120,8 +120,13 @@ export function glowMat(color, intensity) {
   return new THREE.MeshStandardMaterial({ color: 0x111111, emissive: color, emissiveIntensity: intensity || 2.5, roughness: 0.5, flatShading: true });
 }
 
+/* Geometry shared by every copy of a creature is built once and tagged, so
+   freeing a dead enemy frees only what was made for it alone. */
 const GEO = {};
-function geo(key, make) { return GEO[key] || (GEO[key] = make()); }
+function geo(key, make) {
+  if (!GEO[key]) { GEO[key] = make(); GEO[key].userData.shared = true; }
+  return GEO[key];
+}
 
 const shadowTex = (() => {
   const c = document.createElement("canvas"); c.width = c.height = 64;
@@ -132,6 +137,7 @@ const shadowTex = (() => {
   return new THREE.CanvasTexture(c);
 })();
 const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false });
+shadowMat.userData.shared = true;
 /** A soft dark disc under a character. Real shadows only exist at medium
  *  quality and up; this keeps everything grounded on low. */
 export function blobShadow(r) {

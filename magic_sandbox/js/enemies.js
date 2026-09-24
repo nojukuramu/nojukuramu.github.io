@@ -829,9 +829,10 @@ export function disposeEnemy(e) {
   freeBar(e.bar); e.bar = null;
   scene.remove(e.mesh.root);
   e.mesh.root.traverse((o) => {
-    if (o.isMesh && o.material && o.material !== bubbleMat) {
+    if (o.isMesh && o.material && o.material !== bubbleMat && !o.material.userData.shared) {
       [].concat(o.material).forEach((m) => m.dispose());
     }
+    if (o.isMesh && o.geometry && !o.geometry.userData.shared && o.geometry !== bubbleGeo) o.geometry.dispose();
     if (o.isSprite && o.material) o.material.dispose();
   });
 }
