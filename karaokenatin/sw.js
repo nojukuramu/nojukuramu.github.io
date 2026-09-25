@@ -43,6 +43,7 @@ var SHELL_FILES = [
     "./css/app.css",
     "./js/icons.js",
     "./js/sound.js",
+    "./js/fx.js",
     "./js/stats.js",
     "./js/games.js",
     "./js/qr.js",
