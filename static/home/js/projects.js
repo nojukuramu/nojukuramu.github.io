@@ -85,6 +85,29 @@
       c.globalAlpha = 1;
     },
 
+    /* a crosshair, and a body bunny hopping across it in widening arcs */
+    crosshair: function (c, w, h, p, a) {
+      var cx = w / 2, cy = h / 2, r = h * 0.2;
+      c.strokeStyle = a; c.lineWidth = 2;
+      c.beginPath(); c.arc(cx, cy, r, 0, 6.283); c.stroke();
+      c.beginPath();
+      c.moveTo(cx, cy - r - 9); c.lineTo(cx, cy - r + 7); c.moveTo(cx, cy + r - 7); c.lineTo(cx, cy + r + 9);
+      c.moveTo(cx - r - 9, cy); c.lineTo(cx - r + 7, cy); c.moveTo(cx + r - 7, cy); c.lineTo(cx + r + 9, cy);
+      c.stroke();
+      var t = p % 4, x = w * 0.12 + (w * 0.76) * (t / 4);
+      var hop = Math.abs(Math.sin(t * 3.9)) * h * (0.12 + t * 0.03);
+      var y = h * 0.8 - hop;
+      c.globalAlpha = 0.35; c.fillStyle = "#FFF3E2";
+      for (var k = 1; k < 8; k++) {
+        var tk = Math.max(0, t - k * 0.06), xk = w * 0.12 + (w * 0.76) * (tk / 4);
+        c.beginPath(); c.arc(xk, h * 0.8 - Math.abs(Math.sin(tk * 3.9)) * h * (0.12 + tk * 0.03), 1.6, 0, 6.283); c.fill();
+      }
+      c.globalAlpha = 1; c.fillStyle = "#FFF3E2";
+      c.beginPath(); c.arc(x, y, 3.2, 0, 6.283); c.fill();
+      c.font = "600 " + Math.round(h * 0.13) + "px ui-monospace, Menlo, monospace"; c.fillStyle = a; c.textAlign = "left";
+      c.fillText("{ }", w * 0.08, h * 0.2);
+    },
+
     /* an alarm that will not be ignored */
     alarm: function (c, w, h, p, a) {
       var cx = w / 2, cy = h * 0.54, r = h * 0.30;
@@ -339,6 +362,10 @@
       desc: "The Loom Tower — draw your own spells and climb ten floating islands.",
       hi: ["Shapes are elements, circles are shots, runes aim them", "Wardens, Anchors and a checkpoint every other floor", "Phone, computer or gamepad, and it plays offline"],
       tags: ["Three.js", "WebGL", "roguelite"] },
+    { name: "Hacks", href: "hacks/", badge: "Movement shooter", accent: "#39C6E8", kind: "games", motif: "crosshair",
+      desc: "A Source-style movement shooter where writing the cheats is the lesson.",
+      hi: ["Bunny hop, air strafe, surf, wall climb, wall jump, lunge", "Write ESP, aimbots and bhop scripts in JavaScript, in game", "Bots, rooms with friends, phone controls you can rearrange"],
+      tags: ["Three.js", "WebRTC", "learn to code"] },
     { name: "Task Notes", href: "task-notes/", badge: "PWA", accent: "#E8B44A", kind: "tools", motif: "alarm",
       desc: "A notebook with a real alarm clock inside it.",
       hi: ["Repeating alarms that ring until you answer them", "Markdown notes, notebooks, tags, five views", "Entirely offline, on IndexedDB"],

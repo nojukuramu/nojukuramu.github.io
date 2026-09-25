@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Hacks — the movement shooter you are allowed to cheat in</title>
+<meta name="description" content="A Source-style movement shooter where writing cheats is the point: bunny hop, air strafe, surf, wall climb and lunge, then write your own ESP, aimbot and bhop scripts in JavaScript.">
+<meta name="theme-color" content="#0a0e13">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hacks">
+<link rel="stylesheet" href="css/game.css">
+<!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
+<script>window.HK_VERSION = "1";</script>
+<script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
+</head>
+<body class="atTitle">
+<canvas id="gl"></canvas>
+<canvas id="overlay" aria-hidden="true"></canvas>
+<div id="tags" aria-hidden="true"></div>
+
+<!-- ============ HUD ============ -->
+<div id="hud" hidden>
+  <div id="crosshair" aria-hidden="true"><i class="ch t"></i><i class="ch b"></i><i class="ch l"></i><i class="ch r"></i><i class="dot"></i></div>
+  <div id="hitmark" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div id="lungeRing" hidden aria-hidden="true"><svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="26" class="track"/><circle id="lungeArc" cx="30" cy="30" r="26" class="arc"/></svg><b id="lungeTxt"></b></div>
+  <div id="hudTop">
+    <div class="pill"><b id="modeName"></b><span id="scoreLine"></span><span id="clock" class="mono"></span></div>
+    <div id="netLine" hidden></div>
+  </div>
+  <div id="killfeed"></div>
+  <div id="hudBL">
+    <div class="hpbox"><b id="hpN">100</b><div class="bar"><i id="hpF"></i></div></div>
+    <div id="speedo" class="mono"><b id="speedN">0.0</b><small>m/s</small></div>
+  </div>
+  <div id="hudBR">
+    <div id="slots"></div>
+    <div class="ammo"><b id="ammoN" class="mono"></b><small id="ammoMag" class="mono"></small></div>
+    <div id="gunName"></div>
+  </div>
+  <div id="hackChip" hidden><i data-icon="code"></i><span id="hackChipN"></span></div>
+  <div id="fps" class="mono" hidden></div>
+  <div id="dmgdir" aria-hidden="true"></div>
+  <div id="centerMsg" hidden></div>
+  <div id="toast" hidden></div>
+</div>
+<div id="hurtFlash" aria-hidden="true"></div>
+<div id="scope" hidden aria-hidden="true"></div>
+<div id="scoreboard" hidden></div>
+
+<!-- ============ touch controls (built by touch.js) ============ -->
+<div id="touch" hidden></div>
+<div id="touchEdit" hidden>
+  <div class="bar">
+    <b>Move buttons</b>
+    <span class="muted" id="teSel">Drag a button. Tap one to size it.</span>
+    <label class="te-size">Size <input type="range" id="teSize" min="32" max="220" step="2"></label>
+    <label class="te-size">Fade <input type="range" id="teAlpha" min="0.25" max="1" step="0.05"></label>
+    <button id="teReset" class="btn ghost small">Reset</button>
+    <button id="teDone" class="btn primary small">Done</button>
+  </div>
+</div>
+
+<!-- ============ screens ============ -->
+<div id="menus">
+
+<section id="scr-title" class="screen">
+  <div class="title-wrap">
+    <h1 class="logo" aria-label="Hacks"><span class="prompt">&gt;</span>HACKS<span class="cursor"></span></h1>
+    <p class="tag">A movement shooter you are allowed to cheat in. <button class="info" data-info="about" aria-label="What this is"><i data-icon="info"></i></button></p>
+    <div class="menu-col">
+      <button id="btnPlay" class="btn primary big"><i data-icon="play"></i>Play vs bots</button>
+      <button id="btnMulti" class="btn big"><i data-icon="users"></i>Multiplayer</button>
+      <button id="btnQuickTitle" class="btn ghost"><i data-icon="quick"></i>Quick join</button>
+      <button id="btnPractice" class="btn"><i data-icon="target"></i>Practice (dummies, no danger)</button>
+      <button id="btnHacksTitle" class="btn"><i data-icon="code"></i>Write hacks</button>
+      <div class="trow">
+        <button id="btnLoadout" class="btn ghost"><i data-icon="gun"></i>Loadout</button>
+        <button id="btnSettings" class="btn ghost"><i data-icon="gear"></i>Settings</button>
+        <button class="btn ghost" data-info="howto"><i data-icon="help"></i>How to play</button>
+      </div>
+    </div>
+    <p class="ver muted"><span id="verLine"></span> · <button id="btnCheckUpdate" class="linkbtn">Check for updates</button></p>
+  </div>
+</section>
+
+<section id="scr-play" class="screen" hidden>
+  <div class="panel">
+    <h2>Play vs bots</h2>
+    <div class="field"><label>Mode</label><div id="spMode" class="seg"></div></div>
+    <div class="setrow"><label for="spBots">Bots <b id="spBotsN" class="num"></b></label><input type="range" id="spBots" min="1" max="11" step="1"></div>
+    <div class="field"><label>Difficulty <button class="info" data-info="bots" aria-label="About bots"><i data-icon="info"></i></button></label><div id="spDiff" class="seg"></div></div>
+    <div class="setrow"><label for="spTarget">Kills to win <b id="spTargetN" class="num"></b></label><input type="range" id="spTarget" min="5" max="100" step="5"></div>
+    <div class="stackbtns">
+      <button id="btnPlayGo" class="btn primary wide"><i data-icon="play"></i>Start</button>
+      <button class="btn ghost wide" data-back>Back</button>
+    </div>
+  </div>
+</section>
+
+<section id="scr-loadout" class="screen" hidden>
+  <div class="panel wide">
+    <h2>Loadout <button class="info" data-info="weapons" aria-label="About the weapons"><i data-icon="info"></i></button></h2>
+    <h3 class="sub">Primary</h3><div id="loPrimary" class="cards"></div>
+    <h3 class="sub">Secondary</h3><div id="loSecondary" class="cards"></div>
+    <h3 class="sub">Melee <button class="info" data-info="lunge" aria-label="About the lunge"><i data-icon="info"></i></button></h3><div id="loMelee" class="cards"></div>
+    <p class="muted small">Changes apply at your next spawn.</p>
+    <div class="stackbtns"><button class="btn primary wide" data-back>Done</button></div>
+  </div>
+</section>
+
+<section id="scr-settings" class="screen" hidden>
+  <div class="panel wide">
+    <h2>Settings</h2>
+    <div id="setTabs" class="seg tabs">
+      <button data-tab="controls" class="on">Controls</button><button data-tab="keys">Keys</button><button data-tab="touch">Touch</button><button data-tab="video">Video &amp; sound</button>
+    </div>
+    <div class="tabpane" data-pane="controls">
+      <div class="setrow"><label for="stSens">Mouse sensitivity <b id="stSensN" class="num"></b></label><input type="range" id="stSens" min="0.2" max="8" step="0.1"></div>
+      <div class="setrow"><label for="stAds">Aiming sensitivity <b id="stAdsN" class="num"></b></label><input type="range" id="stAds" min="0.2" max="2" step="0.05"></div>
+      <div class="setrow"><label for="stFov">Field of view <b id="stFovN" class="num"></b></label><input type="range" id="stFov" min="70" max="120" step="1"></div>
+      <label class="tog"><input type="checkbox" id="stInvert"><span>Invert looking up and down</span></label>
+      <div class="field"><label>Sprint</label><div id="stSprint" class="seg"><button data-v="hold">Hold</button><button data-v="toggle">Toggle</button><button data-v="auto">Always</button></div></div>
+      <div class="field"><label>Crouch</label><div id="stCrouch" class="seg"><button data-v="hold">Hold</button><button data-v="toggle">Toggle</button></div></div>
+      <label class="tog"><input type="checkbox" id="stPauseEdit"><span>Pause solo games while the hacks panel is open</span></label>
+    </div>
+    <div class="tabpane" data-pane="keys" hidden>
+      <p class="muted small">Click a key to change it. Escape always opens the menu. <button id="btnResetKeys" class="linkbtn">Reset all</button></p>
+      <div id="bindList" class="binds"></div>
+    </div>
+    <div class="tabpane" data-pane="touch" hidden>
+      <p class="muted small">Every button stays on screen. Move them where your thumbs are. <button class="info" data-info="touch" aria-label="About touch controls"><i data-icon="info"></i></button></p>
+      <button id="btnEditTouch" class="btn wide"><i data-icon="move"></i>Move buttons</button>
+      <div class="setrow"><label for="stTouchLook">Look sensitivity <b id="stTouchLookN" class="num"></b></label><input type="range" id="stTouchLook" min="0.2" max="3" step="0.05"></div>
+      <label class="tog"><input type="checkbox" id="stTouchSprint"><span>Push the stick to the edge to sprint</span></label>
+    </div>
+    <div class="tabpane" data-pane="video" hidden>
+      <div class="field"><label>Graphics</label><div id="stQuality" class="seg"><button data-v="auto">Auto</button><button data-v="low">Low</button><button data-v="medium">Medium</button><button data-v="high">High</button></div></div>
+      <div class="setrow"><label for="stMaster">Volume <b id="stMasterN" class="num"></b></label><input type="range" id="stMaster" min="0" max="1" step="0.05"></div>
+      <div class="setrow"><label for="stSfx">Effects <b id="stSfxN" class="num"></b></label><input type="range" id="stSfx" min="0" max="1" step="0.05"></div>
+      <label class="tog"><input type="checkbox" id="stSpeed"><span>Show speed</span></label>
+      <label class="tog"><input type="checkbox" id="stFps"><span>Show frame rate</span></label>
+      <div class="setrow"><label for="stCross">Crosshair colour</label><input type="color" id="stCross"></div>
+      <p class="muted small">Stored in this browser only. <button class="info" data-info="privacy" aria-label="What is stored"><i data-icon="info"></i></button></p>
+    </div>
+    <div class="stackbtns"><button class="btn primary wide" data-back>Done</button></div>
+  </div>
+</section>
+
+<section id="scr-pause" class="screen" hidden>
+  <div class="panel">
+    <h2>Paused</h2>
+    <p id="pauseStats" class="muted"></p>
+    <div id="pauseBoard"></div>
+    <div class="stackbtns">
+      <button id="btnResume" class="btn primary wide"><i data-icon="play"></i>Resume</button>
+      <button id="btnPauseHacks" class="btn wide"><i data-icon="code"></i>Hacks</button>
+      <div class="trow">
+        <button id="btnPauseLoadout" class="btn ghost"><i data-icon="gun"></i>Loadout</button>
+        <button id="btnPauseSettings" class="btn ghost"><i data-icon="gear"></i>Settings</button>
+      </div>
+      <button id="btnQuit" class="btn ghost wide"><i data-icon="exit"></i>Leave the match</button>
+    </div>
+  </div>
+</section>
+
+<section id="scr-results" class="screen" hidden>
+  <div class="panel wide">
+    <h2 id="resTitle"></h2>
+    <p id="resSub" class="muted"></p>
+    <div id="resBoard"></div>
+    <div class="stackbtns">
+      <button id="btnResAgain" class="btn primary wide"><i data-icon="play"></i>Play again</button>
+      <button id="btnResBack" class="btn primary wide">Back to the room</button>
+      <button id="btnResLeave" class="btn ghost wide">Leave</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ multiplayer ============ -->
+<section id="scr-servers" class="screen" hidden>
+  <div class="panel wide">
+    <h2>Multiplayer <button class="info" data-info="multiplayer" aria-label="How multiplayer works"><i data-icon="info"></i></button></h2>
+    <div class="setrow"><label for="mpName">Your name</label><input id="mpName" class="txt" maxlength="16" autocomplete="off" spellcheck="false"></div>
+    <button id="btnQuickJoin" class="btn primary wide"><i data-icon="quick"></i>Quick join</button>
+    <h3 class="sub">Servers <button class="info" data-info="servers" aria-label="About servers"><i data-icon="info"></i></button></h3>
+    <div id="serverList" class="mlist"></div>
+    <div class="coderow"><input id="joinCode" class="txt mono" maxlength="6" placeholder="Room code" autocomplete="off" spellcheck="false" aria-label="Room code"><button id="btnJoinCode" class="btn">Join</button></div>
+    <small id="mpStatus" class="muted"></small>
+    <div class="stackbtns"><button id="btnServersBack" class="btn ghost wide">Back</button></div>
+  </div>
+</section>
+
+<section id="scr-rooms" class="screen" hidden>
+  <div class="panel wide">
+    <h2 id="roomsTitle"></h2>
+    <p id="roomsSub" class="muted"></p>
+    <div id="roomList" class="mlist"></div>
+    <div class="stackbtns">
+      <button id="btnCreateRoom" class="btn primary wide"><i data-icon="plus"></i>Create a room</button>
+      <button id="btnRoomsBack" class="btn ghost wide">Back to the servers</button>
+    </div>
+  </div>
+</section>
+
+<section id="scr-roomset" class="screen" hidden>
+  <div class="panel">
+    <h2 id="roomsetTitle">New room</h2>
+    <div class="setrow"><label for="rsName">Name</label><input id="rsName" class="txt" maxlength="24" autocomplete="off" spellcheck="false"></div>
+    <div class="field"><label>Mode</label><div id="rsMode" class="seg"></div></div>
+    <div class="setrow"><label for="rsMax">Players <b id="rsMaxN" class="num"></b></label><input type="range" id="rsMax" min="2" max="12" step="1"></div>
+    <div class="setrow"><label for="rsTarget">Kills to win <b id="rsTargetN" class="num"></b></label><input type="range" id="rsTarget"></div>
+    <div class="setrow"><label for="rsTime">Time limit <b id="rsTimeN" class="num"></b></label><input type="range" id="rsTime" min="0" max="30" step="1"></div>
+    <div class="setrow"><label for="rsBots">Fill with bots to <b id="rsBotsN" class="num"></b></label><input type="range" id="rsBots" min="0" max="12" step="1"></div>
+    <div class="field"><label>Bot difficulty</label><div id="rsDiff" class="seg"></div></div>
+    <div class="field"><label>Hacks allowed <button class="info" data-info="rules" aria-label="About hack rules"><i data-icon="info"></i></button></label><div id="rsHacks" class="seg"></div></div>
+    <label class="tog"><input type="checkbox" id="rsPriv"><span>Private — join by code only</span></label>
+    <div class="stackbtns">
+      <button id="btnRoomsetGo" class="btn primary wide">Create</button>
+      <button id="btnRoomsetBack" class="btn ghost wide">Cancel</button>
+    </div>
+  </div>
+</section>
+
+<section id="scr-room" class="screen" hidden>
+  <div class="panel wide">
+    <div class="roomhead">
+      <div class="rh"><h2 id="roomName"></h2><p id="roomDesc" class="muted"></p></div>
+      <div class="codebox"><small>Code</small><b id="roomCode" class="mono"></b></div>
+    </div>
+    <p id="roomState" class="muted"></p>
+    <div id="roomPlayers"></div>
+    <div class="stackbtns">
+      <button id="btnRoomStart" class="btn primary wide"><i data-icon="play"></i><span>Start</span></button>
+      <button id="btnRoomReady" class="btn primary wide"><span>Ready</span></button>
+      <div class="trow">
+        <button id="btnRoomLoadout" class="btn ghost"><i data-icon="gun"></i>Loadout</button>
+        <button id="btnRoomHacks" class="btn ghost"><i data-icon="code"></i>Hacks</button>
+        <button id="btnRoomEdit" class="btn ghost"><i data-icon="gear"></i>Room setup</button>
+      </div>
+      <button id="btnRoomLeave" class="btn ghost wide"><i data-icon="exit"></i>Leave</button>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<!-- ============ the hacks panel ============ -->
+<div id="hackPanel" hidden>
+  <header class="hp-head">
+    <b class="mono">&gt; hacks</b>
+    <div id="hpTabs" class="seg tabs small">
+      <button data-htab="code" class="on">Code</button><button data-htab="learn">Learn</button><button data-htab="api">API</button>
+    </div>
+    <span id="hpRules" class="rules"></span>
+    <span class="spacer"></span>
+    <button id="hpClose" class="iconBtn" aria-label="Close the hacks panel"><i data-icon="close"></i></button>
+  </header>
+  <div class="hp-body">
+    <aside id="hpList" class="hp-list"></aside>
+    <main class="hp-main" data-hpane="code">
+      <div class="hp-bar">
+        <input id="hpName" class="txt mono" maxlength="32" spellcheck="false" aria-label="Hack name">
+        <button id="hpRun" class="btn primary small" title="Ctrl+S"><i data-icon="play"></i>Run</button>
+        <button id="hpStop" class="btn small"><i data-icon="stop"></i>Stop</button>
+        <button id="hpMore" class="iconBtn" aria-label="More"><i data-icon="more"></i></button>
+      </div>
+      <div id="hpMenu" class="hp-menu" hidden>
+        <button data-act="dup">Duplicate</button>
+        <button data-act="export">Save as a file</button>
+        <button data-act="copy">Copy code</button>
+        <button data-act="import">Open a .js file</button>
+        <button data-act="delete" class="danger">Delete</button>
+      </div>
+      <div id="editor" class="editor"></div>
+      <div id="hpUi" class="hp-ui" hidden></div>
+      <div class="hp-console">
+        <div class="hc-head"><b>Console</b><span id="hpPerf" class="muted mono"></span><span class="spacer"></span><button id="hpClear" class="linkbtn">Clear</button></div>
+        <div id="hpLog" class="mono"></div>
+      </div>
+    </main>
+    <main class="hp-main doc" data-hpane="learn" hidden><div id="hpLearn"></div></main>
+    <main class="hp-main doc" data-hpane="api" hidden><div id="hpApi"></div></main>
+  </div>
+  <input type="file" id="hpFile" accept=".js,.txt,text/javascript,text/plain" hidden>
+</div>
+
+<!-- ============ key capture, info sheet, update bar ============ -->
+<div id="bindCapture" hidden><div class="panel"><b id="bindWhat"></b><p>Press a key or a mouse button, or scroll.</p><small class="muted">Escape cancels · Backspace clears</small></div></div>
+
+<div id="info-scrim" hidden></div>
+<div id="info-sheet" role="dialog" aria-modal="true" aria-labelledby="info-title" hidden>
+  <div class="sheet-head"><h2 id="info-title"></h2><button id="info-close" class="iconBtn" aria-label="Close"><i data-icon="close"></i></button></div>
+  <div id="info-body"></div>
+</div>
+
+<div id="update-bar" hidden>
+  <span>A new version of Hacks is ready.</span>
+  <button id="update-go" class="btn primary small">Reload</button>
+  <button id="update-later" class="iconBtn" aria-label="Later"><i data-icon="close"></i></button>
+</div>
+
+<noscript><p class="noscript">Hacks needs JavaScript. That is rather the point.</p></noscript>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
