@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- KaraokeNatin app icon. Source of truth for icons/*.png — see
+       tools/make-icons.py. Palette is the app's dark theme: midnight violet
+       stage, neon magenta mic, gold for the sparkle. -->
+  <defs>
+    <radialGradient id="stage" cx="50%" cy="28%" r="78%">
+      <stop offset="0" stop-color="#3a2170"/>
+      <stop offset="0.55" stop-color="#1d1340"/>
+      <stop offset="1" stop-color="#120c24"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff4fa6"/>
+      <stop offset="1" stop-color="#7c4dff"/>
+    </linearGradient>
+    <linearGradient id="head" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff7cc0"/>
+      <stop offset="1" stop-color="#e0217f"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e9e3ff"/>
+      <stop offset="1" stop-color="#b9aee6"/>
+    </linearGradient>
+    <filter id="neon" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="mesh" width="34" height="34" patternUnits="userSpaceOnUse">
+      <circle cx="17" cy="17" r="6" fill="#a8105c" opacity="0.55"/>
+    </pattern>
+  </defs>
+
+  <!-- stage disc and neon rim -->
+  <circle cx="512" cy="512" r="496" fill="url(#stage)"/>
+  <circle cx="512" cy="512" r="470" fill="none" stroke="url(#ring)" stroke-width="18" opacity="0.9" filter="url(#neon)"/>
+
+  <!-- sound waves -->
+  <g fill="none" stroke-linecap="round" filter="url(#neon)">
+    <path d="M300 330a230 230 0 0 0 0 250" stroke="#ff4fa6" stroke-width="30"/>
+    <path d="M220 270a330 330 0 0 0 0 370" stroke="#b36bff" stroke-width="26" opacity="0.85"/>
+    <path d="M724 330a230 230 0 0 1 0 250" stroke="#ff4fa6" stroke-width="30"/>
+    <path d="M804 270a330 330 0 0 1 0 370" stroke="#b36bff" stroke-width="26" opacity="0.85"/>
+  </g>
+
+  <!-- microphone -->
+  <g filter="url(#neon)">
+    <path d="M512 610v140" stroke="#e9e3ff" stroke-width="40" stroke-linecap="round"/>
+    <path d="M392 790h240" stroke="#e9e3ff" stroke-width="40" stroke-linecap="round"/>
+    <path d="M352 470a160 160 0 0 0 320 0" fill="none" stroke="#e9e3ff" stroke-width="36" stroke-linecap="round"/>
+  </g>
+  <rect x="412" y="200" width="200" height="400" rx="100" fill="url(#body)"/>
+  <path d="M412 300a100 100 0 0 1 200 0v70H412z" fill="url(#head)"/>
+  <path d="M412 300a100 100 0 0 1 200 0v70H412z" fill="url(#mesh)"/>
+  <rect x="412" y="362" width="200" height="22" fill="#8f82c4"/>
+  <circle cx="512" cy="470" r="22" fill="#ff4fa6"/>
+  <path d="M440 300a72 72 0 0 1 50 -68" fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" opacity="0.55"/>
+
+  <!-- gold sparkle -->
+  <path d="M760 190l16 44 44 16-44 16-16 44-16-44-44-16 44-16z" fill="#f5c451"/>
+  <path d="M258 760l10 28 28 10-28 10-10 28-10-28-28-10 28-10z" fill="#f5c451" opacity="0.85"/>
+</svg>

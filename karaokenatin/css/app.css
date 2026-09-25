@@ -1,8 +1,12 @@
 /* KaraokeNatin — one stylesheet, two themes, two roles.
  *
- * Palette follows Claude's: warm paper in light, warm charcoal in dark, with a
- * single clay accent doing all the pointing. Headings are serif, everything
- * else is the system sans — the contrast is what keeps it from reading generic.
+ * Palette is a karaoke room: in dark, the lights-down midnight violet of a
+ * videoke booth with one neon magenta doing all the pointing; in light, the
+ * same room with the lights up — lavender paper and a deeper magenta that
+ * still clears contrast on white. Gold is kept for scores and winners, the
+ * colour the room already reads as "you did well". Headings are serif,
+ * everything else is the system sans — the contrast is what keeps it from
+ * reading generic.
  *
  * Layout targets: a phone held one-handed (the remote) and a TV or laptop
  * (the host). The host view is deliberately a single screen — see "host stage
@@ -12,25 +16,32 @@
 :root {
   color-scheme: light;
 
-  --bg: #faf9f5;
+  --bg: #f7f4fc;
   --bg-2: #ffffff;
-  --bg-3: #f0eee6;
-  --bg-4: #e9e6dc;
-  --line: #e3ded1;
-  --line-2: #d5cfbe;
-  --ink: #1f1e1d;
-  --ink-2: #6b6862;
-  --ink-3: #97948c;
-  --accent: #c96442;
-  --accent-soft: rgba(201, 100, 66, 0.1);
+  --bg-3: #efe9f8;
+  --bg-4: #e4dbf2;
+  --line: #e1d8ef;
+  --line-2: #cdbfe4;
+  --ink: #1b1330;
+  --ink-2: #5d5677;
+  --ink-3: #7f7899;
+  --accent: #c8166e;
+  --accent-soft: rgba(200, 22, 110, 0.09);
   --accent-ink: #ffffff;
-  --ok: #3a8a68;
-  --warn: #b0762a;
-  --bad: #c0483f;
+  --accent-rgb: 200, 22, 110;
+  --ok: #1d8660;
+  --warn: #a4640c;
+  --bad: #c42a3f;
 
-  --shadow-sm: 0 1px 2px rgba(31, 30, 29, 0.05);
-  --shadow: 0 4px 16px -6px rgba(31, 30, 29, 0.14);
-  --shadow-lg: 0 24px 60px -20px rgba(31, 30, 29, 0.28);
+  --shadow-sm: 0 1px 2px rgba(27, 19, 48, 0.06);
+  --shadow: 0 4px 16px -6px rgba(27, 19, 48, 0.16);
+  --shadow-lg: 0 24px 60px -20px rgba(27, 19, 48, 0.3);
+
+  /* Stage lights: two soft spots at the top of the page. Faint enough in light
+     that it reads as paper tint, not decoration. */
+  --glow:
+    radial-gradient(60% 40% at 15% 0%, rgba(200, 22, 110, 0.06), transparent 70%),
+    radial-gradient(50% 40% at 90% 0%, rgba(110, 60, 220, 0.06), transparent 70%);
 
   --radius: 16px;
   --radius-sm: 10px;
@@ -58,50 +69,60 @@ html[data-theme="dark"], :root.dark { color-scheme: dark; }
   html:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --bg: #1f1e1d;
-    --bg-2: #262624;
-    --bg-3: #30302e;
-    --bg-4: #3a3a37;
-    --line: #3a3936;
-    --line-2: #4a4945;
-    --ink: #f5f4ee;
-    --ink-2: #b2aea5;
-    --ink-3: #85827b;
-    --accent: #d97757;
-    --accent-soft: rgba(217, 119, 87, 0.14);
-    --accent-ink: #1f1e1d;
-    --ok: #57c79a;
-    --warn: #e0a34e;
-    --bad: #f08279;
+    --bg: #120c24;
+    --bg-2: #1a1332;
+    --bg-3: #231b41;
+    --bg-4: #2d2450;
+    --line: #2c2450;
+    --line-2: #3d3267;
+    --ink: #f4f0ff;
+    --ink-2: #b6aed2;
+    --ink-3: #8c84ac;
+    --accent: #ff4fa6;
+    --accent-soft: rgba(255, 79, 166, 0.15);
+    --accent-ink: #1a0822;
+    --accent-rgb: 255, 79, 166;
+    --ok: #4fd6a2;
+    --warn: #f5c451;
+    --bad: #ff7a8c;
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow: 0 4px 18px -6px rgba(0, 0, 0, 0.6);
     --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
+
+    --glow:
+      radial-gradient(60% 45% at 12% 0%, rgba(255, 79, 166, 0.14), transparent 70%),
+      radial-gradient(55% 45% at 92% 0%, rgba(124, 77, 255, 0.16), transparent 70%);
   }
 }
 
 /* Explicit dark choice — same values, but winning over the light default
    regardless of what the system prefers. */
 html[data-theme="dark"] {
-  --bg: #1f1e1d;
-  --bg-2: #262624;
-  --bg-3: #30302e;
-  --bg-4: #3a3a37;
-  --line: #3a3936;
-  --line-2: #4a4945;
-  --ink: #f5f4ee;
-  --ink-2: #b2aea5;
-  --ink-3: #85827b;
-  --accent: #d97757;
-  --accent-soft: rgba(217, 119, 87, 0.14);
-  --accent-ink: #1f1e1d;
-  --ok: #57c79a;
-  --warn: #e0a34e;
-  --bad: #f08279;
+  --bg: #120c24;
+  --bg-2: #1a1332;
+  --bg-3: #231b41;
+  --bg-4: #2d2450;
+  --line: #2c2450;
+  --line-2: #3d3267;
+  --ink: #f4f0ff;
+  --ink-2: #b6aed2;
+  --ink-3: #8c84ac;
+  --accent: #ff4fa6;
+  --accent-soft: rgba(255, 79, 166, 0.15);
+  --accent-ink: #1a0822;
+  --accent-rgb: 255, 79, 166;
+  --ok: #4fd6a2;
+  --warn: #f5c451;
+  --bad: #ff7a8c;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow: 0 4px 18px -6px rgba(0, 0, 0, 0.6);
   --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
+
+  --glow:
+    radial-gradient(60% 45% at 12% 0%, rgba(255, 79, 166, 0.14), transparent 70%),
+    radial-gradient(55% 45% at 92% 0%, rgba(124, 77, 255, 0.16), transparent 70%);
 }
 
 * { box-sizing: border-box; }
@@ -118,6 +139,9 @@ html, body {
 
 body {
   min-height: 100dvh;
+  background-image: var(--glow);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
   padding-bottom: env(safe-area-inset-bottom);
   transition: background var(--mid) var(--ease), color var(--mid) var(--ease);
 }
@@ -564,9 +588,9 @@ body.is-host .pill.host-only { display: inline-flex; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  background: rgba(12, 11, 10, 0.86);
+  background: rgba(14, 9, 30, 0.86);
   border: 0;
-  color: #f5f4ee;
+  color: #f4f0ff;
   cursor: pointer;
   padding: 20px;
   text-align: center;
@@ -585,12 +609,12 @@ body.is-host .pill.host-only { display: inline-flex; }
   animation: halo 2.8s ease-out infinite;
 }
 @keyframes halo {
-  0%   { box-shadow: 0 0 0 0 rgba(201, 100, 66, 0.45); }
-  70%  { box-shadow: 0 0 0 22px rgba(201, 100, 66, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(201, 100, 66, 0); }
+  0%   { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.45); }
+  70%  { box-shadow: 0 0 0 22px rgba(var(--accent-rgb), 0); }
+  100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); }
 }
 .tap-text { font-size: 17px; font-weight: 600; font-family: var(--serif); }
-.tap-sub { font-size: 13px; color: #b2aea5; max-width: 34ch; }
+.tap-sub { font-size: 13px; color: #b6aed2; max-width: 34ch; }
 
 /* Always on screen, not on hover: the host screen is usually a TV or a tablet
  * that never sends a hover, and a control you cannot point at is a control
@@ -600,10 +624,10 @@ body.is-host .pill.host-only { display: inline-flex; }
   right: 12px;
   bottom: 12px;
   z-index: 3;
-  background: rgba(12, 11, 10, 0.62);
+  background: rgba(14, 9, 30, 0.62);
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 10px;
-  color: #f5f4ee;
+  color: #f4f0ff;
   width: 38px;
   height: 38px;
   cursor: pointer;
@@ -614,7 +638,7 @@ body.is-host .pill.host-only { display: inline-flex; }
 }
 .stage:hover .fs-btn, .fs-btn:hover, .fs-btn:focus-visible {
   opacity: 1;
-  background: rgba(12, 11, 10, 0.85);
+  background: rgba(14, 9, 30, 0.85);
 }
 .fs-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -641,7 +665,7 @@ body.is-host .pill.host-only { display: inline-flex; }
   align-items: center;
   gap: 5px;
   padding: clamp(5px, 0.6vw, 10px);
-  background: rgba(12, 11, 10, 0.6);
+  background: rgba(14, 9, 30, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 12px;
   backdrop-filter: blur(4px);
@@ -661,7 +685,7 @@ body.stage-fullscreen .fs-join,
   font-weight: 700;
   letter-spacing: 0.16em;
   line-height: 1;
-  color: #f5f4ee;
+  color: #f4f0ff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
@@ -681,8 +705,8 @@ body.stage-fullscreen .invite-rail { display: none !important; }
   gap: 12px;
   padding: 24px;
   text-align: center;
-  color: #f5f4ee;
-  background: radial-gradient(120% 120% at 50% 0%, rgba(40, 37, 34, 0.96), rgba(10, 10, 9, 0.98));
+  color: #f4f0ff;
+  background: radial-gradient(120% 120% at 50% 0%, rgba(46, 26, 78, 0.96), rgba(10, 6, 22, 0.98));
 }
 .stage-idle[hidden] { display: none; }
 .stage-idle-title {
@@ -698,16 +722,16 @@ body.stage-fullscreen .invite-rail { display: none !important; }
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: var(--radius-sm);
-  color: #f5f4ee;
+  color: #f4f0ff;
   padding: 10px 14px;
   font: inherit;
   font-size: 15px;
 }
-.stage-search input::placeholder { color: #a49f96; }
+.stage-search input::placeholder { color: #a39bc2; }
 .stage-search input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-.stage-idle-hint { margin: 0; color: #a49f96; font-size: 13px; }
+.stage-idle-hint { margin: 0; color: #a39bc2; font-size: 13px; }
 /* Fullscreen has no keyboard in front of it — the phones do. */
-.stage-idle-fs { display: none; margin: 0; color: #cfcabf; font-size: clamp(14px, 1.8vw, 22px); }
+.stage-idle-fs { display: none; margin: 0; color: #d2cbe8; font-size: clamp(14px, 1.8vw, 22px); }
 body.stage-fullscreen .stage-idle-fs, .stage:fullscreen .stage-idle-fs { display: block; }
 body.stage-fullscreen .stage-search,
 body.stage-fullscreen .stage-idle-hint,
@@ -729,7 +753,7 @@ body.stage-fullscreen .stage-idle-hint,
   text-align: center;
   padding: 20px;
   color: #fff;
-  background: radial-gradient(120% 120% at 50% 40%, rgba(28, 22, 18, 0.86), rgba(8, 8, 7, 0.95));
+  background: radial-gradient(120% 120% at 50% 40%, rgba(40, 18, 62, 0.86), rgba(8, 5, 18, 0.95));
 }
 .score-card[hidden] { display: none; }
 .score-card.in { animation: score-in 900ms var(--ease) both; }
@@ -742,7 +766,7 @@ body.stage-fullscreen .stage-idle-hint,
   font-size: clamp(13px, 1.6vw, 20px);
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #d8d2c6;
+  color: #ddd6f0;
 }
 .score-value {
   margin: 0;
@@ -760,8 +784,8 @@ body.stage-fullscreen .stage-idle-hint,
   max-width: 24ch;
 }
 .score-card[data-band="great"] .score-value { color: #f0c23c; }
-.score-card[data-band="poor"] .score-value { color: #9b958a; }
-.score-card[data-band="impossible"] .score-value {
+.score-card[data-band="poor"] .score-value { color: #9a93b6; }
+.score-card.revealed[data-band="impossible"] .score-value {
   color: #f0c23c;
   animation: score-throb 1100ms var(--ease) infinite alternate;
 }
@@ -780,7 +804,7 @@ body.stage-fullscreen .stage-idle-hint,
   z-index: 6;
   overflow: hidden;
   pointer-events: none;
-  background: rgba(12, 11, 10, 0.72);
+  background: rgba(14, 9, 30, 0.72);
   padding: 10px 0;
 }
 .curfew[hidden] { display: none; }
@@ -1652,7 +1676,7 @@ body.can-manage .tab.host-tab { display: inline-flex; }
   text-align: center;
   padding: 20px;
   color: #fff;
-  background: radial-gradient(120% 120% at 50% 40%, rgba(30, 20, 32, 0.9), rgba(8, 8, 7, 0.96));
+  background: radial-gradient(120% 120% at 50% 40%, rgba(44, 18, 60, 0.9), rgba(8, 5, 18, 0.96));
   animation: score-in var(--slow) var(--ease) both;
 }
 .spin-card[hidden] { display: none; }
@@ -1685,22 +1709,18 @@ body.can-manage .tab.host-tab { display: inline-flex; }
   white-space: nowrap;
 }
 .spin-reel.flip { animation: reel-step 140ms var(--ease); }
-@keyframes reel-step {
-  from { opacity: 0.3; transform: translateY(-30%); }
-  to   { opacity: 1; transform: none; }
-}
 .spin-card.landed .spin-window {
   border-color: #f0c23c;
   background: rgba(240, 194, 60, 0.14);
   animation: landed 900ms var(--ease) both;
 }
-.spin-card.landed .spin-reel { color: #f0c23c; animation: none; }
+.spin-card.landed .spin-reel { color: #f0c23c; }
 @keyframes landed {
   0%   { transform: scale(1); }
   40%  { transform: scale(1.06); }
   100% { transform: scale(1); }
 }
-.spin-sub { margin: 0; color: #cfcabf; font-size: clamp(12px, 1.6vw, 19px); }
+.spin-sub { margin: 0; color: #d2cbe8; font-size: clamp(12px, 1.6vw, 19px); }
 
 /* ── going round again ──
    Three seconds, counted down where you can see it. An offer that expires
@@ -1716,9 +1736,9 @@ body.can-manage .tab.host-tab { display: inline-flex; }
   gap: 10px;
   padding: 9px 12px;
   border-radius: 999px;
-  background: rgba(12, 11, 10, 0.86);
+  background: rgba(14, 9, 30, 0.86);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #f5f4ee;
+  color: #f4f0ff;
   box-shadow: var(--shadow-lg);
   animation: rise var(--mid) var(--ease) both;
 }
@@ -1771,10 +1791,10 @@ body.can-manage .tab.host-tab { display: inline-flex; }
   max-width: min(60%, 620px);
   padding: clamp(6px, 0.8vw, 11px) clamp(10px, 1.2vw, 18px);
   border-radius: 12px;
-  background: rgba(12, 11, 10, 0.7);
+  background: rgba(14, 9, 30, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.14);
   backdrop-filter: blur(4px);
-  color: #f5f4ee;
+  color: #f4f0ff;
   pointer-events: none;
 }
 .up-next[hidden] { display: none; }
@@ -1797,7 +1817,7 @@ body.can-manage .tab.host-tab { display: inline-flex; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.up-next-who { font-size: clamp(11px, 1vw, 16px); color: #a49f96; flex: none; }
+.up-next-who { font-size: clamp(11px, 1vw, 16px); color: #a39bc2; flex: none; }
 
 /* ── an advert is playing ── */
 /* Sits to the left of the fullscreen button rather than under it — both live
@@ -1813,9 +1833,9 @@ body.can-manage .tab.host-tab { display: inline-flex; }
   gap: 8px;
   padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(12, 11, 10, 0.66);
+  background: rgba(14, 9, 30, 0.66);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #cfcabf;
+  color: #d2cbe8;
   font-size: clamp(11px, 1vw, 15px);
   pointer-events: none;
 }
@@ -2193,3 +2213,224 @@ body.in-lobby .panels { opacity: 0.35; pointer-events: none; }
 
 /* The roulette while it is spinning, in the now-playing card. */
 .now-gameicon { width: 76px; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   The party layer: confetti, stage lights, and the number doing more than
+   changing. Everything here is decoration on top of cards that already work
+   without it — the reduced-motion rule above switches all of it off, and
+   js/fx.js throws no confetti at all when it is on.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── confetti (js/fx.js) ──
+   One element per piece. The path is two legs: thrown out and up, slowing,
+   then falling and fluttering off the bottom. The per-keyframe timing
+   functions are what make it look thrown rather than slid. */
+.fx-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+.fx-layer.fx-fixed { position: fixed; z-index: 90; }
+.confetti {
+  position: absolute;
+  width: 8px;
+  height: 14px;
+  margin: -7px 0 0 -4px;
+  border-radius: 2px;
+  will-change: transform, opacity;
+  animation: confetti-fly var(--dur, 2s) both;
+}
+.confetti-dot { width: 9px; height: 9px; margin: -4px 0 0 -4px; border-radius: 50%; }
+@keyframes confetti-fly {
+  0% {
+    transform: translate(0, 0) rotate3d(1, 0.4, 0, 0deg) scale(0.5);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.12, 0.72, 0.3, 1);
+  }
+  28% {
+    transform: translate(var(--cx), var(--cy)) rotate3d(1, 0.4, 0, calc(var(--spin) * 0.3)) scale(1);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.85, 0.55);
+  }
+  85% { opacity: 1; }
+  100% {
+    transform: translate(calc(var(--cx) + var(--drift)), var(--fall)) rotate3d(1, 0.4, 0, var(--spin)) scale(0.9);
+    opacity: 0;
+  }
+}
+
+/* ── stage lights ──
+   Slow rays turning behind the score and the wheel. They come up when there
+   is something to look at — the number landing, the wheel spinning — so the
+   card feels lit rather than decorated. */
+.score-card, .spin-card { overflow: hidden; isolation: isolate; }
+.score-card::before, .spin-card::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 44%;
+  width: 190vmax;
+  height: 190vmax;
+  margin: -95vmax 0 0 -95vmax;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 79, 166, 0.13) 0deg 7deg, transparent 7deg 20deg);
+  -webkit-mask-image: radial-gradient(closest-side, #000 8%, transparent 62%);
+  mask-image: radial-gradient(closest-side, #000 8%, transparent 62%);
+  opacity: 0;
+  transition: opacity 900ms var(--ease);
+  animation: rays-turn 40s linear infinite;
+  pointer-events: none;
+}
+@keyframes rays-turn { to { transform: rotate(360deg); } }
+.score-card.revealed::before { opacity: 1; }
+.score-card[data-band="great"]::before,
+.score-card[data-band="impossible"]::before,
+.spin-card.landed::before {
+  background: repeating-conic-gradient(from 0deg, rgba(245, 196, 81, 0.16) 0deg 7deg, transparent 7deg 20deg);
+}
+.score-card[data-band="impossible"]::before { animation-duration: 12s; }
+.score-card[data-band="poor"]::before { opacity: 0; }
+.spin-card.spinning::before { opacity: 0.8; animation-duration: 8s; }
+.spin-card.landed::before { opacity: 1; }
+
+/* ── the number ── */
+.score-value {
+  color: #ff4fa6;
+  text-shadow: 0 0 22px rgba(255, 79, 166, 0.55), 0 6px 30px rgba(0, 0, 0, 0.5);
+  font-variant-numeric: tabular-nums;
+}
+.score-card[data-band="great"] .score-value,
+.score-card[data-band="impossible"] .score-value {
+  text-shadow: 0 0 26px rgba(245, 196, 81, 0.6), 0 6px 30px rgba(0, 0, 0, 0.5);
+}
+.score-card[data-band="poor"] .score-value { text-shadow: 0 6px 30px rgba(0, 0, 0, 0.5); }
+
+/* While it climbs: a kick on every new number. */
+.score-card.counting .score-value.bump { animation: value-bump 180ms ease-out; }
+@keyframes value-bump {
+  from { transform: scale(1.07); }
+  to   { transform: scale(1); }
+}
+
+/* When it lands: a spring past its size and back, then the band's own act. */
+.score-card.revealed .score-value { animation: value-pop 760ms cubic-bezier(0.2, 1.7, 0.4, 1) both; }
+@keyframes value-pop {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.28); }
+  100% { transform: scale(1); }
+}
+.score-card.revealed[data-band="great"] .score-value {
+  animation: value-pop 760ms cubic-bezier(0.2, 1.7, 0.4, 1) both,
+             value-glow 1.6s ease-in-out 760ms infinite alternate;
+}
+@keyframes value-glow {
+  from { text-shadow: 0 0 20px rgba(245, 196, 81, 0.45), 0 6px 30px rgba(0, 0, 0, 0.5); }
+  to   { text-shadow: 0 0 46px rgba(245, 196, 81, 0.9), 0 6px 30px rgba(0, 0, 0, 0.5); }
+}
+/* 101 breaks the machine, so it gets every colour the machine has. */
+.score-card.revealed[data-band="impossible"] .score-value {
+  background: linear-gradient(90deg, #f5c451, #ff4fa6, #b36bff, #4fd6a2, #f5c451) 0 0 / 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 22px rgba(255, 79, 166, 0.6));
+  animation: value-pop 760ms cubic-bezier(0.2, 1.7, 0.4, 1) both,
+             value-rainbow 2.4s linear infinite,
+             score-throb 1100ms var(--ease) 760ms infinite alternate;
+}
+@keyframes value-rainbow { to { background-position: 300% 0; } }
+/* A low score droops instead of popping — the sad trombone's picture. */
+.score-card.revealed[data-band="poor"] .score-value {
+  animation: value-droop 1.5s var(--ease) both;
+  transform-origin: 30% 90%;
+}
+@keyframes value-droop {
+  0%   { transform: none; }
+  25%  { transform: rotate(-7deg) translateY(4%); }
+  45%  { transform: rotate(4deg) translateY(2%); }
+  70%  { transform: rotate(-3deg) translateY(6%); }
+  100% { transform: rotate(-4deg) translateY(6%); }
+}
+
+.score-card.in .score-who { animation: who-in 800ms var(--ease) both; }
+@keyframes who-in {
+  from { opacity: 0; transform: translateY(-14px); letter-spacing: 0.42em; }
+  to   { opacity: 1; transform: none; letter-spacing: 0.16em; }
+}
+.score-line {
+  transform: translateY(10px) scale(0.96);
+  transition: opacity var(--slow) var(--ease), transform var(--slow) cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.score-card.revealed .score-line { transform: none; }
+
+/* ── the wheel's lights ──
+   A ring of bulbs round the window, chasing while it spins and flashing when
+   it lands: the one picture everybody already has of a game show wheel. */
+.spin-window { position: relative; }
+.spin-window::before {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  padding: 9px;
+  border-radius: 22px;
+  background: radial-gradient(circle, #ffe7a3 0 2.6px, rgba(245, 196, 81, 0.5) 3.4px, transparent 5px) 0 0 / 20px 20px;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0.45;
+  animation: bulbs-chase 1.6s linear infinite;
+  pointer-events: none;
+}
+@keyframes bulbs-chase { to { background-position: 20px 0; } }
+.spin-card.spinning .spin-window::before { opacity: 1; animation-duration: 0.36s; }
+.spin-card.landed .spin-window::before { opacity: 1; animation: bulbs-flash 260ms steps(1) 6; }
+@keyframes bulbs-flash { 50% { opacity: 0.15; } }
+.spin-card.landed .spin-window { box-shadow: 0 0 40px -6px rgba(245, 196, 81, 0.6); }
+
+/* Motion blur on each step: the name is going past, not being replaced. */
+@keyframes reel-step {
+  from { opacity: 0.25; transform: translateY(-42%); filter: blur(3px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+.spin-card.landed .spin-reel { animation: reel-land 700ms cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+@keyframes reel-land {
+  0%   { transform: scale(0.9); text-shadow: none; }
+  40%  { transform: scale(1.12); text-shadow: 0 0 30px rgba(245, 196, 81, 0.9); }
+  100% { transform: scale(1); text-shadow: 0 0 18px rgba(245, 196, 81, 0.5); }
+}
+.spin-title { animation: neon-on 1.2s steps(1) both; text-shadow: 0 0 12px rgba(179, 107, 255, 0.7); }
+@keyframes neon-on {
+  0%, 12%, 20%, 34% { opacity: 0.2; }
+  8%, 16%, 28%, 100% { opacity: 1; }
+}
+
+/* ── the countdown to going again ── */
+.spin-again-count { display: inline-block; transition: color var(--fast) var(--ease); }
+.spin-again-count.beat { animation: count-beat 420ms cubic-bezier(0.2, 1.6, 0.4, 1); }
+.spin-again-count.urgent { color: #ff4fa6; opacity: 1; font-weight: 700; }
+@keyframes count-beat {
+  from { transform: scale(1.6); }
+  to   { transform: scale(1); }
+}
+.spin-again .btn.voted { animation: vote-pop 380ms cubic-bezier(0.2, 1.6, 0.4, 1); }
+@keyframes vote-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* ── up next: a neon edge that runs along it once as it arrives ── */
+.up-next { overflow: hidden; }
+.up-next.in::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 79, 166, 0.35) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: sheen 1.4s var(--ease) 300ms both;
+  pointer-events: none;
+}
+@keyframes sheen { to { transform: translateX(100%); } }

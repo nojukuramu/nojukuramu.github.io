@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Generate the PWA icon set from the desktop app's icon.
+"""Generate the PWA icon set from icons/icon.svg.
 
-The web port shares its identity with the Tauri app, so it shares the icon.
-Source lives in the KaraokeNatin repo; the generated PNGs are committed here so
-the site needs no build step.
+The icon used to be the Tauri app's raster, which lived in another repo and
+could not follow the web app's palette. It is now drawn here as SVG in the
+dark theme's colours; PIL cannot read SVG, so it is rasterised first:
 
-    python3 tools/make-icons.py [path/to/icon.png]
+    node tools/render-icon.js /tmp/kn-icon.png
+    python3 tools/make-icons.py /tmp/kn-icon.png
+
+The generated PNGs are committed so the site needs no build step.
 
 Produces icons/icon-{192,512}.png (transparent, purpose "any"),
 icons/maskable-512.png (opaque, art inside the 80% safe zone so Android's
@@ -19,9 +22,9 @@ from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "icons")
-DEFAULT_SRC = os.path.join(HERE, "..", "..", "..", "KaraokeNatin", "icon.png")
+DEFAULT_SRC = "/tmp/kn-icon.png"  # what tools/render-icon.js writes by default
 
-BG = (11, 11, 18, 255)  # --bg, so the opaque variants sit on the app's own dark
+BG = (18, 12, 36, 255)  # dark --bg (#120c24), so the opaque variants sit on the app's own dark
 
 
 def square(img):

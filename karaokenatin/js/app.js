@@ -328,6 +328,7 @@
     box.classList.remove("in");
     void box.offsetWidth;
     box.classList.add("in");
+    if (sfxOn() && KN.sound) KN.sound.dingDong();
     clearTimeout(upNextTimer);
     upNextTimer = setTimeout(hideUpNext, UP_NEXT_MS);
   }
@@ -747,21 +748,40 @@
     line.textContent = entry.line;
     card.dataset.band = entry.band;
     card.hidden = false;
-    card.classList.remove("revealed");
+    card.classList.remove("revealed", "counting");
+    if (KN.fx) KN.fx.clear(card);
     // Restart the entrance animation even when two songs end back to back.
     card.classList.remove("in");
     void card.offsetWidth;
-    card.classList.add("in");
+    card.classList.add("in", "counting");
+    if (sfxOn()) KN.sound.whoosh();
 
     var board = $("#score-board");
     if (board) { board.hidden = true; board.innerHTML = ""; }
 
     countUp(value, entry.score, function () {
+      card.classList.remove("counting");
       card.classList.add("revealed");
-      if (sfxOn() && entry.score >= 95) KN.sound.fanfare();
+      if (sfxOn()) KN.sound.celebrate(entry.band);
+      celebrateScore(card, entry.band);
       speak(entry.line);
       setTimeout(function () { revealBoard(before, after, entry); }, SCORE_BOARD_MS);
     });
+  }
+
+  /* The picture half of the reaction; KN.sound.celebrate is the other half.
+   * Confetti is kept for the scores that earn it — if every 78 got a cannon,
+   * the 97 would have nothing left to say. */
+  function celebrateScore(card, band) {
+    if (!KN.fx) return;
+    if (band === "impossible") {
+      KN.fx.cannons(card, 240);
+      setTimeout(function () { KN.fx.confetti(card, { count: 90, y: 0.35 }); }, 450);
+    } else if (band === "great") {
+      KN.fx.cannons(card, 170);
+    } else if (band === "good") {
+      KN.fx.confetti(card, { count: 60, y: 0.4 });
+    }
   }
 
   /**
@@ -785,7 +805,15 @@
       if (!began) began = now;
       var p = Math.min(1, (now - began) / SCORE_COUNT_MS);
       var eased = 1 - Math.pow(1 - p, 3);
-      node.textContent = String(Math.round(target * eased));
+      var shown = String(Math.round(target * eased));
+      if (node.textContent !== shown) {
+        node.textContent = shown;
+        // A small kick on every new number, so the count reads as a meter
+        // being pushed rather than a label being rewritten.
+        node.classList.remove("bump");
+        void node.offsetWidth;
+        node.classList.add("bump");
+      }
 
       // 40ms between ticks at the start, a third of a second by the end.
       var gap = 40 + 300 * p * p;
@@ -886,7 +914,11 @@
 
   function hideScore() {
     var card = $("#score-card");
-    if (card) { card.hidden = true; card.classList.remove("in", "revealed"); }
+    if (card) {
+      card.hidden = true;
+      card.classList.remove("in", "revealed", "counting");
+      if (KN.fx) KN.fx.clear(card);
+    }
     if (scoreAnim) {
       cancelAnimationFrame(scoreAnim.frame);
       if (scoreAnim.roll) scoreAnim.roll.stop();
@@ -993,14 +1025,20 @@
     $("#spin-sub").textContent = "";
     card.hidden = false;
     card.classList.remove("landed");
+    if (KN.fx) KN.fx.clear(card);
+    if (sfxOn()) KN.sound.whoosh();
 
-    if (reducedMotion() || !names.length) {
+    function land() {
       reel.textContent = landing;
+      card.classList.remove("spinning");
       card.classList.add("landed");
-      if (sfxOn()) KN.sound.chime();
+      if (sfxOn()) { KN.sound.chime(); KN.sound.sparkle(0.12, 6); }
+      if (KN.fx) KN.fx.confetti(card, { count: 50, y: 0.5, spread: 380 });
       later(done, 700);
-      return;
     }
+
+    if (reducedMotion() || !names.length) { land(); return; }
+    card.classList.add("spinning");
 
     var i = 0;
     var began = Date.now();
@@ -1010,15 +1048,9 @@
       reel.classList.remove("flip");
       void reel.offsetWidth;
       reel.classList.add("flip");
-      if (sfxOn()) KN.sound.tick(1 - 0.4 * p);
+      if (sfxOn()) KN.sound.tick(1 - 0.4 * p, 1400 - 500 * p);
       i++;
-      if (p >= 1) {
-        reel.textContent = landing;
-        card.classList.add("landed");
-        if (sfxOn()) KN.sound.chime();
-        later(done, 700);
-        return;
-      }
+      if (p >= 1) { land(); return; }
       later(step, 55 + 340 * p * p);
     }
     step();
@@ -1082,6 +1114,7 @@
     if (!app.state || !app.state.spinOffer) return;
     if (app.role === "host") handle({ type: CMD.GAME_AGAIN, vote: vote }, app.name || "Host", "host");
     else dispatch({ type: CMD.GAME_AGAIN, vote: vote });
+    if (sfxOn() && KN.sound) KN.sound.blip(vote === "yes" ? 990 : 520, 0.07);
     renderSpinOffer();
   }
 
@@ -1128,8 +1161,18 @@
     box.hidden = false;
 
     var left = Math.ceil((offer.ms - (Date.now() - app.offerSeenAt)) / 1000);
-    $("#spin-again-count").textContent =
-      String(Math.max(0, Math.min(Math.round(offer.ms / 1000), left)));
+    var shown = Math.max(0, Math.min(Math.round(offer.ms / 1000), left));
+    var count = $("#spin-again-count");
+    if (count.textContent !== String(shown)) {
+      count.textContent = String(shown);
+      count.classList.remove("beat");
+      void count.offsetWidth;
+      count.classList.add("beat");
+      count.classList.toggle("urgent", shown <= 3);
+      /* The last three seconds are counted out loud, on the host only: the
+       * room hears one clock, not one from every phone in it. */
+      if (app.role === "host" && sfxOn() && shown > 0 && shown <= 3) KN.sound.blip(660 + (3 - shown) * 110);
+    }
 
     var votes = offer.votes || {};
     var yes = 0, no = 0;
@@ -1344,6 +1387,8 @@
         if (sc && sc.at !== app.lastScoreAt) {
           app.lastScoreAt = sc.at;
           toast(sc.name + " scored " + sc.score + " — " + sc.line, sc.score >= 95 ? "ok" : null);
+          // Your own big score gets a little of the stage's party in your hand.
+          if (sc.by === app.clientId && sc.score >= 95 && KN.fx) KN.fx.confetti(document.body, { count: 70, y: 0.3 });
           // The host is the one that scored it; this phone still keeps its own
           // half of the record when the song was this phone's.
           noteMyScore(sc, null);
@@ -3174,7 +3219,7 @@
 
   /* Also the ?v= on every asset in index.html and in sw.js SHELL_FILES.
    * tools/version-check.js fails the build if the three drift apart. */
-  var APP_VERSION = "2.5.1";
+  var APP_VERSION = "2.6.0";
   var UPDATE_CHECK_MS = 30 * 60 * 1000;
 
   var swReg = null;
