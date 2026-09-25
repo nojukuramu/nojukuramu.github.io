@@ -20,6 +20,23 @@ import { scene, renderer, camera, worldToScreen, onResize } from "./gfx.js";
 import { rand, TAU, clamp } from "./util.js";
 
 /* ---------------------------------------------------------------
+   The host's tap: in a multiplayer match only the host runs the enemies,
+   so every ring, warning and flash they make is copied (net.js sends it on)
+   while enemy code is running. A client draws its own spells itself, so
+   nothing else is copied. Sparks (emit) are never copied — too many, and
+   each end makes its own trails anyway.
+   --------------------------------------------------------------- */
+let tap = null, tapping = 0;
+export function setTap(fn) { tap = fn; }
+export function tapBegin() { tapping++; }
+export function tapEnd() { tapping = Math.max(0, tapping - 1); }
+/** Stop copying for a moment (a death both ends draw); returns what to resume. */
+export function tapPause() { const t = tapping; tapping = 0; return t; }
+export function tapResume(t) { tapping = t; }
+export function isTapping() { return tapping > 0 && !!tap; }
+const copy = (name, args) => { if (tapping > 0 && tap) tap(name, Array.prototype.slice.call(args)); };
+
+/* ---------------------------------------------------------------
    Particles
    --------------------------------------------------------------- */
 const MAX = 2600;
@@ -93,6 +110,7 @@ export function emit(x, y, z, vx, vy, vz, life, s0, s1, c, alpha, grav, drag, pl
 
 /** A spray of sparks, the workhorse for hits and deaths. */
 export function burst(x, y, z, c, n, speed, opts) {
+  copy("burst", arguments);
   opts = opts || {};
   const up = opts.up === undefined ? 1 : opts.up;
   for (let i = 0; i < n; i++) {
@@ -141,6 +159,7 @@ function stepCloud(P, dt) {
 /** Lightning: a jagged run of short-lived sparks between two points. Thick
  *  enough to read at a glance, which a one-pixel WebGL line never is. */
 export function bolt(x0, y0, z0, x1, y1, z1, c) {
+  copy("bolt", arguments);
   const len = Math.hypot(x1 - x0, y1 - y0, z1 - z0);
   const n = Math.max(4, Math.ceil(len * 2.2));
   let px = x0, py = y0, pz = z0;
@@ -170,6 +189,7 @@ for (let i = 0; i < 28; i++) {
 }
 let ringNext = 0;
 export function ring(x, z, c, r0, r1, dur, y, alpha) {
+  copy("ring", arguments);
   const R = rings[ringNext]; ringNext = (ringNext + 1) % rings.length;
   R.m.material.color.set(c);
   R.m.position.set(x, y === undefined ? 0.12 : y, z);
@@ -224,6 +244,7 @@ for (let i = 0; i < 48; i++) {
  *  For a lane, (x, z) is its near end, `ang` its direction and `len` its length.
  *  Returns a handle the caller may move or end early; it frees itself at `dur`. */
 export function decal(shape, x, z, radius, c, dur, opts) {
+  copy("decal", arguments);
   opts = opts || {};
   const D = decals.find((d) => !d.busy);
   if (!D) return null;
@@ -261,6 +282,7 @@ for (let i = 0; i < 4; i++) {
 export let flashesEnabled = true;
 export function setFlashesEnabled(v) { flashesEnabled = v; }
 export function flash(x, y, z, c, peak, dur, range) {
+  copy("flash", arguments);
   let F = flashes[0];
   for (const f of flashes) if (f.L.intensity < F.L.intensity) F = f;
   F.L.color.set(c); F.L.position.set(x, y, z); F.L.distance = range || 12;
@@ -283,6 +305,7 @@ let numNext = 0;
 export let numbersEnabled = true;
 export function setNumbersEnabled(v) { numbersEnabled = v; }
 export function number(x, y, z, text, cls) {
+  copy("number", arguments);
   if (!numbersEnabled && cls !== "heal" && cls !== "info") return;
   const N = nums[numNext]; numNext = (numNext + 1) % nums.length;
   N.el.textContent = text;

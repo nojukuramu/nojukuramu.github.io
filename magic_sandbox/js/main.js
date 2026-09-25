@@ -6,7 +6,7 @@
  * something big dies) and slow motion (a Warden's last breath). Both are
  * measured in real time so they can never stretch a pause. */
 
-import { S, on } from "./state.js";
+import { S, on, online } from "./state.js";
 import * as gfx from "./gfx.js";
 import * as fx from "./fx.js";
 import { loadAssets } from "./models.js";
@@ -18,6 +18,9 @@ import * as forge from "./forge.js";
 import * as menus from "./menus.js";
 import * as info from "./info.js";
 import * as update from "./update.js";
+import * as net from "./net.js";
+import * as mpui from "./mpui.js";
+import * as lobby from "./lobby.js";
 import * as audio from "./audio.js";
 import { initInput, poll, device } from "./input.js";
 import { save } from "./save.js";
@@ -45,9 +48,12 @@ on("title", titleScene);
 let last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
-  const real = Math.min(0.05, (now - last) / 1000);
+  const wall = Math.min(1, Math.max(0, (now - last) / 1000));
+  const real = Math.min(0.05, wall);
   last = now;
   let dt = real;
+  // A room shares one clock: nobody's kill may freeze everybody's frame.
+  if (online()) { S.hitstop = 0; S.slowmo = 0; }
   if (S.hitstop > 0) { S.hitstop -= real; dt = 0; }
   else if (S.slowmo > 0) { S.slowmo -= real; dt *= 0.35; }
   const input = poll();
@@ -59,7 +65,9 @@ function frame(now) {
     gfx.updateCamera(Math.cos(titleAng) * r * 0.25, Math.sin(titleAng) * r * 0.25, 0, 0, 1.25, real);
     if (S.world) S.world.update(real, now / 1000, gfx.camState.x, gfx.camState.z);
   } else if (P) {
-    if (!S.paused) game.update(dt, input);
+    // The match runs on the wall clock: a slow frame must not make one mage
+    // late to their own respawn, or to the room's countdown.
+    if (!S.paused) { game.update(dt, input); net.update(wall); }
     // lean the camera toward where you are looking, a little more with a mouse
     let lx = 0, lz = 0;
     if (P.alive) {
@@ -72,7 +80,9 @@ function frame(now) {
     let zoom = 1;
     const B = S.boss;
     if (B && B.alive && B.state !== "sleep" && dist(B.x, B.z, P.x, P.z) < 22) zoom = B.type === "heart" ? 1.3 : 1.15;
-    gfx.updateCamera(P.x, P.z, lx, lz, zoom, real);
+    // down in a match: watch whoever net.js picked
+    const V = !P.alive && S.view ? S.view : P;
+    gfx.updateCamera(V.x, V.z, V === P ? lx : 0, V === P ? lz : 0, zoom, real);
   }
   fx.update(S.paused ? 0 : dt);
   hud.update(real);
@@ -90,6 +100,7 @@ async function boot() {
   hud.init();
   forge.init();
   menus.init();
+  mpui.init();
   initInput({ pause: menus.togglePause, book: menus.toggleBook });
   $("gl").addEventListener("pointerdown", (e) => { if (e.pointerType === "touch") document.body.dataset.device = "touch"; });
 
@@ -107,7 +118,7 @@ async function boot() {
 
   // A test/debug handle, only when asked for — never exposed by default.
   if (location.hash.includes("debug") || localStorage.getItem("msandbox:debug")) {
-    window.MS = { S, game, menus, forge, save, gfx, fx, hud };
+    window.MS = { S, game, menus, forge, save, gfx, fx, hud, net, mpui, lobby };
   }
 }
 boot();

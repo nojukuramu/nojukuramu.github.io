@@ -6,7 +6,7 @@
    every service worker in this repository answers the same "skip-waiting".
    Changes from RouteCast: an ES module instead of the RC namespace, and the
    question it asks before reloading is about a floor in progress rather than
-   a ride.
+   a ride, and it also asks when you are in a multiplayer room.
 
    The first version of this game's worker had a SKIP_WAITING handler that
    nothing ever sent, and no page code watched for new builds at all: a
@@ -116,8 +116,9 @@ export function init(registration, isBusy) {
 export function checkNow() { return check(true); }
 
 export function apply() {
-  // Reloading ends the floor you are on; your landing and spellbook survive.
-  if (busy() && !window.confirm("Reloading ends the floor you are on. Your spellbook and last landing are kept. Update now?")) return;
+  // Reloading ends the floor you are on, or leaves the room you are in; your
+  // landing and spellbook survive.
+  if (busy() && !window.confirm("Reloading ends the floor you are on and leaves any room you are in. Your spellbook and last landing are kept. Update now?")) return;
   doApply();
 }
 

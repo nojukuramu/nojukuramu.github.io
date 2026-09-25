@@ -8,19 +8,26 @@
  *
  * One bar of mana instead of the first version's four elemental pools. The
  * four bars were four things to watch for one decision; the cost of a spell
- * already depends on what is drawn in it. */
+ * already depends on what is drawn in it.
+ *
+ * The same function builds the other mages in a multiplayer match (remote:
+ * true). Those are puppets: net.js moves them and they never run
+ * updatePlayer, but they are real players in every other way — they carry
+ * their owner's pages, compiled with their owner's boons, so a spell they
+ * cast here flies exactly as it did there. */
 
 import * as THREE from "three";
-import { S, emit } from "./state.js";
+import { S, emit, players } from "./state.js";
 import { scene, addShake, kick } from "./gfx.js";
 import * as fx from "./fx.js";
 import { buildMage } from "./models.js";
-import { compileSpell, overLimits, isEmptyDesign, elementInfo, rankNeeded } from "./spellcore.js";
+import { compileSpell, overLimits, isEmptyDesign, elementInfo, rankNeeded, emptyDesign } from "./spellcore.js";
+import { hostile } from "./modes.js";
 import { BOONS, BOON_BY_ID } from "./boons.js";
 import { fireLayer, triggerPayloads } from "./spells.js";
 import { save, SLOTS } from "./save.js";
 import { drawDesign, fitScale } from "./glyphart.js";
-import { damp, clamp, dist, angDiff, rand } from "./util.js";
+import { damp, clamp, dist, angDiff, rand, mulberry32 } from "./util.js";
 
 export function freshMods() {
   const m = {};
@@ -29,13 +36,17 @@ export function freshMods() {
 }
 export const xpNeed = (lv) => Math.round(18 + lv * 12 + lv * lv * 1.2);
 
-export function createPlayer(snap) {
+export function createPlayer(snap, opts) {
   snap = snap || {};
+  opts = opts || {};
+  const remote = !!opts.remote;
   const mesh = buildMage();
   scene.add(mesh.root);
-  const light = new THREE.PointLight(0xb39dff, 8, 9, 2);
-  light.position.set(0, 2, 0);
-  mesh.root.add(light);
+  // Other mages carry no light of their own: every light added mid-fight
+  // makes three recompile every lit shader, and eight would be eight times.
+  const light = remote ? { intensity: 0, color: new THREE.Color() } : new THREE.PointLight(0xb39dff, 8, 9, 2);
+  if (!remote) { light.position.set(0, 2, 0); mesh.root.add(light); }
+  if (opts.robe !== undefined) tintRobe(mesh, opts.robe);
   const circleCanvas = document.createElement("canvas");
   circleCanvas.width = circleCanvas.height = 256;
   const circleTex = new THREE.CanvasTexture(circleCanvas);
@@ -50,8 +61,12 @@ export function createPlayer(snap) {
     selected: 0, cd: new Array(SLOTS).fill(0), gcd: 0, compiled: [], blocked: [], empty: [],
     castT: 0, circleT: 0, revivesUsed: 0, pendingLevels: 0, echoQ: [],
     mesh, light, circleCanvas, circleTex, circleKey: "", nagT: 0, lowManaT: 0, walk: 0, deadT: 0,
-    infiniteMana: false, noDeath: false, rankFloor: 1
+    infiniteMana: false, noDeath: false, rankFloor: 1,
+    isMage: true, remote, id: opts.id || 0, team: opts.team || 0, name: opts.name || "", designs: null, killedById: null
   };
+  /* Whose pages this mage draws from: yours from the save, another mage's
+     from what their machine sent. */
+  P.designOf = (i) => (remote ? (P.designs && P.designs[i]) || emptyDesign() : save.spell(i));
 
   P.recompute = function () {
     const m = freshMods();
@@ -68,7 +83,7 @@ export function createPlayer(snap) {
   P.recompile = function () {
     const mods = P.spellMods();
     for (let i = 0; i < SLOTS; i++) {
-      const d = save.spell(i);
+      const d = P.designOf(i);
       const c = compileSpell(d, mods);
       P.compiled[i] = c;
       P.empty[i] = isEmptyDesign(d);
@@ -76,7 +91,7 @@ export function createPlayer(snap) {
       P.blocked[i] = over.length ? rankNeeded(d, c) : 0;
     }
     P.circleKey = "";
-    emit("spellsChanged");
+    if (!remote) emit("spellsChanged");
   };
   P.select = function (i) {
     if (i < 0 || i >= SLOTS || i === P.selected) return;
@@ -85,7 +100,7 @@ export function createPlayer(snap) {
     emit("select", i);
   };
 
-  P.hurt = function (dmg, ang, src, kb) {
+  P.hurt = function (dmg, ang, src, kb, by) {
     if (!P.alive || P.iframe > 0) return false;
     dmg *= 1 - Math.min(0.5, P.mods.armor);
     P.hp -= dmg;
@@ -99,8 +114,8 @@ export function createPlayer(snap) {
     if (P.hp <= 0) {
       if (P.noDeath) { P.hp = 1; return true; }
       if (P.mods.revive > P.revivesUsed) { P.revivesUsed++; revive(); return true; }
-      P.hp = 0; P.alive = false; P.deadT = 0; P.killedBy = src || "the dark";
-      emit("playerDied", src);
+      P.hp = 0; P.alive = false; P.deadT = 0; P.killedBy = src || "the dark"; P.killedById = by === undefined ? null : by;
+      emit("playerDied", src, P.killedById);
     }
     return true;
   };
@@ -156,6 +171,19 @@ export function createPlayer(snap) {
   P.dispose = function () {
     scene.remove(mesh.root);
     circleTex.dispose();
+  };
+  /** Back on your feet: a respawn, a new round, a teammate's hand. */
+  P.respawn = function (x, z, frac) {
+    if (x !== null && x !== undefined) { P.x = x; P.z = z; }
+    P.vx = P.vz = 0;
+    P.alive = true; P.deadT = 0; P.killedBy = null; P.killedById = null;
+    P.hp = Math.max(1, P.maxHp * (frac === undefined ? 1 : frac)); P.mana = P.maxMana;
+    P.iframe = 2; P.dashT = 0; P.echoQ = [];
+    mesh.body.rotation.set(0, 0, 0); mesh.body.position.y = 0;
+    if (!remote) light.intensity = 8;
+    fx.ring(P.x, P.z, 0xb39dff, 0.4, 3, 0.5, 0.2);
+    fx.burst(P.x, 1, P.z, 0xb39dff, 20, 5, { size: 0.3, grav: -2 });
+    if (!remote) emit("respawn");
   };
 
   P.recompute();
@@ -224,9 +252,14 @@ export function updatePlayer(P, dt, input) {
   if (input.cast) tryCast(P);
   for (let i = P.echoQ.length - 1; i >= 0; i--) {
     const q = P.echoQ[i]; q.t -= dt;
-    if (q.t <= 0) { fireLayer(q.c, 0, P.x, P.z, P.aim, true); fx.ring(P.x, P.z, 0xffd97a, 0.3, 1.4, 0.3); P.echoQ.splice(i, 1); emit("echo"); }
+    if (q.t <= 0) {
+      const seed = (Math.random() * 1e9) | 0;
+      fireLayer(q.c, 0, P.x, P.z, P.aim, true, P, mulberry32(seed));
+      emit("castAt", q.i, P.x, P.z, P.aim, seed);
+      fx.ring(P.x, P.z, 0xffd97a, 0.3, 1.4, 0.3); P.echoQ.splice(i, 1); emit("echo");
+    }
   }
-  if (input.trigger) { const n = triggerPayloads(); if (n) emit("trigger", n); }
+  if (input.trigger) { const n = triggerPayloads(P); if (n) emit("trigger", n); }
   if (input.potion) P.drinkPotion();
 
   animate(P, dt, Math.hypot(P.vx, P.vz));
@@ -248,8 +281,12 @@ function tryCast(P) {
   P.mana -= c.cost;
   P.cd[i] = c.cooldown;
   P.gcd = 0.08;
-  fireLayer(c, 0, P.x, P.z, P.aim, true);
-  if (P.mods.echo && Math.random() < P.mods.echo) P.echoQ.push({ c, t: 0.14 });
+  // One seed decides the scatter, and it travels with the cast, so every
+  // mage in a room sees the same lopsided page scatter the same way.
+  const seed = (Math.random() * 1e9) | 0;
+  fireLayer(c, 0, P.x, P.z, P.aim, true, P, mulberry32(seed));
+  emit("castAt", i, P.x, P.z, P.aim, seed);
+  if (P.mods.echo && Math.random() < P.mods.echo) P.echoQ.push({ c, t: 0.14, i });
   P.castT = 0.22; P.circleT = 0.7;
   kick(P.aim, Math.min(0.35, 0.08 + c.totalShots * 0.02));
   const col = c.elements[0] ? elementInfo(c.elements[0]).hex : 0xb39dff;
@@ -265,8 +302,14 @@ function autoTarget(P) {
   for (const e of S.enemies) {
     if (!e.alive || e.type === "geode" || (e.type === "dummy" && S.mode !== "sandbox")) continue;
     if (e.boss && e.state === "sleep") continue;
+    if (e.fogHidden) continue;
     const d = dist(P.x, P.z, e.x, e.z);
     if (d < bd) { bd = d; best = e; }
+  }
+  if (S.match) for (const Q of players()) {
+    if (!Q.alive || Q.fogHidden || !hostile(S.match.mode, P, Q)) continue;
+    const d = dist(P.x, P.z, Q.x, Q.z);
+    if (d < bd) { bd = d; best = Q; }
   }
   return best;
 }
@@ -274,6 +317,21 @@ function autoTarget(P) {
 /* ---------------------------------------------------------------
    Looks
    --------------------------------------------------------------- */
+function tintRobe(mesh, hex) {
+  const c = new THREE.Color(hex);
+  mesh.mats[0].color.copy(c);
+  mesh.mats[1].color.copy(c).multiplyScalar(0.68);
+}
+export { tintRobe };
+
+/** Pose a puppet mage where net.js put it. */
+export function animateRemote(P, dt) {
+  P.iframe = Math.max(0, P.iframe - dt);
+  P.hurtT = Math.max(0, P.hurtT - dt);
+  if (!P.alive) P.deadT += dt;
+  animate(P, dt, P.alive ? Math.hypot(P.vx, P.vz) : 0);
+}
+
 const tmpC = new THREE.Color();
 function animate(P, dt, speed) {
   const M = P.mesh;
@@ -318,7 +376,7 @@ function animate(P, dt, speed) {
     const col = elementInfo(el).color;
     const g = P.circleCanvas.getContext("2d");
     g.clearRect(0, 0, 256, 256);
-    const d = save.spell(P.selected);
+    const d = P.designOf(P.selected);
     drawDesign(g, d, { cx: 128, cy: 128, scale: fitScale(d, 250), line: 2.4, mono: col, outer: true, nodes: false });
     P.circleTex.needsUpdate = true;
     tmpC.set(col);

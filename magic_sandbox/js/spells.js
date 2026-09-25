@@ -6,16 +6,50 @@
  * burst out of a shot when it lands or when you pull the trigger.
  *
  * Shot meshes are pooled and share one material per colour, so a
- * forty-shard spell costs forty matrix updates and no allocations. */
+ * forty-shard spell costs forty matrix updates and no allocations.
+ *
+ * Every shot knows whose it is. In a match every end flies every mage's
+ * spells, so what everyone sees agrees; but a spell only *hurts* where the
+ * rules say it does. Enemies are the host's to hurt (enemies.js ignores a
+ * client's hits). A mage is hurt only on their own machine — the victim's
+ * view of a shot is the one that counts, the same rule an enemy's bolt
+ * follows — and a mage who falls says who did it (net.js). */
 
 import * as THREE from "three";
-import { S, emit } from "./state.js";
+import { S, emit, players } from "./state.js";
 import { scene } from "./gfx.js";
 import * as fx from "./fx.js";
 import { REACTIONS, elementInfo } from "./spellcore.js";
 import { rand, TAU, clamp, dist } from "./util.js";
 import { hurtEnemy, enemiesNear } from "./enemies.js";
 import { ENEMY_SHOT } from "./themes.js";
+import { hostile, PVP_DAMAGE } from "./modes.js";
+
+/* ---------------------------------------------------------------
+   Who a shot can strike: the Unravelled, and in a PVP match every mage
+   hostile to whoever cast it.
+   --------------------------------------------------------------- */
+function victimsNear(owner, x, z, r) {
+  const out = enemiesNear(x, z, r);
+  const M = S.match;
+  if (!M || !owner) return out;
+  for (const Q of players()) {
+    if (!Q.alive || !hostile(M.mode, owner, Q)) continue;
+    const dx = Q.x - x, dz = Q.z - z, rr = r + Q.r;
+    if (dx * dx + dz * dz <= rr * rr) out.push(Q);
+  }
+  return out;
+}
+/** A spell reaching a mage. Only the mage's own machine applies it. */
+function strikeMage(Q, dmg, ang, kb, owner, col) {
+  fx.burst(Q.x, 1, Q.z, col || 0xffffff, 6, 4, { size: 0.26 });
+  if (Q !== S.player || !owner) return;
+  Q.hurt(dmg * PVP_DAMAGE, ang, owner.name || "a mage", kb * 0.35, owner.id);
+}
+function strike(target, dmg, o, owner) {
+  if (target.isMage) strikeMage(target, dmg, Math.atan2(o.kbz || 0, o.kbx || 0), Math.hypot(o.kbx || 0, o.kbz || 0), owner, o.color);
+  else hurtEnemy(target, dmg, o);
+}
 
 /* ---------------------------------------------------------------
    Pooled shot bodies
@@ -66,24 +100,25 @@ const glowOf = (els) => (els.length > 1 ? elementInfo(els[1]).hex : colorOf(els)
  * Fire layer `li` of a compiled spell from (x, z) heading `aim`.
  * Layer 0 comes from the caster; later layers from wherever their parent ended.
  */
-export function fireLayer(spell, li, x, z, aim, fromCaster) {
+export function fireLayer(spell, li, x, z, aim, fromCaster, owner, rng) {
+  const rnd = rng || Math.random;
   const L = spell.layers[li];
   if (!L) return 0;
   let n = 0;
   const fwdX = Math.cos(aim), fwdZ = Math.sin(aim), rtX = -fwdZ, rtZ = fwdX;
   for (const s of L.shots) {
     const ox = x + rtX * s.ox + fwdX * s.oz, oz = z + rtZ * s.ox + fwdZ * s.oz;
-    if (s.form === "nova") { spawnNova(spell, li, L, s, ox, oz, aim); n++; continue; }
+    if (s.form === "nova") { spawnNova(spell, li, L, s, ox, oz, aim, owner); n++; continue; }
     for (const d of s.dirs) {
-      const spread = fromCaster ? (Math.random() - 0.5) * spell.spread : 0;
-      spawnShot(spell, li, L, s, ox + (fromCaster ? fwdX * 0.7 : 0), oz + (fromCaster ? fwdZ * 0.7 : 0), aim + d + spread);
+      const spread = fromCaster ? (rnd() - 0.5) * spell.spread : 0;
+      spawnShot(spell, li, L, s, ox + (fromCaster ? fwdX * 0.7 : 0), oz + (fromCaster ? fwdZ * 0.7 : 0), aim + d + spread, owner);
       n++;
     }
   }
   return n;
 }
 
-function spawnShot(spell, li, L, s, x, z, dir) {
+function spawnShot(spell, li, L, s, x, z, dir, owner) {
   const els = L.elements;
   const col = colorOf(els);
   const b = body(col, glowOf(els));
@@ -93,7 +128,7 @@ function spawnShot(spell, li, L, s, x, z, dir) {
   const shot = {
     spell, li, L, s, x, z, y: 1.0, dir, vx: Math.cos(dir) * s.speed, vz: Math.sin(dir) * s.speed,
     speed: s.speed, r, traveled: 0, pierce: s.pierce, bounce: s.bounce, hit: new Set(),
-    col, b, trail: 0, done: false, payload: li + 1 < spell.layers.length, spin: rand(0, TAU)
+    col, b, trail: 0, done: false, payload: li + 1 < spell.layers.length, spin: rand(0, TAU), owner: owner || null
   };
   b.g.position.set(x, shot.y, z);
   b.g.rotation.set(0, Math.atan2(shot.vx, shot.vz), 0);
@@ -101,7 +136,7 @@ function spawnShot(spell, li, L, s, x, z, dir) {
   return shot;
 }
 
-function spawnNova(spell, li, L, s, x, z, aim) {
+function spawnNova(spell, li, L, s, x, z, aim, owner) {
   const col = colorOf(L.elements);
   fx.ring(x, z, col, 0.4, s.novaR, 0.32, 0.15, 1);
   fx.ring(x, z, glowOf(L.elements), 0.2, s.novaR * 0.8, 0.45, 0.35, 0.6);
@@ -110,7 +145,7 @@ function spawnNova(spell, li, L, s, x, z, aim) {
     const a = i / 26 * TAU;
     fx.emit(x + Math.cos(a) * 0.4, 0.5, z + Math.sin(a) * 0.4, Math.cos(a) * s.novaR * 3.4, 0.6, Math.sin(a) * s.novaR * 3.4, 0.3, 0.45, 0.1, col, 1, 0, 5);
   }
-  S.shots.push({ nova: true, spell, li, L, s, x, z, dir: aim, r0: 0.4, t: 0, dur: 0.3, hit: new Set(), col, done: false, payload: li + 1 < spell.layers.length });
+  S.shots.push({ nova: true, spell, li, L, s, x, z, dir: aim, r0: 0.4, t: 0, dur: 0.3, hit: new Set(), col, done: false, payload: li + 1 < spell.layers.length, owner: owner || null });
   emit("nova", L.elements);
 }
 
@@ -139,7 +174,7 @@ export function update(dt) {
     }
     // enemies
     let ended = false;
-    for (const e of enemiesNear(p.x, p.z, p.r + 2.2)) {
+    for (const e of victimsNear(p.owner, p.x, p.z, p.r + 2.2)) {
       if (p.hit.has(e) || !e.alive) continue;
       if (dist(p.x, p.z, e.x, e.z) > p.r + e.r) continue;
       p.hit.add(e);
@@ -180,6 +215,8 @@ export function update(dt) {
       if (P.hurt(q.dmg, Math.atan2(q.vz, q.vx), q.src || "a bolt")) dead = true;
       else if (!P.dashing) dead = true;
     }
+    // Another mage's machine decides whether it hurt them; here it only stops.
+    if (!dead) for (const Q of S.remotes) if (Q.alive && !Q.dashing && dist(q.x, q.z, Q.x, Q.z) < q.r + Q.r) { dead = true; break; }
     if (dead) {
       fx.burst(q.x, q.y, q.z, ENEMY_SHOT, 5, 3, { size: 0.22 });
       release(q.b); S.eshots.splice(i, 1);
@@ -198,8 +235,9 @@ export function update(dt) {
     }
     if (z.tick <= 0) {
       z.tick = 0.3;
-      for (const e of enemiesNear(z.x, z.z, z.r + 1.5)) {
+      for (const e of victimsNear(z.owner, z.x, z.z, z.r + 1.5)) {
         if (dist(z.x, z.z, e.x, e.z) > z.r + e.r * 0.5) continue;
+        if (e.isMage) { if (e === S.player) strikeMage(e, z.dps * 0.3, 0, 0, z.owner, z.col); continue; }
         hurtEnemy(e, z.dps * 0.3, { burn: z.burn, slow: z.slow, quiet: true, color: z.col });
       }
     }
@@ -211,7 +249,7 @@ function stepNova(p, dt) {
   p.t += dt;
   const t = clamp(p.t / p.dur, 0, 1);
   const rad = p.r0 + (p.s.novaR - p.r0) * (1 - Math.pow(1 - t, 2));
-  for (const e of enemiesNear(p.x, p.z, rad + 2)) {
+  for (const e of victimsNear(p.owner, p.x, p.z, rad + 2)) {
     if (p.hit.has(e) || !e.alive) continue;
     const d = dist(p.x, p.z, e.x, e.z);
     if (d > rad + e.r) continue;
@@ -228,6 +266,7 @@ function stepNova(p, dt) {
 function directHit(p, e, angOverride) {
   const s = p.s, L = p.L;
   const a = angOverride !== undefined ? angOverride : p.dir;
+  if (e.isMage) { strikeMage(e, s.dmg, a, s.kb, p.owner, p.col); return; }
   hurtEnemy(e, s.dmg, { kbx: Math.cos(a) * s.kb, kbz: Math.sin(a) * s.kb, burn: s.burn, chill: s.chill, color: p.col, elements: L.elements });
   if (!p.nova) fx.burst(e.x, 1, e.z, p.col, 7, 5, { size: 0.28 });
   if (L.reactions.includes("storm")) chain(e, s.dmg * 0.55, p);
@@ -238,14 +277,14 @@ function chain(from, dmg, p) {
   const done = new Set([from]);
   for (let k = 0; k < 3; k++) {
     let best = null, bd = 6.5;
-    for (const e of enemiesNear(src.x, src.z, 6.5)) {
+    for (const e of victimsNear(p.owner, src.x, src.z, 6.5)) {
       if (done.has(e) || !e.alive) continue;
       const d = dist(src.x, src.z, e.x, e.z);
       if (d < bd) { bd = d; best = e; }
     }
     if (!best) break;
     fx.bolt(src.x, 1.2, src.z, best.x, 1.2, best.z, REACTIONS.storm.color);
-    hurtEnemy(best, dmg, { chill: p.s.chill * 0.5, color: 0x9fe3ff });
+    strike(best, dmg, { chill: p.s.chill * 0.5, color: 0x9fe3ff }, p.owner);
     done.add(best);
     src = best;
   }
@@ -268,13 +307,13 @@ export function finish(p) {
     fx.burst(x, 0.8, z, 0xffffff, 6, 4, { size: 0.3 });
     fx.flash(x, 1.2, z, p.col, 18, 0.22, R * 4);
     emit("boom", R);
-    for (const e of enemiesNear(x, z, R + 2)) {
+    for (const e of victimsNear(p.owner, x, z, R + 2)) {
       if (!e.alive) continue;
       const d = dist(x, z, e.x, e.z);
       if (d > R + e.r) continue;
       const a = Math.atan2(e.z - z, e.x - x);
       const fall = p.hit.has(e) ? 0.5 : Math.max(0.4, 1 - d / (R + e.r));
-      hurtEnemy(e, s.dmg * 0.8 * fall, { kbx: Math.cos(a) * s.kb * 1.2, kbz: Math.sin(a) * s.kb * 1.2, burn: s.burn, chill: s.chill * 0.5, color: p.col });
+      strike(e, s.dmg * 0.8 * fall, { kbx: Math.cos(a) * s.kb * 1.2, kbz: Math.sin(a) * s.kb * 1.2, burn: s.burn, chill: s.chill * 0.5, color: p.col }, p.owner);
     }
   }
   // Reactions happen wherever the shot ends — at the end of its flight, on
@@ -283,7 +322,7 @@ export function finish(p) {
   if (p.payload) {
     p.payload = false;
     const heading = p.nova ? p.dir : Math.atan2(p.vz, p.vx);
-    fireLayer(p.spell, p.li + 1, x, z, heading, false);
+    fireLayer(p.spell, p.li + 1, x, z, heading, false, p.owner);
     fx.burst(x, 1, z, 0xffffff, 6, 3, { size: 0.3 });
     emit("payload");
   }
@@ -291,13 +330,13 @@ export function finish(p) {
 
 function reactAt(id, x, z, p) {
   const dmg = p.s.dmg;
-  if (id === "steam") addZone("steam", x, z, 2.2, 3, Math.max(4, dmg * 0.45), { col: 0xdfe8f0 });
-  else if (id === "magma") addZone("magma", x, z, 1.8, 4, Math.max(3, dmg * 0.35), { col: 0xff8a2a, burn: p.s.burn || 3 });
-  else if (id === "mire") addZone("mire", x, z, 2.5, 4.5, 1, { col: 0x7fa36a, slow: 0.6 });
+  if (id === "steam") addZone("steam", x, z, 2.2, 3, Math.max(4, dmg * 0.45), { col: 0xdfe8f0, owner: p.owner });
+  else if (id === "magma") addZone("magma", x, z, 1.8, 4, Math.max(3, dmg * 0.35), { col: 0xff8a2a, burn: p.s.burn || 3, owner: p.owner });
+  else if (id === "mire") addZone("mire", x, z, 2.5, 4.5, 1, { col: 0x7fa36a, slow: 0.6, owner: p.owner });
   else if (id === "shrapnel" && !p.shard) {
     for (let k = 0; k < 6; k++) {
       const a = k / 6 * TAU + rand(-0.2, 0.2);
-      const sh = spawnShot(p.spell, p.li, p.L, Object.assign({}, p.s, { form: "needle", radius: 0.12, speed: 22, range: 7, dmg: dmg * 0.35, splash: 0, pierce: 0, bounce: 0 }), x, z, a);
+      const sh = spawnShot(p.spell, p.li, p.L, Object.assign({}, p.s, { form: "needle", radius: 0.12, speed: 22, range: 7, dmg: dmg * 0.35, splash: 0, pierce: 0, bounce: 0 }), x, z, a, p.owner);
       sh.shard = true; sh.payload = false;
       sh.L = Object.assign({}, p.L, { reactions: [] });
     }
@@ -307,22 +346,22 @@ function reactAt(id, x, z, p) {
 
 export function addZone(type, x, z, r, dur, dps, o) {
   o = o || {};
-  const zone = { type, x, z, r, dur, t: 0, tick: 0.05, dps, slow: o.slow || 0, burn: o.burn || 0, col: o.col || 0xffffff };
+  const zone = { type, x, z, r, dur, t: 0, tick: 0.05, dps, slow: o.slow || 0, burn: o.burn || 0, col: o.col || 0xffffff, owner: o.owner || null };
   fx.decal(2, x, z, r, zone.col, dur, { opacity: type === "steam" ? 0.35 : 0.75 });
   S.zones.push(zone);
   emit("zone", type);
   return zone;
 }
 
-/** Pull the trigger: every shot still carrying a layer releases it now. */
-export function triggerPayloads() {
+/** Pull the trigger: every shot of yours still carrying a layer releases it now. */
+export function triggerPayloads(owner) {
   let n = 0;
-  for (const p of S.shots) if (p.payload && !p.done && !p.nova) { finish(p); n++; }
+  for (const p of S.shots) if (p.payload && !p.done && !p.nova && (!owner || p.owner === owner)) { finish(p); n++; }
   S.shots = S.shots.filter((p) => !p.done);
   return n;
 }
-export function pendingPayloads() {
-  for (const p of S.shots) if (p.payload && !p.done && !p.nova) return true;
+export function pendingPayloads(owner) {
+  for (const p of S.shots) if (p.payload && !p.done && !p.nova && (!owner || p.owner === owner)) return true;
   return false;
 }
 
@@ -331,6 +370,7 @@ export function pendingPayloads() {
    --------------------------------------------------------------- */
 export function enemyShot(x, z, ang, speed, dmg, opts) {
   opts = opts || {};
+  if (S.net.role === "host") emit("netEshot", [x, z, ang, speed, dmg, opts]);
   const b = body(ENEMY_SHOT, ENEMY_SHOT);
   const r = opts.r || 0.24;
   b.m.scale.setScalar(r); b.h.scale.setScalar(r * 8 + 0.5);

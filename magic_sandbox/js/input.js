@@ -47,7 +47,7 @@ export function initInput(h) {
     const c = e.code;
     if (c === "Escape" || c === "KeyP") { handlers.pause(); return; }
     if (c === "Tab" || c === "KeyB") { e.preventDefault(); handlers.book(); return; }
-    if (S.paused) return;
+    if (S.paused || S.uiOpen) return;
     if (c === "Space" || c === "ShiftLeft" || c === "ShiftRight") { e.preventDefault(); edge.dash = true; }
     if (c === "KeyF") edge.trigger = true;
     if (c === "KeyE") edge.interact = true;
@@ -159,7 +159,7 @@ export function poll() {
   I.dash = edge.dash; I.trigger = edge.trigger; I.interact = edge.interact; I.potion = edge.potion;
   I.select = edge.select; I.cycle = edge.cycle;
   edge.dash = edge.trigger = edge.interact = edge.potion = false; edge.select = -1; edge.cycle = 0;
-  if (S.paused) { mouse.down = false; return I; }
+  if (S.paused || S.uiOpen) { mouse.down = false; return I; }
 
   // keyboard
   const kx = (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0);
