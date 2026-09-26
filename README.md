@@ -5,9 +5,11 @@ visited directly at `https://nojukuramu.github.io/<folder>/`.
 
 The root (`index.html`) is the landing page that ties the projects together. It sits on a drawn
 sunset: one canvas, no libraries, where a single number — how far through the evening we are —
-paints the sky, the sun, tonight's real moon phase, the clouds, four mountain ridges and the lake
-under them. Scrolling runs that number forward, so the top of the page is golden hour and the
-bottom is a starry night; the dial in the corner can take it over instead.
+paints the sky, the sun and the rays it throws while it is low, tonight's real moon phase, the
+clouds, four mountain ridges and the lake under them, and after dark the Milky Way, a meteor now
+and then, and the lights of a far shore coming on one by one. Scrolling runs that number forward,
+so the top of the page is golden hour and the bottom is a starry night; the dial in the corner can
+take it over instead.
 
 Its styles and scripts live in [`static/home/`](static/home/):
 
@@ -15,15 +17,38 @@ Its styles and scripts live in [`static/home/`](static/home/):
 |------|------------|
 | [`js/sky.js`](static/home/js/sky.js) | the scene — sky, sun, moon, cloud, birds, ridges, lake, rain, snow, fog, lightning |
 | [`js/weather.js`](static/home/js/weather.js) | [Open-Meteo](https://open-meteo.com/) and the moon, so the drawn sky can follow the real one |
-| [`js/ambience.js`](static/home/js/ambience.js) | wind, crickets, birds, rain and thunder, synthesised — there are no audio files |
-| [`js/projects.js`](static/home/js/projects.js) | the carousel, and the small drawn scene on every card |
-| [`js/splash.js`](static/home/js/splash.js) | the logo writing itself, and the moment the device is measured |
+| [`js/ambience.js`](static/home/js/ambience.js) | wind, crickets, birds, rain and thunder, and the logo's cue, synthesised — there are no audio files |
+| [`js/projects.js`](static/home/js/projects.js) | the ring of cards and the grid it folds into, and the small drawn scene on every card |
+| [`js/motion.js`](static/home/js/motion.js) | everything else that moves: headings rising a word at a time, the ribbons, the counters, the mark at the bottom |
+| [`js/splash.js`](static/home/js/splash.js) | the logo writing itself and flying into the header, one timeline with its sound, and the moment the device is measured |
 | [`js/home.js`](static/home/js/home.js) | the glue: scroll, dial, sound, search palette |
+| [`tools/validate.js`](static/home/tools/validate.js) | `node static/home/tools/validate.js` — the checks to run before committing |
 
 Adding a project means adding one object to the `PROJECTS` array in
-[`static/home/js/projects.js`](static/home/js/projects.js) — the carousel, the filters and the
-search palette are all driven from it. A card's `motif` names one of the drawing functions at the
-top of that file.
+[`static/home/js/projects.js`](static/home/js/projects.js) — the carousel, the filters, the
+ribbons, the counters and the search palette are all driven from it. A card's `motif` names one of
+the drawing functions at the top of that file. The heading counts the projects in words and is
+corrected from the list at run time, but the number is also written into the HTML for anyone
+without scripts; the validator refuses to let the two disagree, and checks that the folder exists
+and is in `sitemap.xml`.
+
+**On the ring.** The projects are a ring of cards laid out by hand rather than by scroll-snap: one
+float says where the ring is, every card's transform is a function of its distance from it, and a
+spring pulls that float to the card it is heading for. That is what lets the side cards sit on a
+curve, the ring loop, and a flick carry momentum. It takes a mouse drag, a touch swipe (vertical
+swipes still scroll the page), a sideways trackpad swipe, the arrow keys, and Tab — focusing a card
+turns the ring to it. A card at the side comes to the middle when clicked; only the one in the
+spotlight opens.
+
+While it is on screen and nobody is touching it, it tours itself, a card every six and a half
+seconds, the lit dot filling as each stop runs out. Hovering or focusing pauses it; dragging,
+clicking or pressing anything on it stops it for good, and the play button is the only way back.
+It never tours under `prefers-reduced-motion`.
+
+The grid button folds the same fourteen cards into a grid with the transforms taken off — where
+the browser has View Transitions each card flies to its place, and elsewhere it simply swaps. The
+choice is remembered. With the evening's sound on, each card that comes into the spotlight rings
+its own note of the logo's pentatonic, so turning the ring plays a tune.
 
 **On the weather.** Nothing is sent anywhere until the visitor asks. The location pin in the
 corner is the only thing that prompts; coordinates are rounded to two decimals (~1 km) before they
@@ -41,31 +66,56 @@ webfont is involved: the four glyphs are committed as SVG outlines, and one geom
 so the mark cannot drift between them. The word is centred by the transform rather than by
 padding, which is why it lands identically at 30 px and at 512.
 
-**On the splash.** It draws that same square: the plate outlines itself, then the word is
-stroked on letter by letter inside it, then flooded.
+**On the splash.** It draws that same square. An ember waits at the corner while the device is
+measured; then a spark runs the outline of the square, a pen of light writes the word inside it
+letter by letter, shedding embers as it goes, the gold floods in with a shine crossing the letters
+and a ring of light leaving them, and the mark flies up into its place in the header as the curtain
+lifts — landing exactly on the header's own logo, which is the same geometry.
 
-It has a sound, synthesised like everything else here — a low swell as the square lands, a nib on
-paper for the length of each stroke, a small bell the instant each letter arrives (four notes up a
-major pentatonic, so there is no wrong interval to land on), and an open fifth with a shimmer over
-it as the fill floods in. The cue is scheduled from the same plan the drawing uses and against a
-single audio timestamp, so a bell can never land on a letter that has not arrived, even if the
-main thread stalls mid-animation. Rendered offline and measured, it peaks around -10 dBFS.
+Every beat has a sound, synthesised like everything else here: a low swell and a rim tone — a wet
+finger round a glass — while the spark runs the square, and a tick as it closes; a nib on paper
+for each stroke and a bell the frame each letter lands (four notes up a major pentatonic, so there
+is no wrong interval); an open fifth as the gold floods, with a shimmer that sweeps upward exactly
+as long as the shine takes to cross; and air moving as the mark flies, panned towards the header,
+with a soft tock when it lands.
+
+The picture and the sound are one plan, not two things started together. The drawing is computed
+every frame from the clock rather than left to CSS transitions, so a stalled frame is dropped,
+never late. The sound books each beat on the audio clock for the moment it will be *heard* —
+`getOutputTimestamp()` pairs the two clocks at the speaker, so output latency is included, and on
+Bluetooth headphones that is a fifth of a second — and the drawing waits exactly that long before
+its first frame. The nib's loudness and brightness follow the pen's own speed curve, the same curve
+that moves the pen and throws its embers, so the loudest scratch is the fastest stroke. Measured in
+the browser, each bell is booked within a tenth of a millisecond of its letter's landing, and the
+letter completes on the next frame, never before. The cue peaks around -19 dBFS on the same meter
+that puts the previous one at -16: a cue, not a fanfare.
 
 Two things it will not do. It never plays if the visitor has muted the site — that is their
 choice, and it is checked before anything else. And on a cold load browsers refuse to start audio
 without a gesture, so most first visits are silent: nothing is faked, and nothing is queued to
-startle anyone later. Moving, scrolling or typing before the letters begin hands it the gesture in
-time. Under `prefers-reduced-motion` there is no write to sync to, so there is no cue at all.
+startle anyone later. But the drawing keeps asking, and a click or a key part-way through brings
+the sound in at the beat the picture has reached — beats already past are skipped, not played
+late. "Replay the intro" in the search palette runs the whole thing again from a click, so it
+always has its sound. Clicking the curtain or pressing Escape, Enter or Space skips it, and lets go
+of whatever the sound had booked. Under `prefers-reduced-motion` there is no write to sync to, so
+the logo is simply there and there is no cue at all.
 
-The order it does things in matters. `stroke-dashoffset` is a main-thread property, so a scene
-repainting behind the black would starve the one thing anybody can see. So the sequence is:
-measure first with a short burst of the real rendering (`NJ.sky.probe()`, capped at eighteen
-frames or 600 ms), let the verdict pick how much drawing this device can afford, write the logo
-while the main thread is quiet, and start the scene as the curtain lifts. The hairline under the
-mark is that measurement, not a fake progress bar.
+The order it does things in matters. A scene repainting behind the black would starve the one
+thing anybody can see. So the sequence is: measure first with a short burst of the real rendering
+(`NJ.sky.probe()`, capped at eighteen frames or 600 ms) while only compositor animations move —
+the waiting ember and the hairline under the mark, which is that measurement and not a fake
+progress bar — let the verdict pick how much drawing this device can afford, write the logo while
+the main thread is quiet, and start the scene as the curtain lifts. The flight is a Web Animation,
+on the compositor, so the scene starting under it cannot make it stutter.
 
 If `splash.js` never loads, a CSS animation clears the overlay on its own a few seconds in — a
-broken script can never leave a black page.
+broken script can never leave a black page. Once it has loaded it stands that animation down and
+keeps the same promise with a timer of its own.
+
+The same goes for everything that starts hidden. The hero's words wait under a class only
+`splash.js` sets, and rise when it lifts the curtain (or after six seconds regardless). Every other
+reveal hangs off `.motion`, which `motion.js` sets only once it is running and able to reveal
+things again. A page where neither loads is simply all there.
 
 **On other browsers.** The layout is checked for horizontal overflow at fourteen widths from
 320 px up, with `overflow-x` neutralised so nothing is masked, and again with every modern
