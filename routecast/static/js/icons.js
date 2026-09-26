@@ -173,6 +173,62 @@ RC.icons = (function () {
 
     check: wrap('<path d="M4.5 12.6 9.4 17.5 19.5 6.8"/>'),
 
+    /* How a stranger looks on the public road. A closed set: a rider picks
+       one of these, they never send a picture. */
+    bike: wrap(
+      '<circle cx="5.8" cy="16.5" r="3.3"/><circle cx="18.2" cy="16.5" r="3.3"/>' +
+      '<path d="M5.8 16.5 9.4 9.2h6.2l2.6 7.3M9.4 9.2l3.3 7.3H5.8M12.4 6.8h2.2l1 2.4M8.2 6.8h2.6"/>'
+    ),
+    scooter: wrap(
+      '<circle cx="6" cy="17.5" r="2.4"/><circle cx="18" cy="17.5" r="2.4"/>' +
+      '<path d="M8.4 17.5h7.2l-2-11h2.9M4.5 12.8h7.4"/>'
+    ),
+    truck: wrap(
+      '<path d="M2.8 16.8V6.6a1 1 0 0 1 1-1h9.6v11.2"/><path d="M13.4 9.2h4.1l3.7 4v3.6h-1.6"/>' +
+      '<circle cx="7" cy="17.4" r="1.9"/><circle cx="17.4" cy="17.4" r="1.9"/><path d="M9 17h6.4M2.8 16.8h2.3"/>'
+    ),
+    walk: wrap(
+      '<circle cx="13" cy="4.6" r="1.8"/>' +
+      '<path d="M9.2 21l2.3-6.2 2.8 2.4V21M11.5 14.8l1-5.4-3.2 1.8-1.3 3M12.5 9.4l2.3 2.6 3 .8"/>'
+    ),
+
+    /* What is on the road. Each has to be told apart at the size of a map
+       pin, so they differ in outline, not in detail. */
+    traffic: wrap(
+      '<path d="M3.5 17.5v-3.2l1.2-3a1.4 1.4 0 0 1 1.3-.9h5.6a1.4 1.4 0 0 1 1.3.9l1.2 3v3.2Z"/>' +
+      '<path d="M10.5 10.4l.9-2.3a1.4 1.4 0 0 1 1.3-.9h5.6a1.4 1.4 0 0 1 1.3.9l1.2 3v3.2h-6.3"/>' +
+      '<path d="M5.5 17.5v1.5M11.5 17.5v1.5"/>'
+    ),
+    crash: wrap(
+      '<path d="M12 3l1.9 4.6 4.7-1.9-1.9 4.7L21.3 12l-4.6 1.9 1.9 4.7-4.7-1.9L12 21.3l-1.9-4.6-4.7 1.9 1.9-4.7L2.7 12l4.6-1.9-1.9-4.7 4.7 1.9Z"/>'
+    ),
+    hazard: wrap(
+      '<path d="M12 3.5L2.5 20.5h19L12 3.5Z"/><path d="M12 9.8v4.2M12 17.3v.1"/>'
+    ),
+    flood: wrap(
+      '<path d="M3 15.5c1.5 0 1.5-1.2 3-1.2s1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2"/>' +
+      '<path d="M3 19.5c1.5 0 1.5-1.2 3-1.2s1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2"/>' +
+      '<path d="M6.5 11.8V8.6L12 4.5l5.5 4.1v3.2"/>'
+    ),
+    closed: wrap('<circle cx="12" cy="12" r="8.6"/><path d="M7.4 12h9.2"/>'),
+    checkpoint: wrap(
+      '<path d="M4.4 20.5v-7M19.6 20.5v-7"/><rect x="2.8" y="9.5" width="18.4" height="4" rx="1"/>' +
+      '<path d="M7.4 9.5l-2.6 4M12.6 9.5l-2.6 4M17.8 9.5l-2.6 4"/>'
+    ),
+
+    // A horn with its sound: the one-tap hello between two riders.
+    horn: wrap(
+      '<path d="M4 9.8h3.2l6-4.3v13l-6-4.3H4Z"/><path d="M16.6 9a4.2 4.2 0 0 1 0 6M19.2 6.6a7.6 7.6 0 0 1 0 10.8"/>'
+    ),
+    fit: wrap('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
+    go: wrap('<path d="M12 2.5 19.5 19 12 15.3 4.5 19 12 2.5Z"/>'),
+    door: wrap('<path d="M10 4H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"/><path d="m14 8.5 3.5 3.5-3.5 3.5M17.5 12H9"/>'),
+    "eye-off": wrap(
+      '<path d="M3 3l18 18"/>' +
+      '<path d="M10.6 5.6c.5-.1.9-.1 1.4-.1 5 0 8.5 4.2 9.5 6.5-.4 1-1.3 2.4-2.6 3.7M6.5 6.9C4.6 8.2 3.2 10.2 2.5 12c1 2.3 4.5 6.5 9.5 6.5 1.6 0 3-.4 4.3-1"/>' +
+      '<path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>'
+    ),
+
     // Spoken guidance on, and off.
     speaker: wrap(
       '<path d="M4 9.5h3.2L12 5.2v13.6L7.2 14.5H4a.8.8 0 0 1-.8-.8V10.3a.8.8 0 0 1 .8-.8Z"/>' +

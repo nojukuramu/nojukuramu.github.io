@@ -171,7 +171,10 @@ async function main() {
     executablePath: process.env.PLAYWRIGHT_CHROMIUM || undefined
   });
 
-  async function newPage(label, where, viewport) {
+  /* `gps: true` replaces the browser's geolocation with one this file drives
+     (window.__fix), with speed and heading in it — the emulated one has
+     neither, and a rider who is "riding" needs both. */
+  async function newPage(label, where, viewport, gps) {
     const ctx = await browser.newContext({
       viewport: viewport || { width: 1100, height: 820 },
       permissions: ["geolocation", "microphone"],
@@ -184,6 +187,18 @@ async function main() {
       [brokerPort]
     );
     await stubWorld(ctx);
+    if (gps) {
+      await ctx.addInitScript(([w]) => {
+        const watchers = {}; let id = 0; let last = { lat: w.lat, lon: w.lon };
+        const pos = (f) => ({ coords: { latitude: f.lat, longitude: f.lon, accuracy: 6,
+          speed: f.speed == null ? null : f.speed / 3.6, heading: f.heading == null ? null : f.heading, altitude: null },
+          timestamp: Date.now() });
+        navigator.geolocation.watchPosition = function (ok) { id++; watchers[id] = ok; setTimeout(() => ok(pos(last)), 50); return id; };
+        navigator.geolocation.clearWatch = function (i) { delete watchers[i]; };
+        navigator.geolocation.getCurrentPosition = function (ok) { setTimeout(() => ok(pos(last)), 30); };
+        window.__fix = function (f) { last = f; Object.keys(watchers).forEach((k) => watchers[k](pos(f))); };
+      }, [where]);
+    }
     const page = await ctx.newPage();
     page.on("pageerror", (e) => { console.log("  !! " + label + " page error: " + e.message); failures++; });
     page.on("console", (m) => {
@@ -206,8 +221,12 @@ async function main() {
   section("A room opens, and the door holds");
 
   await host.click("#group-btn");
+  check("the pane asks one question first: start or join",
+        await host.evaluate(() => !document.getElementById("group-start-box").hidden &&
+                                  document.getElementById("group-join-box").hidden));
   await host.fill("#group-name", "Lead Rider");
-  await host.fill("#group-code", "RIDE42");
+  await host.click("#group-own-code-fold summary");
+  await host.fill("#group-own-code", "RIDE42");
   await host.click("#group-host-btn");
   await host.waitForFunction(() => window.RC.group.isActive(), null, { timeout: 20000 });
   check("the host is in its own room", await host.evaluate(() => window.RC.group.isHost()));
@@ -216,6 +235,10 @@ async function main() {
   check("approval is on by default", await host.evaluate(() => window.RC.group.settings().approval));
 
   await guest.click("#group-btn");
+  await guest.click("#group-mode-join");
+  check("a joiner is not shown the host's switches",
+        await guest.evaluate(() => document.getElementById("group-start-box").hidden &&
+                                   !document.getElementById("group-join-box").hidden));
   await guest.fill("#group-name", "Second Rider");
   await guest.fill("#group-code", "ride42");
   await guest.click("#group-join-btn");
@@ -259,6 +282,9 @@ async function main() {
   await host.waitForFunction(() => window.RC && document.getElementById("summary") &&
                                    !document.getElementById("summary").hidden, null, { timeout: 30000 });
   await host.click("#tab-group");
+  await host.click('[data-subtabs="group"] [data-sub="route"]');
+  check("with a route planned, sharing it is the next step",
+        await host.evaluate(() => document.getElementById("group-step-plan").getAttribute("data-done") === "yes"));
   await host.click("#group-plan-set");
   await host.waitForFunction(() => !!window.RC.group.planned(), null, { timeout: 10000 });
   await guest.waitForFunction(() => !!window.RC.group.planned(), null, { timeout: 30000 });
@@ -432,6 +458,7 @@ async function main() {
   }, qrPayload.url);
 
   await scanner.click("#group-btn");
+  await scanner.click("#group-mode-join");
   await scanner.fill("#group-name", "Third Rider");
   await scanner.click("#group-scan-btn");
   await scanner.waitForFunction(
@@ -519,6 +546,70 @@ async function main() {
   }
   await guest.setViewportSize({ width: 430, height: 860 });
 
+  section("The Ride pane, reorganised");
+
+  // The guest's copy of the plan is a list of stops on the Route sub-tab.
+  await guest.click("#group-btn");
+  await guest.click('[data-subtabs="group"] [data-sub="route"]');
+  check("the planned stops are listed in order",
+        await guest.evaluate(() => document.querySelectorAll("#group-plan-stoplist li").length ===
+                                   window.RC.group.planned().stops.length));
+  check("a guest can ride the agreed line", await guest.evaluate(() => !document.getElementById("group-plan-ride").hidden));
+  check("but only the host can replace it", await guest.evaluate(() => document.getElementById("group-plan-set").hidden));
+  await guest.click("#group-plan-ride");
+  await guest.waitForFunction(() => {
+    const plan = window.RC.group.planned();
+    const last = plan.stops[plan.stops.length - 1];
+    return document.getElementById("to-input").value === last.name &&
+           !document.getElementById("summary").hidden;
+  }, null, { timeout: 30000 }).then(() => check("riding it plans the agreed stops from where you are", true),
+                                    () => check("riding it plans the agreed stops from where you are", false));
+  check("and the ride's own line is untouched by it",
+        (await guest.evaluate(() => JSON.stringify(window.RC.group.planned().coords))) === before);
+
+  // Something said while the planner is shut lands on the rail button, and
+  // the button goes straight to it.
+  await guest.click("#panel-close");
+  await host.evaluate(() => window.RC.group.say("Wait up"));
+  await guest.waitForFunction(() => document.getElementById("group-count").getAttribute("data-kind") === "chat",
+                              null, { timeout: 15000 });
+  check("an unread line shows on the ride button", true);
+  await guest.click("#group-btn");
+  check("and the ride button opens the talk",
+        await guest.evaluate(() => document.querySelector('[data-subtabs="group"] [data-sub="talk"]')
+                                     .getAttribute("aria-selected") === "true"));
+  check("which clears the count",
+        await guest.evaluate(() => document.getElementById("group-sub-talk-n").hidden));
+
+  // A one-tap line is a whole sentence.
+  await guest.click('#group-says [data-say="0"]');
+  await host.waitForFunction(() => window.RC.group.chat().some((m) => m.text === "On my way"), null, { timeout: 15000 });
+  check("a one-tap line reaches the room", true);
+
+  // How the ride is drawn is this phone's business.
+  await guest.click('[data-subtabs="group"] [data-sub="map"]');
+  await guest.click('[data-mate-names="always"]');
+  await guest.waitForFunction(() => document.querySelectorAll(".rc-mate-name").length > 0, null, { timeout: 10000 })
+    .then(() => check("names can be always on", true), () => check("names can be always on", false));
+  await guest.click('[data-mate-names="never"]');
+  check("or off entirely", await guest.evaluate(() => document.querySelectorAll(".rc-mate-name").length === 0));
+  check("and the choice is kept", await guest.evaluate(() => window.RC.store.get("groupView", {}).names === "never"));
+
+  // Tap a rider, get their card.
+  await guest.click('[data-subtabs="group"] [data-sub="riders"]');
+  const hostId = await guest.evaluate(() => window.RC.group.members().filter((m) => m.host)[0].id);
+  await guest.click(`#group-members [data-mate="${hostId}"]`);
+  await guest.waitForSelector("#who-card:not([hidden])", { timeout: 5000 });
+  check("tapping a rider opens their card",
+        (await guest.evaluate(() => document.getElementById("who-name").textContent)) === "Lead Rider");
+  check("with a way to find them and ride to them",
+        await guest.evaluate(() => Array.from(document.querySelectorAll("#who-acts .rc-act"))
+                                     .map((b) => b.textContent).join("|").indexOf("Ride to them") >= 0));
+  check("and the planner is out of the way", await guest.evaluate(() =>
+        document.getElementById("panel").getAttribute("data-open") === "false"));
+  await guest.click("#who-close");
+  check("the card closes", await guest.evaluate(() => document.getElementById("who-card").hidden));
+
   section("Positions, and leaving");
 
   /* The guest's own geolocation watch is live and its fixes are the real thing,
@@ -554,6 +645,91 @@ async function main() {
         await host.evaluate(() => window.RC.group.members().length === 1));
   check("the planned route goes with the room",
         await guest.evaluate(() => window.RC.group.planned() === null));
+
+  section("PUBs: the road talks");
+
+  const pubA = await newPage("pubA", START, null, true);
+  const pubB = await newPage("pubB", { lat: START.lat + 0.002, lon: START.lon + 0.001 });
+  for (const [pg, name] of [[pubA, "Ana"], [pubB, "Ben"]]) {
+    await pg.click("#pubs-btn");
+    await pg.fill("#pubs-name", name);
+    await pg.click("#pubs-start");
+    await pg.waitForFunction(() => window.RC.pubs.isOn(), null, { timeout: 15000 });
+  }
+  await pubA.waitForFunction(() => window.RC.pubs.role() === "host", null, { timeout: 20000 });
+  await pubB.waitForFunction(() => window.RC.pubs.role() === "guest", null, { timeout: 30000 });
+  check("the first phone holds the area and the second joins it", true);
+  await pubA.waitForFunction(() => window.RC.pubs.world().length === 1, null, { timeout: 20000 });
+  await pubB.waitForFunction(() => window.RC.pubs.world().length === 1, null, { timeout: 20000 });
+  check("each sees the other", true);
+  check("a stranger is a badge with a glyph, not a ride-mate's dot",
+        await pubB.evaluate(() => !!document.querySelector(".rc-pub .rc-pub-face svg")));
+  check("the map button for the road appears while PUBs is on",
+        await pubB.evaluate(() => !document.getElementById("pubs-fab").hidden));
+
+  // A shout from the map's own sheet floats over the sender on the other map.
+  await pubA.click("#panel-close");
+  await pubB.click("#panel-close");
+  await pubA.click("#pubs-fab");
+  await pubA.fill("#pubs-sheet-input", "Anyone at the pass?");
+  await pubA.click("#pubs-sheet-send");
+  await pubB.waitForFunction(() => Array.from(document.querySelectorAll(".rc-bubble"))
+                                   .some((b) => b.textContent === "Anyone at the pass?"), null, { timeout: 15000 });
+  check("a shout floats over the sender on everybody else's map", true);
+  check("and the sheet gets out of the way once it is said",
+        await pubA.evaluate(() => document.getElementById("pubs-sheet").hidden));
+
+  // A report from the sheet is a pin on the other map.
+  await pubB.click("#pubs-fab");
+  await pubB.click('#pubs-sheet-grid [data-report="crash"]');
+  await pubA.waitForSelector('.rc-rep[data-kind="crash"]', { timeout: 15000 });
+  check("a report is a pin on the other rider's map", true);
+  await pubA.click('.rc-rep[data-kind="crash"]');
+  await pubA.waitForSelector("#who-card:not([hidden])", { timeout: 5000 });
+  check("tapping the pin says what it is",
+        (await pubA.evaluate(() => document.getElementById("who-name").textContent)) === "Crash");
+  await pubA.click("#who-close");
+
+  // Riding towards a pin, you are told once — on screen and out loud — and
+  // riding up to it, you are asked whether it is still there.
+  await pubA.evaluate(() => {
+    window.__said = [];
+    window.speechSynthesis.speak = function (u) { window.__said.push(u.text); };
+  });
+  await pubA.click("#dock-free");
+  await pubA.waitForFunction(() => document.documentElement.getAttribute("data-mode") === "free", null, { timeout: 15000 });
+  const pin = await pubA.evaluate(() => { const r = window.RC.pubs.reports()[0]; return { lat: r.lat, lon: r.lon }; });
+  await pubA.evaluate((p) => window.__fix({ lat: p.lat - 0.0054, lon: p.lon, speed: 36, heading: 0 }), pin);
+  await pubA.waitForFunction(() => /Crash reported ahead/.test(document.getElementById("group-toast").textContent),
+                             null, { timeout: 20000 })
+    .then(() => check("riding towards a pin, the rider is told", true),
+          () => check("riding towards a pin, the rider is told", false));
+  check("out loud", await pubA.evaluate(() => window.__said.some((t) => /crash reported ahead/i.test(t))),
+        await pubA.evaluate(() => JSON.stringify(window.__said)));
+  await pubA.evaluate((p) => window.__fix({ lat: p.lat - 0.0006, lon: p.lon, speed: 20, heading: 0 }), pin);
+  await pubA.waitForFunction(() => !document.getElementById("who-card").hidden &&
+                                   /still there/.test(document.getElementById("who-name").textContent),
+                             null, { timeout: 15000 })
+    .then(() => check("riding up to it asks whether it is still there", true),
+          () => check("riding up to it asks whether it is still there", false));
+  await pubA.click("#who-acts .rc-act-primary");
+  await pubB.waitForFunction(() => window.RC.pubs.reports().length === 1 && window.RC.pubs.reports()[0].ups === 2,
+                             null, { timeout: 15000 });
+  check("still there is counted for everyone", true);
+
+  // A beep is addressed, and heard.
+  await pubA.evaluate(() => window.RC.pubs.beep(window.RC.pubs.world()[0].id));
+  await pubB.waitForFunction(() => /beeped at you/.test(document.getElementById("group-toast").textContent),
+                             null, { timeout: 15000 });
+  check("a beep is heard by the rider it was for", true);
+
+  await pubB.click("#pubs-btn");
+  await pubB.click("#pubs-stop");
+  check("going dark takes the map furniture with it",
+        await pubB.evaluate(() => document.getElementById("pubs-fab").hidden &&
+                                  !document.querySelector(".rc-pub") && !document.querySelector(".rc-rep")));
+  await pubA.__ctx.close();
+  await pubB.__ctx.close();
 
   await browser.close();
   site.close();

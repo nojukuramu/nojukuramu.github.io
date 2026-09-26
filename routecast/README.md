@@ -16,8 +16,10 @@ voice, and — for whoever drifts off the agreed line — a set of real routes b
 It runs phone to phone, with no server holding anybody's position.
 
 Or open the door entirely: **PUBs** is the public road. Turn it on and every rider nearby
-who has also turned it on is on your map, and you are on theirs; open a **PUB room** and
-anyone can walk in and talk. Same phone-to-phone transport, no accounts, nothing stored.
+who has also turned it on is on your map, and you are on theirs. Say something and it
+floats over your marker on their map; beep somebody; pin a crash, a flood or a checkpoint
+where you are, and everyone riding towards it is told. Open a **PUB room** and anyone can
+walk in and talk. Same phone-to-phone transport, no accounts, nothing stored.
 
 Live at <https://nojukuramu.github.io/routecast/>.
 
@@ -85,10 +87,17 @@ Live at <https://nojukuramu.github.io/routecast/>.
 - **Group ride.** A room of riders on one map (see below): one shared **planned route**
   that is static by design, live positions, a roster with a door on it, chat, push-to-talk
   voice, and routes back to the line for anyone who leaves it. Joining is a six-character
-  code read aloud, a link, or the host's **QR code** pointed at with a camera.
+  code read aloud, a link, or the host's **QR code** pointed at with a camera. Tap any rider
+  for a card — find them, ride to them — and choose how the ride is drawn on *your* map:
+  names always, zoomed-in or never, speeds, fading trails, the planned line itself.
 - **PUBs — the public road.** A group ride is a room you are invited into; a PUB is the
   opposite. Switch it on and your name and position go to every rider in your area who has
-  switched it on, and theirs come back. Anyone can also open a **PUB room**: a chat room
+  switched it on, and theirs come back — as a badge with the glyph they picked. A line said
+  to the area floats over the sayer's head; a **beep** is a horn for one rider; a **road
+  report** (traffic, crash, hazard, flood, closed, checkpoint) is a pin where you are that
+  fades on its own, is confirmed or voted away by whoever rides past, and is spoken to
+  anyone riding towards it. One round button by the map controls does all three without
+  opening the planner. Anyone can also open a **PUB room**: a chat room
   with the door wedged open, published to the area so it is walked into rather than
   invited to. Off by default, one tap to go dark, and a local ignore list that drops
   somebody where their messages *arrive* rather than filtering them out of a list. There
@@ -421,41 +430,48 @@ to hammer a public demo server.
 
 ### The Ride tab
 
-Everything about a room that is not on the map is one tab in the planner, and it used to be
-six identically-styled blocks in a single column: the same uppercase grey heading over each
-one, ten actions that were all the same green text link, and the two things a rider actually
-reaches for mid-ride — the code, and whether they are still connected — sitting somewhere in
-the middle of it. Whether you were connected, reconnecting, or waiting in a lobby was an
-11.5px grey sentence.
+Everything about a room that is not on the map is one tab in the planner, and it had grown
+into one long column: the room card, the door, the riders, the route, voice, chat and the
+host's switches, every one of them always there, so the chat was four screens down and the
+thing you wanted was never where your thumb was.
 
-It is now read top to bottom in the order it is needed:
+**Out of a room it asks one question first: start one, or join one.** The two used to share
+a single form, which is how a rider joining somebody else's ride ended up reading about a
+door they do not have. *Start* shows the route that will go out with the ride — the route on
+the planner, as a destination and three numbers, with a switch to keep it back — then the
+door, then "choose the code yourself" folded away. *Join* shows a code field with the scanner
+in it, and nothing else. An invite link answers the question for you.
 
-- **The room card.** The code, large, and one state pill beside it — *Hosting*, *Connected*,
-  *Finding the ride…*, *Reconnecting…*, *Waiting at the door* — each with its own colour, and
-  a dot that pulses only while something is genuinely in flight. Copy, Invite and Leave are
-  buttons rather than links, and Leave turns red under the thumb instead of looking like the
-  other two. The invite link is spelled out underneath, because a button whose entire result
-  happened on the clipboard is a button you cannot check.
-- **The door**, when anybody is at it: its own amber box, one row per rider, a solid
-  **Let in** and a quiet **Refuse**. This is the one control in the app with a safety
-  consequence, and it no longer looks like everything else.
-- **Riders**, with the count in the heading and each rider's *state* — host, waiting, off
-  the line, offline — as a coloured tag rather than more grey text on the end of a sentence,
-  because scanning a roster is looking for the odd one out.
-- **The planned route** as three numbers — distance, moving time, stops — instead of one
-  run-on line, with how far off the line you are as its own row: green when you are on it,
-  amber when you are not.
-- **Voice**, which now says which of the two paths the room is on (*Live*, *Recorded clips*,
-  *Muted*, *Listen only*, or who is talking right now). That mattered and was previously
-  readable only as a tooltip on a button on the other side of the screen: on the live path
-  the room hears you mid-sentence, and on the fallback nobody hears a syllable until your
-  thumb comes up.
-- **Chat**, unchanged.
-- **Host settings**, folded away. They are set once at the start of a ride and then never
-  touched, and they used to sit between the riders and the chat.
+**In a room, the room card and the door stay on top, always** — where am I connected, and
+who is asking to come in — and everything else is four sub-tabs:
 
-Each section is separated by a hairline and real space. Inside a room the sections had no
-gap between them at all, which is most of why the pane read as one undifferentiated scroll.
+- **Riders.** Everyone, with their state as a tag (host, waiting, off the line, offline).
+  Tap one and the planner gets out of the way, the map flies to them and their card opens:
+  *Find*, *Ride to them* (an ordinary route from where you are to where they are now), and
+  for the host *Remove*. **Everyone on the map** fits the whole ride in one look; **Where is
+  everyone?** asks the room.
+- **Route.** Set up in the order it happens. With nothing shared yet the host sees two
+  numbered steps — *plan it* (a jump to the Route tab), then *share it* — and the second
+  lights up once the first is done. Once there is a line: distance, time and stops as three
+  numbers, the stops as a list with the ones behind you struck through, whether you are on
+  the line, and **Ride it** — the stops still ahead of you, planned from where you are, so a
+  rider who joins at the second fuel stop is not sent back to the first. The host's
+  **Replace with my route** only appears when there is actually something new to share.
+- **Talk.** Voice first (it is used mid-ride, with a thumb), with its live/clip/muted state,
+  then the chat with a row of one-tap lines — *On my way*, *Wait up*, *Stopping for fuel* —
+  because a sentence typed at a fuel stop with gloves on is a sentence not sent. The number
+  on this sub-tab is what was said while you were looking at something else, and the rail
+  button goes straight here when there is one.
+- **Map.** How the ride is drawn on *your* screen and nobody else's: rider names always, only
+  when zoomed in far enough to read them, or never; speeds on the labels; **trails**, a
+  couple of minutes of fading tail behind each rider drawn from positions the phone already
+  had; the rider list over the dashboard; and the planned line itself, which can be hidden
+  without leaving it (off-line detection and the ways back still read it). Below that, for
+  the host, the room's own rules.
+
+The state pill, the door's amber box, the three-number route and the voice state all carry
+over from before; what changed is that each now lives where it is used rather than in one
+column that had to be scrolled past to reach anything.
 
 ### The door
 
@@ -581,6 +597,40 @@ question that must never need a tap to answer.
 walk into one without going public. Codes are published to the area, so a PUB is found
 rather than shared.
 
+### On the map
+
+The public road is meant to be lived on, not administered, so most of it is on the map:
+
+- **People** are round badges ringed in their own colour, with the glyph they chose — a
+  motorbike, a car, a bicycle, a scooter, a truck, on foot — or their initial, and a wedge
+  for where they are heading. Glass inside the ring, never a solid fill: a ride-mate is a
+  solid dot, and the two must never be confused on a moving map. A small dot on the badge
+  means they are in a PUB room. Tap one for a card: **Beep**, **Their PUB**, **Ignore**.
+- **Bubbles.** A line said to the area floats over the sayer's marker on everybody's map
+  for eight seconds and fades, the way a shout does. Riders stopped together would talk
+  over each other, so a bubble that would land on another is lifted clear of it. Said by
+  somebody off your screen, it is a toast instead.
+- **Pins.** Six kinds, each its own colour and outline so they are told apart at the size
+  of a pin. Tap one to say it is **still there** or **not there**; your own can be taken
+  down. Riding towards one — inside a cone around your heading and within 1.2 km, or within
+  400 m in any direction when you are too slow for a heading to mean anything — you are
+  told once, on screen, out loud and with a buzz. Ride right up to one and the card asks
+  whether it is still there, and goes away on its own if you do not answer.
+- **A beep** makes the sender's badge honk on the other map — a shake and a ring — with two
+  short tones generated on the page (no audio file), a buzz and a toast. Standing still, the
+  sender's card opens so you can beep back; riding, it does not, because a card over the
+  dashboard is not a thing to spring on anybody at speed.
+- **The round button** by the map controls opens a sheet of six big report buttons, a row of
+  one-tap lines and a chat field — everything the road needs, one tap from the map, used at
+  a red light with gloves on.
+
+The Pubs tab holds whatever needs reading, in four sub-tabs — **Chat**, **Road**, **People**,
+**PUBs** — and each carries the switches for how its own part is drawn: bubbles on the Chat
+tab, pins and spoken warnings on the Road tab, names on the People tab (with the glyph you
+show others). Markers are kept rather than rebuilt: a rider who moves moves their marker, and
+it is only redrawn when what it shows has changed, which is both cheaper on every fix and the
+only way a bubble can fade without restarting.
+
 ### How an area works with no server
 
 The app already knows how to introduce two browsers with nothing but a six-character code
@@ -606,11 +656,24 @@ mistaken for a PUB.
 Everything off the wire is a stranger's claim. Names and messages are stripped of control
 characters and capped; a fix that is not a plausible coordinate is dropped rather than
 drawn at (0, 0); nobody can claim to be travelling at Mach 3 or facing 900 degrees; one
-loud rider cannot flood a room. A stranger's dot is a **hollow ring**, never the solid dot
-a rider in your own ride gets, because the difference has to survive a glance at a moving
-map. And a hub relays; it does not moderate — a self-appointed relay moderating a public
-channel is worse than one that does not, which is why the ignore list is local, permanent
-and applied where messages arrive.
+loud rider cannot flood a room. A stranger's marker is a **ringed badge**, never the solid
+dot a rider in your own ride gets, because the difference has to survive a glance at a
+moving map. And a hub relays; it does not moderate — a self-appointed relay moderating a
+public channel is worse than one that does not, which is why the ignore list is local,
+permanent and applied where messages arrive (an ignored rider's bubbles and pins go with
+them, and their lines in a PUB room too).
+
+The area's own talk is attributed from the **connection** it arrived on, never from
+anything written inside it: a shout carries the name the hub has on file for that link, so
+nobody can put words over somebody else's marker. An id is held by the link using it — a
+second link claiming it while the first is still talking is refused, and a rider who
+reloaded gets theirs back once the old link has gone quiet. Shouts are one bubble long and
+one every couple of seconds; a beep is addressed to one connection and rationed per pair of
+riders at both ends. A pin goes where its reporter **is** — the hub refuses one more than
+1.5 km from the reporter's own last position — the same kind reported twice within 150 m is
+one pin seen twice, and a rider gets one say per pin. Pins travel with relative ages rather
+than timestamps, so no phone's clock can make one immortal, and a hub that hands over passes
+them on; nothing outlives the area emptying.
 
 ## Riding with it
 
@@ -921,7 +984,9 @@ routecast/
     groupui.js              RC.groupui  — the room on screen: the Ride tab, the layers, the
                                           cards, and the rail of riders above the speedometer
     pubs.js                 RC.pubs     — the public road: area hubs, presence, PUB rooms
-    pubsui.js               RC.pubsui   — PUBs on screen: the Pubs tab, the strangers layer
+    pubsui.js               RC.pubsui   — PUBs on screen: the Pubs tab, badges, bubbles, pins,
+                                          the road sheet and the alerts ahead
+    who.js                  RC.who      — one card for anything tapped on the map
     nav.js                  RC.nav      — live navigation: route projection, live ETA, wake lock,
                                           reroute and forecast-refresh gating, ride recording
     free.js                 RC.free     — free driving: the dashboard and the recorder, no route
@@ -1024,7 +1089,17 @@ roads come back as real geometry at roughly the speed they were ridden, and that
 road a second time makes one segment hotter rather than inventing a second one; and that
 two riders in the same region derive the same PUB area code while riders in different
 regions do not, that an area code can never be mistaken for a ride code, and that a
-stranger cannot claim to be at 99,999 km/h or facing 905 degrees.
+stranger cannot claim to be at 99,999 km/h or facing 905 degrees. Three phones are then put
+in one area on a broker that lives in the test, with a clock the test turns by hand: the
+first holds the area and the others join; a shout reaches everybody else once, attributed to
+the rider it came from, and the shouter sees it once rather than echoed; a beep reaches the
+one rider it was for and nobody else, and cannot be leaned on; a report is carried to the
+area and announced once, the same crash reported twice nearby is one pin seen twice, a rider
+gets one vote, one vote against two sightings does not end it and the reporter can take their
+own down; a pin far from its reporter is refused; a second link cannot take over a rider's
+marker; and ignoring somebody takes their pins and lines with them. Every sub-tab button has
+a pane and every pane a button, and every report kind and every marker a stranger can pick is
+a real glyph rather than the fallback.
 
 Two invariants that are cheap to check and expensive to lose are checked as text: that the
 version the page reports and the version the worker serves are the same number, and that every
@@ -1072,8 +1147,23 @@ It also joins a third rider **by camera**: the host's QR is drawn for real, and 
 `BarcodeDetector` hands the app what a reader would have seen, so what is under test is the
 path from "the detector saw this string" to "the rider is at the door" — including that the
 camera is released the moment the code is read, that scanning alone puts nobody in the room,
-and that a scanned rider can be refused like any other. It needs Playwright; everything else
-in `tools/` needs nothing at all.
+and that a scanned rider can be refused like any other.
+
+The reorganised Ride tab is driven the way a rider would: the setup asks start-or-join first
+and a joiner is never shown the host's switches; the planned stops are listed; **Ride it**
+plans the agreed stops from where the rider is without touching the ride's own line; a line
+said while the planner is shut lands on the rail button, which opens the Talk sub-tab and
+clears the count; a one-tap line reaches the room; names can be switched always-on and off
+and the choice is kept; and tapping a rider in the list closes the planner and opens their
+card.
+
+Then two more phones **go public** in the same area: one holds it and the other joins; a
+stranger is a badge with a glyph; a shout from the map's own sheet floats over the sender on
+the other map; a report is a pin there; riding towards it (on a scripted GPS, because the
+emulated one has no speed or heading) the rider is told on screen and out loud, and riding
+up to it asks whether it is still there — and answering counts for everyone; a beep is heard
+by the rider it was for; and going dark takes the badges, the pins and the round button with
+it. It needs Playwright; everything else in `tools/` needs nothing at all.
 
 ```
 node tools/voice-latency.js

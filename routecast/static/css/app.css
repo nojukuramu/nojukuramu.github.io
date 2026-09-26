@@ -85,6 +85,14 @@
   --rc-planned:      #4B5BC4;
   --rc-planned-soft: #E2E5F7;
 
+  /* The public road's own colour: a teal that is neither the ride's indigo
+     nor any risk level, so a stranger's badge, a PUBs button and a ride-mate
+     are three different things at a glance. --rc-plum is the one report
+     kind (a closed road) that needed a hue of its own. */
+  --rc-pubs:         #1B7F9E;
+  --rc-pubs-soft:    #DDF0F5;
+  --rc-plum:         #8A3A6E;
+
   /* Rain, in the ride profile's bars: a blue that is not the planned line's
      indigo, because the two sit a few pixels apart. */
   --rc-rain:         #3D7FB8;
@@ -157,6 +165,9 @@
     --rc-danger-soft:  #331B1B;
     --rc-planned:      #8E9BF0;
     --rc-planned-soft: #1C2044;
+    --rc-pubs:         #5CC3DF;
+    --rc-pubs-soft:    #13303A;
+    --rc-plum:         #D586B8;
     --rc-rain:         #7DB2E2;
 
     --map-filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.86) saturate(.55);
@@ -202,6 +213,9 @@
   --rc-danger-soft:  #331B1B;
   --rc-planned:      #8E9BF0;
   --rc-planned-soft: #1C2044;
+  --rc-pubs:         #5CC3DF;
+  --rc-pubs-soft:    #13303A;
+  --rc-plum:         #D586B8;
   --rc-rain:         #7DB2E2;
 
   --map-filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.86) saturate(.55);
@@ -2616,30 +2630,67 @@ code { font-family: var(--mono); font-size: .92em; }
    colour you were introduced to; somebody on the public road is a RING. The
    difference has to survive a glance at a moving map, so it is a difference of
    shape rather than of shade. */
-.rc-pub { position: relative; display: block; width: 16px; height: 16px; }
-.rc-pub-dot {
+/* A stranger: a round badge with the glyph they chose (or their initial),
+   ringed in their colour, with a wedge for where they are heading. Glass
+   inside the ring, never a solid fill — a ride-mate is a solid dot, and the
+   two must never be confused on a moving map. */
+.rc-pub { position: relative; display: block; width: 30px; height: 30px; cursor: pointer; }
+.rc-pub-face {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: transparent;
-  border: 3px solid var(--pub, var(--rc-planned));
-  box-shadow: 0 1px 4px rgba(0, 0, 0, .4), inset 0 0 0 1.5px rgba(255, 255, 255, .75);
+  display: grid;
+  place-items: center;
+  background: var(--glass-strong);
+  border: 2.5px solid var(--pub, var(--rc-pubs));
+  color: var(--pub, var(--rc-pubs));
+  box-shadow: 0 2px 7px rgba(0, 0, 0, .32);
+  transition: transform .2s var(--ease);
 }
+.rc-pub-face svg { width: 17px; height: 17px; }
+.rc-pub-initial { font-size: 13px; font-weight: 800; line-height: 1; }
+:root[data-rotate="on"] .rc-pub-face > * { transform: rotate(calc(-1 * var(--rc-bearing, 0deg))); }
 .rc-pub-arrow {
   position: absolute;
   left: 50%; top: 50%;
   width: 0; height: 0;
-  margin: -16px 0 0 -4px;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-bottom: 8px solid var(--pub, var(--rc-planned));
-  transform-origin: 50% 150%;
-  opacity: .85;
+  margin: -24px 0 0 -5px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 8px solid var(--pub, var(--rc-pubs));
+  transform-origin: 5px 24px;
+  opacity: .9;
+  pointer-events: none;
 }
+/* In a PUB room: a small speech dot on the badge, so "who could I talk to"
+   is readable off the map. */
+.rc-pub.is-in-room .rc-pub-face::after {
+  content: "";
+  position: absolute;
+  right: -3px; top: -3px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--rc-pubs);
+  border: 2px solid var(--glass-strong);
+}
+.rc-pub.is-picked .rc-pub-face { transform: scale(1.18); box-shadow: 0 0 0 4px var(--glass-strong), 0 0 0 7px var(--pub, var(--rc-pubs)); }
+/* A beep: the badge honks — a shake and a ring going out — for a couple of
+   seconds, then stops. */
+.rc-pub.is-beeping .rc-pub-face { animation: rc-honk .18s ease-in-out 0s 8 alternate; }
+.rc-pub.is-beeping::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 3px solid var(--pub, var(--rc-pubs));
+  animation: rc-ping 1.2s ease-out 2;
+  pointer-events: none;
+}
+@keyframes rc-honk { from { transform: rotate(-12deg) scale(1.08); } to { transform: rotate(12deg) scale(1.08); } }
 .rc-pub-name {
   position: absolute;
-  left: 21px;
-  top: -2px;
+  left: 34px;
+  top: 5px;
   white-space: nowrap;
   font-size: 10.5px;
   font-weight: 600;
@@ -2650,17 +2701,104 @@ code { font-family: var(--mono); font-size: .92em; }
   border: 1px dashed var(--glass-line);
   border-radius: 7px;
   padding: 1px 5px;
-  transform-origin: 0 50%;
+  transform-origin: -19px 50%;
 }
-.rc-pub-name b { color: var(--pub, var(--rc-planned)); font-variant-numeric: tabular-nums; }
+.rc-pub-name b { color: var(--pub, var(--rc-pubs)); font-variant-numeric: tabular-nums; }
 :root[data-rotate="on"] .rc-pub-name {
   transform: rotate(calc(-1 * var(--rc-bearing, 0deg)));
 }
 
+/* What somebody just said, over their head. The outer box is a point with
+   no size, which is what turns back upright on a rotated map; the words
+   inside it pop up, hold, and fade on their own clock. */
+.rc-bubble { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; pointer-events: none; }
+:root[data-rotate="on"] .rc-bubble { transform: rotate(calc(-1 * var(--rc-bearing, 0deg))); }
+.rc-bubble > span {
+  position: absolute;
+  left: 0;
+  bottom: 21px;
+  width: max-content;
+  max-width: 190px;
+  padding: 6px 10px;
+  border-radius: 14px;
+  background: var(--glass-strong);
+  color: var(--glass-ink);
+  border: 2px solid var(--pub, var(--rc-pubs));
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  overflow-wrap: anywhere;
+  box-shadow: var(--shadow-float);
+  transform: translateX(-50%);
+  animation: rc-bubble-life 8s var(--ease) both;
+}
+.rc-bubble > span::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  margin-left: -6px;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid var(--pub, var(--rc-pubs));
+}
+.rc-bubble.is-mine > span { background: var(--rc-pubs); border-color: var(--rc-pubs); color: #FFFFFF; }
+.rc-bubble.is-mine > span::after { border-top-color: var(--rc-pubs); }
+@keyframes rc-bubble-life {
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(.7); }
+  5% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  88% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -8px); }
+}
+
+/* A pin about the road: a drop in the kind's own colour with its glyph in
+   white, and how many riders have seen it when that is more than one. */
+.rc-rep, .rc-rep-face { --rep: var(--rc-caution); }
+[data-kind="traffic"] { --rep: var(--rc-watch); }
+[data-kind="crash"] { --rep: var(--rc-danger); }
+[data-kind="hazard"] { --rep: var(--rc-caution); }
+[data-kind="flood"] { --rep: var(--rc-rain); }
+[data-kind="closed"] { --rep: var(--rc-plum); }
+[data-kind="checkpoint"] { --rep: var(--rc-planned); }
+.rc-rep { position: relative; display: block; width: 34px; height: 40px; cursor: pointer; animation: rc-pin-drop .5s var(--ease) backwards; }
+.rc-rep-pin {
+  position: absolute;
+  left: 3px; top: 3px;
+  width: 28px; height: 28px;
+  border-radius: 50% 50% 50% 3px;
+  transform: rotate(-45deg);
+  background: var(--rep);
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .35);
+  display: grid;
+  place-items: center;
+  color: #FFFFFF;
+}
+.rc-rep-pin svg { width: 15px; height: 15px; transform: rotate(45deg); }
+:root[data-rotate="on"] .rc-rep-pin svg { transform: rotate(calc(45deg - var(--rc-bearing, 0deg))); }
+.rc-rep[data-picked="yes"] .rc-rep-pin { box-shadow: 0 0 0 4px var(--glass-strong), 0 3px 10px rgba(0, 0, 0, .4); }
+.rc-rep-n {
+  position: absolute;
+  right: -4px; top: -4px;
+  min-width: 17px; height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--glass-strong);
+  color: var(--rep);
+  border: 1.5px solid var(--rep);
+  font-size: 10px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  font-variant-numeric: tabular-nums;
+}
+
 /* The rail button. PUBs being on is the one piece of state in this app that
    is a decision about strangers, so it is the one that is always visible. */
-.rc-glass-pubs[data-on="true"] { color: var(--rc-planned); border-color: var(--rc-planned); }
+.rc-glass-pubs[data-on="true"] { color: var(--rc-pubs); border-color: var(--rc-pubs); }
 .rc-glass-pubs { position: relative; }
+.rc-glass-pubs .rc-glass-badge[data-kind="chat"] { background: var(--rc-pubs); }
 
 /* One line of consequence, said once, where it cannot be scrolled past. */
 .rc-note {
@@ -3264,7 +3402,13 @@ code { font-family: var(--mono); font-size: .92em; }
 :root[data-power="save"] .rc-rider-wrap::after,
 :root[data-power="save"] .rc-lockbtn,
 :root[data-power="save"] .rc-recap,
-:root[data-power="save"] .rc-recap * { animation: none !important; }
+:root[data-power="save"] .rc-recap *,
+:root[data-power="save"] .rc-subpane,
+:root[data-power="save"] .rc-who,
+:root[data-power="save"] .rc-pubsheet,
+:root[data-power="save"] .rc-pubsfab,
+:root[data-power="save"] .rc-rep,
+:root[data-power="save"] .rc-bubble > span { animation: none !important; }
 :root[data-power="save"] .rc-rider-marker,
 :root[data-power="save"] .rc-hud-gauge-fill,
 :root[data-power="save"] .rc-rider-halo { transition: none; }
@@ -3326,4 +3470,365 @@ code { font-family: var(--mono); font-size: .92em; }
   .rc-turn-glyph svg { width: 26px; height: 26px; }
   .rc-hud[data-style="big"] .rc-hud-speed { min-width: 88px; }
   .rc-hud[data-style="big"] .rc-pod-v { font-size: 17px; }
+}
+
+/* ============================================================
+   Sub-tabs inside a pane (util.js RC.subtabs)
+
+   The Ride and Pubs panes each grew four jobs. A strip of four buttons that
+   stays at the top while the pane scrolls, with a small count where there is
+   something new — the same shape in both panes.
+   ============================================================ */
+.rc-subtabs {
+  position: sticky;
+  top: -2px;
+  z-index: 3;
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 10px -8px rgba(0, 0, 0, .25);
+}
+.rc-subtab {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .18s var(--ease), color .18s var(--ease);
+}
+.rc-subtab:hover { color: var(--ink); }
+.rc-subtab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+.rc-subtab-n {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--line-strong);
+  color: var(--ink-soft);
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
+  font-variant-numeric: tabular-nums;
+}
+.rc-subtab-n.is-alert { background: var(--rc-planned); color: #FFFFFF; }
+[data-subtabs="pubs"] .rc-subtab-n.is-alert { background: var(--rc-pubs); }
+.rc-subtab-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--rc-caution); }
+.rc-subpane { display: flex; flex-direction: column; gap: 14px; }
+.rc-subpane:not([hidden]) { animation: rc-pane-in .22s var(--ease) backwards; }
+#group-on, #pubs-on { display: flex; flex-direction: column; gap: 14px; }
+/* The room card's four actions on one row: it sits above every sub-tab, so
+   each line it saves is a line of the ride on screen. */
+.rc-room-acts-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.rc-room-acts-4 .rc-act { justify-content: center; padding: 0 6px; min-width: 0; }
+
+/* ---------- starting a ride: what goes out with it ---------- */
+.rc-plan-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--line-strong);
+  background: var(--surface);
+}
+.rc-plan-card[data-has="yes"] { border-style: solid; border-color: var(--rc-planned); background: var(--rc-planned-soft); }
+.rc-plan-card-icon {
+  width: 34px; height: 34px;
+  flex: none;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.rc-plan-card-icon svg { width: 19px; height: 19px; }
+.rc-plan-card[data-has="yes"] .rc-plan-card-icon { background: var(--rc-planned); color: #FFFFFF; }
+.rc-plan-card-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rc-plan-card-meta b { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-plan-card-meta i { font-style: normal; font-size: 12px; color: var(--muted); }
+#group-own-code-fold .rc-fold-body { gap: 6px; }
+
+/* ---------- the planned route, set up in order ---------- */
+.rc-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rc-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.rc-step-n {
+  width: 24px; height: 24px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--muted);
+  transition: background .2s var(--ease), color .2s var(--ease);
+}
+.rc-step[data-done="yes"] .rc-step-n { background: var(--matcha); color: var(--matcha-ink); }
+.rc-step[data-done="yes"] + .rc-step .rc-step-n { background: var(--rc-planned); color: #FFFFFF; }
+.rc-step-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rc-step-text b { font-size: 13px; font-weight: 600; }
+.rc-step-text i { font-style: normal; font-size: 11.5px; color: var(--muted); }
+
+.rc-plan-stops { list-style: none; margin: 0; padding: 0 0 0 4px; display: flex; flex-direction: column; }
+.rc-plan-stop { position: relative; padding: 4px 0 4px 20px; font-size: 12.5px; color: var(--ink-soft); }
+.rc-plan-stop::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 50%;
+  width: 11px; height: 11px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  border: 2px solid var(--rc-planned);
+  background: var(--surface);
+  z-index: 1;
+}
+.rc-plan-stop::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 50%;
+  height: 100%;
+  width: 2px;
+  background: var(--rc-planned-soft);
+}
+.rc-plan-stop:last-child::after { display: none; }
+.rc-plan-stop.is-last::before { background: var(--rc-planned); }
+.rc-plan-stop.is-passed { color: var(--faint); text-decoration: line-through; }
+.rc-plan-stop.is-passed::before { border-color: var(--faint); }
+
+/* ---------- one-tap lines ---------- */
+.rc-says {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 1px 1px 3px;
+  -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, #000 88%, transparent);
+}
+.rc-says::-webkit-scrollbar { display: none; }
+.rc-say {
+  flex: none;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 15px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s var(--ease), color .15s var(--ease), transform .12s var(--ease);
+}
+.rc-say:hover { border-color: var(--matcha); color: var(--matcha); }
+.rc-say:active { transform: scale(.95); }
+#pubs-says .rc-say:hover, .rc-pubsheet .rc-say:hover { border-color: var(--rc-pubs); color: var(--rc-pubs); }
+
+/* ---------- a list row that opens something on the map ---------- */
+.rc-mate-row.is-tappable { cursor: pointer; padding-inline: 4px; transition: background .15s var(--ease); }
+.rc-mate-row.is-tappable:hover,
+.rc-mate-row.is-tappable:focus-visible { background: var(--surface-2); outline: none; }
+.rc-mate-row > svg:last-child { width: 16px; height: 16px; color: var(--faint); flex: none; }
+.rc-mate.is-picked .rc-mate-dot { box-shadow: 0 0 0 3px #FFFFFF, 0 0 0 6px var(--rider, var(--matcha)); }
+
+/* ---------- somebody on the map, tapped (who.js) ---------- */
+.rc-who,
+.rc-pubsheet {
+  position: absolute;
+  left: calc(var(--safe-l) + var(--gut));
+  right: calc(var(--safe-r) + var(--gut));
+  bottom: calc(var(--safe-b) + var(--gut));
+  max-width: 480px;
+  margin-inline: auto;
+  border-radius: 16px;
+  padding: 11px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid var(--glass-line);
+  color: var(--glass-ink);
+  box-shadow: var(--shadow-float);
+}
+.rc-who { z-index: 723; }
+.rc-pubsheet { z-index: 724; max-height: min(72vh, 520px); overflow-y: auto; overscroll-behavior: contain; }
+.rc-who.is-in, .rc-pubsheet.is-in { animation: rc-sheet-up .3s var(--ease) backwards; }
+.rc-who-top { display: flex; align-items: center; gap: 11px; }
+.rc-who-face { width: 42px; height: 42px; flex: none; display: grid; place-items: center; }
+.rc-who-dot {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--who, var(--matcha));
+  border: 3px solid #FFFFFF;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, .4);
+}
+.rc-who-pub {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  border: 3px solid var(--who, var(--rc-pubs));
+  color: var(--who, var(--rc-pubs));
+  background: var(--glass-strong);
+  display: grid;
+  place-items: center;
+}
+.rc-who-pub svg { width: 21px; height: 21px; }
+.rc-who-pub .rc-pub-initial { font-size: 17px; }
+.rc-who-face .rc-rep-face { width: 42px; height: 42px; }
+.rc-who-face .rc-rep-face svg { width: 22px; height: 22px; }
+.rc-who-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rc-who-meta b { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-who-meta i { font-style: normal; font-size: 12px; color: var(--muted); }
+.rc-who-acts { display: flex; gap: 7px; flex-wrap: wrap; }
+.rc-who-acts .rc-act { height: 38px; flex: 1 1 0; min-width: 0; justify-content: center; }
+.rc-who[data-kind="pub"] .rc-act-primary { background: var(--rc-pubs); border-color: var(--rc-pubs); color: #FFFFFF; }
+
+/* ---------- road reports ---------- */
+.rc-rep-face {
+  width: 34px; height: 34px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--rep);
+  color: #FFFFFF;
+  display: grid;
+  place-items: center;
+}
+.rc-rep-face svg { width: 18px; height: 18px; }
+.rc-report-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.rc-report-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 4px 9px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform .12s var(--ease), border-color .15s var(--ease);
+}
+.rc-report-btn:hover { border-color: var(--rep, var(--line-strong)); }
+.rc-report-btn:active { transform: scale(.95); }
+.rc-report-btn .rc-rep-face { width: 40px; height: 40px; }
+.rc-report-btn .rc-rep-face svg { width: 21px; height: 21px; }
+.rc-report-grid.is-big .rc-report-btn { padding: 12px 4px 10px; background: var(--glass-strong); border-color: var(--glass-line); }
+.rc-report-grid.is-big .rc-rep-face { width: 48px; height: 48px; }
+.rc-report-grid.is-big .rc-rep-face svg { width: 25px; height: 25px; }
+.rc-report-list { display: flex; flex-direction: column; }
+.rc-report-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rc-report-row:last-child { border-bottom: 0; }
+.rc-report-row:hover { background: var(--surface-2); }
+.rc-report-row > svg { width: 16px; height: 16px; color: var(--faint); flex: none; }
+
+/* ---------- how you look on the public road ---------- */
+.rc-avatars { display: flex; gap: 7px; flex-wrap: wrap; }
+.rc-avatar {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: border-color .15s var(--ease), color .15s var(--ease), transform .12s var(--ease);
+}
+.rc-avatar svg { width: 21px; height: 21px; }
+.rc-avatar:active { transform: scale(.92); }
+.rc-avatar[aria-pressed="true"] { border-color: var(--rc-pubs); color: var(--rc-pubs); background: var(--rc-pubs-soft); }
+.rc-pub-chip {
+  width: 30px; height: 30px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--pub, var(--rc-pubs));
+  color: var(--pub, var(--rc-pubs));
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+}
+.rc-pub-chip svg { width: 16px; height: 16px; }
+.rc-pub-chip .rc-pub-initial { font-size: 12px; }
+.rc-room-pubs { border-color: var(--rc-pubs); }
+
+/* ---------- the road, right here: the map's own PUBs button ---------- */
+.rc-pubsfab { color: #FFFFFF; background: var(--rc-pubs); border-color: var(--rc-pubs); }
+.rc-pubsfab:hover { background: var(--rc-pubs); filter: brightness(1.08); }
+.rc-pubsfab[aria-expanded="true"] { box-shadow: 0 0 0 3px var(--glass-strong), 0 0 0 5px var(--rc-pubs); }
+.rc-pubsfab:not([hidden]) { animation: rc-pop .4s var(--ease) backwards; }
+
+.rc-group-toast[data-kind="pubs"] { border-color: var(--rc-pubs); }
+.rc-group-toast[data-kind="alert"] { border-color: var(--rc-caution); color: var(--rc-caution); }
+
+/* The planner is a bottom sheet in portrait, and a card about the map has no
+   business sitting on top of it: they step aside while it is open and come
+   back, as they were, when it closes. On a wide screen the drawer is beside
+   the map, so they move over instead, like the rest of the furniture. */
+@media (orientation: portrait) and (max-width: 899px) {
+  :root[data-panel="open"] .rc-rejoin-card,
+  :root[data-panel="open"] .rc-who,
+  :root[data-panel="open"] .rc-pubsheet { visibility: hidden; }
+}
+@media (min-width: 900px) {
+  :root[data-panel="open"] .rc-rejoin-card,
+  :root[data-panel="open"] .rc-who,
+  :root[data-panel="open"] .rc-pubsheet {
+    left: calc(var(--safe-l) + var(--gut) + min(400px, 82vw) + 8px);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 620px) {
+  .rc-who,
+  .rc-pubsheet {
+    left: auto;
+    right: calc(var(--safe-r) + var(--gut) + 52px);
+    width: min(440px, 62vw);
+    margin-inline: 0;
+  }
+  .rc-pubsheet { max-height: calc(100vh - var(--safe-t) - var(--safe-b) - var(--rail-h) - 34px); }
+  .rc-report-grid.is-big { grid-template-columns: repeat(6, 1fr); }
+  .rc-report-grid.is-big .rc-report-btn { font-size: 10.5px; }
+  .rc-report-grid.is-big .rc-rep-face { width: 40px; height: 40px; }
 }

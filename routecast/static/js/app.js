@@ -1611,6 +1611,38 @@
     }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
   }
 
+  /* Somewhere to go that did not come from the search box: the ride's
+     planned stops still ahead, or where a mate is right now. The same two
+     moves a quick destination makes — the places go into the fields, then
+     "from where you are" — so what comes out is an ordinary route that can be
+     looked at, saved, re-planned and started like any other. */
+  function planFromHere(places, label) {
+    if (!places || !places.length) return;
+    RC.el("stops").innerHTML = "";
+    state.endpoints = [state.endpoints[0], state.endpoints[state.endpoints.length - 1]];
+    for (var m = 0; m < places.length - 1; m++) addStop();
+    for (var i = 0; i < places.length; i++) {
+      var ep = state.endpoints[i + 1];
+      var p = places[i];
+      ep.place = { name: p.name || "Stop", address: p.address || p.name || "",
+                   lat: p.lat, lon: p.lon, precise: true };
+      ep.inputEl.value = ep.place.name;
+    }
+    drawEndpoints();
+    saveTrip();
+    if (!navigator.geolocation) { openPanel("route"); return; }
+    setStatus("Finding you, then " + (label || places[places.length - 1].name || "the way") + "…", "busy");
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      setEndpointFromLatLon(state.endpoints[0], pos.coords.latitude, pos.coords.longitude);
+      plan();
+    }, function () {
+      setStatus("Could not find you — set a start and plan.", "error");
+      flashStatus(4000);
+      drawEndpoints();
+      openPanel("route");
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  }
+
   /* ---------------------------------------------------------
      Saved routes
      --------------------------------------------------------- */
@@ -3842,6 +3874,10 @@
     window.addEventListener("resize", onViewportChange);
     window.addEventListener("orientationchange", onViewportChange);
 
+    /* One card for anything tapped on the map — a mate, a stranger, a pin.
+       Before the two modules that fill it. */
+    RC.who.init(map);
+
     /* The room is its own thing drawn over the same map. It gets the handful of
        app-level answers it cannot work out for itself and nothing else. */
     RC.groupui.init({
@@ -3852,6 +3888,7 @@
       avoidMotorways: function () { return state.avoidMotorways; },
       currentPlan: currentPlanForGroup,
       driveRoute: driveRoute,
+      planTo: planFromHere,
       setStatus: setStatus,
       flashStatus: flashStatus,
       openPanel: openPanel,
@@ -3875,7 +3912,15 @@
         // but the panel wants a distance the moment the pane is opened.
         return RC.group.myFix() || lastOwnFix;
       },
-      openPubs: function () { openPanel("pubs"); }
+      openPubs: function () { openPanel("pubs"); },
+      closePanel: closePanel,
+      isPanelOpen: isPanelOpen,
+      // Alerts about the road ahead are for a rider who is riding.
+      mode: function () { return state.mode; },
+      vehicle: function () { return state.vehicle; },
+      // The room's own notice line, so the map has one toast rather than two
+      // that land on top of each other.
+      toast: function (msg, kind) { RC.groupui.toast(msg, kind); }
     });
 
     /* The heat map is a second reading of the same record the planner uses,

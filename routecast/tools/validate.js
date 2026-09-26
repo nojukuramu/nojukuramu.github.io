@@ -332,6 +332,52 @@ section("Static: the info sheet");
         long.length === 0, long.join(" | "));
 })();
 
+section("Static: sub-tabs and the road's glyphs");
+(function () {
+  var html = read("index.html");
+
+  /* A sub-tab button with no pane is a tab that shows nothing, and a pane with
+     no button is a part of the app nobody can reach. RC.subtabs pairs them by
+     name alone, so the pairing is checked here, strip by strip. */
+  var strips = {};
+  var rs = /data-subtabs="([a-z-]+)"([\s\S]*?)<\/div>/g, ms;
+  while ((ms = rs.exec(html))) {
+    var keys = [], rb = /data-sub="([a-z-]+)"/g, mb;
+    while ((mb = rb.exec(ms[2]))) keys.push(mb[1]);
+    strips[ms[1]] = keys;
+  }
+  check("the Ride and Pubs panes have sub-tabs", !!strips.group && !!strips.pubs, Object.keys(strips).join(", "));
+  var panes = {}, rp = /data-sub-pane="([a-z-]+):([a-z-]+)"/g, mp;
+  while ((mp = rp.exec(html))) (panes[mp[1]] = panes[mp[1]] || []).push(mp[2]);
+  var lonely = [];
+  Object.keys(strips).forEach(function (name) {
+    strips[name].forEach(function (k) { if ((panes[name] || []).indexOf(k) < 0) lonely.push(name + ":" + k + " has no pane"); });
+    (panes[name] || []).forEach(function (k) { if (strips[name].indexOf(k) < 0) lonely.push(name + ":" + k + " has no button"); });
+  });
+  Object.keys(panes).forEach(function (name) { if (!strips[name]) lonely.push(name + " has panes and no strip"); });
+  check("every sub-tab has a pane and every pane a sub-tab", lonely.length === 0, lonely.join(", "));
+
+  /* Every kind of road report and every marker a stranger can pick has to be
+     a real glyph: the fallback is a circle with an exclamation mark in it,
+     which on a map pin reads as a hazard whatever it was meant to be. */
+  var icons = sandbox(true).RC.icons;
+  var pubs = sandbox().RC.pubs;
+  var fallback = icons.ui("no-such-glyph");
+  var noGlyph = pubs.REPORT_KINDS.filter(function (k) { return icons.ui(k) === fallback; });
+  check("every report kind has its own glyph", pubs.REPORT_KINDS.length === 6 && noGlyph.length === 0,
+        noGlyph.join(", ") || String(pubs.REPORT_KINDS.length));
+  var ui = read("static/js/pubsui.js");
+  var m = /var AVATAR_ICON = \{([^}]*)\}/.exec(ui);
+  var map = {};
+  if (m) m[1].replace(/(\w+):\s*"([\w-]+)"/g, function (_, k, v) { map[k] = v; });
+  var missing = pubs.AVATARS.filter(function (a) { return !map[a] || icons.ui(map[a]) === fallback; });
+  check("every marker a stranger can pick is drawn", pubs.AVATARS.length > 0 && missing.length === 0,
+        missing.join(", "));
+  var kindsInUi = (ui.match(/\{ kind: "[a-z]+"/g) || []).length;
+  check("the report buttons cover every kind the area carries", kindsInUi === pubs.REPORT_KINDS.length,
+        kindsInUi + " vs " + pubs.REPORT_KINDS.length);
+})();
+
 section("Static: the basemaps");
 (function () {
   /* mapstyles.js is pure data and one generator, so it can simply be run:
@@ -531,6 +577,9 @@ section("Static: theme tokens");
     // by groupui.js from the room's palette; --pub is the same idea for a
     // stranger on the public road, written by pubsui.js.
     if (t === "--rider" || t === "--pub") return false;
+    // --who is the colour of whoever is on the tapped card, written by who.js
+    // from the rider's or stranger's own colour.
+    if (t === "--who") return false;
     // --rc-dock-h is the dock's measured height (app.js, updateBottomVar),
     // --acc the rider's GPS error circle in pixels (app.js), and --i an
     // element's place in a staggered entrance, written inline by whatever
@@ -1575,6 +1624,154 @@ section("Behaviour: what a PUB is allowed to be");
         blunt(14.59952345) === 14.5995, "got " + blunt(14.59952345));
   check("rounding is to about ten metres, not to a suburb",
         Math.abs(blunt(14.59952345) - 14.59952345) < 0.0001);
+})();
+
+section("Behaviour: the area talks, and nobody talks for anybody else");
+(function () {
+  /* Three phones in one area, on a broker that lives in this process. The
+     clock is a queue this test turns by hand, so the seven-second wait for an
+     existing hub costs nothing and the order things happen in is exact. */
+  var timers = [], seq = 0;
+  function fakeTimeout(fn, ms) { var id = ++seq; timers.push({ id: id, fn: fn, at: ms || 0 }); return id; }
+  function fakeClear(id) { timers = timers.filter(function (t) { return t.id !== id; }); }
+  function flush() {
+    var guard = 0;
+    while (timers.length && guard++ < 50) {
+      timers.sort(function (a, b) { return a.at - b.at; });
+      timers.shift().fn();
+    }
+  }
+  function copy(o) { return JSON.parse(JSON.stringify(o)); }
+
+  var rooms = {}, conn = 0;
+  var bus = {
+    normalizeCode: function (c) { return String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6); },
+    host: function (code, opts) {
+      var on = opts.on || {};
+      if (rooms[code]) { fakeTimeout(function () { if (on["code-taken"]) on["code-taken"](); }); return { stop: function () {}, broadcast: function () {}, guests: function () { return []; } }; }
+      var links = {};
+      var h = {
+        broadcast: function (o) { Object.keys(links).forEach(function (k) { links[k].send(o); }); },
+        guests: function () { return Object.keys(links).map(function (k) { return links[k]; }); },
+        stop: function () { if (rooms[code] && rooms[code].h === h) delete rooms[code]; }
+      };
+      rooms[code] = { h: h, on: on, links: links };
+      return h;
+    },
+    join: function (code, cb) {
+      var r = rooms[code];
+      var id = "L" + (++conn);
+      if (!r) return { send: function () {}, stop: function () {} };
+      var link = { id: id, send: function (o) { cb.message(copy(o)); } };
+      r.links[id] = link;
+      fakeTimeout(function () { cb.open(); });
+      return {
+        send: function (o) { if (rooms[code] === r) r.on["guest-message"](link, copy(o)); },
+        stop: function () { delete r.links[id]; }
+      };
+    }
+  };
+
+  function phone(name, lat, lon) {
+    var ctx = sandbox();
+    ctx.setTimeout = fakeTimeout;
+    ctx.clearTimeout = fakeClear;
+    ctx.navigator.geolocation = {
+      getCurrentPosition: function (ok) { ok({ coords: { latitude: lat, longitude: lon } }); },
+      watchPosition: function () { return 1; },
+      clearWatch: function () {}
+    };
+    var RC = ctx.RC;
+    RC.net = bus;
+    var said = { shouts: [], beeps: [], reports: [] };
+    RC.pubs.onShout = function (l) { said.shouts.push(l); };
+    RC.pubs.onBeep = function (b) { said.beeps.push(b); };
+    RC.pubs.onReport = function (r) { said.reports.push(r); };
+    RC.pubs.start(name);
+    return { RC: RC, said: said };
+  }
+
+  var hub = phone("Hub", 14.60, 121.00);
+  flush();                                   // nobody answered: it holds the area
+  var ana = phone("Ana", 14.6004, 121.0004);
+  var ben = phone("Ben", 14.602, 121.002);
+  flush();
+  check("the first phone in an area holds it", hub.RC.pubs.role() === "host");
+  check("the next ones join it", ana.RC.pubs.role() === "guest" && ben.RC.pubs.role() === "guest");
+
+  // Everybody says HI once the way the timer would.
+  hub.RC.pubs.setAvatar("moto");
+  ana.RC.pubs.setAvatar("car");
+  ben.RC.pubs.setAvatar("not-a-glyph");
+  flush();
+  hub.RC.pubs._tick();
+  var seen = ana.RC.pubs.world();
+  check("a guest sees the rest of the area", seen.length === 2, seen.length + " people");
+  var hubDot = seen.filter(function (p) { return p.name === "Hub"; })[0];
+  check("and the glyph each one chose", hubDot && hubDot.av === "moto");
+  check("a glyph that is not ours is nobody's",
+        ben.RC.pubs.avatar() === null && seen.every(function (p) { return p.name !== "Ben" || p.av === null; }));
+
+  // Shouts.
+  check("a shout is accepted", ana.RC.pubs.shout("Anyone riding to Tagaytay?"));
+  var benHeard = ben.said.shouts.filter(function (l) { return !l.mine; });
+  check("everybody else hears it", benHeard.length === 1 && benHeard[0].name === "Ana" &&
+        hub.said.shouts.length === 1);
+  check("it is attributed to the rider it came from", benHeard[0] && benHeard[0].from === ana.RC.pubs.myId());
+  check("the shouter sees their own line once, not echoed twice",
+        ana.said.shouts.length === 1 && ana.said.shouts[0].mine);
+  check("a second shout straight after is refused", !ana.RC.pubs.shout("again"));
+  check("a shout is capped at a bubble's length",
+        ana.RC.pubs._clean.shout(new Array(300).join("z")).length <= ana.RC.pubs.SHOUT_MAX);
+
+  // Beeps are addressed: only the target hears one.
+  check("a beep is sent", ben.RC.pubs.beep(ana.RC.pubs.myId()));
+  check("the rider it was for hears it", ana.said.beeps.length === 1 && ana.said.beeps[0].name === "Ben");
+  check("nobody else does", hub.said.beeps.length === 0);
+  check("and the horn cannot be leaned on", !ben.RC.pubs.beep(ana.RC.pubs.myId()));
+
+  // Reports.
+  check("a report is accepted", ana.RC.pubs.report("crash"));
+  var pins = ben.RC.pubs.reports();
+  check("the area carries it", pins.length === 1 && pins[0].kind === "crash" && pins[0].by === "Ana", JSON.stringify(pins));
+  check("the other riders are told once", ben.said.reports.length === 1 && hub.said.reports.length === 1);
+  check("the reporter is not told about their own pin", ana.said.reports.length === 0);
+  check("the reporter's own copy knows it is theirs", ana.RC.pubs.reports()[0].mine === true);
+  check("a kind we do not draw is refused", !ben.RC.pubs.report("ufo"));
+
+  // The same thing reported again nearby is a confirmation, not a second pin.
+  hub.RC.pubs.report("crash");
+  check("the same crash reported twice is one pin", ben.RC.pubs.reports().length === 1);
+  check("seen twice", ben.RC.pubs.reports()[0].ups === 2, "ups=" + ben.RC.pubs.reports()[0].ups);
+
+  // Voting it away.
+  var pin = ben.RC.pubs.reports()[0].id;
+  check("a rider can say it is gone", ben.RC.pubs.vote(pin, false));
+  check("once", !ben.RC.pubs.vote(pin, false));
+  check("one vote against two sightings does not end it", ben.RC.pubs.reports().length === 1);
+  check("the reporter can take their own pin back", ana.RC.pubs.vote(pin, false) &&
+        ben.RC.pubs.reports().length === 0);
+
+  // A pin placed somewhere the reporter is not is refused by the hub.
+  var hubRC = hub.RC;
+  var before = hubRC.pubs.reports().length;
+  hubRC.pubs._hubReportAs(ana.RC.pubs.myId(), { kind: "flood", lat: 15.5, lon: 121.0 });
+  check("a pin far from its reporter is refused", hubRC.pubs.reports().length === before);
+
+  // Nobody can wear somebody else's id while that somebody is still talking.
+  hubRC.pubs._hiAs("Lx", { id: ana.RC.pubs.myId(), name: "Not Ana", lat: 14.7, lon: 121.1 });
+  hub.RC.pubs._tick();
+  var anaNow = ben.RC.pubs.world().filter(function (p) { return p.id === ana.RC.pubs.myId(); })[0];
+  check("a second link cannot take over a rider's marker", anaNow && anaNow.name === "Ana",
+        anaNow ? anaNow.name : "gone");
+
+  // Ignoring somebody takes their words and pins with them.
+  ana.RC.pubs.report("flood");
+  ben.RC.pubs.block(ana.RC.pubs.myId());
+  check("an ignored rider's pins disappear", ben.RC.pubs.reports().every(function (r) { return r.byId !== ana.RC.pubs.myId(); }));
+  check("and so do their lines", ben.RC.pubs.shouts().every(function (l) { return l.from !== ana.RC.pubs.myId(); }));
+
+  hub.RC.pubs.stop(); ana.RC.pubs.stop(); ben.RC.pubs.stop();
 })();
 
 /* A context for the modules the main sandbox does not load: the forecast
