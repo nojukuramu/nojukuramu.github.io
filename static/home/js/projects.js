@@ -1,7 +1,7 @@
 /* ============================================================
    nojukuramu — the projects
 
-   A carousel rather than a grid, and every card carries a small drawn
+   A ring of cards rather than a grid, and every card carries a small drawn
    scene of what the thing actually does: a spell circle tracing itself, a
    tower filling with light, an alarm going off, a skyline growing, four
    strings under a bow. They are twenty lines of canvas each, not
@@ -9,7 +9,18 @@
    sky behind them.
 
    Only the card in the spotlight animates. The rest hold a single frame,
-   so twelve canvases cost about as much as one.
+   so fourteen canvases cost about as much as one.
+
+   The ring is laid out by hand, not by the browser's scroll snapping. One
+   float, `pos`, says where the ring is; every card's transform is a
+   function of its distance from it, and a spring pulls `pos` to the whole
+   number it is heading for. Native scroll-snap could not put the side
+   cards on a curve, could not loop, and fought the tour; a spring is forty
+   lines and does all three. Touch still belongs to the page vertically —
+   the stage only claims horizontal drags (`touch-action: pan-y`).
+
+   The grid is the same fourteen cards with the transforms taken off, and
+   where the browser has View Transitions the cards fly between the two.
    ============================================================ */
 (function (global) {
   "use strict";
@@ -43,13 +54,25 @@
      Each is (ctx, w, h, phase, accent) and draws one frame. `phase` is
      seconds since the card took the spotlight. */
   var MOTIF = {
-    /* a polygon inscribing itself inside a circle, then another over it */
+    /* a polygon inscribing itself inside a circle, then another over it —
+       on the twelve-node ring the game actually has you trace */
     circles: function (c, w, h, p, a) {
       var cx = w / 2, cy = h / 2, r = h * 0.34;
       c.strokeStyle = a; c.lineWidth = 1.4;
       c.globalAlpha = 0.55;
       c.beginPath(); c.arc(cx, cy, r, 0, 6.283); c.stroke();
       c.beginPath(); c.arc(cx, cy, r * 0.68, 0, 6.283); c.stroke();
+      c.globalAlpha = 0.3;
+      c.beginPath(); c.arc(cx, cy, r * 1.22, 0, 6.283); c.stroke();
+      c.fillStyle = a;
+      for (var n = 0; n < 12; n++) {
+        var na = p * 0.35 + (n / 12) * 6.283 - 1.57;
+        c.globalAlpha = 0.45 + 0.35 * Math.sin(p * 3 - n);
+        c.beginPath(); c.arc(cx + Math.cos(na) * r, cy + Math.sin(na) * r, 1.8, 0, 6.283); c.fill();
+        var ra = -p * 0.2 + (n / 12) * 6.283;
+        c.globalAlpha = 0.35;
+        c.fillRect(cx + Math.cos(ra) * r * 1.1 - 1, cy + Math.sin(ra) * r * 1.1 - 1, 2, 2);
+      }
       c.globalAlpha = 1;
       var sides = 3 + (Math.floor(p / 3.2) % 4);
       var spin = p * 0.35;
@@ -82,6 +105,19 @@
       g.addColorStop(0, a); g.addColorStop(1, "rgba(0,0,0,0)");
       c.globalAlpha = 0.4 + 0.3 * Math.sin(p * 2); c.fillStyle = g;
       c.beginPath(); c.arc(w / 2, base - h * 0.66, h * 0.4, 0, 6.283); c.fill();
+      /* the island it stands on, and the motes the loom throws off */
+      c.globalAlpha = 0.5; c.fillStyle = "rgba(255,243,226,.35)";
+      c.beginPath();
+      c.moveTo(x - fw * 0.5, base); c.lineTo(x + fw * 1.5, base);
+      c.lineTo(x + fw * 0.8, base + h * 0.1); c.lineTo(x + fw * 0.35, base + h * 0.12); c.closePath(); c.fill();
+      c.fillStyle = a;
+      for (var m = 0; m < 9; m++) {
+        var mt = (p * 0.35 + m / 9) % 1;
+        c.globalAlpha = Math.sin(mt * Math.PI) * 0.9;
+        c.beginPath();
+        c.arc(w / 2 + Math.sin(m * 2.4 + p) * fw * 0.9, base - mt * h * 0.8, 1.4, 0, 6.283);
+        c.fill();
+      }
       c.globalAlpha = 1;
     },
 
@@ -420,222 +456,659 @@
     { id: "sound", label: "Sound" }
   ];
 
+  /* Spelled out, because the heading that counts them is written in words.
+     Past twenty it can have digits; that is a nice problem to have. */
+  var WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+               "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen",
+               "Eighteen", "Nineteen", "Twenty"];
+  function inWords(n) { return WORDS[n] || String(n); }
+
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
   }
-  function tint(hexStr, a) {
+  function rgbOf(hexStr) {
     var h = hexStr.replace("#", "");
-    return "rgba(" + parseInt(h.slice(0, 2), 16) + "," + parseInt(h.slice(2, 4), 16) + "," + parseInt(h.slice(4, 6), 16) + "," + a + ")";
+    return parseInt(h.slice(0, 2), 16) + "," + parseInt(h.slice(2, 4), 16) + "," + parseInt(h.slice(4, 6), 16);
   }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  /* signed distance round a ring of n, in (-n/2, n/2] */
+  function wrap(d, n) { d = ((d % n) + n) % n; return d > n / 2 ? d - n : d; }
+  function mod(v, n) { return ((v % n) + n) % n; }
+
+  var TOUR_KEY = "home.tour";
+  var VIEW_KEY = "home.view";
+  function recall(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function remember(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+  var OPEN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6.5l5.5 5.5L13 17.5"/></svg>';
+
+  /* Seconds the tour spends on each card. Long enough to read the three
+     highlights at an ordinary pace, which is the whole point of stopping. */
+  var TOUR = 6.5;
+
+  /* The spring. Stiff enough that a click feels answered inside a tenth of
+     a second, damped just under critical so a flick lands with the
+     smallest overshoot rather than a wobble. */
+  var STIFF = 190, DAMP = 25;
 
   /* ---------- build ---------- */
   var carousel = {
     projects: PROJECTS,
+    filters: FILTERS,
     current: 0,
+    inWords: inWords,
+    rgbOf: rgbOf,
 
     mount: function (root) {
-      var track = root.querySelector("[data-track]");
-      var viewport = root.querySelector("[data-viewport]");
+      var stage = root.querySelector("[data-stage]");
       var dotsEl = root.querySelector("[data-dots]");
       var countEl = root.querySelector("[data-count]");
       var filterEl = root.querySelector("[data-filters]");
-      var glowEl = root.querySelector("[data-glow]");
+      var playBtn = root.querySelector("[data-play]");
+      var viewEl = root.querySelector("[data-views]");
 
-      filterEl.innerHTML = FILTERS.map(function (f, i) {
-        return '<button class="chip' + (i === 0 ? " on" : "") + '" data-filter="' + f.id + '">' + esc(f.label) + "</button>";
+      /* --- markup --- */
+      filterEl.innerHTML = '<span class="chip-pill" aria-hidden="true"></span>' + FILTERS.map(function (f, i) {
+        var n = f.id === "all" ? PROJECTS.length
+              : PROJECTS.filter(function (p) { return p.kind === f.id; }).length;
+        return '<button class="chip' + (i === 0 ? " on" : "") + '" data-filter="' + f.id + '" aria-pressed="' + (i === 0) + '">' +
+               esc(f.label) + "<i>" + n + "</i></button>";
       }).join("");
+      var pill = filterEl.querySelector(".chip-pill");
+      var chips = Array.prototype.slice.call(filterEl.querySelectorAll(".chip"));
 
-      track.innerHTML = PROJECTS.map(function (p, i) {
-        return '<article class="slide" data-i="' + i + '" data-kind="' + p.kind + '" style="--accent:' + p.accent +
-               ';--accent-soft:' + tint(p.accent, 0.22) + '">' +
-                 '<div class="slide-scene"><canvas data-motif="' + p.motif + '" aria-hidden="true"></canvas></div>' +
-                 '<div class="slide-body">' +
-                   '<div class="slide-top">' +
+      stage.innerHTML = PROJECTS.map(function (p, i) {
+        return '<article class="slide" data-i="' + i + '" role="group" aria-roledescription="slide" aria-label="' + esc(p.name) +
+               '" style="--accent:' + p.accent + ";--accent-rgb:" + rgbOf(p.accent) + '">' +
+                 '<div class="slide-inner">' +
+                   '<div class="slide-scene">' +
+                     '<canvas data-motif="' + p.motif + '" aria-hidden="true"></canvas>' +
+                     '<span class="slide-no" aria-hidden="true">' + pad(i + 1) + "</span>" +
+                   "</div>" +
+                   '<div class="slide-body">' +
                      '<span class="slide-badge">' + esc(p.badge) + "</span>" +
-                     '<span class="slide-no">' + String(i + 1).padStart(2, "0") + "</span>" +
+                     "<h3>" + esc(p.name) + "</h3>" +
+                     '<p class="slide-desc">' + esc(p.desc) + "</p>" +
+                     '<ul class="slide-highlights">' + p.hi.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" +
+                     '<div class="slide-foot">' +
+                       '<div class="slide-tags">' + p.tags.map(function (t) { return '<span class="slide-tag">' + esc(t) + "</span>"; }).join("") + "</div>" +
+                       '<span class="slide-cta">Open' + OPEN_ICON + "</span>" +
+                     "</div>" +
                    "</div>" +
-                   "<h3>" + esc(p.name) + "</h3>" +
-                   '<p class="slide-desc">' + esc(p.desc) + "</p>" +
-                   '<ul class="slide-highlights">' + p.hi.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" +
-                   '<div class="slide-foot">' +
-                     '<div class="slide-tags">' + p.tags.map(function (t) { return '<span class="slide-tag">' + esc(t) + "</span>"; }).join("") + "</div>" +
-                     '<span class="slide-cta">Open<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6.5l5.5 5.5L13 17.5"/></svg></span>' +
-                   "</div>" +
+                   '<span class="slide-sheen" aria-hidden="true"></span>' +
                  "</div>" +
                  '<a class="stretch" href="' + esc(p.href) + '" aria-label="Open ' + esc(p.name) + '"></a>' +
                "</article>";
       }).join("");
 
-      var slides = Array.prototype.slice.call(track.children);
-
       dotsEl.innerHTML = PROJECTS.map(function (p, i) {
-        return '<button class="car-dot' + (i === 0 ? " on" : "") + '" data-i="' + i + '" aria-label="' + esc(p.name) + '"></button>';
+        return '<button class="car-dot" data-i="' + i + '" aria-label="' + esc(p.name) + '"></button>';
       }).join("");
+      var dots = Array.prototype.slice.call(dotsEl.children);
 
-      /* --- the motif canvases --- */
-      var scenes = slides.map(function (sl) {
-        var cv = sl.querySelector("canvas");
-        return { el: cv, ctx: cv.getContext("2d"), fn: MOTIF[cv.dataset.motif], w: 0, h: 0 };
+      var S = Array.prototype.map.call(stage.children, function (el, i) {
+        var cv = el.querySelector("canvas");
+        return { i: i, el: el, inner: el.querySelector(".slide-inner"), cv: cv, ctx: cv.getContext("2d"),
+                 fn: MOTIF[cv.getAttribute("data-motif")], w: 0, h: 0, since: 0 };
       });
 
-      function sizeScenes() {
-        var dpr = Math.min(global.devicePixelRatio || 1, 2);
-        scenes.forEach(function (s) {
-          var r = s.el.getBoundingClientRect();
-          if (!r.width) return;
-          s.w = r.width; s.h = r.height;
-          s.el.width = Math.round(r.width * dpr);
-          s.el.height = Math.round(r.height * dpr);
-          s.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        });
+      /* --- state --- */
+      var vis = S.slice();            /* what the filter lets through, in order */
+      var loop = vis.length > 3;      /* a ring needs enough cards to go round */
+      var pos = 0, target = 0, vel = 0;
+      var placedAt = NaN, stale = true;
+      var activeK = -1;
+      var grid = false;
+      var L = null;
+      var inView = !("IntersectionObserver" in global);
+      var hover = false, focusWithin = false;
+      var drag = null, suppressClick = false;
+      var wheeling = false, wheelTimer = 0, wheelFrom = 0;
+      var hot = null;                 /* the card under the pointer, in the grid */
+      var tour = { on: !reduced && recall(TOUR_KEY) !== "off", t: 0 };
+
+      /* --- layout ---
+         Card width comes from CSS; everything else is a fraction of it, so
+         the ring is the same shape on a phone as on a desk, only flatter —
+         a steep angle on a narrow screen hides the neighbours entirely. */
+      function measure() {
+        var vw = root.clientWidth || global.innerWidth;
+        var first = vis[0] || S[0];
+        var cw = first.el.offsetWidth || 400;
+        var narrow = vw < 720;
+        var s2 = cw * (narrow ? 0.34 : 0.38);
+        L = {
+          s1: cw * (narrow ? 0.9 : 0.76),
+          s2: s2,
+          rot: narrow ? 16 : 30,
+          depth: narrow ? 110 : 190,
+          reach: narrow ? 1.3 : clamp((vw / 2 - cw * 0.5) / s2 + 0.6, 1.3, 3.4)
+        };
+        stale = true;
       }
 
-      function drawScene(i, p) {
-        var s = scenes[i];
-        if (!s || !s.fn || !s.w) return;
-        s.ctx.clearRect(0, 0, s.w, s.h);
-        s.ctx.save();
-        try { s.fn(s.ctx, s.w, s.h, p, PROJECTS[i].accent); } catch (e) {}
-        s.ctx.restore();
-      }
-
-      var t0 = performance.now();
-      function frame(now) {
-        var p = (now - t0) / 1000;
-        drawScene(carousel.current, p);
-        if (!reduced) requestAnimationFrame(frame);
-      }
-
-      /* --- position --- */
-      function visible() {
-        return slides.filter(function (s) { return !s.hidden; });
-      }
-      function centerOf(el) { return el.offsetLeft + el.offsetWidth / 2; }
-
-      function markActive() {
-        var vis = visible();
-        if (!vis.length) return;
-        var mid = viewport.scrollLeft + viewport.clientWidth / 2;
-        var best = vis[0], bestD = Infinity;
-        vis.forEach(function (s) {
-          var d = Math.abs(centerOf(s) - mid);
-          if (d < bestD) { bestD = d; best = s; }
-        });
-        var idx = +best.dataset.i;
-        slides.forEach(function (s) { s.classList.toggle("is-active", s === best); });
-        if (idx !== carousel.current) {
-          var leaving = carousel.current;
-          carousel.current = idx;
-          if (leaving !== idx) drawScene(leaving, 1.4);
-          var p = PROJECTS[idx];
-          countEl.innerHTML = "<b>" + String(vis.indexOf(best) + 1).padStart(2, "0") + "</b> / " + String(vis.length).padStart(2, "0");
-          Array.prototype.forEach.call(dotsEl.children, function (d) { d.classList.toggle("on", +d.dataset.i === idx); });
-          glowEl.style.background = "radial-gradient(60% 70% at 50% 50%, " + tint(p.accent, 0.30) + " 0%, transparent 70%)";
-          drawScene(idx, 0);
+      function place() {
+        if (grid || !L) return;
+        var n = vis.length;
+        for (var k = 0; k < n; k++) {
+          var s = vis[k], st = s.el.style;
+          var d = loop ? wrap(k - pos, n) : k - pos;
+          var ad = Math.abs(d), sd = d < 0 ? -1 : 1;
+          var x = ad <= 1 ? d * L.s1 : sd * (L.s1 + (ad - 1) * L.s2);
+          var ry = sd * Math.min(ad, 1) * L.rot;
+          var z = -Math.pow(Math.min(ad, 4), 0.9) * L.depth;
+          var sc = 1 - Math.min(ad, 3) * 0.035;
+          var op = clamp(L.reach + 0.5 - ad, 0, 1);
+          /* The card at the back of the ring swaps sides as the ring turns.
+             Fade it out before it gets there, so the swap is never seen. */
+          if (loop) op *= clamp((n / 2 - ad) * 1.6, 0, 1);
+          st.transform = "translate3d(" + x.toFixed(1) + "px,0," + z.toFixed(1) + "px) rotateY(" +
+                         ry.toFixed(2) + "deg) scale(" + sc.toFixed(3) + ")";
+          st.opacity = op.toFixed(3);
+          st.zIndex = String(1000 - Math.round(ad * 100));
+          st.pointerEvents = op < 0.35 ? "none" : "";
+          st.setProperty("--dim", Math.min(ad * 0.55, 0.78).toFixed(3));
         }
       }
 
-      function goTo(el, smooth) {
-        if (!el) return;
-        viewport.scrollTo({ left: centerOf(el) - viewport.clientWidth / 2, behavior: (smooth && !reduced) ? "smooth" : "auto" });
+      function spotlit() {
+        var n = vis.length;
+        if (!n) return -1;
+        var r = Math.round(pos);
+        return loop ? mod(r, n) : clamp(r, 0, n - 1);
       }
-      function step(delta, smooth) {
-        var vis = visible();
-        var here = vis.indexOf(slides[carousel.current]);
-        if (here < 0) here = 0;
-        goTo(vis[clamp(here + delta, 0, vis.length - 1)], smooth);
+
+      function setActive(k, quiet) {
+        if (k < 0 || k === activeK) return;
+        var prev = vis[activeK];
+        var s = vis[k];
+        activeK = k;
+        S.forEach(function (x) { x.el.classList.toggle("is-active", x === s); });
+        if (prev && prev !== s) { untilt(prev); drawScene(prev, 1.4); }
+        s.since = performance.now();
+        carousel.current = s.i;
+        countEl.innerHTML = "<b>" + pad(k + 1) + "</b> / " + pad(vis.length);
+        dots.forEach(function (d, i) {
+          d.classList.toggle("on", i === s.i);
+          d.style.removeProperty("--p");
+        });
+        root.style.setProperty("--car-accent", PROJECTS[s.i].accent);
+        root.style.setProperty("--car-accent-rgb", rgbOf(PROJECTS[s.i].accent));
+        tour.t = 0;
+        if (!quiet && NJ.ambience && NJ.ambience.tick) NJ.ambience.tick(s.i);
       }
-      carousel.goToIndex = function (i, smooth) { goTo(slides[i], smooth !== false); };
 
-      viewport.addEventListener("scroll", markActive, { passive: true });
-      root.querySelector("[data-prev]").addEventListener("click", function () { step(-1, true); });
-      root.querySelector("[data-next]").addEventListener("click", function () { step(1, true); });
-      dotsEl.addEventListener("click", function (e) {
-        var b = e.target.closest("[data-i]");
-        if (b) goTo(slides[+b.dataset.i], true);
-      });
+      /* --- the spring --- */
+      function physics(dt) {
+        if ((drag && drag.live) || wheeling) return;
+        if (reduced) { pos = target; vel = 0; return; }
+        if (pos === target && vel === 0) return;
+        /* fixed small steps: a long frame must not be able to fling it */
+        var steps = Math.max(1, Math.ceil(dt * 240)), h = dt / steps;
+        for (var i = 0; i < steps; i++) {
+          vel += (STIFF * (target - pos) - DAMP * vel) * h;
+          pos += vel * h;
+        }
+        if (Math.abs(target - pos) < 0.0004 && Math.abs(vel) < 0.004) {
+          pos = target; vel = 0;
+          /* keep the numbers small on a ring that has gone round a lot */
+          if (loop && vis.length) { target = mod(target, vis.length); pos = target; stale = true; }
+        }
+      }
 
-      var shuffle = root.querySelector("[data-shuffle]");
-      if (shuffle) shuffle.addEventListener("click", function () {
-        var vis = visible().filter(function (s) { return +s.dataset.i !== carousel.current; });
-        if (vis.length) goTo(vis[(Math.random() * vis.length) | 0], true);
-      });
+      function moving() {
+        return (drag && drag.live) || wheeling || pos !== target || vel !== 0;
+      }
+
+      /* --- one frame loop for all of it --- */
+      var raf = 0, last = 0;
+      function kick() { if (!raf) raf = requestAnimationFrame(frame); }
+      function frame(now) {
+        raf = 0;
+        /* The spring gets a capped step (it sub-steps anyway); the tour gets
+           the real one, or a phone drawing fifteen frames a second would
+           stay on each card twice as long as it says. */
+        var real = last ? (now - last) / 1000 : 1 / 60;
+        var dt = Math.min(0.1, real);
+        last = now;
+        if (!grid) {
+          physics(dt);
+          if (pos !== placedAt || stale) { place(); placedAt = pos; stale = false; }
+          setActive(spotlit(), false);
+        }
+        runTour(Math.min(0.25, real));
+        var s = grid ? hot : vis[activeK];
+        if (s && !reduced) drawScene(s, (now - s.since) / 1000);
+        /* Keep going while something moves, or while there is a scene on
+           screen to animate. Off screen and settled, the loop stops. */
+        if (moving() || (inView && !reduced)) raf = requestAnimationFrame(frame);
+        else last = 0;
+      }
+
+      /* --- moving it --- */
+      function go(delta) {
+        var n = vis.length;
+        if (!n || grid) return;
+        var base = Math.round(target);
+        target = loop ? base + delta : clamp(base + delta, 0, n - 1);
+        if (reduced) pos = target;
+        kick();
+      }
+      function goToK(k) {
+        var n = vis.length;
+        if (!n || k < 0 || grid) return;
+        var base = Math.round(target);
+        target = loop ? base + wrap(k - base, n) : k;
+        if (reduced) pos = target;
+        kick();
+      }
+
+      /* Anything the visitor does to the ring ends the tour — they are
+         driving now. The play button is the only way back on. */
+      function took() { if (tour.on) setTour(false, true); }
+
+      function setTour(on, byHand) {
+        tour.on = on; tour.t = 0;
+        playBtn.classList.toggle("paused", !on);
+        playBtn.setAttribute("aria-pressed", on ? "true" : "false");
+        playBtn.setAttribute("aria-label", on ? "Pause the tour" : "Play the tour");
+        playBtn.title = on ? "Pause the tour" : "Play the tour";
+        dots.forEach(function (d) { d.style.removeProperty("--p"); });
+        if (byHand) remember(TOUR_KEY, on ? "on" : "off");
+        kick();
+      }
+
+      function runTour(dt) {
+        if (!tour.on || grid || vis.length < 2) return;
+        if (inView && !hover && !focusWithin && !(drag && drag.live) && !document.hidden) {
+          tour.t += dt;
+          if (tour.t >= TOUR) { tour.t = 0; go(1); }
+        }
+        var dot = dots[carousel.current];
+        if (dot) dot.style.setProperty("--p", (tour.t / TOUR).toFixed(3));
+      }
+
+      /* --- scenes --- */
+      function sizeScenes() {
+        var dpr = Math.min(global.devicePixelRatio || 1, 2);
+        S.forEach(function (s) {
+          /* offset sizes, not the bounding box: the box of a card turned
+             thirty degrees away is narrower than the canvas really is */
+          var w = s.cv.offsetWidth, h = s.cv.offsetHeight;
+          if (!w || !h || (w === s.w && h === s.h)) return;
+          s.w = w; s.h = h;
+          s.cv.width = Math.round(w * dpr);
+          s.cv.height = Math.round(h * dpr);
+          s.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          drawScene(s, 1.4);
+        });
+      }
+
+      function drawScene(s, p) {
+        if (!s || !s.fn || !s.w) return;
+        s.ctx.clearRect(0, 0, s.w, s.h);
+        s.ctx.save();
+        try { s.fn(s.ctx, s.w, s.h, p, PROJECTS[s.i].accent); } catch (e) {}
+        s.ctx.restore();
+      }
+
+      function untilt(s) {
+        if (!s) return;
+        s.el.classList.remove("lit");
+        s.inner.style.removeProperty("--rx");
+        s.inner.style.removeProperty("--ry");
+      }
+
+      /* --- filters, and the pill that slides between them --- */
+      function movePill() {
+        var b = filterEl.querySelector(".chip.on");
+        if (!b || !b.offsetWidth) return;
+        pill.style.width = b.offsetWidth + "px";
+        pill.style.height = b.offsetHeight + "px";
+        pill.style.transform = "translate(" + b.offsetLeft + "px," + b.offsetTop + "px)";
+        filterEl.classList.add("has-pill");
+      }
+
+      function applyFilter(id) {
+        var keep = vis[activeK];
+        chips.forEach(function (c) {
+          var on = c.getAttribute("data-filter") === id;
+          c.classList.toggle("on", on);
+          c.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+        movePill();
+        vis = S.filter(function (s) { return id === "all" || PROJECTS[s.i].kind === id; });
+        S.forEach(function (s) {
+          var on = vis.indexOf(s) !== -1;
+          s.el.hidden = !on;
+          dots[s.i].hidden = !on;
+        });
+        loop = vis.length > 3;
+        activeK = -1;
+        var k = Math.max(0, vis.indexOf(keep));
+        measure();
+        sizeScenes();
+        /* the new set turns into place rather than appearing */
+        target = k;
+        pos = reduced || grid ? k : k - 1.6;
+        vel = 0;
+        if (grid) setActive(k, true);
+        kick();
+      }
 
       filterEl.addEventListener("click", function (e) {
         var b = e.target.closest("[data-filter]");
-        if (!b) return;
-        var id = b.dataset.filter;
-        Array.prototype.forEach.call(filterEl.children, function (c) { c.classList.toggle("on", c === b); });
-        slides.forEach(function (s) { s.hidden = !(id === "all" || s.dataset.kind === id); });
-        requestAnimationFrame(function () {
-          sizeScenes();
-          var vis = visible();
-          if (vis.length) { goTo(vis[0], false); markActive(); }
-        });
+        if (!b || b.classList.contains("on")) return;
+        /* on a phone the row scrolls; bring the chosen chip fully into it */
+        if (filterEl.scrollWidth > filterEl.clientWidth) {
+          filterEl.scrollTo({ left: b.offsetLeft - 20, behavior: reduced ? "auto" : "smooth" });
+        }
+        var id = b.getAttribute("data-filter");
+        if (grid) morph(function () { applyFilter(id); });
+        else applyFilter(id);
       });
 
-      /* drag, for a mouse */
-      var down = false, startX = 0, startL = 0, moved = 0;
-      viewport.addEventListener("pointerdown", function (e) {
-        if (e.pointerType === "touch") return;
-        down = true; moved = 0; startX = e.clientX; startL = viewport.scrollLeft;
-        viewport.classList.add("dragging");
-      });
-      global.addEventListener("pointermove", function (e) {
-        if (!down) return;
-        var d = e.clientX - startX;
-        moved = Math.max(moved, Math.abs(d));
-        viewport.scrollLeft = startL - d;
-      });
-      global.addEventListener("pointerup", function () {
-        if (!down) return;
-        down = false; viewport.classList.remove("dragging");
-        if (moved > 6) goTo(slides[carousel.current], true);
-      });
-      track.addEventListener("click", function (e) { if (moved > 6) { e.preventDefault(); moved = 0; } }, true);
-
-      /* the card leans towards the pointer */
-      if (!reduced) {
-        track.addEventListener("pointermove", function (e) {
-          var card = e.target.closest(".slide.is-active");
-          if (!card) return;
-          var r = card.getBoundingClientRect();
-          var nx = (e.clientX - r.left) / r.width - 0.5;
-          var ny = (e.clientY - r.top) / r.height - 0.5;
-          card.style.setProperty("--rx", (-ny * 5).toFixed(2) + "deg");
-          card.style.setProperty("--ry", (nx * 6).toFixed(2) + "deg");
-        });
-        track.addEventListener("pointerleave", function () {
-          slides.forEach(function (s) { s.style.removeProperty("--rx"); s.style.removeProperty("--ry"); });
-        });
+      /* --- ring and grid ---
+         Where the browser has View Transitions, each card is given a name for
+         the length of the switch and the browser flies it from where it was
+         to where it lands. The page itself is not cross-faded: the old root
+         is hidden and the new one shown at once, so only the cards move and
+         the sky behind them never doubles. */
+      function morph(change) {
+        if (reduced || !document.startViewTransition) { change(); kick(); return; }
+        var named = vis.slice();
+        named.forEach(function (s) { s.el.style.viewTransitionName = "nj-card-" + s.i; });
+        document.documentElement.classList.add("nj-vt");
+        var done = function () {
+          S.forEach(function (s) { s.el.style.viewTransitionName = ""; });
+          document.documentElement.classList.remove("nj-vt");
+          kick();
+        };
+        try {
+          var vt = document.startViewTransition(function () {
+            change();
+            /* cards the change revealed need names too, or they just pop in */
+            vis.forEach(function (s) { s.el.style.viewTransitionName = "nj-card-" + s.i; });
+          });
+          vt.finished.then(done, done);
+        } catch (e) { change(); done(); }
       }
 
+      function setView(mode, animate) {
+        var on = mode === "grid";
+        if (on === grid) return;
+        var change = function () {
+          grid = on;
+          root.classList.toggle("is-grid", on);
+          Array.prototype.forEach.call(viewEl.querySelectorAll("[data-view]"), function (b) {
+            var m = b.getAttribute("data-view") === mode;
+            b.classList.toggle("on", m);
+            b.setAttribute("aria-pressed", m ? "true" : "false");
+          });
+          S.forEach(untilt);
+          if (on) {
+            S.forEach(function (s) {
+              var st = s.el.style;
+              st.transform = st.opacity = st.zIndex = st.pointerEvents = "";
+              st.removeProperty("--dim");
+            });
+          } else {
+            hot = null;
+            pos = target = Math.max(0, activeK);
+            vel = 0;
+            /* coming back from a long grid, the ring may be above the fold */
+            var r = root.getBoundingClientRect();
+            if (r.top < 0) global.scrollBy(0, r.top - 90);
+          }
+          measure();
+          sizeScenes();
+          if (!on) { place(); placedAt = pos; }
+        };
+        if (animate) morph(change); else { change(); kick(); }
+        remember(VIEW_KEY, mode);
+      }
+
+      viewEl.addEventListener("click", function (e) {
+        var b = e.target.closest("[data-view]");
+        if (b) setView(b.getAttribute("data-view"), true);
+      });
+
+      /* --- drag, for every kind of pointer ---
+         A horizontal drag is the ring's; anything that starts out vertical
+         is left alone so the page still scrolls under a thumb. */
+      stage.addEventListener("pointerdown", function (e) {
+        suppressClick = false;
+        if (grid || e.button !== 0 || !vis.length) return;
+        drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, p0: pos, live: false, samples: [[e.timeStamp, e.clientX]] };
+      });
+
+      stage.addEventListener("pointermove", function (e) {
+        if (drag && e.pointerId === drag.id) {
+          var dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+          if (!drag.live) {
+            if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { drag = null; return; }
+            if (Math.abs(dx) < 7) return;
+            drag.live = true;
+            drag.p0 = pos;
+            drag.x0 = e.clientX;
+            dx = 0;
+            took();
+            root.classList.add("dragging");
+            try { stage.setPointerCapture(e.pointerId); } catch (err) {}
+          }
+          var raw = drag.p0 - dx / L.s1;
+          var n = vis.length;
+          /* past either end of a short row, give a little and pull back */
+          pos = loop ? raw : raw < 0 ? raw * 0.3 : raw > n - 1 ? n - 1 + (raw - n + 1) * 0.3 : raw;
+          target = pos; vel = 0;
+          drag.samples.push([e.timeStamp, e.clientX]);
+          if (drag.samples.length > 6) drag.samples.shift();
+          kick();
+          return;
+        }
+        lean(e);
+      });
+
+      function release(e, cancelled) {
+        if (!drag || (e && e.pointerId !== drag.id)) return;
+        var d = drag;
+        drag = null;
+        if (!d.live) return;
+        root.classList.remove("dragging");
+        suppressClick = true;
+        var v = 0;
+        if (!cancelled) {
+          var sm = d.samples, a = sm[0], b = sm[sm.length - 1];
+          /* a finger that stopped before it let go is not a flick */
+          if (e.timeStamp - b[0] < 90) v = -((b[1] - a[1]) / Math.max(8, b[0] - a[0])) * 1000 / L.s1;
+        }
+        v = clamp(v, -14, 14);
+        var dest = Math.round(clamp(pos + v * 0.2, pos - 4, pos + 4));
+        dest = committed(d.p0, pos, dest);
+        target = loop ? dest : clamp(dest, 0, vis.length - 1);
+        vel = v * 0.5;
+        if (reduced) { pos = target; vel = 0; }
+        kick();
+      }
+      stage.addEventListener("pointerup", function (e) { release(e, false); });
+      stage.addEventListener("pointercancel", function (e) { release(e, true); });
+      /* Only the stage's own capture ending counts. A touch is implicitly
+         captured by the link under the finger, and handing that capture to
+         the stage makes the *link* lose it — an event that bubbles up here
+         and, taken at face value, drops every touch drag as it starts. */
+      stage.addEventListener("lostpointercapture", function (e) {
+        if (e.target === stage && drag && drag.live) release(e, true);
+      });
+      /* links are draggable by default, which steals the gesture */
+      stage.addEventListener("dragstart", function (e) { e.preventDefault(); });
+
+      stage.addEventListener("click", function (e) {
+        if (suppressClick) { e.preventDefault(); e.stopPropagation(); suppressClick = false; return; }
+        if (grid) return;
+        var el = e.target.closest(".slide");
+        if (!el) return;
+        var k = vis.indexOf(S[+el.getAttribute("data-i")]);
+        /* a card at the side comes to the middle first; only the one in the
+           spotlight opens */
+        if (k !== activeK) { e.preventDefault(); took(); goToK(k); }
+      }, true);
+
+      /* A deliberate push of a fifth of a card goes to the next card, even
+         with no speed behind it. Rounding alone would need half a card —
+         and a tilt-wheel mouse, whose notches arrive a few hundred
+         milliseconds apart, would never get there at all. */
+      function committed(from, now, dest) {
+        var moved = now - from;
+        if (dest === Math.round(from) && Math.abs(moved) > 0.18) return Math.round(from) + (moved > 0 ? 1 : -1);
+        return dest;
+      }
+
+      /* --- a sideways swipe on a trackpad turns the ring --- */
+      stage.addEventListener("wheel", function (e) {
+        if (grid || !vis.length) return;
+        if (Math.abs(e.deltaX) <= Math.abs(e.deltaY) * 1.2) return;
+        e.preventDefault();
+        took();
+        var unit = e.deltaMode === 1 ? 32 : e.deltaMode === 2 ? L.s1 : 1;
+        if (!wheeling) wheelFrom = pos;
+        pos += (e.deltaX * unit) / L.s1 * 0.8;
+        if (!loop) pos = clamp(pos, -0.3, vis.length - 0.7);
+        target = pos; vel = 0; wheeling = true;
+        clearTimeout(wheelTimer);
+        wheelTimer = setTimeout(function () {
+          wheeling = false;
+          var dest = committed(wheelFrom, pos, Math.round(pos));
+          target = loop ? dest : clamp(dest, 0, vis.length - 1);
+          kick();
+        }, 140);
+        kick();
+      }, { passive: false });
+
+      /* --- the card leans towards the pointer, and a light follows it --- */
+      function lean(e) {
+        if (reduced || e.pointerType === "touch") return;
+        var el = e.target.closest && e.target.closest(".slide");
+        var s = el ? S[+el.getAttribute("data-i")] : null;
+        if (grid && s !== hot) {
+          if (hot) { untilt(hot); drawScene(hot, 1.4); }
+          hot = s;
+          if (s) s.since = performance.now();
+          kick();
+        }
+        if (!s || (!grid && !el.classList.contains("is-active"))) return;
+        var r = s.inner.getBoundingClientRect();
+        var nx = (e.clientX - r.left) / r.width, ny = (e.clientY - r.top) / r.height;
+        var st = s.inner.style;
+        st.setProperty("--rx", ((0.5 - ny) * 7).toFixed(2) + "deg");
+        st.setProperty("--ry", ((nx - 0.5) * 9).toFixed(2) + "deg");
+        st.setProperty("--mx", (nx * 100).toFixed(1) + "%");
+        st.setProperty("--my", (ny * 100).toFixed(1) + "%");
+        s.el.classList.add("lit");
+      }
+
+      stage.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse") hover = true; });
+      stage.addEventListener("pointerleave", function () {
+        hover = false;
+        S.forEach(untilt);
+        if (grid && hot) { drawScene(hot, 1.4); hot = null; }
+      });
+
+      /* Tabbing through the cards turns the ring to each in turn. Only for
+         keyboard focus — a mouse press focuses the link too, and that must
+         not start the ring moving under a drag that is about to begin. */
+      root.addEventListener("focusin", function (e) {
+        focusWithin = true;
+        if (grid) return;
+        var el = e.target.closest && e.target.closest(".slide");
+        if (!el) return;
+        var kb = true;
+        try { kb = e.target.matches(":focus-visible"); } catch (err) {}
+        if (!kb) return;
+        var k = vis.indexOf(S[+el.getAttribute("data-i")]);
+        if (k >= 0 && k !== activeK) { took(); goToK(k); }
+      });
+      root.addEventListener("focusout", function (e) {
+        if (!e.relatedTarget || !root.contains(e.relatedTarget)) focusWithin = false;
+      });
+
+      /* --- the controls --- */
+      root.querySelector("[data-prev]").addEventListener("click", function () { took(); go(-1); });
+      root.querySelector("[data-next]").addEventListener("click", function () { took(); go(1); });
+      dotsEl.addEventListener("click", function (e) {
+        var b = e.target.closest("[data-i]");
+        if (!b) return;
+        took();
+        goToK(vis.indexOf(S[+b.getAttribute("data-i")]));
+      });
+      playBtn.addEventListener("click", function () { setTour(!tour.on, true); });
+
+      var shuffle = root.querySelector("[data-shuffle]");
+      if (shuffle) shuffle.addEventListener("click", function () {
+        took();
+        if (vis.length < 2) return;
+        var k;
+        do { k = (Math.random() * vis.length) | 0; } while (k === activeK);
+        goToK(k);
+      });
+
       document.addEventListener("keydown", function (e) {
-        if (e.defaultPrevented) return;
+        if (e.defaultPrevented || grid || e.altKey || e.metaKey || e.ctrlKey) return;
         var typing = /^(input|textarea|select)$/i.test(e.target.tagName || "") || e.target.isContentEditable;
         if (typing) return;
         var box = root.getBoundingClientRect();
         if (box.top > global.innerHeight * 0.75 || box.bottom < global.innerHeight * 0.25) return;
-        if (e.key === "ArrowRight") { e.preventDefault(); step(1, true); }
-        else if (e.key === "ArrowLeft") { e.preventDefault(); step(-1, true); }
+        if (e.key === "ArrowRight") { e.preventDefault(); took(); go(1); }
+        else if (e.key === "ArrowLeft") { e.preventDefault(); took(); go(-1); }
       });
 
+      var resizeT = 0;
       global.addEventListener("resize", function () {
-        sizeScenes();
-        goTo(slides[carousel.current], false);
+        clearTimeout(resizeT);
+        resizeT = setTimeout(function () { measure(); sizeScenes(); movePill(); kick(); }, 60);
       });
+      /* the face arrives late and every chip changes width when it does */
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { movePill(); measure(); kick(); });
 
+      if ("IntersectionObserver" in global) {
+        new IntersectionObserver(function (en) {
+          inView = en[0].isIntersecting;
+          if (inView) kick();
+        }, { threshold: 0.12 }).observe(root);
+      }
+
+      carousel.goToIndex = function (i) {
+        var s = S[i];
+        if (!s) return;
+        if (vis.indexOf(s) === -1) {
+          if (grid) morph(function () { applyFilter("all"); }); else applyFilter("all");
+        }
+        took();
+        if (grid) {
+          s.el.scrollIntoView({ block: "center", behavior: reduced ? "auto" : "smooth" });
+          s.el.classList.remove("ping");
+          void s.el.offsetWidth;
+          s.el.classList.add("ping");
+          return;
+        }
+        goToK(vis.indexOf(s));
+      };
+      carousel.setView = function (mode) { setView(mode, true); };
+
+      /* --- first paint --- */
+      setTour(tour.on, false);
+      measure();
+      /* The ring starts a little way round and turns into place as it
+         comes into view — the first thing it does is show that it moves. */
+      if (!reduced && !inView) { pos = -2.2; }
       requestAnimationFrame(function () {
+        if (recall(VIEW_KEY) === "grid") setView("grid", false);
+        measure();
         sizeScenes();
-        goTo(slides[0], false);
-        markActive();
-        countEl.innerHTML = "<b>01</b> / " + String(PROJECTS.length).padStart(2, "0");
-        glowEl.style.background = "radial-gradient(60% 70% at 50% 50%, " + tint(PROJECTS[0].accent, 0.30) + " 0%, transparent 70%)";
-        /* One frame for every card, once. Only the spotlit one goes on
-           animating, but the neighbours peeking in from the sides have to
-           show their scene rather than an empty band. */
-        scenes.forEach(function (s, i) { drawScene(i, 1.4); });
-        if (!reduced) requestAnimationFrame(frame);
+        movePill();
+        S.forEach(function (s) { drawScene(s, 1.4); });
+        if (grid) setActive(0, true);
+        stale = true;
+        kick();
       });
 
       return carousel;

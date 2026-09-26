@@ -24,6 +24,14 @@
   var splash = document.getElementById("splash");
   if (!splash) return;
 
+  /* The hero's words wait under `.intro` and rise on `.splashed`, so they
+     arrive as the curtain lifts instead of finishing unseen behind it.
+     `.splashed` is also set on a timer of its own here, independent of
+     run() ever being called, so nothing can leave the headline hidden. */
+  var docEl = document.documentElement;
+  docEl.classList.add("intro");
+  setTimeout(function () { docEl.classList.add("splashed"); }, 6000);
+
   var ink = splash.querySelector(".splash-ink");
   var glyphs = ink ? Array.prototype.slice.call(ink.children) : [];
   var gauge = document.getElementById("splash-gauge-fill");

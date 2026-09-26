@@ -5,9 +5,11 @@ visited directly at `https://nojukuramu.github.io/<folder>/`.
 
 The root (`index.html`) is the landing page that ties the projects together. It sits on a drawn
 sunset: one canvas, no libraries, where a single number — how far through the evening we are —
-paints the sky, the sun, tonight's real moon phase, the clouds, four mountain ridges and the lake
-under them. Scrolling runs that number forward, so the top of the page is golden hour and the
-bottom is a starry night; the dial in the corner can take it over instead.
+paints the sky, the sun and the rays it throws while it is low, tonight's real moon phase, the
+clouds, four mountain ridges and the lake under them, and after dark the Milky Way, a meteor now
+and then, and the lights of a far shore coming on one by one. Scrolling runs that number forward,
+so the top of the page is golden hour and the bottom is a starry night; the dial in the corner can
+take it over instead.
 
 Its styles and scripts live in [`static/home/`](static/home/):
 
@@ -16,14 +18,37 @@ Its styles and scripts live in [`static/home/`](static/home/):
 | [`js/sky.js`](static/home/js/sky.js) | the scene — sky, sun, moon, cloud, birds, ridges, lake, rain, snow, fog, lightning |
 | [`js/weather.js`](static/home/js/weather.js) | [Open-Meteo](https://open-meteo.com/) and the moon, so the drawn sky can follow the real one |
 | [`js/ambience.js`](static/home/js/ambience.js) | wind, crickets, birds, rain and thunder, synthesised — there are no audio files |
-| [`js/projects.js`](static/home/js/projects.js) | the carousel, and the small drawn scene on every card |
+| [`js/projects.js`](static/home/js/projects.js) | the ring of cards and the grid it folds into, and the small drawn scene on every card |
+| [`js/motion.js`](static/home/js/motion.js) | everything else that moves: headings rising a word at a time, the ribbons, the counters, the mark at the bottom |
 | [`js/splash.js`](static/home/js/splash.js) | the logo writing itself, and the moment the device is measured |
 | [`js/home.js`](static/home/js/home.js) | the glue: scroll, dial, sound, search palette |
+| [`tools/validate.js`](static/home/tools/validate.js) | `node static/home/tools/validate.js` — the checks to run before committing |
 
 Adding a project means adding one object to the `PROJECTS` array in
-[`static/home/js/projects.js`](static/home/js/projects.js) — the carousel, the filters and the
-search palette are all driven from it. A card's `motif` names one of the drawing functions at the
-top of that file.
+[`static/home/js/projects.js`](static/home/js/projects.js) — the carousel, the filters, the
+ribbons, the counters and the search palette are all driven from it. A card's `motif` names one of
+the drawing functions at the top of that file. The heading counts the projects in words and is
+corrected from the list at run time, but the number is also written into the HTML for anyone
+without scripts; the validator refuses to let the two disagree, and checks that the folder exists
+and is in `sitemap.xml`.
+
+**On the ring.** The projects are a ring of cards laid out by hand rather than by scroll-snap: one
+float says where the ring is, every card's transform is a function of its distance from it, and a
+spring pulls that float to the card it is heading for. That is what lets the side cards sit on a
+curve, the ring loop, and a flick carry momentum. It takes a mouse drag, a touch swipe (vertical
+swipes still scroll the page), a sideways trackpad swipe, the arrow keys, and Tab — focusing a card
+turns the ring to it. A card at the side comes to the middle when clicked; only the one in the
+spotlight opens.
+
+While it is on screen and nobody is touching it, it tours itself, a card every six and a half
+seconds, the lit dot filling as each stop runs out. Hovering or focusing pauses it; dragging,
+clicking or pressing anything on it stops it for good, and the play button is the only way back.
+It never tours under `prefers-reduced-motion`.
+
+The grid button folds the same fourteen cards into a grid with the transforms taken off — where
+the browser has View Transitions each card flies to its place, and elsewhere it simply swaps. The
+choice is remembered. With the evening's sound on, each card that comes into the spotlight rings
+its own note of the logo's pentatonic, so turning the ring plays a tune.
 
 **On the weather.** Nothing is sent anywhere until the visitor asks. The location pin in the
 corner is the only thing that prompts; coordinates are rounded to two decimals (~1 km) before they
@@ -66,6 +91,11 @@ mark is that measurement, not a fake progress bar.
 
 If `splash.js` never loads, a CSS animation clears the overlay on its own a few seconds in — a
 broken script can never leave a black page.
+
+The same goes for everything that starts hidden. The hero's words wait under a class only
+`splash.js` sets, and rise when it lifts the curtain (or after six seconds regardless). Every other
+reveal hangs off `.motion`, which `motion.js` sets only once it is running and able to reveal
+things again. A page where neither loads is simply all there.
 
 **On other browsers.** The layout is checked for horizontal overflow at fourteen widths from
 320 px up, with `overflow-x` neutralised so nothing is masked, and again with every modern

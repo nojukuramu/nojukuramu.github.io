@@ -8,12 +8,14 @@
    ever the one clock, so nothing here can drift out of step with anything
    else in front of it.
 
-   What is painted, in order: sky, stars, meteors, sun and its glow, the
-   moon at tonight's real phase, cloud lit from underneath, flocks, four
-   ridges with mist pooling at their feet, the lake carrying whichever
-   light is above it, a treeline, fireflies, then whatever the weather is
-   doing — rain, snow, fog, lightning — and a vignette so the type always
-   has something to sit on.
+   What is painted, in order: sky, the Milky Way, stars (a few of them
+   glinting), meteors, sun and its glow and the rays it throws while it is
+   low, the moon at tonight's real phase, cloud lit from underneath,
+   flocks, four ridges with mist pooling at their feet, the lake carrying
+   whichever light is above it, the lights of a far shore coming on as it
+   gets dark, a treeline, fireflies, then whatever the weather is doing —
+   rain, snow, fog, lightning — and a vignette so the type always has
+   something to sit on.
 
    No libraries, one requestAnimationFrame, and a static single frame when
    the visitor has asked for reduced motion.
@@ -88,6 +90,10 @@
   var HORIZON = 0.70;
 
   var stars = [], clouds = [], flocks = [], ranges = [], flies = [], shooters = [];
+  var rays = [], lights = [], glints = [];
+  var milky = null, milkyW = 0, milkyH = 0, glow = null, nextMeteor = 0;
+  /* star colour by temperature: most are white, a few blue, a few warm */
+  var STAR_COL = ["#FFF6E4", "#DCE6FF", "#FFE0B0"];
   var drops = [], flakes = [], splashes = [], bolt = null;
   var moonlight = null, pointer = { x: 0, y: 0, tx: 0, ty: 0 };
 
@@ -154,8 +160,33 @@
 
     stars = [];
     for (var i = 0; i < 300; i++) {
+      var hue = rnd();
       stars.push({ x: rnd(), y: rnd() * (HORIZON - 0.03), r: 0.4 + rnd() * 1.5,
-                   mag: 0.3 + rnd() * 0.7, tw: rnd() * 6.283, sp: 0.5 + rnd() * 1.9 });
+                   mag: 0.3 + rnd() * 0.7, tw: rnd() * 6.283, sp: 0.5 + rnd() * 1.9,
+                   col: hue < 0.16 ? 1 : hue < 0.27 ? 2 : 0 });
+    }
+    /* grouped by colour so the paint loop changes fillStyle three times,
+       not three hundred */
+    stars.sort(function (a, b) { return a.col - b.col; });
+    glints = [];
+    for (var gi = 0; gi < stars.length; gi++) {
+      if (stars[gi].r > 1.62 && stars[gi].mag > 0.72) glints.push(gi);
+    }
+
+    /* The sun's rays: wedges fanned across the upper half of the sky. They
+       sway rather than turn — a sunset does not spin. */
+    rays = [];
+    for (var ry = 0; ry < 12; ry++) {
+      rays.push({ a: -Math.PI + 0.22 + (ry / 11) * (Math.PI - 0.44) + (rnd() - 0.5) * 0.16,
+                  w: 0.018 + rnd() * 0.045, ph: rnd() * 6.283, sp: 0.5 + rnd() });
+    }
+
+    /* Houses on the far shore, which come on one by one as it gets dark. */
+    lights = [];
+    for (var li = 0; li < 24; li++) {
+      var cluster = (li / 6) | 0;
+      lights.push({ x: (0.12 + cluster * 0.33 + rnd() * 0.16) % 1.4, dy: rnd(), ph: rnd() * 6.283,
+                    cool: rnd() < 0.18, size: 0.6 + rnd() * 0.9, at: 0.52 + rnd() * 0.3 });
     }
 
     clouds = [];
@@ -188,6 +219,79 @@
     }
   }
 
+  /* One soft dot, drawn once and stamped wherever something glows — the
+     far shore's windows, the fireflies. A radial gradient per glow per frame
+     would be a hundred gradients; this is a hundred drawImage calls. */
+  function makeGlow() {
+    var c = document.createElement("canvas");
+    c.width = c.height = 32;
+    var g = c.getContext("2d");
+    var gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, "rgba(255,222,150,1)");
+    gr.addColorStop(0.22, "rgba(255,200,112,.5)");
+    gr.addColorStop(1, "rgba(255,190,100,0)");
+    g.fillStyle = gr;
+    g.fillRect(0, 0, 32, 32);
+    return c;
+  }
+
+  function gauss(r) { return (r() + r() + r() - 1.5) / 1.5; }
+
+  /* The Milky Way is painted once per window size into its own canvas and
+     laid over the sky as a single image — a band of light, a couple of
+     thousand faint stars packed along its spine, and dark lanes of dust
+     eaten out of the middle. It is never animated, so it costs one
+     drawImage a frame. */
+  function buildMilky() {
+    var w = Math.max(1, Math.round(W)), h = Math.max(1, Math.round(H * HORIZON));
+    if (milky && w === milkyW && h === milkyH) return;
+    milkyW = w; milkyH = h;
+    var c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    var m = c.getContext("2d");
+    var rnd = mulberry(1987);
+    var len = Math.sqrt(w * w + h * h) * 0.72, thick = Math.max(60, Math.min(w, h) * 0.17);
+
+    m.translate(w * 0.40, h * 0.52);
+    m.rotate(-0.5);
+
+    m.save();
+    m.scale(1, thick / len);
+    var g = m.createRadialGradient(0, 0, 0, 0, 0, len);
+    g.addColorStop(0, "rgba(214,218,255,0.30)");
+    g.addColorStop(0.4, "rgba(176,164,226,0.14)");
+    g.addColorStop(1, "rgba(120,110,180,0)");
+    m.fillStyle = g;
+    m.beginPath(); m.arc(0, 0, len, 0, 6.283); m.fill();
+    m.restore();
+
+    for (var i = 0; i < 2200; i++) {
+      var along = (rnd() - 0.5) * 2 * len * 0.92;
+      var across = gauss(rnd) * thick * 0.5 * (1 - Math.abs(along) / len * 0.55);
+      var big = rnd() < 0.08;
+      m.globalAlpha = 0.12 + rnd() * (big ? 0.7 : 0.4);
+      m.fillStyle = rnd() < 0.3 ? "#E0E6FF" : "#FFF1DD";
+      m.fillRect(along, across, big ? 1.6 : 1, big ? 1.6 : 1);
+    }
+
+    m.globalAlpha = 1;
+    m.globalCompositeOperation = "destination-out";
+    for (var k = 0; k < 8; k++) {
+      var ax = (rnd() - 0.5) * len * 1.1, ay = gauss(rnd) * thick * 0.10;
+      var rr = thick * (0.25 + rnd() * 0.35);
+      m.save();
+      m.translate(ax, ay);
+      m.scale(2.6, 0.42);
+      var dg = m.createRadialGradient(0, 0, 0, 0, 0, rr);
+      dg.addColorStop(0, "rgba(0,0,0,.6)");
+      dg.addColorStop(1, "rgba(0,0,0,0)");
+      m.fillStyle = dg;
+      m.beginPath(); m.arc(0, 0, rr, 0, 6.283); m.fill();
+      m.restore();
+    }
+    milky = c;
+  }
+
   /* This scene is nothing but soft gradients, and its cost is almost purely
      fill rate: at a phone's device pixel ratio a full-screen backing store
      is four to nine times the work for a picture with no hard edge in it to
@@ -218,6 +322,7 @@
     canvas.style.width = W + "px";
     canvas.style.height = H + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    buildMilky();
     dirty = true;
   }
 
@@ -281,6 +386,16 @@
     ctx.beginPath(); ctx.arc(-r * 0.32, -r * 0.22, r * 0.19, 0, 6.283); ctx.fill();
     ctx.beginPath(); ctx.arc(r * 0.28, r * 0.18, r * 0.13, 0, 6.283); ctx.fill();
     ctx.beginPath(); ctx.arc(r * 0.05, -r * 0.46, r * 0.10, 0, 6.283); ctx.fill();
+
+    /* a sphere rather than a coin: light from the lit side, falling off
+       towards the limb */
+    ctx.globalAlpha = 1;
+    var sph = ctx.createRadialGradient(r * 0.3, -r * 0.25, r * 0.1, 0, 0, r);
+    sph.addColorStop(0, "rgba(255,255,255,0.14)");
+    sph.addColorStop(0.65, "rgba(0,0,0,0)");
+    sph.addColorStop(1, "rgba(0,0,12,0.32)");
+    ctx.fillStyle = sph;
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.283); ctx.fill();
     ctx.restore();
   }
 
@@ -307,14 +422,42 @@
     /* stars — an overcast is the only thing that can take them away */
     var starA = night * (1 - wx.cloud * 0.85) * (1 - wx.fog * 0.7);
     if (starA > 0.01) {
-      ctx.fillStyle = "#FFF6E4";
+      /* the band comes out a little after the first stars do */
+      var mwA = clamp((night - 0.35) / 0.65, 0, 1) * starA;
+      if (milky && mwA > 0.01) {
+        ctx.globalAlpha = mwA * 0.9;
+        ctx.drawImage(milky, 0, 0, W, hy);
+      }
+      var col = -1;
       for (var i = 0; i < stars.length; i++) {
         var s = stars[i];
+        if (s.col !== col) { col = s.col; ctx.fillStyle = STAR_COL[col]; }
         var tw = 0.62 + 0.38 * Math.sin(now * 0.0011 * s.sp + s.tw);
         ctx.globalAlpha = starA * s.mag * tw * 0.95;
         ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.r, 0, 6.283); ctx.fill();
       }
+      /* the brightest few glint: a cross that grows as they twinkle */
+      ctx.strokeStyle = "#FFF6E4"; ctx.lineWidth = 0.7; ctx.lineCap = "round";
+      for (var gl = 0; gl < glints.length; gl++) {
+        var gs = stars[glints[gl]];
+        var gt = 0.5 + 0.5 * Math.sin(now * 0.0011 * gs.sp + gs.tw);
+        var gx = gs.x * W, gy = gs.y * H, gL = gs.r * (2.5 + gt * 5.5);
+        ctx.globalAlpha = starA * gs.mag * gt * 0.65;
+        ctx.beginPath();
+        ctx.moveTo(gx - gL, gy); ctx.lineTo(gx + gL, gy);
+        ctx.moveTo(gx, gy - gL); ctx.lineTo(gx, gy + gL);
+        ctx.stroke();
+      }
       ctx.globalAlpha = 1;
+
+      /* and on a clear night, every so often, one falls */
+      if (!reduced && starA > 0.35 && now > nextMeteor) {
+        if (nextMeteor) {
+          shooters.push({ x: W * (0.1 + Math.random() * 0.8), y: hy * (0.05 + Math.random() * 0.35),
+                          vx: (3 + Math.random() * 3) * (Math.random() < 0.5 ? -1 : 1), vy: 1.4 + Math.random() * 1.8, life: 1 });
+        }
+        nextMeteor = now + 5000 + Math.random() * 11000;
+      }
     }
 
     for (var sh = shooters.length - 1; sh >= 0; sh--) {
@@ -343,6 +486,32 @@
       gg.addColorStop(0.34, rgba(P.glow, ga * 0.36));
       gg.addColorStop(1, rgba(P.glow, 0));
       ctx.fillStyle = gg; ctx.fillRect(0, 0, W, hy);
+    }
+
+    /* Rays, while the sun is low and the sky is clear enough to throw
+       them. Drawn under the cloud, so the cloud cuts them into beams. */
+    var rayK = clamp(1 - tShown / 0.46, 0, 1) * sunOut * (1 - wx.grey);
+    if (rayK > 0.02 && sunY - R < hy) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, W, hy); ctx.clip();
+      ctx.globalCompositeOperation = "lighter";
+      var rl = Math.max(W, H) * 0.95;
+      var rg = ctx.createRadialGradient(sunX, sunY, R * 0.6, sunX, sunY, rl);
+      rg.addColorStop(0, rgba(P.sun, 0.13 * rayK));
+      rg.addColorStop(0.28, rgba(P.glow, 0.06 * rayK));
+      rg.addColorStop(1, rgba(P.glow, 0));
+      ctx.fillStyle = rg;
+      ctx.beginPath();
+      for (var ri = 0; ri < rays.length; ri++) {
+        var ray = rays[ri];
+        var aa = ray.a + (reduced ? 0 : Math.sin(now * 0.00012 * ray.sp + ray.ph) * 0.035);
+        var ww = ray.w * (reduced ? 1 : 0.7 + 0.3 * Math.sin(now * 0.00035 * ray.sp + ray.ph));
+        ctx.moveTo(sunX, sunY);
+        ctx.arc(sunX, sunY, rl, aa - ww, aa + ww);
+        ctx.closePath();
+      }
+      ctx.fill();
+      ctx.restore();
     }
 
     if (sunY - R < hy && sunOut > 0.05) {
@@ -452,7 +621,10 @@
     hz.addColorStop(1, rgba(P.hor, 0.42 * (1 - night * 0.6)));
     ctx.fillStyle = hz; ctx.fillRect(0, hy - H * 0.20, W, H * 0.20);
 
-    /* ridges */
+    /* Ridges. Each is drawn 1.6 screens wide from a fifth of a screen off
+       the left: the nearest drifts a quarter of a screen by the bottom of
+       the page, and anything narrower runs out before the right edge. */
+    var RW = 1.6;
     var sp = tScroll;
     for (var r2 = 0; r2 < ranges.length; r2++) {
       var spec = RANGE_SPEC[r2], pts = ranges[r2], n2 = pts.length - 1;
@@ -462,9 +634,9 @@
       ctx.beginPath();
       ctx.moveTo(-0.2 * W + shift, hy + 2);
       for (var k2 = 0; k2 <= n2; k2++) {
-        ctx.lineTo(-0.2 * W + shift + (k2 / n2) * W * 1.4, H * spec.base - pts[k2] * H * spec.amp);
+        ctx.lineTo(-0.2 * W + shift + (k2 / n2) * W * RW, H * spec.base - pts[k2] * H * spec.amp);
       }
-      ctx.lineTo(-0.2 * W + shift + W * 1.4, hy + 2);
+      ctx.lineTo(-0.2 * W + shift + W * RW, hy + 2);
       ctx.closePath(); ctx.fill();
 
       /* mist pooling at the foot of the range — aerial perspective, and the
@@ -484,7 +656,7 @@
         ctx.strokeStyle = rgba(P.sun, 1); ctx.lineWidth = 1.4;
         ctx.beginPath();
         for (var k3 = 0; k3 <= n2; k3++) {
-          var x3 = -0.2 * W + shift + (k3 / n2) * W * 1.4;
+          var x3 = -0.2 * W + shift + (k3 / n2) * W * RW;
           var y3 = H * spec.base - pts[k3] * H * spec.amp;
           if (k3 === 0) ctx.moveTo(x3, y3); else ctx.lineTo(x3, y3);
         }
@@ -566,6 +738,46 @@
       ctx.restore(); ctx.globalAlpha = 1;
     }
 
+    /* The far shore, lighting up. They ride with the nearest ridge so they
+       stay put against it when the scroll slides the ranges, and each lays
+       a thin broken line of itself down the water. */
+    var shoreA = clamp((tShown - 0.5) / 0.3, 0, 1) * (1 - wx.fog * 0.6);
+    if (shoreA > 0.02 && glow) {
+      var nearSpec = RANGE_SPEC[RANGE_SPEC.length - 1];
+      var shiftN = -(tScroll * nearSpec.drift * W * 3.2) - pointer.x * nearSpec.look * 90;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      for (var lq = 0; lq < lights.length; lq++) {
+        var lt = lights[lq];
+        var on = clamp((tShown - lt.at) / 0.06, 0, 1);
+        if (on <= 0) continue;
+        var span = W * 1.4;
+        var lx = ((lt.x * W + shiftN + W * 0.2) % span + span) % span - W * 0.2;
+        if (lx < -12 || lx > W + 12) continue;
+        var ly = hy - 1.2 - lt.dy * 2.6;
+        var flick = reduced ? 1 : 0.82 + 0.18 * Math.sin(now * 0.0037 * (0.6 + lt.dy) + lt.ph);
+        var la = shoreA * on * flick;
+        var rgbL = lt.cool ? "214,226,255" : "255,200,124";
+        var gsz = 12 * lt.size;
+        ctx.globalAlpha = la * 0.55;
+        ctx.drawImage(glow, lx - gsz / 2, ly - gsz / 2, gsz, gsz);
+        ctx.globalAlpha = la;
+        ctx.fillStyle = "rgb(" + rgbL + ")";
+        ctx.fillRect(lx - 0.7, ly - 0.7, 1.4, 1.4);
+        var rlen = 8 + lt.dy * 26;
+        var rgd = ctx.createLinearGradient(0, hy, 0, hy + rlen);
+        rgd.addColorStop(0, "rgba(" + rgbL + "," + (0.5 * la).toFixed(3) + ")");
+        rgd.addColorStop(1, "rgba(" + rgbL + ",0)");
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = rgd;
+        var wob = reduced ? 0 : Math.sin(now * 0.0021 + lq * 1.7) * 0.9;
+        for (var seg = 0; seg < rlen; seg += 3) {
+          ctx.fillRect(lx - 0.8 + wob * (seg / rlen) * 2, hy + 1 + seg, 1.6, 2);
+        }
+      }
+      ctx.restore();
+    }
+
     /* long flat ripples, so the whole lake reads as water */
     ctx.save();
     ctx.beginPath(); ctx.rect(0, hy, W, H - hy); ctx.clip();
@@ -619,15 +831,23 @@
     /* fireflies — fair weather only */
     var flyA = clamp((night - 0.35) / 0.65, 0, 1) * (1 - clamp(wx.rain * 2, 0, 1)) * (1 - wx.fog);
     if (flyA > 0.02) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
       ctx.fillStyle = "#FFD98A";
       for (var fi = 0; fi < flies.length; fi++) {
         var fy = flies[fi];
-        ctx.globalAlpha = flyA * (0.35 + 0.65 * Math.abs(Math.sin(now * 0.0016 * fy.sp + fy.ph)));
-        ctx.beginPath();
-        ctx.arc((fy.x + Math.sin(now * 0.0004 * fy.sp + fy.ph) * 0.02) * W,
-                fy.y * H + Math.cos(now * 0.0006 * fy.sp + fy.ph) * 9, fy.r, 0, 6.283);
-        ctx.fill();
+        var fA = flyA * (0.35 + 0.65 * Math.abs(Math.sin(now * 0.0016 * fy.sp + fy.ph)));
+        var fx = (fy.x + Math.sin(now * 0.0004 * fy.sp + fy.ph) * 0.02) * W;
+        var fyy2 = fy.y * H + Math.cos(now * 0.0006 * fy.sp + fy.ph) * 9;
+        if (glow) {
+          var hs = fy.r * 14;
+          ctx.globalAlpha = fA * 0.5;
+          ctx.drawImage(glow, fx - hs / 2, fyy2 - hs / 2, hs, hs);
+        }
+        ctx.globalAlpha = fA;
+        ctx.beginPath(); ctx.arc(fx, fyy2, fy.r, 0, 6.283); ctx.fill();
       }
+      ctx.restore();
       ctx.globalAlpha = 1;
     }
 
@@ -818,6 +1038,7 @@
     mount: function (el) {
       canvas = el;
       ctx = canvas.getContext("2d");
+      glow = makeGlow();
       seedScene();
       resize();
       if (reduced) { calibrated = true; settleResolve(quality); }

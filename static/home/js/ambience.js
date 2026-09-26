@@ -31,6 +31,7 @@
   var scene = { t: 0, wind: 8, rain: 0, storm: 0 };
   var timer = null, chirpTimer = null;
   var listeners = [];
+  var lastTick = 0;
 
   function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
@@ -404,6 +405,20 @@
 
     thunder: thunder,
     onchange: function (fn) { listeners.push(fn); },
+
+    /* A card coming into the spotlight rings a bell on the same pentatonic
+       the logo's letters land on — an octave down for the second half of
+       the list — so turning the ring plays a little tune in which no two
+       neighbours can clash. Only for someone who turned the evening's sound
+       on; never as a surprise. */
+    tick: function (i) {
+      if (!started || !ctx || ctx.state !== "running") return;
+      var PENTA = [523.25, 587.33, 659.25, 783.99, 880.00, 1046.50];
+      var now = ctx.currentTime;
+      if (now - lastTick < 0.045) return;
+      lastTick = now;
+      bell(now + 0.005, PENTA[i % PENTA.length] * (i >= PENTA.length ? 0.5 : 1), 0.022);
+    },
 
     /* Bring the clock up without starting the ambience bed. Returns null
        where there is no Web Audio at all. */
