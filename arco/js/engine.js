@@ -1,5 +1,6 @@
 /* ARCO — engine.js
  * Audio graph, instrument presets, and the bridge to the DSP worklet.
+ * Six strings are always running; which of them a layout drives is its business.
  *
  *   strings (AudioWorklet)  ->  body resonators  -+->  dry  -+->  limiter -> out
  *                                                 \-> verb -/
@@ -55,7 +56,7 @@ window.ARCO = window.ARCO || {};
   var dry = null, wet = null, verb = null, master = null;
   var ready = false;
   var preset = PRESETS.guitar;
-  var energy = [0, 0, 0, 0];
+  var energy = [0, 0, 0, 0, 0, 0];
   var noiseBuf = null;
 
   function makeImpulse(seconds) {
@@ -184,9 +185,18 @@ window.ARCO = window.ARCO || {};
     param("bow" + i).setTargetAtTime(Math.max(0, Math.min(1, v)), ctx.currentTime, fast ? 0.004 : 0.02);
   }
 
-  function pluck(i, amp, tone) {
+  /* pm is a palm mute, 0..1: the attack stays, the ring does not.
+   * hz, when given, is the pitch the string should be at for this pluck; snap
+   * starts it there instead of gliding from wherever it was. */
+  function pluck(i, amp, tone, pm, hz, snap) {
     if (!node) return;
-    node.port.postMessage({ type: "pluck", s: i, amp: amp, tone: tone });
+    if (hz > 0) setFreq(i, hz);
+    node.port.postMessage({ type: "pluck", s: i, amp: amp, tone: tone, pm: pm || 0, hz: hz || 0, snap: !!snap });
+  }
+
+  function setSpread(n) {
+    if (!node) return;
+    node.port.postMessage({ type: "spread", n: n });
   }
 
   function damp(i, amt) {
@@ -248,6 +258,8 @@ window.ARCO = window.ARCO || {};
     setBow: setBow,
     pluck: pluck,
     damp: damp,
+    setSpread: setSpread,
+    clear: function () { if (node) node.port.postMessage({ type: "clear" }); },
     bodyHit: bodyHit,
     setContact: setContact,
     setBright: setBright,

@@ -1,6 +1,7 @@
 /* ARCO — dsp-worklet.js
  *
- * Four digital-waveguide strings. Each string is a pair of delay lines split at
+ * Six digital-waveguide strings — a guitar's worth. The arc layout only ever
+ * drives the first four; the neck layout uses all six. Each string is a pair of delay lines split at
  * a contact point (the bow/pick position), with a damping filter at the bridge
  * and a hard reflection at the nut. That single structure covers both
  * instruments: feed it a noise burst and it is plucked, feed it a bow-friction
@@ -13,7 +14,7 @@
  * (Helmholtz motion). Stop moving your thumb and the note genuinely dies.
  */
 
-var NUM_STRINGS = 4;
+var NUM_STRINGS = 6;
 var MIN_FREQ = 38;
 /* The excitation is written in musical 0..1 terms at the call sites; this is
  * what turns that into an amplitude the waveguide actually rings at. Tuned so a
@@ -69,9 +70,13 @@ function StringVoice(sr) {
 
   this.gain = 1;        // mute envelope
   this.gainTarget = 1;
+  this.loop = 1;        // extra loss per round trip: a palm on the strings, or a mute
+  this.dark = 0;        // extra bridge damping for a palm mute, 0..1
 
   this.freq = 220;
   this.freqSmooth = 220;
+  this.hold = 0;        // pitch sent with the last pluck, used until the parameter agrees
+  this.holdN = 0;       // render quanta left to wait for it
   this.energy = 0;      // cheap RMS follower, reported back to the UI
 }
 
@@ -79,17 +84,37 @@ function StringVoice(sr) {
  * the string is about to play, and that is only known inside process() where
  * the frequency parameter is readable. Plucking off a stale pitch made the
  * first note of a session swoop up into tune. */
-StringVoice.prototype.pluck = function (amp, tone) {
-  this.pending = { amp: amp, tone: tone };
+StringVoice.prototype.pluck = function (amp, tone, pm, hz, snap) {
+  this.pending = { amp: amp, tone: tone, pm: pm || 0, snap: !!snap };
   this.gainTarget = 1;
   this.gain = 1;
+  this.loop = 1;
+  this.dark = 0;
+  /* The page sends the pitch with the pluck, because the frequency parameter
+   * it also sets may land a render quantum later than this message does. The
+   * string plays this pitch until the parameter catches up with it, so a
+   * tapped note starts in tune instead of sliding in from the last one. */
+  if (hz > 0) {
+    this.hold = Math.max(MIN_FREQ, Math.min(4000, hz));
+    this.holdN = 8;
+  }
 };
+
+/* Loss per round trip that makes a string die in `tau` seconds whatever its
+ * pitch. A fixed per-trip loss would stop a high e in a blink and let a low E
+ * hum on, because the low string makes far fewer trips a second — which is the
+ * opposite of how a palm on the strings behaves. */
+function lossFor(freq, tau) {
+  return Math.exp(-1 / (Math.max(MIN_FREQ, freq) * tau));
+}
 
 StringVoice.prototype.startPluck = function (freq) {
   var p = this.pending;
   this.pending = null;
-  /* A silent string has no pitch to glide from, so start it in tune. */
-  if (this.energy < 0.004) this.freqSmooth = freq;
+  /* A silent string has no pitch to glide from, so start it in tune. So does
+   * a fresh attack: a pick on a new fret is that fret at once. A hammer-on
+   * keeps the glide, which is the sound of it. */
+  if (this.energy < 0.004 || p.snap) this.freqSmooth = freq;
   /* One period of shaped noise is the classic Karplus-Strong excitation. Capped
    * so low notes do not get a smeared, unfocused attack. */
   var period = this.sr / Math.max(MIN_FREQ, freq);
@@ -98,10 +123,22 @@ StringVoice.prototype.startPluck = function (freq) {
   this.excAmp = p.amp;
   this.excTone = p.tone;
   this.excLp = 0;
+  /* Palm mute: the side of the hand on the strings at the bridge. The attack
+   * survives, the highs go at once, and the note is gone in a fraction of a
+   * second — the chug riffs are built from. */
+  if (p.pm > 0) {
+    this.loop = lossFor(freq, 0.36 - 0.28 * p.pm);
+    this.dark = p.pm;
+  }
 };
 
+/* A mute is a hand arriving on a string, so it bleeds energy out of the loop
+ * as well as turning the output down. Output gain alone left the string
+ * vibrating underneath and let it bloom back the moment anything touched it. */
 StringVoice.prototype.damp = function (amt) {
   this.gainTarget = 1 - 0.98 * amt;
+  this.loop = amt > 0 ? lossFor(this.freqSmooth, 0.03 + 0.3 * (1 - amt)) : 1;
+  if (amt <= 0) this.dark = 0;
 };
 
 StringVoice.prototype.clear = function () {
@@ -110,6 +147,8 @@ StringVoice.prototype.clear = function () {
   this.lp = this.dc1 = this.dc2 = 0;
   this.exc = 0;
   this.energy = 0;
+  this.loop = 1;
+  this.dark = 0;
 };
 
 /* Bow friction curve. `slope` rises as bow force falls, so a light bow slips
@@ -143,18 +182,24 @@ class ArcoProcessor extends AudioWorkletProcessor {
     for (var i = 0; i < NUM_STRINGS; i++) this.voices.push(new StringVoice(this.sr));
     this.frame = 0;
     this.alive = true;
+    /* How many strings the current layout plays. The stereo spread is laid
+     * across those, so the arc's four strings still span left to right
+     * instead of bunching on the bass side of a six-string field. */
+    this.spread = NUM_STRINGS;
     this._energies = new Float64Array(NUM_STRINGS);
-    this._report = { type: "energy", e: [0, 0, 0, 0] };
+    this._report = { type: "energy", e: new Array(NUM_STRINGS).fill(0) };
 
     this.port.onmessage = (e) => {
       var d = e.data;
       if (!d) return;
       if (d.type === "pluck") {
         var v = this.voices[d.s];
-        if (v) v.pluck(d.amp, d.tone === undefined ? 0.5 : d.tone);
+        if (v) v.pluck(d.amp, d.tone === undefined ? 0.5 : d.tone, d.pm, d.hz, d.snap);
       } else if (d.type === "damp") {
         var w = this.voices[d.s];
         if (w) w.damp(d.amt);
+      } else if (d.type === "spread") {
+        this.spread = Math.max(2, Math.min(NUM_STRINGS, d.n | 0));
       } else if (d.type === "clear") {
         for (var k = 0; k < this.voices.length; k++) this.voices[k].clear();
       } else if (d.type === "stop") {
@@ -193,12 +238,18 @@ class ArcoProcessor extends AudioWorkletProcessor {
       var bConst = bParam.length === 1;
 
       /* Pan the low strings left and the high strings right for a little width. */
-      var pan = (s / (NUM_STRINGS - 1)) * 2 - 1;   // -1 .. 1  (bass .. treble)
+      var pan = Math.min(1, (s / (this.spread - 1)) * 2 - 1) * 0.8;   // bass .. treble
       var gL = Math.cos((pan * 0.5 + 0.5) * Math.PI / 2);
       var gR = Math.sin((pan * 0.5 + 0.5) * Math.PI / 2);
+      var lpc = lpCoef + (0.93 - lpCoef) * 0.75 * v.dark;
+      if (v.holdN > 0) {
+        if (Math.abs(fParam[0] - v.hold) < 0.5) v.holdN = 0;
+        else v.holdN--;
+      }
+      var holding = v.holdN > 0;
 
       for (var i = 0; i < n; i++) {
-        var f = fConst ? fParam[0] : fParam[i];
+        var f = holding ? v.hold : fConst ? fParam[0] : fParam[i];
         var bowVel = bConst ? bParam[0] : bParam[i];
 
         if (v.pending) v.startPluck(f);
@@ -216,8 +267,8 @@ class ArcoProcessor extends AudioWorkletProcessor {
         var neckOut = v.neck.out;
 
         /* Bridge: one-pole lowpass, phase-inverted reflection, slight loss. */
-        v.lp = bridgeOut + lpCoef * (v.lp - bridgeOut);
-        var bridgeRefl = -v.lp * sustain * (0.9 + 0.1 * v.gain);
+        v.lp = bridgeOut + lpc * (v.lp - bridgeOut);
+        var bridgeRefl = -v.lp * sustain * (0.9 + 0.1 * v.gain) * v.loop;
         var nutRefl = -neckOut * 0.9995;
 
         var drive = 0;

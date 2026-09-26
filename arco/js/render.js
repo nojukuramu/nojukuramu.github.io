@@ -1,5 +1,7 @@
 /* ARCO — render.js
- * Canvas 2D. Draws the degree fan, the four strings, and the live readouts.
+ * Canvas 2D. Owns the canvas and its sizing; draws the arc layout — the
+ * degree fan, the four strings, and the live readouts — and hands the frame
+ * to fretboard.js when the neck is showing.
  * The strings are drawn with a real mode shape (pinned at both ends, bulging in
  * the middle) scaled by each string's actual measured energy, so you can see
  * what you are hearing.
@@ -339,6 +341,10 @@ window.ARCO = window.ARCO || {};
   function draw() {
     var now = performance.now() - t0;
     if (!A.input.geom()) return;
+    if (A.input.state.layout === "neck") {
+      A.fretboard.draw(ctx, W, H, dpr, now);
+      return;
+    }
     background();
     drawFan(now);
     drawStrings(now);

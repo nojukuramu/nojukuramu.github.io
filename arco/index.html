@@ -3,27 +3,42 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>ARCO · a two-thumb instrument for phones</title>
-  <meta name="description" content="A phone instrument you play with both thumbs. The left thumb stops scale degrees on a fan, the right thumb bows or plucks four physically modelled strings, and tilt shapes the tone. Learn a melody once and it plays in all twelve keys." />
+  <title>ARCO · a guitar for your phone</title>
+  <meta name="description" content="A guitar you play on a phone held sideways: six physically modelled strings, a real neck with hammer-ons, pull-offs, slides and bends, and a body to pick, strum and palm-mute. Tap mode lets the frets sound by themselves, so a riff needs one hand." />
   <meta name="theme-color" content="#07080e" />
   <meta name="color-scheme" content="dark" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
-  <meta property="og:title" content="ARCO · a two-thumb instrument for phones" />
-  <meta property="og:description" content="Degrees under the left thumb, a bow under the right, and real waveguide strings in between. Master the shapes once, play in any key." />
+  <meta property="og:title" content="ARCO · a guitar for your phone" />
+  <meta property="og:description" content="Six real waveguide strings, a neck that hammers, pulls, slides and bends, and a body to strum and palm-mute. No samples anywhere." />
   <meta property="og:type" content="website" />
 
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 28 A24 24 0 0 1 28 4' fill='none' stroke='%23ffb454' stroke-width='2.5'/%3E%3Cpath d='M4 20 A16 16 0 0 1 20 4' fill='none' stroke='%236fd0ff' stroke-width='2'/%3E%3Ccircle cx='4' cy='28' r='2.5' fill='%2334e0c0'/%3E%3C/svg%3E" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icons/apple-touch.png" />
   <link rel="stylesheet" href="css/arco.css" />
+  <!-- One version number. sw.js carries the same one in its cache name, and
+       tools/validate.js refuses to let the two drift apart. Bumping it is what
+       publishes an update. -->
+  <script>window.ARCO_VERSION = "2";</script>
 </head>
 
-<body data-inst="guitar">
+<body data-inst="guitar" data-layout="neck" data-shape="note">
 
   <canvas id="stage"></canvas>
+
+  <!-- A new version is waiting. One line, dismissible, and it never applies
+       itself: swapping the code out mid-song is the failure this replaces. -->
+  <div id="update-bar" class="updbar" role="status" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.4 11.4a8.4 8.4 0 1 0-.7 4.6"/><path d="M21 7.4v4.6h-4.6"/></svg>
+    <span>New version ready</span>
+    <button type="button" id="update-go" class="mini">Reload</button>
+    <button type="button" id="update-later" class="mini" aria-label="Not now" title="Not now">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
 
   <!-- Toolbar -->
   <header class="bar" id="bar">
@@ -33,25 +48,40 @@
 
     <div class="bar-c">
       <div class="keypick">
-        <button id="keyDown" class="mini" aria-label="Key down">◀</button>
+        <button id="keyDown" class="mini" aria-label="Key down">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
         <button id="keyName" class="keyname" title="Tap to move around the circle of fifths">C</button>
-        <button id="keyUp" class="mini" aria-label="Key up">▶</button>
+        <button id="keyUp" class="mini" aria-label="Key up">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
       </div>
       <select id="modeSel" class="sel" aria-label="Mode"></select>
-      <div class="seg" role="group" aria-label="Instrument">
+      <div class="seg only-neck" id="shapeSeg" role="group" aria-label="What one finger holds">
+        <button class="segbtn on" data-shape="note" title="One note">note</button>
+        <button class="segbtn" data-shape="power" title="Power chord: root, fifth, octave">power</button>
+        <button class="segbtn" data-shape="octave" title="Root and its octave">oct</button>
+        <button class="segbtn" data-shape="chord" title="The key's chord on that root">chord</button>
+      </div>
+      <div class="seg wideonly" role="group" aria-label="Instrument">
         <button id="btnGuitar" class="segbtn on">Pluck</button>
         <button id="btnViolin" class="segbtn">Bow</button>
       </div>
     </div>
 
     <div class="bar-r">
-      <button id="btn7th"    class="tog" title="Add sevenths to the voicing">7th</button>
-      <button id="btnLatch"  class="tog" title="Hold the chord, keep the melody string live">latch</button>
-      <button id="btnLock"   class="tog on" title="Show or hide the chromatic wedges">diatonic</button>
-      <button id="btnLearn"  class="tog" title="Practise a melody by scale degree">learn</button>
+      <button id="btnTap"    class="tog on only-neck" title="Frets sound by themselves">tap</button>
+      <button id="btn7th"    class="tog" title="Add sevenths to the chords">7th</button>
+      <button id="btnLatch"  class="tog only-arc" title="Hold the chord, keep the melody string live">latch</button>
+      <button id="btnLock"   class="tog on only-arc" title="Show or hide the chromatic wedges">diatonic</button>
+      <button id="btnLearn"  class="tog" title="Practise a melody">learn</button>
       <button id="btnMotion" class="tog" title="Use tilt for tone and bend">tilt</button>
-      <button id="btnFull" class="tog icon" title="Fullscreen" aria-label="Toggle fullscreen">⛶</button>
-      <button id="btnSettings" class="tog icon" aria-label="Settings">⚙</button>
+      <button id="btnFull" class="tog icon" title="Fullscreen" aria-label="Toggle fullscreen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+      <button id="btnSettings" class="tog icon" aria-label="Setup" title="Setup">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"/><circle cx="16" cy="7" r="2.4"/><circle cx="10" cy="17" r="2.4"/></svg>
+      </button>
     </div>
   </header>
 
@@ -63,8 +93,13 @@
     </div>
     <div class="trainer-row" id="trainerRow"></div>
     <div class="trainer-act">
-      <button id="trainerKey" class="mini wide" title="Same shapes, new key">↻ new key</button>
-      <button id="trainerClose" class="mini" aria-label="Close trainer">✕</button>
+      <button id="trainerKey" class="mini wide" title="Same melody, new key">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.4 11.4a8.4 8.4 0 1 0-.7 4.6"/><path d="M21 7.4v4.6h-4.6"/></svg>
+        new key
+      </button>
+      <button id="trainerClose" class="mini" aria-label="Close trainer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
     </div>
   </div>
 
@@ -72,49 +107,111 @@
   <div class="overlay" id="start">
     <div class="panel">
       <h1 class="title">ARCO</h1>
-      <p class="sub">A two-thumb instrument. Real strings, no samples.</p>
+      <p class="sub">A guitar for your phone. Six real strings, no samples.</p>
 
       <div class="startgrid">
-      <svg class="holdfig" viewBox="0 0 340 150" aria-label="Hold the phone in landscape with both hands; thumbs on the screen, fingers behind">
-        <rect x="34" y="22" width="272" height="106" rx="14" fill="#0c0f1a" stroke="#2a3350" stroke-width="2"/>
-        <path d="M44 122 A76 76 0 0 1 120 46" fill="none" stroke="#ffb454" stroke-width="3" opacity=".85"/>
-        <path d="M44 122 A48 48 0 0 1 92 74" fill="none" stroke="#ffb454" stroke-width="2" opacity=".4"/>
-        <path d="M296 122 A76 76 0 0 0 220 46" fill="none" stroke="#6fd0ff" stroke-width="3" opacity=".85"/>
-        <path d="M296 122 A48 48 0 0 0 248 74" fill="none" stroke="#6fd0ff" stroke-width="2" opacity=".4"/>
-        <circle cx="44" cy="122" r="6" fill="#34e0c0"/>
-        <circle cx="296" cy="122" r="6" fill="#34e0c0"/>
-        <path d="M18 128 q-12 -18 2 -34" fill="none" stroke="#59668f" stroke-width="4" stroke-linecap="round"/>
-        <path d="M322 128 q12 -18 -2 -34" fill="none" stroke="#59668f" stroke-width="4" stroke-linecap="round"/>
-        <text x="86" y="142" fill="#ffb454" font-size="11" font-family="system-ui" text-anchor="middle">left · stops the note</text>
-        <text x="254" y="142" fill="#6fd0ff" font-size="11" font-family="system-ui" text-anchor="middle">right · makes the sound</text>
+      <svg class="holdfig" viewBox="0 0 340 150" aria-label="The phone held sideways: the neck on the left, the body on the right">
+        <rect x="24" y="18" width="292" height="108" rx="14" fill="#0c0f1a" stroke="#2a3350" stroke-width="2"/>
+        <rect x="36" y="30" width="16" height="84" fill="#0b0d16"/>
+        <rect x="52" y="30" width="170" height="84" fill="#141828"/>
+        <rect x="52" y="30" width="3" height="84" fill="#e9e2cf" opacity=".8"/>
+        <path d="M86 30v84M120 30v84M154 30v84M188 30v84M222 30v84" stroke="#8d97b8" stroke-width="1.4" opacity=".6"/>
+        <path d="M276 30h26v84h-26z" fill="#ffffff" opacity=".04"/>
+        <path d="M301 30v84" stroke="#e9e2cf" stroke-width="2.5" opacity=".6"/>
+        <path d="M36 38h266M36 52h266M36 66h266" stroke="#e4ecfc" stroke-width="1" opacity=".55"/>
+        <path d="M36 80h266M36 94h266M36 108h266" stroke="#ecd6b2" stroke-width="1.8" opacity=".6"/>
+        <circle cx="137" cy="94" r="7" fill="#ffb454"/>
+        <circle cx="171" cy="80" r="6" fill="#ffb454" opacity=".75"/>
+        <circle cx="250" cy="72" r="9" fill="#ffb454" opacity=".25"/>
+        <circle cx="250" cy="72" r="3.5" fill="#ffffff"/>
+        <path d="M250 50v44" stroke="#ffb454" stroke-width="2" stroke-dasharray="3 4" opacity=".7"/>
+        <text x="129" y="142" fill="#ffb454" font-size="11" font-family="system-ui" text-anchor="middle">neck · fret, slide, bend</text>
+        <text x="262" y="142" fill="#6fd0ff" font-size="11" font-family="system-ui" text-anchor="middle">body · pick, strum</text>
       </svg>
 
       <ul class="rules">
-        <li><b>Left thumb</b> sweeps a fan of <b>scale degrees</b> — angle picks the degree, reaching further out jumps an octave, and small wiggles bend the pitch.</li>
-        <li><b>Right thumb</b> is the picking or bowing hand. Sweep across the four strings to strum; in Bow mode the sound only lives while your thumb keeps moving.</li>
-        <li><b>Tilt</b> shapes tone and bend. It never picks notes — thumbs are precise, tilt is not.</li>
+        <li><b>Fret</b> on the neck. With <b>tap</b> on, that is the note — a riff needs one hand.</li>
+        <li><b>Pick</b> or <b>strum</b> on the body. The bridge end palm-mutes.</li>
+        <li><b>Slide</b> along a string, <b>bend</b> across it, <b>flick off</b> to pull off.</li>
       </ul>
       </div>
-
-      <p class="fine startfine">Because the fan is degrees and not note names, a melody learned once plays in every key with the same motion. No headphones needed, but they help.</p>
 
       <div class="ctarow">
         <button id="startBtn" class="cta">tap to tune up</button>
         <button id="startInstall" class="cta ghost" hidden>install</button>
       </div>
-      <p class="fine iosnote" id="startIosNote" hidden>For true fullscreen on iPhone: <b>Share → Add to Home Screen</b>.</p>
+      <p class="fine startfine"><button type="button" class="linkbtn" data-info="neck">How the neck plays</button> · <button type="button" class="linkbtn" data-info="shapes">Power chords and shapes</button></p>
+      <p class="fine iosnote" id="startIosNote" hidden>For fullscreen on iPhone: <b>Share, then Add to Home Screen</b>.</p>
       <p class="err" id="startErr" hidden></p>
-      <p class="fine kb">On a desktop: <kbd>A W S E D F T G Y H U J</kbd> are the degrees, <kbd>Z</kbd>/<kbd>X</kbd> change octave, <kbd>space</kbd> strums, <kbd>1</kbd>–<kbd>4</kbd> pick one string.</p>
+      <p class="fine kb">On a desktop: <kbd>A W S E D F T G Y H U J</kbd> play the key's degrees, <kbd>space</kbd> strums, <kbd>1</kbd>–<kbd>6</kbd> pick a string, arrows move up the neck.</p>
     </div>
   </div>
 
-  <!-- Settings -->
+  <!-- Setup -->
   <div class="overlay soft" id="settings" hidden>
     <div class="panel small">
-      <button class="x" id="settingsClose" aria-label="Close">✕</button>
+      <button class="x" id="settingsClose" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
       <h2>Setup</h2>
 
       <div class="row">
+        <span class="lbl">Layout<button type="button" class="ib" data-info="layout" aria-label="Neck or arcs" title="Neck or arcs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></span>
+        <div class="seg" role="group" aria-label="Layout">
+          <button id="layNeck" class="segbtn on">Neck</button>
+          <button id="layArc" class="segbtn">Arcs</button>
+        </div>
+      </div>
+
+      <div class="row narrowonly">
+        <span class="lbl">Instrument</span>
+        <div class="seg" role="group" aria-label="Instrument">
+          <button id="setGuitar" class="segbtn on">Pluck</button>
+          <button id="setViolin" class="segbtn">Bow</button>
+        </div>
+      </div>
+
+      <div class="row only-neck">
+        <label for="tuneSel">Tuning</label>
+        <select id="tuneSel" class="sel wide"></select>
+      </div>
+
+      <div class="row only-neck">
+        <span class="lbl">Frets shown<button type="button" class="ib" data-info="neck" aria-label="How the neck plays" title="How the neck plays"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></span>
+        <select id="fretSel" class="sel" aria-label="Frets shown">
+          <option value="5">5</option>
+          <option value="7" selected>7</option>
+          <option value="9">9</option>
+          <option value="12">12</option>
+        </select>
+      </div>
+
+      <div class="row only-neck">
+        <span class="lbl">Strings</span>
+        <button id="setView" class="mini wide">Low E at the bottom</button>
+      </div>
+
+      <div class="row only-neck">
+        <span class="lbl">Hand</span>
+        <button id="setHand" class="mini wide">Right-handed</button>
+      </div>
+
+      <div class="row only-neck">
+        <span class="lbl">Scale on the neck<button type="button" class="ib" data-info="scale" aria-label="Key and scale" title="Key and scale"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></span>
+        <button id="setDots" class="mini wide">Shown</button>
+      </div>
+
+      <div class="row only-neck">
+        <span class="lbl">How it plays</span>
+        <span class="guide">
+          <button type="button" class="linkbtn" data-info="neck">neck</button>
+          <button type="button" class="linkbtn" data-info="pick">body</button>
+          <button type="button" class="linkbtn" data-info="tap">tap</button>
+          <button type="button" class="linkbtn" data-info="shapes">shapes</button>
+        </span>
+      </div>
+
+      <div class="row only-arc">
         <label for="reachSel">Thumb reach</label>
         <select id="reachSel" class="sel">
           <option value="0.86">Short</option>
@@ -123,75 +220,90 @@
         </select>
       </div>
 
-      <div class="row">
-        <label>Register</label>
+      <div class="row only-arc">
+        <span class="lbl">Register</span>
         <div class="stepper">
-          <button id="octDown" class="mini">−</button>
+          <button id="octDown" class="mini" aria-label="Lower">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg>
+          </button>
           <span id="octVal">3</span>
-          <button id="octUp" class="mini">+</button>
+          <button id="octUp" class="mini" aria-label="Higher">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12M12 6v12"/></svg>
+          </button>
         </div>
       </div>
 
-      <div class="row">
-        <label>String order</label>
+      <div class="row only-arc">
+        <span class="lbl">String order<button type="button" class="ib" data-info="arcchords" aria-label="Chords on the arcs" title="Chords on the arcs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></span>
         <button id="setInvert" class="mini wide">Melody nearest</button>
       </div>
 
       <div class="row">
-        <label>Tilt</label>
+        <span class="lbl">Tilt<button type="button" class="ib" data-info="tilt" aria-label="What tilt does" title="What tilt does"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></span>
         <button id="btnCalibrate" class="mini wide">Set neutral pose</button>
       </div>
-      <p class="fine" id="motionNote" hidden>Motion access was refused, so tilt is off. Everything else still works.</p>
+      <p class="fine" id="motionNote" hidden>Motion access was refused, so tilt is off.</p>
 
       <div class="row">
-        <label for="songSel">Practice</label>
+        <label for="songSel">Practice<button type="button" class="ib" data-info="learn" aria-label="How learn works" title="How learn works"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></label>
         <select id="songSel" class="sel"></select>
       </div>
 
       <div class="row" id="rowFull">
-        <label>Screen</label>
+        <span class="lbl">Screen</span>
         <button id="setFull" class="mini wide">Go fullscreen</button>
       </div>
 
       <div class="row" id="rowInstall" hidden>
-        <label>Install</label>
+        <span class="lbl">Install<button type="button" class="ib" data-info="install" aria-label="What installing does" title="What installing does"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></span>
         <button id="setInstall" class="mini wide">Add to home screen</button>
       </div>
-      <p class="fine" id="installNote" hidden>Installed ARCO launches fullscreen in landscape with no browser chrome, and plays with no network — there are no samples to download.</p>
 
-      <h3>What each hand does</h3>
-      <p class="fine">
-        The four strings are a voicing of whatever degree the left thumb is holding, stacked bass to treble:
-        root, third, fifth, and the degree itself an octave up. The innermost lane — where a relaxed thumb sits —
-        is that top voice, so brushing one lane plays a melody and sweeping outward fills in the chord.
-        <b>7th</b> swaps the fifth for the seventh. <b>Latch</b> freezes the chord under the lower three strings
-        and lets the melody string keep following your left thumb, which is how you accompany yourself.
-      </p>
-      <p class="fine">
-        Tap the back of the phone while <b>tilt</b> is on and the body gets struck, like knocking on a soundboard.
-      </p>
+      <div class="row">
+        <span class="lbl"><span id="versionNote">Version</span><button type="button" class="ib" data-info="update" aria-label="How updating works" title="How updating works"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></span>
+        <button id="versionCheck" class="mini wide">Check for updates</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- The info sheet. Its copy lives in js/info.js, so the start screen and
+       Setup can reach the same explanation without two copies of it. -->
+  <div id="info-sheet" class="info" hidden>
+    <div class="info-scrim" id="info-scrim"></div>
+    <div class="info-card" role="dialog" aria-modal="true" aria-labelledby="info-title">
+      <div class="info-head">
+        <h2 id="info-title"></h2>
+        <button type="button" class="x" id="info-close" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="info-body" id="info-body"></div>
     </div>
   </div>
 
   <div class="overlay hard" id="rotate" hidden>
     <div class="rotmsg">
-      <div class="rotico">⟳</div>
+      <svg class="rotico" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="15" y="5" width="18" height="38" rx="4"/><path d="M21 37h6"/></svg>
       <p class="rottitle">Turn the phone sideways</p>
-      <p class="fine">ARCO is played in landscape, one thumb per corner.</p>
+      <p class="fine">ARCO is played in landscape, like a guitar across your lap.</p>
       <div class="taphint" id="tapHint">
         <span class="tapdots" aria-hidden="true"><i></i><i></i></span>
         <b>Double-tap anywhere</b>
         <span class="fine">go fullscreen and rotate</span>
       </div>
-      <p class="fine rotfail" id="rotFail" hidden>This browser will not rotate for you — turn the phone yourself. Installing ARCO to the home screen gives you fullscreen landscape for good.</p>
+      <p class="fine rotfail" id="rotFail" hidden>This browser will not rotate for you — turn the phone yourself, or install ARCO for fullscreen landscape for good.</p>
     </div>
   </div>
 
+  <script src="js/update.js"></script>
+  <script src="js/info.js"></script>
   <script src="js/shell.js"></script>
   <script src="js/theory.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/input.js"></script>
+  <script src="js/neck.js"></script>
   <script src="js/render.js"></script>
+  <script src="js/fretboard.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

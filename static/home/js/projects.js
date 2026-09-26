@@ -443,8 +443,8 @@
       hi: ["Anybody can file a route; the votes decide which ones stand", "Plans a trip across them, transfers and all", "Fares, a reliability meter, and the weather along the line"],
       tags: ["Supabase", "OpenStreetMap", "community"] },
     { name: "ARCO", href: "arco/", badge: "Instrument", accent: "#E0A24C", kind: "sound", motif: "strings",
-      desc: "A two-thumb instrument for a phone held sideways.",
-      hi: ["One thumb sweeps the scale, the other plucks or bows", "Four modelled strings, and tilt shapes the tone", "Learn a melody once, play it in all twelve keys"],
+      desc: "A guitar for a phone held sideways.",
+      hi: ["A six-string neck that hammers, pulls, slides and bends", "Tap frets to play, or pick, strum and palm-mute the body", "Power chords under one thumb, in any tuning"],
       tags: ["AudioWorklet", "waveguide", "offline"] }
   ];
 

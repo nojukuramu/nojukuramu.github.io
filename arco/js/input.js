@@ -1,5 +1,9 @@
 /* ARCO — input.js
- * Geometry, thumbs, and sensors.
+ * Geometry, thumbs, and sensors — and the switch between the two layouts.
+ *
+ * The neck (js/neck.js) is the default: a guitar, played the way a guitarist
+ * already plays. Everything below the pointer entry points is the other
+ * layout, the arcs, which is what this file has always been:
  *
  * Hold the phone in landscape, both hands wrapped around it, fingers behind.
  * Each thumb pivots at its bottom corner, so both control surfaces are arcs
@@ -21,6 +25,18 @@ window.ARCO = window.ARCO || {};
   var T = A.theory;
 
   var state = {
+    layout: "neck",      // "neck" (a guitar) or "arc" (the two-thumb fans)
+
+    /* The neck's settings — see js/neck.js. */
+    tuning: "standard",
+    frets: 7,            // how many frets the window shows
+    pos: 1,              // the first fret in the window
+    lefty: false,        // mirror the whole neck for a left-handed player
+    lowTop: false,       // false = tab view, low E at the bottom
+    tap: true,           // a fret sounds by itself, without a pick
+    shape: "note",       // what one finger holds: note, power, octave, chord
+    scaleDots: true,     // mark the key's scale on the neck
+
     key: 0,
     mode: "major",
     octave: 3,
@@ -38,7 +54,7 @@ window.ARCO = window.ARCO || {};
 
     tiltLR: 0,
     tiltFB: 0,
-    ringVis: [0, 0, 0, 0],
+    ringVis: [0, 0, 0, 0, 0, 0],
     lastHit: 0
   };
 
@@ -82,6 +98,8 @@ window.ARCO = window.ARCO || {};
 
     var L = side(W * 0.012, H * 1.01, false, rMin, rMax, A0, A1);
     var R = side(W * 0.988, H * 1.01, true, rMax * 0.36, rMax, A0, A1);
+
+    if (state.layout === "neck") A.neck.layout(W, H);
 
     geom = {
       W: W, H: H,
@@ -215,6 +233,12 @@ window.ARCO = window.ARCO || {};
     if (!geom) return;
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointers */ }
     var p = local(e);
+    if (state.layout === "neck") {
+      pointers[e.pointerId] = { neck: true };
+      A.neck.down(e, p);
+      emit("input");
+      return;
+    }
     var isLeft = p.x < geom.W * 0.5;
     pointers[e.pointerId] = { left: isLeft };
 
@@ -249,6 +273,18 @@ window.ARCO = window.ARCO || {};
     if (!rec || !geom) return;
     var p = local(e);
     var now = performance.now();
+    if (rec.neck) {
+      /* Coalesced events carry the positions a fast strum crossed between
+       * two frames, which is the difference between six strings and three. */
+      var list = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
+      if (list && list.length > 1) {
+        for (var ci = 0; ci < list.length; ci++) A.neck.move(e, local(list[ci]), list[ci].timeStamp);
+      } else {
+        A.neck.move(e, p, now);
+      }
+      emit("input");
+      return;
+    }
 
     if (rec.left && state.left && state.left.id === e.pointerId) {
       var po = geom.L.polar(p.x, p.y);
@@ -327,6 +363,11 @@ window.ARCO = window.ARCO || {};
     if (canvas.hasPointerCapture && canvas.hasPointerCapture(e.pointerId)) {
       canvas.releasePointerCapture(e.pointerId);
     }
+    if (rec.neck) {
+      A.neck.up(e, local(e));
+      emit("input");
+      return;
+    }
 
     if (state.left && state.left.id === e.pointerId) {
       state.left = null;
@@ -380,7 +421,7 @@ window.ARCO = window.ARCO || {};
   /* The bow is re-sent for all four strings every frame, which is 240 parameter
    * automations a second for values that mostly do not change. Skipping the
    * no-ops keeps the audio thread quiet on cheaper phones. */
-  var lastBow = [-1, -1, -1, -1];
+  var lastBow = [-1, -1, -1, -1, -1, -1];
   function sendBow(s, v, fast) {
     if (Math.abs(v - lastBow[s]) < 0.004) return;
     lastBow[s] = v;
@@ -388,11 +429,24 @@ window.ARCO = window.ARCO || {};
   }
 
   function silenceBows() {
-    for (var i = 0; i < 4; i++) { lastBow[i] = 0; A.engine.setBow(i, 0, true); }
+    for (var i = 0; i < 6; i++) { lastBow[i] = 0; A.engine.setBow(i, 0, true); }
+  }
+
+  function decayRings(dt) {
+    var decay = Math.pow(0.06, dt);
+    var en = A.engine.energy();
+    for (var i = 0; i < state.ringVis.length; i++) {
+      state.ringVis[i] = Math.max(state.ringVis[i] * decay, Math.min(1, (en[i] || 0) * 3.5));
+    }
   }
 
   function tick(dt) {
     if (!geom) return;
+    if (state.layout === "neck") {
+      A.neck.tick(dt);
+      decayRings(dt);
+      return;
+    }
     var now = performance.now();
 
     /* The bow. pointermove stops firing the moment a thumb holds still, so the
@@ -427,12 +481,7 @@ window.ARCO = window.ARCO || {};
     A.engine.setBright(0.5 + state.tiltLR * 0.32 + (state.instrument === "guitar" ? 0.12 : 0));
 
     pushFreqs();
-
-    var decay = Math.pow(0.06, dt);
-    var en = A.engine.energy();
-    for (var i = 0; i < 4; i++) {
-      state.ringVis[i] = Math.max(state.ringVis[i] * decay, Math.min(1, en[i] * 3.5));
-    }
+    decayRings(dt);
   }
 
   /* ---------------------------------------------------------------- sensors */
@@ -549,6 +598,7 @@ window.ARCO = window.ARCO || {};
     var t = ev.target;
     if (t && /^(input|select|textarea)$/i.test(t.tagName)) return;
     var k = ev.key.toLowerCase();
+    if (state.layout === "neck") { neckKeyDown(ev, k); return; }
 
     if (k in KEYMAP) {
       ev.preventDefault();
@@ -570,8 +620,39 @@ window.ARCO = window.ARCO || {};
     if (k >= "1" && k <= "4") pluckLane(4 - parseInt(k, 10), 0.3, 0.6);
   }
 
+  /* The same degree row on the neck, where each key frets the degree at the
+   * nearest place in the window. 1-6 are strings by guitar numbering — 1 is
+   * the high e — and the arrows move up and down the neck. */
+  function neckKeyDown(ev, k) {
+    if (k in KEYMAP) {
+      ev.preventDefault();
+      if (heldKey === k) return;
+      heldKey = k;
+      A.neck.kbPress(KEYMAP[k], keyRing);
+      emit("input");
+      return;
+    }
+    if (k === "z") keyRing = Math.max(0, keyRing - 1);
+    if (k === "x") keyRing = Math.min(2, keyRing + 1);
+    if (k === " ") { ev.preventDefault(); A.neck.strumAll(); }
+    if (k >= "1" && k <= "6") A.neck.pickOne(6 - parseInt(k, 10));
+    if (k === "arrowleft" || k === "arrowright") {
+      ev.preventDefault();
+      if (A.neck.shift(k === "arrowleft" ? -1 : 1)) emit("neck");
+    }
+    emit("input");
+  }
+
   function onKeyUp(ev) {
     var k = ev.key.toLowerCase();
+    if (state.layout === "neck") {
+      if (k in KEYMAP && heldKey === k) {
+        heldKey = null;
+        A.neck.kbRelease();
+        emit("input");
+      }
+      return;
+    }
     if (k in KEYMAP && heldKey === k) {
       heldKey = null;
       state.left = null;
@@ -597,12 +678,32 @@ window.ARCO = window.ARCO || {};
     if (geom) geom.zones = buildZones(geom.L);
   }
 
+  /* Changing layout mid-note would leave strings tuned and ringing for a
+   * surface that no longer exists, so everything is let go first. */
+  function setLayout(name) {
+    for (var id in pointers) {
+      try { canvas.releasePointerCapture(Number(id)); } catch (e) { /* already gone */ }
+    }
+    pointers = {};
+    state.left = null;
+    state.right = null;
+    heldKey = null;
+    A.neck.reset();
+    silenceBows();
+    state.layout = name === "arc" ? "arc" : "neck";
+    A.engine.clear();
+    A.engine.setSpread(state.layout === "neck" ? 6 : 4);
+    for (var i = 0; i < state.ringVis.length; i++) state.ringVis[i] = 0;
+    emit("layout");
+  }
+
   A.input = {
     state: state,
     attach: attach,
     layout: layout,
     geom: function () { return geom; },
     rebuildZones: rebuildZones,
+    setLayout: setLayout,
     zoneIndexOf: zoneIndexOf,
     voicing: voicing,
     tick: tick,

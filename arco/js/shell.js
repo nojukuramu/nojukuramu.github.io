@@ -6,7 +6,7 @@
  * three ways in, in increasing order of permanence:
  *
  *   1. Double-tap the portrait screen — goes fullscreen and rotates for you.
- *   2. The ⛶ button — fullscreen at any time.
+ *   2. The fullscreen button — fullscreen at any time.
  *   3. Install it — launches fullscreen and landscape with no chrome at all,
  *      and works with no network, since nothing here is streamed.
  *
@@ -143,11 +143,18 @@ window.ARCO = window.ARCO || {};
     });
   }
 
+  /* The registration goes to update.js, which watches it for a newer build
+   * and offers it — the worker itself never takes over on its own. */
   function registerSW() {
-    if (!("serviceWorker" in navigator)) return;
-    if (location.protocol === "file:") return;
-    navigator.serviceWorker.register("sw.js").catch(function () {
+    if (!("serviceWorker" in navigator) || location.protocol === "file:") {
+      if (A.update) A.update.init(null);
+      return;
+    }
+    navigator.serviceWorker.register("sw.js").then(function (reg) {
+      if (A.update) A.update.init(reg);
+    }).catch(function () {
       /* Installability is a bonus; the app runs fine without it. */
+      if (A.update) A.update.init(null);
     });
   }
 
