@@ -29,7 +29,7 @@ import { S, emit, on, isClient, players } from "./state.js";
 import { scene, snapCamera, applyTheme } from "./gfx.js";
 import * as fx from "./fx.js";
 import { buildWorld } from "./world.js";
-import { THEMES, themeForFloor, floorKind } from "./themes.js";
+import { THEMES, themeForFloor, floorKind, floorScale } from "./themes.js";
 import { createPlayer, updatePlayer } from "./player.js";
 import * as enemies from "./enemies.js";
 import * as spells from "./spells.js";
@@ -108,6 +108,9 @@ function collect(p) {
     if (P.rank < MAX_RANK) {
       P.rank++; P.recompile();
       emit("rankUp", P.rank);
+    } else {
+      P.attune++; P.recompute(); P.mana = P.maxMana;
+      emit("attune", P.attune);
     }
   }
   emit("pickup", p.type);
@@ -215,7 +218,7 @@ function campRoster(floor, rng) {
   if (floor >= 3) pool.push("spindle", "spindle");
   if (floor >= 4) pool.push("weaver");
   if (floor >= 5) pool.push("golem", "spindle", "knot");
-  const size = 2 + Math.floor(rng() * 2) + Math.floor(floor / 3);
+  const size = 2 + Math.floor(rng() * 2) + floorScale(floor).extra;
   const out = [];
   while (out.length < size) {
     const t = pool[Math.floor(rng() * pool.length)];
@@ -323,7 +326,7 @@ export function startRun(fromLanding) {
   S.runTime = L ? L.time : 0;
   S.kills = L ? L.kills : 0;
   S.time = 0;
-  newPlayer(L ? { level: L.level, xp: L.xp, boons: L.boons, rank: L.rank, potions: L.potions } : null);
+  newPlayer(L ? { level: L.level, xp: L.xp, boons: L.boons, rank: L.rank, potions: L.potions, attune: L.attune } : null);
   save.data.stats.runs++; save.commit();
   buildFloor(L ? L.floor : 1, (Math.random() * 1e9) | 0);
   emit("runStart", !!L);
@@ -498,7 +501,9 @@ on("kill", (e) => {
   }
   dropXp(e.x, e.z, e.xp);
   if (Math.random() < (e.type === "golem" ? 0.5 : 0.18)) drop("hp", e.x, e.z, 8);
-  if (Math.random() < 0.3) drop("mana", e.x, e.z, 14);
+  // Mana orbs grow with the floor: deeper up, the pages you can afford are
+  // bigger, and a kill should still pay for part of the next one.
+  if (Math.random() < (e.type === "golem" ? 0.6 : 0.35)) drop("mana", e.x, e.z, Math.round(12 * floorScale(S.floor).loot));
   if (P.mods.siphon) { P.addMana(4 * P.mods.siphon); P.heal(P.mods.siphon, true); }
   if (e.type === "anchor" && isClient()) {
     drop("hp", e.x, e.z, 15);
@@ -564,6 +569,19 @@ on("bossGone", () => { if (S.barrier) S.barrier.userData.fall = true; });
    Per frame
    --------------------------------------------------------------- */
 let deathShown = false;
+/* A Warden sheds a mana orb for every tenth of its health you take. A boss
+   fight has no kills to feed on, and with mana as slow as it is now, the
+   fight would otherwise end in a crawl at the regeneration rate. Reading the
+   bar rather than the blows means a co-op guest, whose Warden is a puppet of
+   the host's, sheds the same orbs for itself. */
+function shedMana() {
+  const B = S.boss;
+  if (!B || !B.alive || !B.maxHp || S.mode === "sandbox") return;
+  const due = Math.floor((1 - B.hp / B.maxHp) * 10);
+  B.shed = B.shed || 0;
+  while (B.shed < due && B.shed < 9) { B.shed++; drop("mana", B.x, B.z, Math.round(12 * floorScale(S.floor).loot)); }
+}
+
 export function update(dt, input) {
   const P = S.player;
   if (!P) return;
@@ -576,6 +594,7 @@ export function update(dt, input) {
   spells.update(dt);
   updatePickups(dt);
   if (S.world) S.world.update(dt, S.time, P.x, P.z);
+  shedMana();
 
   // interact
   if (input.interact && P.alive) { const t = nearestProp(P); if (t) useProp(t); }

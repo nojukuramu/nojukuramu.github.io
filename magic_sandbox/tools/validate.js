@@ -241,8 +241,26 @@ const allJs = jsFiles.map(read).join("\n");
     check("the four starters cover all four elements", new Set(starters.flatMap((c) => c.elements)).size === 4);
     check("the four starters cover all four forms", new Set(starters.flatMap((c) => c.forms)).size === 4);
     check("every starter is castable at rank 1", S.starterSpells().every((d) => S.overLimits(d, 1).length === 0));
-    check("every starter costs 5-15 mana", starters.every((c) => c.cost >= 5 && c.cost <= 15), starters.map((c) => c.cost).join(","));
-    check("costs and cooldowns are positive and bounded", starters.every((c) => c.cooldown >= 0.2 && c.cooldown <= 3));
+    check("every starter is cheap: 3-10 mana, under a second", starters.every((c) => c.cost >= 3 && c.cost <= 10 && c.cooldown < 1), starters.map((c) => c.cost + "/" + c.cooldown.toFixed(2)).join(","));
+    check("costs and cooldowns are positive and bounded", starters.every((c) => c.cooldown >= 0.2 && c.cooldown <= S.MAX_COOLDOWN));
+  }
+  {
+    // Cooldown and mana both follow what a page can deal, so a page that
+    // hits hard cannot also be spammed, and cannot be cheap.
+    const all = S.PRESETS.concat(S.starterSpells()).map((d) => S.compileSpell(d)).sort((a, b) => a.potential - b.potential);
+    check("more potential never costs less or recovers faster", all.every((c, i) => i === 0 || (c.cost >= all[i - 1].cost && c.cooldown >= all[i - 1].cooldown - 0.26)),
+      all.map((c) => Math.round(c.potential) + ":" + c.cost + "/" + c.cooldown.toFixed(2)).join(" "));
+    const ww = S.compileSpell(S.PRESETS.find((p) => p.name === "Wildfire Wall"));
+    check("a heavy page is not a hose: Wildfire Wall waits two seconds", ww.cooldown >= 2, ww.cooldown.toFixed(2));
+    const pour = Math.max(...all.map((c) => c.potential / c.cooldown));
+    check("no page pours out more than POUR damage a second", pour <= S.POUR + 1e-9, pour.toFixed(1));
+    const small = all[0], big = all[all.length - 1];
+    check("a small page is the thrifty one", small.potential / small.cost > big.potential / big.cost);
+    const boosted = S.compileSpell(S.starterSpells()[0], { dmg: 2, burn: 2 });
+    const plain = S.compileSpell(S.starterSpells()[0]);
+    check("damage boons raise damage, not the price", boosted.hitDmg > plain.hitDmg * 1.9 && boosted.cost === plain.cost && boosted.cooldown === plain.cooldown);
+    const rimed = S.compileSpell(S.starterSpells()[3], { chill: 0.2 }), water = S.compileSpell(S.starterSpells()[3]);
+    check("Rime chills harder without raising the price", rimed.layers[0].shots[0].chill > water.layers[0].shots[0].chill && rimed.potential === water.potential);
   }
   {
     const big = { name: "", layers: [{ power: 5, glyphs: [{ nodes: [0, 4, 8] }, { nodes: [0, 3, 6, 9] }, { nodes: [0, 2, 4, 6, 8, 10] }], seals: [{ x: 0, y: 0, r: 30, runes: [0, 1, 2, 3, 4] }] }] };
@@ -282,7 +300,17 @@ const allJs = jsFiles.map(read).join("\n");
     check("odd floors are Anchors, even floors Wardens, ten is the Heart", kinds[0] === "anchors" && kinds[1] === "warden" && kinds[9] === "heart" && kinds[10] === "anchors");
     check("each land lasts two floors", T.themeForFloor(1).id === T.themeForFloor(2).id && T.themeForFloor(3).id !== T.themeForFloor(2).id);
     check("floor ten is Stormspire", T.themeForFloor(10).id === "storm");
-    check("enemies grow tougher, gently", T.floorScale(1).hp === 1 && T.floorScale(10).hp < 4 && T.floorScale(10).dmg < 2);
+    const F = (f) => T.floorScale(f);
+    check("the climb opens slow and easy", F(1).hp < 1 && F(1).dmg < 1 && F(1).pace > 1.2 && F(1).tell > 1 && F(1).speed < 1);
+    check("floor ten is harder, gently", F(10).hp < 4 && F(10).dmg < 2 && F(10).pace < 1);
+    const up = ["hp", "dmg", "speed", "extra", "loot"], down = ["pace"];
+    let grows = true;
+    for (let f = 1; f < 200; f++) {
+      if (up.some((k) => F(f + 1)[k] < F(f)[k]) || down.some((k) => F(f + 1)[k] > F(f)[k])) grows = false;
+    }
+    check("every lever keeps turning, floor after floor", grows);
+    check("Endless has no ceiling", F(200).hp > F(100).hp * 2 && F(200).dmg > F(100).dmg * 2 && F(200).pace < F(100).pace && F(200).extra > F(100).extra);
+    check("a warning never shrinks below three quarters", [1, 10, 50, 500].every((f) => F(f).tell >= 0.75));
     const lim = S.RANKS.slice(1);
     check("each rank holds at least as much as the last", lim.every((r, i) => i === 0 || Object.keys(r).every((k) => r[k] >= lim[i - 1][k])));
   }

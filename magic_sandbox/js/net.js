@@ -316,7 +316,7 @@ function sendBook() {
   if (!P) return;
   const d = [];
   for (let i = 0; i < SLOTS; i++) d.push(save.spell(i));
-  send({ t: "book", d, b: P.boons, r: P.rank });
+  send({ t: "book", d, b: P.boons, r: P.rank, a: P.attune });
 }
 function applyBook(Q, m) {
   if (!Q || !Array.isArray(m.d)) return;
@@ -327,6 +327,8 @@ function applyBook(Q, m) {
   let rank = Math.max(1, Math.min(MAX_RANK, m.r | 0 || 1));
   if (S.match && MODES[S.match.mode].pvp) rank = Math.min(rank, S.match.settings.rank);
   Q.rank = rank;
+  // Attunement is Endless's reward; a PVP room starts everyone level with none.
+  Q.attune = S.match && MODES[S.match.mode].pvp ? 0 : Math.max(0, Math.min(999, m.a | 0));
   Q.recompute();
 }
 

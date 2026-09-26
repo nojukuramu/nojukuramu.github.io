@@ -62,10 +62,10 @@ export function elementInfo(id) { return ELEMENTS[id] || ARCANE; }
    third of the way to the ring is a Bolt, and so on, so the page itself is
    the ruler. */
 export const FORMS = {
-  needle: { id: "needle", name: "Needle", maxR: 45,       dmg: 0.8, speed: 30, radius: 0.16, pierce: 2,  range: 24, kb: 0.4, splash: 0,   cost: 0.8, cd: 0 },
-  bolt:   { id: "bolt",   name: "Bolt",   maxR: 85,       dmg: 1.0, speed: 20, radius: 0.28, pierce: 0,  range: 19, kb: 1.2, splash: 0,   cost: 1.0, cd: 0 },
-  orb:    { id: "orb",    name: "Orb",    maxR: 125,      dmg: 1.6, speed: 11, radius: 0.55, pierce: 0,  range: 14, kb: 3.5, splash: 1.6, cost: 1.5, cd: 0.15 },
-  nova:   { id: "nova",   name: "Nova",   maxR: Infinity, dmg: 1.2, speed: 0,  radius: 0,    pierce: 99, range: 0,  kb: 5,   splash: 0,   cost: 1.8, cd: 0.25 }
+  needle: { id: "needle", name: "Needle", maxR: 45,       dmg: 0.8, speed: 30, radius: 0.16, pierce: 2,  range: 24, kb: 0.4, splash: 0,   cd: 0 },
+  bolt:   { id: "bolt",   name: "Bolt",   maxR: 85,       dmg: 1.0, speed: 20, radius: 0.28, pierce: 0,  range: 19, kb: 1.2, splash: 0,   cd: 0 },
+  orb:    { id: "orb",    name: "Orb",    maxR: 125,      dmg: 1.6, speed: 11, radius: 0.55, pierce: 0,  range: 14, kb: 3.5, splash: 1.6, cd: 0.15 },
+  nova:   { id: "nova",   name: "Nova",   maxR: Infinity, dmg: 1.2, speed: 0,  radius: 0,    pierce: 99, range: 0,  kb: 5,   splash: 0,   cd: 0.25 }
 };
 export const FORM_IDS = ["needle", "bolt", "orb", "nova"];
 export function formForRadius(r) {
@@ -185,6 +185,30 @@ function reactionsFor(els) {
   return out;
 }
 
+/* ---------------------------------------------------------------
+   Potential: the damage one cast can deal, all of it.
+   Cooldown and mana are both read off this one number, so a page cannot be
+   cheap and quick and devastating at once: what it can do is what it costs.
+   It counts every shot of every layer, the extra enemies a blast or a Nova
+   catches, what a pierce passes through, the burn left behind and what a
+   reaction adds. It is judged without your boons, so Keen Focus or Kindling
+   make a page hit harder without making it dearer — boons are the reward,
+   the page is the price.
+   --------------------------------------------------------------- */
+const AREA_PER_M = 0.45;     // extra enemies a metre of blast radius is worth
+const REACTION_WORTH = 0.1;  // each reaction adds a cloud, a pool, arcs or shards
+
+function worthOf(s, reactions, mods) {
+  const hit = s.dmg / mods.dmg;
+  // Reach adds rather than multiplies: a piercing, bouncing, splashing shot
+  // is good at several things, not every enemy on the floor at once.
+  const reach = s.form === "nova" ? 1 + AREA_PER_M * s.novaR
+    : 1 + AREA_PER_M * 0.8 * s.splash + 0.3 * Math.min(s.pierce, 3) + (s.bounce ? 0.2 : 0);
+  const burn = s.burn ? 3 * s.burn / mods.burn : 0;           // a burn ticks for three seconds
+  const chill = hit * 0.5 * Math.max(0, s.chill - mods.chill); // a slowed enemy is half a hit spared
+  return (hit * reach + burn + chill) * (1 + REACTION_WORTH * reactions.length);
+}
+
 function compileLayer(L, index, parent, balance, mods) {
   const counts = {};
   const own = [];
@@ -234,19 +258,35 @@ function compileLayer(L, index, parent, balance, mods) {
       bounce: has("air") && form !== "nova" ? 1 : 0,
       burn: has("fire") ? 2.5 * (ec.fire || 1) * pm * mods.burn : 0,
       chill: has("water") ? Math.min(0.65, 0.3 + 0.1 * ((ec.water || 1) - 1) + mods.chill) : 0,
-      cost: (glyphN ? 3 + 2.5 * glyphN : 2.4) * F.cost * (1 + 0.55 * (power - 1)) * (index ? 0.6 : 1),
       ox, oz,
       dirs
     };
+    shot.worth = worthOf(shot, reactions, mods);
     shots.push(shot);
   }
   return { index, power, elements, counts: ec, inherits, reactions, shots,
            shotCount: shots.reduce((n, s) => n + s.dirs.length, 0) };
 }
 
+/* The rules for what a page costs. Cooldown grows in a straight line with
+   potential, so however big a page is drawn, one slot can only pour out
+   about POUR damage a second — a huge page is a big hit on a long wait, never
+   a hose. Mana grows a little faster than potential (the 1.1), so a small
+   page is the thrifty one and a big page buys its speed with mana. A plain
+   fire Bolt is 0.4 s and 4 mana; a crowded rank-three page is seconds and
+   half a pool. MAX_COOLDOWN is only there so no page can lock a slot for
+   the rest of a floor. */
+export const POUR = 85;
+export const MAX_COOLDOWN = 15;
+export function cooldownFor(potential, formCd) {
+  return clamp(0.15 + potential / POUR + (formCd || 0), 0.2, MAX_COOLDOWN);
+}
+export function costFor(potential) { return 1 + 0.12 * Math.pow(potential, 1.1); }
+
 /**
  * compileSpell(design, mods?) → {
  *   layers[], name, cost, cooldown, balance, spread, totalShots,
+ *   potential: the whole damage one cast can deal (see worthOf),
  *   elements, forms, reactions (union over layers, for the grimoire),
  *   dps: a rough single-target figure for the readout
  * }
@@ -264,17 +304,15 @@ export function compileSpell(design, mods) {
     parent = L;
   }
   // Every shot of a layer carries the whole next layer, so counts multiply.
-  let mult = 1, totalShots = 0, cost = 0, powerSum = 0, formCd = 0;
+  let mult = 1, totalShots = 0, potential = 0, formCd = 0;
   layers.forEach((L, i) => {
-    const perShotCost = L.shots.reduce((c, s) => c + s.cost * s.dirs.length, 0);
-    cost += perShotCost * mult;
+    potential += L.shots.reduce((w, s) => w + s.worth * s.dirs.length, 0) * mult;
     mult *= Math.max(1, L.shotCount);
     totalShots += mult;
-    powerSum += L.power - 1;
     if (i === 0) for (const s of L.shots) formCd = Math.max(formCd, FORMS[s.form].cd);
   });
-  const cooldown = clamp(0.2 + 0.03 * totalShots + 0.05 * powerSum + formCd, 0.2, 3) * mods.cd;
-  cost = Math.max(1, Math.round(cost * mods.cost));
+  const cooldown = cooldownFor(potential, formCd) * mods.cd;
+  const cost = Math.max(1, Math.round(costFor(potential) * mods.cost));
 
   const elements = new Set(), forms = new Set(), reactions = new Set();
   for (const L of layers) {
@@ -290,7 +328,7 @@ export function compileSpell(design, mods) {
     return sum + L.shots.reduce((c, s) => c + s.dmg * s.dirs.length, 0) * m;
   }, 0);
   const out = {
-    layers, balance, spread: (1 - balance) * 0.3, cooldown, cost, totalShots,
+    layers, balance, spread: (1 - balance) * 0.3, cooldown, cost, totalShots, potential,
     elements: [...elements], forms: [...forms], reactions: [...reactions],
     hitDmg, volley, dps: volley / cooldown
   };

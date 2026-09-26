@@ -28,7 +28,9 @@ const TOPICS = {
       "<p>Every attack is shown on the ground before it lands. Red means move; " +
       "a dash passes straight through danger.</p>" +
       "<p>Floors 1, 3, 5, 7 and 9 are <b>landings</b>: if you fall, you can start again from the " +
-      "last one with the level and boons you arrived with.</p>"
+      "last one with the level and boons you arrived with.</p>" +
+      "<p>The tower starts slow and presses a little harder every floor. Past the Heart, <b>Endless</b> never stops " +
+      "getting harder — and never stops paying: bigger mana orbs, and Wardens that attune you.</p>"
   },
   controls: {
     title: "Controls",
@@ -99,7 +101,20 @@ const TOPICS = {
       "<p>Your rank decides how much one page can hold: glyphs and seals per layer, runes per seal, how many layers, " +
       "how much power, and how many shots one cast may make.</p>" +
       "<p>You start at rank 1. Every Warden you defeat drops a thread that raises it by one, up to 5. " +
+      "Past rank 5 a thread <b>attunes</b> you instead: +8% spell damage and +10 mana, with no limit. " +
       "The Sandbox always runs at rank 5, so you can design ahead — a page beyond your rank shows a lock until you reach it.</p>"
+  },
+  price: {
+    title: "Cost and cooldown",
+    body:
+      "<p>" + icon("spark") + " is everything one cast can deal: every shot of every layer, what a blast or a Nova " +
+      "catches, what a pierce passes through, burns, chills and reactions.</p>" +
+      "<p>" + icon("clock") + " <b>Cooldown</b> grows with it in a straight line, so a big page is a big hit on a long " +
+      "wait — no page can be held down like a hose. " + icon("drop") + " <b>Mana</b> grows a little faster, so small " +
+      "pages are the thrifty ones.</p>" +
+      "<p>Mana comes back slowly while you cast and twice as fast once you hold off for a moment. Keep a cheap page " +
+      "for the trickle and a big one for when it counts.</p>" +
+      "<p>Boons that add damage do not raise the price.</p>"
   },
   power: {
     title: "Power",

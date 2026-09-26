@@ -442,8 +442,9 @@ function renderPanel() {
     '<div class="stats">' +
     '<span title="Mana per cast"' + (c.cost > maxMana ? ' class="bad"' : "") + ">" + icon("drop") + c.cost + "</span>" +
     '<span title="Cooldown">' + icon("clock") + c.cooldown.toFixed(2) + "s</span>" +
-    '<span title="Damage per hit">' + icon("spark") + (L0 ? Math.round(c.hitDmg) : 0) + "</span>" +
+    '<span title="Damage one cast can deal">' + icon("spark") + (L0 ? Math.round(c.potential) : 0) + "</span>" +
     '<span title="Shots per cast">' + icon("needle") + c.totalShots + "</span>" +
+    '<button class="info" data-info="price" aria-label="About cost and cooldown">' + icon("info") + "</button>" +
     "</div>" +
     '<div class="bal"><span>Balance</span><i><b style="width:' + Math.round(c.balance * 100) + '%"></b></i><em>' + Math.round(c.balance * 100) + '%</em><button class="info" data-info="balance" aria-label="About balance">' + icon("info") + "</button></div>" +
     (c.reactions.length ? '<div class="reacts">' + c.reactions.map((r) => '<span style="color:' + REACTIONS[r].color + '">' + icon(r) + REACTIONS[r].name + "</span>").join("") + '<button class="info" data-info="reactions" aria-label="About reactions">' + icon("info") + "</button></div>" : "");

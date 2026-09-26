@@ -194,6 +194,7 @@ on("thunder", () => play("thunder"));
 on("noMana", () => play("noMana"));
 on("denied", () => play("noMana"));
 on("rankUp", () => play("rank"));
+on("attune", () => play("rank"));
 on("playerDied", () => play("death"));
 on("victory", () => play("victory"));
 on("trigger", () => play("trigger"));
