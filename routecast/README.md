@@ -36,6 +36,52 @@ Live at <https://nojukuramu.github.io/routecast/>.
 - **A departure planner.** The same forecast data is re-scored for departures from three
   hours earlier to six hours later, so you can see whether waiting an hour dodges the
   squall. No extra network calls — it re-reads the hourly series already fetched.
+- **It points, and it talks.** The next turn is an arrow drawn the way a road sign draws
+  it — left, sharp right, the fork you want, the roundabout exit you leave by — with the
+  manoeuvre after it hanging underneath when the two are close enough to be one, and a bar
+  that fills over the last few hundred metres. The same instructions are **spoken**: once
+  early enough to change lanes (about twenty seconds out at your speed) and once as the
+  junction arrives, plus rain or fog ahead while it is still ten kilometres off, a speed you
+  asked to be warned about, and a break after the hours you chose. It uses the voice the
+  phone already has, so it reaches a helmet speaker, costs nothing and sends nothing. Where
+  the phone can vibrate, a double pulse before each turn gets through gloves.
+- **A dashboard you choose.** Three styles — **Strip** (the speed and a row of tiles),
+  **Big** (the speed on a gauge and three tiles large enough to read on a mount) and
+  **Minimal** (the speed and one tile in a corner) — and the tiles themselves, picked and
+  ordered separately for navigating and for free drive. New tiles: when the next **rain**
+  reaches you, where the **wind** hits you relative to the way you are pointing, the next
+  **sunset**, your **heading**, the **clock** and the **battery**. Hold the dashboard
+  mid-ride and its settings open.
+- **A camera that moves like one.** Starting a ride flies down to the rider and tilts in
+  behind them; Re-centre swoops back instead of snapping; the whole-route button pulls the
+  3D camera up, level and north-up (it used to do nothing you could see in 3D); ending a
+  ride levels the horizon and pulls back to the whole of what you rode. While riding, the
+  view **zooms out with speed** and **in at a junction**, and the rider glides between fixes
+  — dead-reckoned along the course at the last speed — instead of hopping once a second.
+- **The weather where it hits you.** Wind is split into what pushes you along and what
+  pushes you sideways, from the road's own bearing, because the same gust is a shove in the
+  back on one heading and a push into the next lane on another. Each checkpoint says whether
+  it is light or dark, and the trip says how much of the ride is after sunset — read from
+  the same forecast request, which now also carries sunrise and sunset.
+- **A profile you read with a finger.** The elevation chart now carries the forecast under
+  it — a band in each stretch's risk colour and bars for the rain — and dragging along it
+  reads any point: how far in, how high, when you get there, what the sky is doing, with a
+  ring on the map showing where.
+- **A rain lock.** Rain and wet gloves press touchscreens. Lock the ride and every touch is
+  ignored — the map, the dashboard and the voice carry on — until the lock is **held** for
+  most of a second, which a raindrop cannot do. The lock button lights up when it is raining
+  where you are.
+- **The ride, afterwards.** A ride ends on a card: the shape of where you went, drawn from
+  the track actually ridden, and the numbers under it — and it can be shared as a picture,
+  drawn on the phone and handed to its own share sheet. Nothing is uploaded to make it.
+- **One tap to somewhere you have been.** Your marks and saved routes sit over the map as
+  chips while nothing is planned; a mark plans from where you are right now. **Share ETA**
+  hands one line — where you are going, when you get there — to whoever you pick.
+- **Easy on the battery.** A parked 3D camera used to redraw the same picture eight times a
+  second; it now goes quiet when nothing moves. The weather chips are rebuilt when what they
+  show changes, not every five seconds. And a **battery saver** — on at 20% by itself where
+  the browser will say what the battery is doing — slows the camera, keeps buildings flat,
+  stops the decorative motion and refreshes the forecast half as often.
 - **Group ride.** A room of riders on one map (see below): one shared **planned route**
   that is static by design, live positions, a roster with a door on it, chat, push-to-talk
   voice, and routes back to the line for anyone who leaves it. Joining is a six-character
@@ -243,7 +289,8 @@ with no backend to hide a secret in.
 | Vector rendering | [MapLibre GL JS](https://maplibre.org/) | vendored, and only downloaded when a vector map is picked |
 | Place search | [Nominatim](https://nominatim.org/) | throttled to 1 request/second, as their usage policy requires |
 | Routing | [OSRM demo server](https://project-osrm.org/) | `driving` profile, with alternatives |
-| Forecast | [Open-Meteo](https://open-meteo.com/) | hourly, up to 16 days, batched by location |
+| Forecast | [Open-Meteo](https://open-meteo.com/) | hourly, up to 16 days, batched by location; the same request carries wind direction and each day's sunrise and sunset |
+| Voice | the browser's own speech synthesis | on the phone, no request at all |
 | Terrain | [Open-Meteo elevation](https://open-meteo.com/en/docs/elevation-api) | Copernicus DEM GLO-90, up to 100 points per request |
 | Traffic | *none* | predicted locally — see below |
 
@@ -306,7 +353,7 @@ would cost a request has its own gate:
 | What | How often it costs a request | The gate |
 |------|------------------------------|----------|
 | Re-timing the ETA, and every downstream checkpoint's forecast with it | never | re-samples the hourly series already in memory, once a minute |
-| Refetching the forecast | every 15 minutes at most | only the checkpoints still ahead, capped at 24 of them; skipped while the page is hidden or offline, and skipped for any point already refetched in the last 10 minutes |
+| Refetching the forecast | every 15 minutes at most (30 with the battery saver on) | only the checkpoints still ahead, capped at 24 of them; skipped while the page is hidden or offline, and skipped for any point already refetched in the last 10 minutes |
 | Rerouting | only when you are genuinely on another road | must be more than 90 m off the line, *and* further off than the fix's own accuracy circle can explain, for four fixes running, and past a backoff that widens 15s → 30s → 1m → 2m → 5m |
 
 Rejoining the route cancels a pending reroute and resets the backoff, so a rider who wanders off
@@ -565,6 +612,99 @@ map. And a hub relays; it does not moderate — a self-appointed relay moderatin
 channel is worse than one that does not, which is why the ignore list is local, permanent
 and applied where messages arrive.
 
+## Riding with it
+
+Everything in this section is what the screen does while the phone is on a mount and the
+rider is looking at the road, so every decision in it was made against one question: can this
+be understood in the half-second a glance takes?
+
+### The camera
+
+The camera already knew who owned the map (`follow.js`); it now also knows how to *move*. Four
+set pieces, each one real animation handed to the engine in one call, with the heartbeat keeping
+its hands off while it flies:
+
+| Moment | Flat map | 3D camera |
+|--------|----------|-----------|
+| A ride starts | a flight down onto the first fix | a flight from wherever the map was, down and tilted in behind the rider |
+| Re-centre, or the camera coming back on its own | a short flight back | a swoop back down into the chase |
+| The whole-route button | a flight out to the route | a pull-up: level, north up, the route under it — Re-centre dives back down |
+| A ride ends | a flight back to show the whole ride above its card | the horizon levels over half a second first, then the same flight |
+
+Between those, two things are continuous. The **zoom follows the speed** — up to a level further
+out at 100 km/h, because at that speed the next kilometre matters more than the next hundred
+metres — and **closes in over the last 260 m before a turn**, because at a junction the
+junction is what matters. Both are smoothed on the heartbeat so the map never breathes with the
+speedometer, and both are offsets on top of the zoom the rider chose: a pinch at 90 km/h is not
+remembered as a preference for being zoomed out. There is a switch for it in *Layers*.
+
+And the rider **glides**. A phone hands over one fix a second, and a marker that jumps seventeen
+metres and then sits still looks broken at 60 km/h. In 3D the drawn position is dead-reckoned
+along the course at the last known speed — for at most 1.1 s — and blended into each new fix;
+the camera follows the drawn position, so the two move together. On the flat map the same job
+is done by a CSS transition on the marker's own transform, switched off around a zoom so the
+rider never slides across the screen after one. The flat marker also carries a halo the size of
+the fix's own error circle, because "the GPS is guessing" is information a dot cannot give.
+
+### Guidance
+
+`guide.js` is what the app says, and when. The voice is the browser's own speech synthesis — the
+same `speak()` KaraokeNatin uses, lifted from `karaokenatin/js/app.js`, with one addition:
+priority. A turn happening *now* cancels whatever is being said; a weather note never interrupts
+a turn.
+
+A turn is announced at most twice: once about twenty seconds out at the current speed (never
+closer than 250 m, never further than 1.2 km), early enough to change lanes, and once about seven
+seconds out as it arrives. A step that only renames the road is not announced at all unless the
+next turn is right behind it, in which case the two are said as one: *"Continue onto Katipunan
+Avenue, then turn left onto…"*. Distances are said the way a person says them — "three hundred
+metres", not "two hundred and eighty-seven" — and a destination set by coordinate is "your
+destination", not fourteen digits read into a helmet.
+
+Weather that the forecast marks as caution or danger is said once per checkpoint, while it is
+still up to ten kilometres off. A break is suggested once per interval of riding time. The speed
+warning is said once per crossing and never more than once a minute. iOS will not let a page
+speak until it has spoken inside a user gesture, so the tap on Go or Free drive speaks a silent
+line; after that the voice is ready for the first turn.
+
+### The dashboard
+
+`hud.js` owns *which* tiles are on the screen and how they look; `app.js` still works out every
+value, because that is where the route, the forecast and the fix all are. That split is what lets
+a tile be added in one place and chosen in another — and `tools/validate.js` checks that the two
+lists agree, so a tile can never be offered that nothing feeds, or fed that nothing can show.
+
+The speed warning is a speed *the rider* chooses. There is no free, key-less source of speed
+limits, and a guessed limit presented as a real one would be worse than none. It has two
+thresholds — over by 1 to turn red, back under by 2 to clear — so a speed sitting on the line
+does not flicker.
+
+### Battery
+
+Two kinds of saving, and the difference matters. The first is always on, because it was waste:
+the 3D camera used to issue a camera move eight times a second whether or not anything had moved,
+and each of those is an animation that renders every frame of its duration — a parked phone was
+running its GPU flat out to redraw the same picture. The chase now skips a move that would look
+the same as the last one, the rider's geometry is rebuilt only when it changes, mirrored markers
+are only repositioned when they move, and the weather chips and the progress ticks are rebuilt
+when what they show changes rather than on a timer.
+
+The second is the **battery saver** (`power.js`), which trades a little of the experience for
+time: the 3D heartbeat slows from 120 ms to 280 ms, buildings stay flat, the dead reckoning and
+every decorative animation stop, and the forecast is refreshed every 30 minutes instead of 15.
+None of it touches the position, the route, the turns or the recorder. **Auto** turns it on at
+20% when the phone is not charging — where the browser exposes the Battery Status API, which
+Chrome on Android does and Safari and Firefox do not; there, Auto simply never switches on, and
+the rider can still choose **On**.
+
+### The rain lock
+
+A transparent layer over the whole screen, rather than a list of controls switched off one by
+one — because that is the only way to be sure a control added next month is locked too. Every
+touch that is not a hold on the lock's own pill is absorbed, and the pill nods so a rider who
+forgot it was locked knows why nothing happened. A hold of 0.9 s unlocks it; a raindrop cannot
+hold still that long. Ending the ride unlocks it too.
+
 ## Running with the screen off
 
 A ride does not stop because the phone went in a pocket. It used to here: the tab was
@@ -725,6 +865,16 @@ publishes an update.
   licence limit.
 - **Recorded roads live in `localStorage`.** Persistent storage is requested but only ever
   granted as a heuristic, and clearing site data clears the lot. There is no export yet.
+- **The voice is whatever the phone has.** Speech synthesis voices differ between phones and
+  languages, some are better than others at street names, and a phone with its media volume at
+  zero says nothing. iPhones cannot vibrate from a web page at all.
+- **Dead reckoning guesses for a second.** Between fixes the 3D rider is moved along at the last
+  known speed; stop hard and it can run up to a second ahead before the next fix pulls it back.
+  That is the cost of a marker that glides, and it never touches the recorded track.
+- **The speed warning is your number, not the road's.** RouteCast has no speed limits and does
+  not pretend to.
+- **The ride card's track is thinned.** A long ride is drawn from a few hundred of its points,
+  which is plenty for a picture and not a survey.
 
 ## How it is built
 
@@ -746,6 +896,7 @@ routecast/
     icons.js                inline SVG weather and UI icons
     background.js           RC.background — wake lock, silence, worker heartbeat: the ride
                                           keeps running with the screen off
+    power.js                RC.power    — the battery saver: one question, "are we saving?"
     history.js              RC.history  — the roads you actually rode, and how long they took
     heat.js                 RC.heat     — that record, drawn: visits, speed, held-up, recency
     traffic.js              RC.traffic  — time-of-week congestion, grounded in your own rides
@@ -758,7 +909,9 @@ routecast/
     sampler.js              RC.sampler  — walks the route, emits checkpoints with ETAs
     weather.js              RC.weather  — Open-Meteo batching, hourly interpolation, WMO codes
     elevation.js            RC.elevation— Open-Meteo DEM profile, climb/descent, grade at a point
-    risk.js                 RC.risk     — vehicle-aware scoring, advice, departure planner
+    risk.js                 RC.risk     — vehicle-aware scoring, advice, departure planner,
+                                          and the wind against the road
+    guide.js                RC.guide    — what is said and buzzed while riding, and when
     pick.js                 RC.pick     — the centre-pin place picker
     qr.js                   RC.qr       — a QR encoder, lifted from KaraokeNatin; no CDN
     peer.js                 RC.net      — WebRTC data channels over a public broker; no backend
@@ -783,6 +936,9 @@ routecast/
     layers.js               RC.layers   — which map is up, which one a ride switches to, and
                                           what the vector engine is given to draw
     layersui.js             RC.layersui — the chooser: a row per map, each in its own palette
+    hud.js                  RC.hud      — the dashboard: three styles, the tiles, the speed warning
+    recap.js                RC.recap    — the ride afterwards: the card, and the picture to share
+    lock.js                 RC.lock     — the rain lock
     app.js                  the glue: map, form, the render pipeline, the draggable sheet
     pwa.js                  install prompt and the iOS add-to-home-screen fallback
   tools/validate.js         static + pure-module suite: `node tools/validate.js`
@@ -842,6 +998,24 @@ map are mirrored into the scene and scaled by distance, that changing the map mi
 not leave the rider in an empty world, and that leaving the ride takes every mirrored thing
 away again. It serves the page from disk and refuses every outside request, so it also
 proves the vector map comes up with no tile server at all.
+
+It also checks the camera's manners: that a parked rider costs it nothing (no camera moves
+while the fix does not change), that in north-up the chevron still points the way the machine
+is going, that the whole-route button pulls the 3D camera up level and north-up and Re-centre
+dives back down, that speed pulls the view back and a junction brings it in, and that a ride
+opens on a flight that lands in the chase.
+
+The newer riding features are checked in `validate.js` the same way the rest are, by running
+the modules: the sun timeline answers "is it dark" without caring which UTC day an event was
+filed under, wind direction is averaged on the shortest arc, the next rain is found where it
+starts rather than at the top of the hour, a wind from the east hits a rider heading north from
+the right; a turn is spoken exactly twice, a road changing its name not at all, a coordinate
+destination never read out as digits, a break suggested once per interval, and nothing at all
+with the voice off; every manoeuvre has its own arrow and survives the ETA calibration on its
+way to the screen, a roundabout says which exit (and the 11th is not the 11st); every
+dashboard tile is fed and every fed value is a tile; the ride card's sketch keeps north up and
+fits its box; and the battery saver saves when the phone says it is low and not while it is
+charging.
 
 It also checks the things the newer features would be expensive to get wrong: that a
 moving vehicle has a heading even when the chipset reports none and a parked one does not,

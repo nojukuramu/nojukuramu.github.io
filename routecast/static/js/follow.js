@@ -41,6 +41,13 @@ RC.follow = (function () {
   var GESTURE_GRACE_MS = 350;    // a wheel/pinch is "in progress" for this long after
   var CUT_PX = 420;              // further than this on screen: jump, do not animate
   var PAN_DURATION_S = 0.45;
+  /* The two moves that are deliberately NOT cuts: the drop onto the rider
+     when a ride starts, and the way back when Re-centre is pressed. Both are
+     the moment the rider's eye is on the screen looking for themselves, and a
+     flight is how the eye finds the dot instead of losing the picture. */
+  var INTRO_S = 1.4;
+  var RETURN_S = 0.7;
+  var FLY_MAX_KM = 150;          // further than this, a flight is a slideshow: cut
 
   var map = null, container = null;
   var following = false;
@@ -52,6 +59,8 @@ RC.follow = (function () {
   var resumeTimer = null;
   var lastTarget = null;
   var onChange = null;
+  var flyNext = 0;               // seconds for the next apply to fly rather than cut; 0 = no
+  var flyingUntil = 0;
 
   function now() { return Date.now(); }
 
@@ -85,6 +94,7 @@ RC.follow = (function () {
     following = true;
     clearResume();
     fire();
+    flyNext = RETURN_S;
     if (lastTarget) apply(lastTarget.lat, lastTarget.lon, lastTarget.opts, true);
   }
 
@@ -118,6 +128,7 @@ RC.follow = (function () {
 
   function onDragStart() {
     markGesture();
+    flyingUntil = 0;             // Leaflet stops a flight under a drag; so do we
     disengage();
   }
 
@@ -148,6 +159,9 @@ RC.follow = (function () {
     if (pageHidden()) return;
     // A pointer on the glass outranks the camera, every time.
     if (pointers > 0) return;
+    // A flight in progress is not interrupted by the next fix a second later;
+    // the fix after it lands takes over from wherever the flight ended.
+    if (!force && now() < flyingUntil) return;
 
     var zoom = preferredZoom == null ? map.getZoom() : preferredZoom;
     if (opts.minZoom != null && zoom < opts.minZoom) zoom = opts.minZoom;
@@ -161,8 +175,13 @@ RC.follow = (function () {
     } catch (e) { far = true; }
 
     programmatic++;
+    var fly = flyNext;
+    flyNext = 0;
     try {
-      if (opts.rotated || far || zoom !== map.getZoom()) {
+      if (fly && !saving() && withinFlight(target)) {
+        flyingUntil = now() + fly * 1000;
+        map.flyTo(target, zoom, { duration: fly, easeLinearity: 0.3 });
+      } else if (opts.rotated || far || zoom !== map.getZoom()) {
         // Course-up must keep the rider dead centre or the rotation pivots
         // around the wrong point; a long jump is a cut either way.
         map.setView(target, zoom, { animate: false });
@@ -174,8 +193,15 @@ RC.follow = (function () {
       return;
     }
     // moveend decrements; a move that produces no event (an identical
-    // position) would otherwise leak the flag, so time it out as well.
-    setTimeout(function () { if (programmatic > 0) programmatic--; }, 1200);
+    // position) would otherwise leak the flag, so time it out as well —
+    // and a flight lasts longer than a pan, so its flag does too.
+    setTimeout(function () { if (programmatic > 0) programmatic--; }, fly ? fly * 1000 + 400 : 1200);
+  }
+
+  function saving() { return !!(RC.power && RC.power.saving()); }
+
+  function withinFlight(target) {
+    try { return map.distance(map.getCenter(), target) < FLY_MAX_KM * 1000; } catch (e) { return false; }
   }
 
   /* ---------- public ---------- */
@@ -220,6 +246,9 @@ RC.follow = (function () {
     lastTarget = null;
     pointers = 0;
     preferredZoom = opts.zoom == null ? null : opts.zoom;
+    // intro: the first fix of the ride is flown to rather than cut to.
+    flyNext = opts.intro ? INTRO_S : 0;
+    flyingUntil = 0;
     clearResume();
     fire();
   }
@@ -229,6 +258,8 @@ RC.follow = (function () {
     following = false;
     lastTarget = null;
     preferredZoom = null;
+    flyNext = 0;
+    flyingUntil = 0;
     clearResume();
     fire();
   }
@@ -257,6 +288,7 @@ RC.follow = (function () {
      is the reason the flat map and the tilted one behave the same. */
   function looked() {
     markGesture();
+    flyingUntil = 0;
     disengage();
   }
 
@@ -267,6 +299,7 @@ RC.follow = (function () {
     following = true;
     clearResume();
     fire();
+    flyNext = RETURN_S;
     if (lastTarget) apply(lastTarget.lat, lastTarget.lon, lastTarget.opts, true);
     return true;
   }

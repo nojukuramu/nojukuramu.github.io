@@ -182,6 +182,73 @@ async function main() {
   check("and the chase keeps the tilt the rider chose",
         Math.abs((await state()).pitch - chosen) < 2, "kept " + chosen.toFixed(1));
 
+  /* The camera's set pieces, and its silence. A parked phone used to keep the
+     GPU drawing eight camera moves a second to the same spot; the overview
+     button used to do nothing a rider could see in 3D; and the chevron used
+     to point north down an east-west road whenever the map was north-up. */
+  section("Standing still, and moving on purpose");
+  await page.evaluate((r) => {
+    window.RC.follow.recenter();
+    window.RC.layers.context({ speedKmh: 0, turnM: null });
+    window.RC.layers.rider(r.lat, r.lon, r.course);
+  }, RIDER);
+  await settle(1500);
+  const e0 = (await state()).eases;
+  for (let i = 0; i < 6; i++) {
+    await page.evaluate((r) => window.RC.layers.rider(r.lat, r.lon, r.course), RIDER);
+    await settle(250);
+  }
+  const e1 = (await state()).eases;
+  check("a parked rider costs the camera nothing", e1 - e0 <= 1, (e1 - e0) + " moves while parked");
+
+  await page.evaluate((r) => {
+    window.RC.compass.setMode("north", { gesture: false });
+    window.RC.layers.rider(r.lat, r.lon, 90);
+  }, RIDER);
+  await settle(900);
+  s = await state();
+  check("in north-up the chevron still points the way the machine is going",
+        Math.abs(s.riderBearing - 90) < 3 && Math.abs(s.bearing) < 3,
+        "chevron " + s.riderBearing + ", map " + s.bearing.toFixed(1));
+  await page.evaluate((r) => {
+    window.RC.compass.setMode("course", { gesture: false });
+    window.RC.compass.setCourse(r.course, 40, r.course);
+    window.RC.layers.rider(r.lat, r.lon, r.course);
+  }, RIDER);
+  await settle(900);
+
+  await page.evaluate((r) => {
+    window.RC.follow.release();
+    window.RC.layers.overview(L.latLngBounds([[r.lat - 0.03, r.lon - 0.03], [r.lat + 0.03, r.lon + 0.03]]));
+  }, RIDER);
+  await settle(1500);
+  s = await state();
+  check("the overview pulls the camera up, level and north up",
+        s.pitch < 2 && Math.abs(s.bearing) < 2 && s.following === false,
+        "pitch " + s.pitch.toFixed(1) + ", bearing " + s.bearing.toFixed(1));
+  await page.evaluate(() => window.RC.follow.recenter());
+  await settle(1100);
+  s = await state();
+  check("and Re-centre dives back down behind the rider", s.pitch > 30 && s.following === true,
+        "pitch " + s.pitch.toFixed(1));
+
+  await page.evaluate(() => window.RC.layers.context({ speedKmh: 100, turnM: null }));
+  await settle(2000);
+  const fast = (await state()).zoomOffset;
+  await page.evaluate(() => window.RC.layers.context({ speedKmh: 10, turnM: 40 }));
+  await settle(2500);
+  const junction = (await state()).zoomOffset;
+  check("speed pulls the view back and a junction brings it in", fast < -0.8 && junction > 0.3,
+        "at speed " + fast.toFixed(2) + ", at the junction " + junction.toFixed(2));
+  await page.evaluate(() => window.RC.layers.context({ speedKmh: null, turnM: null }));
+
+  await page.evaluate(() => window.RC.layers.intro());
+  const flying = (await state()).busy;
+  await settle(2700);
+  s = await state();
+  check("a ride opens on a flight down to the rider, and lands in the chase",
+        flying && !s.busy && s.pitch > 30 && s.following === true, "pitch " + s.pitch.toFixed(1));
+
   section("Everything else is in the scene too");
   s = await state();
   check("the marks Leaflet drew are mirrored into it", s.markers > 0, "markers=" + s.markers);

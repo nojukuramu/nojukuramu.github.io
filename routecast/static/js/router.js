@@ -167,6 +167,13 @@ RC.router = (function () {
     return parts.join(";");
   }
 
+  function ordinal(n) {
+    n = n | 0;
+    var t = n % 100;
+    if (t >= 11 && t <= 13) return n + "th";
+    return n + (["th", "st", "nd", "rd"][n % 10] || "th");
+  }
+
   // Turn a maneuver + street name into a short human instruction.
   function stepText(step) {
     var m = step.maneuver || {};
@@ -177,7 +184,12 @@ RC.router = (function () {
 
     if (type === "depart") verb = "Head out";
     else if (type === "arrive") verb = "Arrive at destination";
-    else if (type === "roundabout" || type === "rotary" || type === "roundabout turn") verb = "Enter the roundabout";
+    else if (type === "roundabout" || type === "rotary" || type === "roundabout turn") {
+      /* Which exit is the whole instruction at a roundabout — "enter the
+         roundabout" on its own sends a rider round it looking for a sign. */
+      verb = m.exit ? "At the roundabout, take the " + ordinal(m.exit) + " exit" : "Enter the roundabout";
+    }
+    else if (type === "exit roundabout" || type === "exit rotary") verb = "Leave the roundabout";
     else if (type === "merge") verb = "Merge";
     else if (type === "on ramp") verb = "Take the ramp";
     else if (type === "off ramp") verb = "Take the exit";
@@ -269,7 +281,13 @@ RC.router = (function () {
           distance: st.distance || 0,
           duration: (st.duration || 0) * factor,
           lat: loc[1],
-          lon: loc[0]
+          lon: loc[0],
+          /* The manoeuvre itself, not just its sentence: the turn banner
+             draws an arrow from these, and the voice decides from them
+             whether an instruction is worth saying twice. */
+          type: (st.maneuver && st.maneuver.type) || "",
+          modifier: (st.maneuver && st.maneuver.modifier) || "",
+          exit: (st.maneuver && st.maneuver.exit) || 0
         });
       }
     }
@@ -490,6 +508,8 @@ RC.router = (function () {
     VEHICLE: VEHICLE,
     expresswayNames: expresswayNames,
     expresswayMeters: expresswayMeters,
-    EXPRESSWAY_RE: EXPRESSWAY_RE
+    EXPRESSWAY_RE: EXPRESSWAY_RE,
+    // Exposed for the harness: what a manoeuvre is called is worth pinning.
+    _stepText: stepText
   };
 })();

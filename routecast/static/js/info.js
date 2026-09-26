@@ -217,6 +217,52 @@ RC.info = (function () {
         "<p>Turned off, RouteCast behaves exactly as it did before any of this existed.</p>"
     },
 
+    dashboard: {
+      title: "The dashboard",
+      body:
+        "<p><b>Strip</b> is the speed and a row of tiles you can swipe. <b>Big</b> puts the speed " +
+        "on a gauge with your first three tiles, large enough to read on a mount at arm's length. " +
+        "<b>Minimal</b> keeps the speed and one tile in a corner and gives the map the rest.</p>" +
+        "<p>Pick the tiles for navigating and for free drive separately — they are different " +
+        "rides. The arrow moves a tile earlier; the first ones are what Big and Minimal show.</p>" +
+        "<p><b>Rain</b> says when the next rain reaches you, read off the forecast already " +
+        "fetched. <b>Wind</b> points where it is blowing <i>relative to you</i> — the part " +
+        "that pushes a bike sideways is what matters, not the compass direction.</p>" +
+        "<p><b>Warn me above</b> is a speed you choose. There is no free, key-less source of " +
+        "speed limits, and a guessed limit would be worse than none, so this is yours: the " +
+        "number turns red and the phone buzzes once each time you cross it.</p>"
+    },
+
+    guidance: {
+      title: "Guidance out loud",
+      body:
+        "<p>Turns are said twice at most: once early enough to change lanes, about twenty " +
+        "seconds ahead at your speed, and once as the junction arrives. A road that only " +
+        "changes its name is not announced a kilometre early.</p>" +
+        "<p>Rain, wind or fog that the forecast marks as caution or danger is announced once, " +
+        "while it is still up to ten kilometres off — early enough to stop for a jacket.</p>" +
+        "<p>It uses the voice your phone already has, so nothing is downloaded and nothing " +
+        "leaves the phone. A helmet speaker paired to the phone hears it too. The speaker in the " +
+        "turn banner silences it for the rest of the ride.</p>" +
+        "<p><b>Buzz</b> needs a phone that can vibrate from a web page: Android can, iPhone " +
+        "cannot.</p>"
+    },
+
+    battery: {
+      title: "The battery saver",
+      body:
+        "<p>A navigator is the app most likely to be running at fifteen per cent, on a mount, in " +
+        "the sun. The saver makes it do less: the 3D camera moves less often, buildings stay " +
+        "flat, the decorative motion stops, and the forecast is refreshed half as often.</p>" +
+        "<p>None of that touches what matters: the position, the route, the turns and the " +
+        "recorder are exactly as they were.</p>" +
+        "<p><b>Auto</b> turns it on by itself at 20% when the phone is not charging — where the " +
+        "browser will say what the battery is doing. Chrome on Android does; Safari and Firefox " +
+        "do not, so on those Auto never switches on and <b>On</b> is the way to ask for it.</p>" +
+        "<p>Whatever this is set to, a stopped ride no longer keeps the 3D view redrawing a " +
+        "picture that is not changing.</p>"
+    },
+
     update: {
       title: "Updates",
       body:

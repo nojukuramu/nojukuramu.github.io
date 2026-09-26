@@ -24,7 +24,7 @@
 
   <!-- The app's version, declared once. sw.js carries the same number as its
        cache name, and tools/validate.js refuses to let the two drift apart. -->
-  <script>window.RC_VERSION = "13";</script>
+  <script>window.RC_VERSION = "14";</script>
 
   <!-- Set theme before paint to avoid a flash -->
   <script>
@@ -112,18 +112,28 @@
     </div>
 
     <!-- ---------- the next turn: one line, never a card ---------- -->
+    <!-- The arrow is the instruction; the words are for when there is time
+         to read them. A manoeuvre close behind this one hangs underneath as
+         "then", and the bar along the bottom fills as the turn arrives. -->
     <div id="turn-banner" class="rc-turn" hidden>
-      <span class="rc-turn-dist" id="turn-dist"></span>
-      <span class="rc-turn-text" id="turn-text"></span>
+      <span class="rc-turn-glyph" id="turn-glyph" aria-hidden="true"></span>
+      <span class="rc-turn-main">
+        <span class="rc-turn-dist" id="turn-dist"></span>
+        <span class="rc-turn-text" id="turn-text"></span>
+      </span>
+      <button type="button" class="rc-turn-voice" id="nav-voice" aria-pressed="true" aria-label="Spoken guidance" title="Spoken guidance"></button>
       <button type="button" class="rc-turn-stop" id="nav-stop" aria-label="End navigation" title="End navigation">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
+      <span class="rc-turn-approach" aria-hidden="true"><span id="turn-approach"></span></span>
+      <span class="rc-turn-then" id="turn-then" hidden></span>
     </div>
 
     <!-- ---------- free driving: the same slot, a different job ---------- -->
     <div id="free-banner" class="rc-turn rc-turn-free" hidden>
       <span class="rc-turn-rec" aria-hidden="true"></span>
       <span class="rc-turn-text" id="free-label">Free drive — recording</span>
+      <button type="button" class="rc-turn-voice" id="free-voice" aria-pressed="true" aria-label="Spoken alerts" title="Spoken alerts"></button>
       <button type="button" class="rc-turn-stop" id="free-stop" aria-label="Finish this ride" title="Finish this ride">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
       </button>
@@ -154,6 +164,11 @@
       </button>
       <button type="button" class="rc-mapbtn" id="ctl-mark" aria-label="Save this spot as a mark" title="Save this spot as a mark">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-4-6.5 4v-16a1 1 0 0 1 1-1Z"/></svg>
+      </button>
+      <!-- The rain lock. Only while riding: a planning screen is being looked
+           at, not rained on. -->
+      <button type="button" class="rc-mapbtn rc-lockbtn" id="ctl-lock" aria-label="Lock the screen against rain" title="Lock the screen against rain" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.2" y="10.6" width="13.6" height="9.8" rx="2"/><path d="M8.4 10.6V8a3.6 3.6 0 0 1 7.2 0v2.6"/><path d="M12 14.4v2.2"/></svg>
       </button>
       <!-- Push to talk. Only ever visible inside a ride, and only when this
            browser can actually record: a dead button on a dashboard is worse
@@ -214,16 +229,28 @@
          fast, and how far off. -->
     <div id="mates-rail" class="rc-mates-rail" hidden aria-label="The rest of the ride"></div>
 
-    <div id="hud" class="rc-hud" hidden>
+    <!-- Three looks, one element: data-style is "strip", "big" or "mini", and
+         the stylesheet does the rest. The gauge is only drawn in "big". Hold
+         it down and it opens its own settings. -->
+    <div id="hud" class="rc-hud" data-style="strip" hidden>
       <div class="rc-hud-progress" id="hud-progress"><span class="rc-hud-progress-fill" id="hud-progress-fill"></span></div>
       <div class="rc-hud-body">
-        <div class="rc-hud-speed">
+        <div class="rc-hud-speed" id="hud-speed-box" data-over="no">
+          <svg class="rc-hud-gauge" viewBox="0 0 64 64" aria-hidden="true">
+            <circle class="rc-hud-gauge-track" cx="32" cy="32" r="28" pathLength="100"/>
+            <circle class="rc-hud-gauge-fill" id="hud-gauge" cx="32" cy="32" r="28" pathLength="100"/>
+          </svg>
           <span class="rc-hud-speed-v" id="hud-speed">—</span>
           <span class="rc-hud-speed-u" id="hud-speed-unit">km/h</span>
         </div>
         <div class="rc-hud-pods" id="hud-pods"></div>
       </div>
     </div>
+
+    <!-- ---------- one tap to somewhere you have been before ----------
+         Your marks and saved routes, sitting on the map above the dock while
+         nothing is planned. A mark goes from where you are now. -->
+    <div id="quick" class="rc-quick" hidden aria-label="Quick destinations"></div>
 
     <!-- ---------- the dock: what you touch when you are not moving ---------- -->
     <div id="dock" class="rc-dock">
@@ -401,6 +428,10 @@
             <div id="trip-facts" class="rc-facts"></div>
             <ul id="summary-advice" class="rc-advice-list"></ul>
             <div class="rc-summary-actions">
+              <button type="button" class="rc-textbtn" id="share-eta">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.4v11.2M7.8 7.4 12 3.2l4.2 4.2"/><path d="M8 10.6H6.4a1.6 1.6 0 0 0-1.6 1.6v7a1.6 1.6 0 0 0 1.6 1.6h11.2a1.6 1.6 0 0 0 1.6-1.6v-7a1.6 1.6 0 0 0-1.6-1.6H16"/></svg>
+                Share ETA
+              </button>
               <button type="button" class="rc-textbtn" id="save-route">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-4-6.5 4v-16a1 1 0 0 1 1-1Z"/></svg>
                 Save this route
@@ -819,6 +850,13 @@
               </span>
               <input type="checkbox" id="drive3d-on" checked />
             </label>
+            <label class="rc-switch">
+              <span class="rc-switch-text">
+                <b>Zoom with speed</b>
+                <i>Further ahead when fast, closer at a junction.</i>
+              </span>
+              <input type="checkbox" id="drive-autozoom" checked />
+            </label>
             <p class="rc-field-hint" id="drive3d-note"></p>
           </section>
 
@@ -858,6 +896,69 @@
 
         <!-- ===== You ===== -->
         <section class="rc-pane" id="pane-you" role="tabpanel" aria-labelledby="tab-you" hidden>
+          <!-- ===== the dashboard: its look, its tiles, its warning ===== -->
+          <section id="dash-panel" class="rc-block">
+            <h2 class="rc-section-h">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.2 17.4a8.6 8.6 0 1 1 15.6 0"/><path d="m12 13.6 3.8-4.4"/><circle cx="12" cy="13.8" r="1.3"/></svg>
+              Dashboard<button type="button" class="rc-infobtn" data-info="dashboard" aria-label="What the dashboard can show" title="What the dashboard can show"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button>
+            </h2>
+            <div class="rc-segmented rc-segmented-3" role="group" aria-label="Dashboard style">
+              <button type="button" class="rc-seg-btn" data-hud-style="strip" aria-pressed="true">Strip</button>
+              <button type="button" class="rc-seg-btn" data-hud-style="big" aria-pressed="false">Big</button>
+              <button type="button" class="rc-seg-btn" data-hud-style="mini" aria-pressed="false">Minimal</button>
+            </div>
+            <p class="rc-field-hint" id="hud-style-note"></p>
+            <div class="rc-field-group">
+              <span class="rc-label">Tiles</span>
+              <div class="rc-segmented" role="group" aria-label="Tiles for which kind of ride">
+                <button type="button" class="rc-seg-btn" data-hud-mode="nav" aria-pressed="true">Navigating</button>
+                <button type="button" class="rc-seg-btn" data-hud-mode="free" aria-pressed="false">Free drive</button>
+              </div>
+              <div id="hud-pod-list" class="rc-podlist"></div>
+            </div>
+            <div class="rc-field-group">
+              <label class="rc-label" for="speed-alert">Warn me above</label>
+              <select id="speed-alert" class="rc-select"></select>
+            </div>
+            <p class="rc-field-hint">Mid-ride, hold the dashboard to come straight here.</p>
+          </section>
+
+          <!-- ===== what the app says out loud ===== -->
+          <section id="guide-panel" class="rc-block">
+            <h2 class="rc-section-h">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.2L12 5.2v13.6L7.2 14.5H4a.8.8 0 0 1-.8-.8V10.3a.8.8 0 0 1 .8-.8Z"/><path d="M15.6 9a4.2 4.2 0 0 1 0 6M18.2 6.6a7.6 7.6 0 0 1 0 10.8"/></svg>
+              Guidance<button type="button" class="rc-infobtn" data-info="guidance" aria-label="What is said and when" title="What is said and when"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button>
+            </h2>
+            <label class="rc-switch">
+              <span class="rc-switch-text">
+                <b>Speak turns and warnings</b>
+                <i>Through the phone, or a helmet speaker.</i>
+              </span>
+              <input type="checkbox" id="guide-voice" checked />
+            </label>
+            <label class="rc-switch">
+              <span class="rc-switch-text">
+                <b>Buzz before turns</b>
+                <i>A double pulse you can feel through gloves.</i>
+              </span>
+              <input type="checkbox" id="guide-buzz" checked />
+            </label>
+            <div class="rc-field-group">
+              <label class="rc-label" for="guide-break">Suggest a break</label>
+              <select id="guide-break" class="rc-select">
+                <option value="0">Never</option>
+                <option value="60">Every hour</option>
+                <option value="90">Every 90 minutes</option>
+                <option value="120">Every 2 hours</option>
+                <option value="180">Every 3 hours</option>
+              </select>
+            </div>
+            <p class="rc-field-hint" id="guide-note"></p>
+            <div class="rc-history-actions">
+              <button type="button" class="rc-textbtn" id="guide-test">Hear a sample</button>
+            </div>
+          </section>
+
           <section id="history-panel" class="rc-block">
             <h2 class="rc-section-h">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.2 4.6v3.8H7"/><path d="M12 7.6V12l3 1.9"/></svg>
@@ -873,7 +974,7 @@
           <section id="background-panel" class="rc-block">
             <h2 class="rc-section-h">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.6" y="2.6" width="10.8" height="18.8" rx="2.4"/><path d="M10.4 5.4h3.2"/><path d="M12 17.6h.01"/></svg>
-              Background<button type="button" class="rc-infobtn" data-info="background" aria-label="What running in the background does" title="What running in the background does"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button>
+              Power<button type="button" class="rc-infobtn" data-info="background" aria-label="What running in the background does" title="What running in the background does"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button>
             </h2>
             <label class="rc-switch">
               <span class="rc-switch-text">
@@ -883,6 +984,15 @@
               <input type="checkbox" id="background-on" checked />
             </label>
             <p class="rc-field-hint" id="background-note"></p>
+            <div class="rc-field-group">
+              <span class="rc-label">Battery saver<button type="button" class="rc-infobtn" data-info="battery" aria-label="What the battery saver changes" title="What the battery saver changes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></span>
+              <div class="rc-segmented rc-segmented-3" role="group" aria-label="Battery saver">
+                <button type="button" class="rc-seg-btn" data-power-mode="auto" aria-pressed="true">Auto</button>
+                <button type="button" class="rc-seg-btn" data-power-mode="on" aria-pressed="false">On</button>
+                <button type="button" class="rc-seg-btn" data-power-mode="off" aria-pressed="false">Off</button>
+              </div>
+              <p class="rc-field-hint" id="power-note"></p>
+            </div>
           </section>
 
           <!-- ===== the version, and the way to ask ===== -->
@@ -931,6 +1041,48 @@
       </div>
     </div>
 
+    <!-- ---------- the ride, afterwards ----------
+         The shape of where you went and the numbers under it. Never shown for
+         a ride too short to mean anything, and gone in one tap. -->
+    <div id="recap" class="rc-recap" hidden role="dialog" aria-labelledby="recap-title">
+      <div class="rc-recap-head">
+        <span class="rc-recap-badge" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path class="rc-recap-tick" d="M5 12.6 9.6 17.2 19 7.4"/></svg>
+        </span>
+        <div class="rc-recap-titles">
+          <p class="rc-recap-kicker" id="recap-kicker">Ride recorded</p>
+          <h2 class="rc-recap-title" id="recap-title"></h2>
+        </div>
+        <button type="button" class="rc-panel-close" id="recap-close" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="rc-recap-art" id="recap-art"></div>
+      <div class="rc-recap-stats" id="recap-stats"></div>
+      <p class="rc-recap-note" id="recap-note" hidden></p>
+      <div class="rc-pick-actions">
+        <button type="button" class="rc-textbtn" id="recap-share">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.4v11.2M7.8 7.4 12 3.2l4.2 4.2"/><path d="M8 10.6H6.4a1.6 1.6 0 0 0-1.6 1.6v7a1.6 1.6 0 0 0 1.6 1.6h11.2a1.6 1.6 0 0 0 1.6-1.6v-7a1.6 1.6 0 0 0-1.6-1.6H16"/></svg>
+          Share the ride
+        </button>
+        <button type="button" class="rc-btn-primary" id="recap-done">Done</button>
+      </div>
+    </div>
+
+    <!-- ---------- the rain lock ----------
+         Transparent, over everything, while a ride is locked: the map keeps
+         moving under it and every touch that is not a hold on the pill is
+         thrown away. -->
+    <div id="lock-veil" class="rc-lock" hidden>
+      <button type="button" class="rc-lock-pill" id="lock-pill" aria-label="Locked. Hold to unlock.">
+        <span class="rc-lock-ring" aria-hidden="true">
+          <svg class="rc-lock-ring-svg" viewBox="0 0 40 40"><circle class="rc-lock-ring-track" cx="20" cy="20" r="17" pathLength="100"/><circle class="rc-lock-ring-fill" cx="20" cy="20" r="17" pathLength="100"/></svg>
+          <svg class="rc-lock-ring-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5.2" y="10.6" width="13.6" height="9.8" rx="2"/><path d="M8.4 10.6V8a3.6 3.6 0 0 1 7.2 0v2.6"/><path d="M12 14.4v2.2"/></svg>
+        </span>
+        <span class="rc-lock-text"><b>Locked for rain</b><i>Hold to unlock</i></span>
+      </button>
+    </div>
+
     <!-- ---------- where the long explanations live ----------
          One sheet for the whole app. Every (i) in the panel opens it; the copy
          itself is in static/js/info.js, so the same explanation can be reached
@@ -969,6 +1121,7 @@
   <script src="static/js/icons.js"></script>
   <script src="static/js/coords.js"></script>
   <script src="static/js/background.js"></script>
+  <script src="static/js/power.js"></script>
   <script src="static/js/history.js"></script>
   <script src="static/js/heat.js"></script>
   <script src="static/js/traffic.js"></script>
@@ -981,6 +1134,7 @@
   <script src="static/js/weather.js"></script>
   <script src="static/js/elevation.js"></script>
   <script src="static/js/risk.js"></script>
+  <script src="static/js/guide.js"></script>
   <script src="static/js/pick.js"></script>
   <script src="static/js/qr.js"></script>
   <script src="static/js/peer.js"></script>
@@ -998,6 +1152,9 @@
   <script src="static/js/gl.js"></script>
   <script src="static/js/layers.js"></script>
   <script src="static/js/layersui.js"></script>
+  <script src="static/js/hud.js"></script>
+  <script src="static/js/recap.js"></script>
+  <script src="static/js/lock.js"></script>
   <script src="static/js/app.js"></script>
   <script src="static/js/pwa.js"></script>
   <script>

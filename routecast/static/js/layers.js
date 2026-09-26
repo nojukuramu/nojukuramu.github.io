@@ -56,6 +56,10 @@ RC.layers = (function () {
   var drive3d = true;
   var driving = false;
   var onChange = null;
+  /* The opening shot was asked for before the camera existed — the drive
+     map is often still loading when Go is pressed — so the request waits
+     here and is handed over the moment there is a camera to fly. */
+  var introPending = false;
 
   function say(msg) {
     if (!bridge || !bridge.setStatus) return;
@@ -133,6 +137,7 @@ RC.layers = (function () {
     /* The compass keeps choosing the heading and keeps smoothing it; it
        just writes it to the camera now instead of to a CSS transform. */
     RC.compass.setRenderer(RC.gl.setBearing);
+    if (introPending) { introPending = false; RC.gl.intro(); }
     RC.gl.sync();
   }
 
@@ -210,10 +215,41 @@ RC.layers = (function () {
     leaveDrive: function () {
       if (!driving) return;
       driving = false;
+      introPending = false;
       cameraOff();
-      apply(base);
+      /* A different planning map would be swapped in under the camera while
+         it is still levelling out, so the swap waits for the horizon. The
+         same map needs no swap and does not wait. */
+      var next = base;
+      if (next === applied) apply(next);
+      else setTimeout(function () { if (!driving) apply(next); }, RC.gl.UNTILT_MS || 0);
       fire();
     },
+
+    /** A ride just started: open on a flight down to the rider rather than
+        a cut. Waits for the camera if the drive map is still loading. */
+    intro: function () {
+      if (RC.gl.isDriving()) { RC.gl.intro(); return true; }
+      if (!driving || !drive3d) return false;
+      introPending = true;
+      return true;
+    },
+
+    /** The whole route, from above — in 3D too. False when there is no
+        camera up, and the flat map should do it itself. */
+    overview: function (bounds) {
+      if (!RC.gl.isDriving() || !bounds) return false;
+      return RC.gl.overview(bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast());
+    },
+
+    lookAt: function (lat, lon) { return RC.gl.isDriving() ? RC.gl.lookAt(lat, lon) : false; },
+
+    /** Speed and the distance to the next turn, which is how the camera
+        decides how much road to show. */
+    context: function (c) { RC.gl.setContext(c); },
+
+    autoZoom: function () { return RC.gl.autoZoom(); },
+    setAutoZoom: function (on) { var v = RC.gl.setAutoZoom(on); fire(); return v; },
 
     /** There is a route on the screen, so a ride is plausible: get the
         engine into the cache now rather than at the kerb. */
