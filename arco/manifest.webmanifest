@@ -1,7 +1,7 @@
 {
-  "name": "ARCO — two-thumb instrument",
+  "name": "ARCO — a guitar for your phone",
   "short_name": "ARCO",
-  "description": "A two-thumb instrument for a phone held sideways. Degrees under the left thumb, a bow under the right, and four physically modelled strings in between.",
+  "description": "A guitar for a phone held sideways: six physically modelled strings, a neck that hammers, pulls, slides and bends, and a body to pick, strum and palm-mute.",
   "id": "/arco/",
   "start_url": "./",
   "scope": "./",

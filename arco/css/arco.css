@@ -130,6 +130,19 @@ button:active { transform: translateY(1px); }
  * miss waiting to happen. */
 .tog.icon { min-width: 30px; font-size: 13px; padding: 4px 5px; }
 
+/* Every glyph is an inline SVG sized by the button it sits in. */
+button svg { display: block; width: 14px; height: 14px; margin: auto; pointer-events: none; }
+.mini.wide svg { display: inline-block; vertical-align: -2px; margin: 0 3px 0 0; width: 12px; height: 12px; }
+
+/* Controls that only mean something on one layout. The 7th only changes the
+ * neck's chord shape, so there it waits until that shape is picked. */
+body[data-layout="neck"] .only-arc,
+body[data-layout="arc"] .only-neck { display: none !important; }
+body[data-layout="neck"]:not([data-shape="chord"]) #btn7th { display: none; }
+
+.seg .segbtn + .segbtn { border-left: 1px solid var(--line); }
+#shapeSeg .segbtn { padding: 5px 8px; }
+
 /* ------------------------------------------------------------------ trainer */
 
 .trainer {
@@ -291,7 +304,7 @@ kbd {
 /* ------------------------------------------------------------ portrait way in */
 
 .rotmsg { text-align: center; color: var(--muted); padding: 16px; }
-.rotico { font-size: 44px; color: var(--accent); animation: spin 2.4s ease-in-out infinite; }
+.rotico { width: 48px; height: 48px; color: var(--accent); animation: spin 2.4s ease-in-out infinite; }
 @keyframes spin { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(90deg); } }
 .rottitle { margin: 6px 0 2px; font-size: 15px; font-weight: 700; color: var(--ink); }
 
@@ -356,3 +369,99 @@ kbd {
   .sel { max-width: 84px; }
   .wordmark { display: none; }
 }
+
+/* Where the neck's toolbar runs out of room, Pluck/Bow moves into Setup
+ * rather than squeezing everything else below a thumb's width. The arcs
+ * have fewer buttons and keep it. */
+.narrowonly { display: none; }
+@media (max-width: 760px) {
+  body[data-layout="neck"] .bar .wideonly { display: none; }
+  body[data-layout="neck"] .narrowonly { display: flex; }
+  #shapeSeg .segbtn { padding: 5px 7px; }
+}
+
+/* ------------------------------------------------------------ setup extras */
+
+.lbl { display: inline-flex; align-items: center; gap: 2px; }
+.row label { display: inline-flex; align-items: center; gap: 2px; }
+.sel.wide { max-width: 190px; }
+.guide { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 10px; }
+
+/* The (i) beside a control: small, quiet, and always the same thing — the
+ * explanation behind it, in the sheet. */
+.ib {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin-left: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.ib svg { width: 15px; height: 15px; }
+.ib:hover, .ib:focus-visible { color: var(--accent); }
+
+.linkbtn {
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 180, 84, 0.35);
+  text-underline-offset: 3px;
+}
+
+/* ---------------------------------------------------------------- the sheet */
+
+.info { position: fixed; inset: 0; z-index: 70; display: flex; align-items: flex-end; justify-content: center; }
+.info[hidden] { display: none; }
+.info-scrim { position: absolute; inset: 0; background: rgba(4, 5, 10, 0.6); backdrop-filter: blur(3px); }
+/* From the bottom, under the thumb that opened it, and short enough in
+ * landscape to leave the top of the screen visible. */
+.info-card {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: min(86vh, 560px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.5);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.info-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 12px 4px 18px; }
+.info-head h2 { margin: 0; font-size: 15px; color: var(--accent); }
+.info-head .x { position: static; flex: 0 0 auto; }
+.info-body { overflow: auto; padding: 0 18px 16px; font-size: 13px; line-height: 1.55; color: #cdd7f2; }
+.info-body p { margin: 0 0 9px; }
+.info-body b { color: var(--ink); }
+
+/* ------------------------------------------------------------ update bar */
+
+.updbar {
+  position: fixed;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 5px 11px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: rgba(11, 14, 24, 0.94);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
+}
+.updbar[hidden] { display: none; }
+.updbar > svg { width: 15px; height: 15px; color: var(--accent); }
+#update-go { color: #0a0c15; background: var(--accent); border-color: var(--accent); font-weight: 700; }

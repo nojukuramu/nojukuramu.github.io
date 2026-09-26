@@ -9,22 +9,32 @@
  *   - Same-origin assets are stale-while-revalidate: instant from cache, with a
  *     fresh copy pulled in the background for next time.
  *   - Cross-origin requests are left completely alone.
+ *   - A new build never takes over on its own. It installs, waits, and the
+ *     page offers it (js/update.js); the handover is the "skip-waiting"
+ *     message every service worker in this repository answers.
+ *
+ * VERSION carries the same number as window.ARCO_VERSION in index.html, and
+ * tools/validate.js refuses to let the two drift apart.
  */
 "use strict";
 
-var VERSION = "arco-v1";
+var VERSION = "arco-v2";
 var SHELL = VERSION + "-shell";
 
 var SHELL_FILES = [
   "./",
   "./index.html",
   "./css/arco.css",
+  "./js/update.js",
+  "./js/info.js",
+  "./js/shell.js",
   "./js/theory.js",
   "./js/engine.js",
   "./js/dsp-worklet.js",
   "./js/input.js",
+  "./js/neck.js",
   "./js/render.js",
-  "./js/shell.js",
+  "./js/fretboard.js",
   "./js/app.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
@@ -34,6 +44,9 @@ var SHELL_FILES = [
 ];
 
 self.addEventListener("install", function (event) {
+  /* No handover here. This used to take over the moment it installed, which
+   * swapped the code out from under somebody mid-song — new scripts against
+   * an old page. A finished install now waits until the page asks. */
   event.waitUntil(
     caches
       .open(SHELL)
@@ -46,8 +59,11 @@ self.addEventListener("install", function (event) {
           })
         );
       })
-      .then(function () { return self.skipWaiting(); })
   );
+});
+
+self.addEventListener("message", function (e) {
+  if (e.data === "skip-waiting") self.skipWaiting();
 });
 
 self.addEventListener("activate", function (event) {
@@ -55,9 +71,13 @@ self.addEventListener("activate", function (event) {
     caches
       .keys()
       .then(function (keys) {
+        /* Caches belong to the whole origin, not to this folder: every other
+         * app on the site keeps its own in the same list. Only ARCO's old
+         * versions are ARCO's to clear — deleting "anything that is not ours"
+         * wiped the other apps' offline copies every time this activated. */
         return Promise.all(
           keys.map(function (k) {
-            if (k.indexOf(VERSION) !== 0) return caches.delete(k);
+            if (k.indexOf("arco-") === 0 && k !== SHELL) return caches.delete(k);
             return null;
           })
         );
