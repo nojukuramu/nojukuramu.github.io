@@ -777,33 +777,81 @@ a.inline{ color:var(--gold-lit); text-decoration:underline; text-underline-offse
 
 /* ============================================================
    The splash
-   Black, and the logo drawing itself on it. The failsafe animation at the
-   end is the important part: if splash.js never runs, this still clears the
-   overlay a few seconds in, so a broken script cannot hide the site.
+   Black, and the logo writing itself on it. splash.js draws the strokes,
+   the spark and the embers frame by frame from one clock; this sheet only
+   holds the resting states and the things that must run on the compositor
+   — the ember waiting while the device is measured, the gauge, the curtain
+   lifting. The failsafe animation at the end is the important part: if
+   splash.js never runs, it still clears the overlay a few seconds in, so a
+   broken script cannot hide the site. Once splash.js has loaded it marks
+   the splash `managed` and keeps that promise itself.
    ============================================================ */
 .splash{
   position:fixed; inset:0; z-index:120;
-  background:#000;
   display:grid; place-items:center;
-  opacity:1;
   animation:splash-failsafe 600ms linear 5200ms forwards;
 }
-.splash-inner{ display:grid; justify-items:center; gap:26px; width:min(268px, 56vw); }
+.splash.managed{ animation:none; }
+/* The black is its own layer, so it can lift while the mark is still in
+   the air on its way to the header. */
+.splash-curtain{ position:absolute; inset:0; background:#000; }
+/* a warmth that gathers behind the mark as it is written, and blooms when
+   the gold floods in */
+.splash-curtain::after{
+  content:""; position:absolute; left:50%; top:50%;
+  width:min(760px, 150vw); height:min(760px, 150vw);
+  transform:translate(-50%, -50%) scale(.8);
+  background:radial-gradient(closest-side, rgba(245,168,60,.14), rgba(193,97,63,.05) 55%, transparent);
+  opacity:0;
+  transition:opacity 1.4s cubic-bezier(.22,1,.36,1), transform 1.4s cubic-bezier(.22,1,.36,1);
+}
+.splash.writing .splash-curtain::after{ opacity:.7; transform:translate(-50%, -50%) scale(1); }
+.splash.filling .splash-curtain::after{ opacity:1; transform:translate(-50%, -50%) scale(1.25); transition-duration:.9s; }
+
+.splash-inner{ position:relative; display:grid; justify-items:center; gap:26px; width:min(268px, 56vw); }
+.splash-stage{ position:relative; width:100%; }
 
 .splash-mark{
-  width:100%; height:auto; display:block;
+  position:relative; z-index:1;
+  width:100%; height:auto; display:block; overflow:visible;
+  transform-origin:50% 50%;
   filter:drop-shadow(0 0 26px rgba(245,168,60,.26));
 }
-/* The plate, drawn as an outline first — the same 1:1 square the header
-   mark is, so the splash is the logo rather than a picture of the word. */
+/* the spark, the pen, the embers, the ring and the shine: one canvas,
+   centred on the mark and overhanging it on every side */
+.splash-fx{ position:absolute; left:-60%; top:-60%; width:220%; height:220%; z-index:2; pointer-events:none; }
+/* The ember that waits at the corner of the square while the device is
+   measured. Opacity and transform only, so it breathes on the compositor
+   and the measurement cannot starve it. splash.js puts it exactly where
+   the spark will set off from. */
+.splash-ember{
+  position:absolute; left:23%; top:1.2%; z-index:3;
+  width:18px; height:18px; margin:-9px 0 0 -9px; border-radius:50%;
+  background:radial-gradient(circle, #FFF6E4 0 16%, rgba(255,217,138,.85) 28%, rgba(245,168,60,.25) 50%, rgba(245,168,60,0) 70%);
+  opacity:0;
+  animation:ember-in .5s cubic-bezier(.22,1,.36,1) .15s forwards, ember 1.25s ease-in-out .65s infinite;
+}
+@keyframes ember-in{ from{ opacity:0; transform:scale(.2); } to{ opacity:.9; transform:scale(1); } }
+@keyframes ember{ 0%, 100%{ opacity:.9; transform:scale(1); } 50%{ opacity:.55; transform:scale(.7); } }
+.splash.sparked .splash-ember{ animation:none; opacity:0; transition:opacity .12s; }
+
+/* The plate: the same 1:1 square the header mark is, so the splash is the
+   logo rather than a picture of the word. Its outline is drawn by the
+   spark; the dash is set by splash.js. Its fill stays out until the
+   outline closes: a black square on black is invisible, but its glow is
+   not, and a halo showing the square before the spark has drawn it gives
+   the drawing away. It blooms on the frame the square closes, with the
+   tick. */
 .splash-plate{
-  fill:#000;
-  stroke:rgba(255,209,143,.34);
+  fill:#000; fill-opacity:0;
+  stroke:rgba(255,209,143,.42);
   stroke-width:6;
   opacity:0;
-  transition:opacity 520ms cubic-bezier(.22,1,.36,1);
+  transition:stroke .5s, stroke-width .7s, fill-opacity .45s cubic-bezier(.22,1,.36,1);
 }
 .splash.plated .splash-plate{ opacity:1; }
+.splash.closed .splash-plate{ fill-opacity:1; }
+.splash.filling .splash-plate{ stroke:rgba(255,217,138,.62); }
 .splash-ink path{
   fill:var(--gold-lit);
   fill-opacity:0;
@@ -815,16 +863,17 @@ a.inline{ color:var(--gold-lit); text-decoration:underline; text-underline-offse
   stroke-width:3;
   stroke-linecap:round;
   stroke-linejoin:round;
+  /* nothing of the word shows until the pen is ready to write it — not
+     even for the first paint, before any script has run */
+  stroke-opacity:0;
+  transition:fill .7s, stroke-opacity .35s;
 }
-/* the flood, once the outline has been written */
-.splash.filling .splash-ink path{
-  fill-opacity:1;
-  transition:fill-opacity 620ms cubic-bezier(.22,1,.36,1);
-}
+.splash.plated .splash-ink path{ stroke-opacity:1; }
+.splash.filling .splash-ink path{ fill-opacity:1; }
 .splash.filling .splash-ink{ animation:splash-warm 900ms cubic-bezier(.22,1,.36,1) forwards; }
 @keyframes splash-warm{
   0%   { filter:none; }
-  60%  { filter:drop-shadow(0 0 18px rgba(255,193,99,.55)); }
+  45%  { filter:drop-shadow(0 0 20px rgba(255,193,99,.7)); }
   100% { filter:none; }
 }
 /* nothing to write when motion is not wanted: it is simply there */
@@ -833,24 +882,41 @@ a.inline{ color:var(--gold-lit); text-decoration:underline; text-underline-offse
 .splash-gauge{
   width:100%; height:2px; border-radius:99px;
   background:rgba(255,243,226,.13); overflow:hidden;
+  transition:opacity .6s;
 }
 .splash-gauge i{
   display:block; height:100%; width:100%;
   transform:scaleX(0); transform-origin:left center;
   background:linear-gradient(90deg, var(--gold), var(--terra));
 }
+/* its job — the measurement — is done by the time the gold floods in */
+.splash.filling .splash-gauge{ opacity:.25; }
 
-.splash.gone{
-  opacity:0; pointer-events:none;
-  transition:opacity 520ms cubic-bezier(.22,1,.36,1);
-}
-.splash.gone .splash-inner{
+/* Leaving. The curtain lifts while the mark flies to the header (a Web
+   Animation in splash.js), turning from gold to the header's cream on the
+   way so it lands as the header's own logo. */
+.splash.lifting{ pointer-events:none; }
+.splash.lifting .splash-curtain{ opacity:0; transition:opacity .72s cubic-bezier(.4,0,.2,1) .06s; }
+.splash.lifting .splash-gauge, .splash.lifting .splash-fx{ opacity:0; transition:opacity .3s; }
+.splash.lifting .splash-ink path{ fill:var(--cream); stroke-opacity:0; }
+.splash.lifting .splash-plate{ stroke:rgba(255,226,189,.18); stroke-width:8; }
+/* where there is nothing to fly to, it lifts in place */
+.splash.lifting.grounded .splash-inner{
   transform:scale(1.06); opacity:0;
   transition:transform 520ms cubic-bezier(.22,1,.36,1), opacity 360ms linear;
 }
+.splash.gone{ opacity:0; visibility:hidden; pointer-events:none; }
 @keyframes splash-failsafe{ to{ opacity:0; visibility:hidden; pointer-events:none; } }
+
+/* the header's mark, the moment the splash's lands on it */
+.brand.landed .brand-mark svg{ animation:land 720ms cubic-bezier(.34,1.56,.64,1); }
+.brand.landed .mark-plate{ stroke:var(--gold-lit); transition:none; }
+@keyframes land{ 0%{ transform:scale(1); } 28%{ transform:scale(1.24); } 100%{ transform:scale(1); } }
 
 @media (prefers-reduced-motion: reduce){
   .splash{ animation:splash-failsafe 1ms linear 1400ms forwards; }
+  .splash.managed{ animation:none; }
   .splash-ink path{ fill-opacity:1; stroke-opacity:0; }
+  .splash-plate{ fill-opacity:1; }
+  .splash-ember{ display:none; }
 }

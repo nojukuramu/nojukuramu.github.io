@@ -130,7 +130,9 @@
         plate: 0,
         letters: finalePaths.map(function (_, i) { return LEAD + i * STAGGER; }),
         draw: DRAW,
-        flood: LEAD + (finalePaths.length - 1) * STAGGER + DRAW * 0.55
+        flood: LEAD + (finalePaths.length - 1) * STAGGER + DRAW * 0.55,
+        /* the same stroke as the splash's, so the same nib */
+        speed: NJ.splash && NJ.splash.speed
       });
     }
   }

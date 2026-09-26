@@ -138,6 +138,14 @@ section("Static: what the scripts reach for");
   var absent = hooks.filter(function (h) { return html.indexOf(h) === -1; });
   check("every carousel hook (" + hooks.length + ") is in the markup", hooks.length >= 8 && absent.length === 0, absent.join(", "));
 
+  /* The splash is found through classes. A missing one does not throw —
+     the spark or the curtain just silently is not there. */
+  var ssrc = read("static/home/js/splash.js"), classes = [], r4 = /querySelector\("\.([\w-]+)/g, w;
+  while ((w = r4.exec(ssrc))) if (classes.indexOf(w[1]) === -1) classes.push(w[1]);
+  var noClass = classes.filter(function (c) { return !new RegExp('class="[^"]*\\b' + c + '\\b').test(html); });
+  check("every splash element splash.js looks for (" + classes.length + ") is in the markup",
+        classes.length >= 6 && noClass.length === 0, noClass.join(", "));
+
   var scripts = [], r3 = /<script[^>]+src="([^"]+)"/g, z;
   while ((z = r3.exec(html))) scripts.push(z[1]);
   var gone = scripts.filter(function (s) { return !exists(s); });

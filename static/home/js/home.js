@@ -209,6 +209,7 @@
     pin: icon('<path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/>'),
     ear: icon('<path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18 6.5a7.6 7.6 0 0 1 0 11"/>'),
     code: icon('<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>'),
+    replay: icon('<path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.6"/><path d="M4 4v4.6h4.6"/><path d="M10.5 9.2v5.6l4.4-2.8z"/>'),
     dice: icon('<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="9" cy="9" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.3" fill="currentColor" stroke="none"/>'),
     grid: icon('<rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/>'),
     ring: icon('<rect x="8" y="4.5" width="8" height="15" rx="1.8"/><path d="M4.5 7.5v9M19.5 7.5v9"/>')
@@ -245,6 +246,8 @@
       run: function () { showWork("ring"); } },
     { icon: I.pin, label: "Use my real sky", sub: "weather", keywords: "location gps weather forecast now",
       run: function () { closePalette(); locBtn.click(); } },
+    { icon: I.replay, label: "Replay the intro", sub: "logo", keywords: "splash loading logo intro again sound animation",
+      run: function () { closePalette(); if (NJ.splash && NJ.splash.replay) NJ.splash.replay(); } },
     { icon: I.ear, label: "Listen to the evening", sub: "sound", keywords: "audio ambient crickets birds wind mute",
       run: function () { closePalette(); if (NJ.ambience) NJ.ambience.toggle(); } },
     { icon: I.sun, label: "Bring back the sun", sub: "sky", keywords: "day golden hour light morning", run: function () { skyTo(0); } },
