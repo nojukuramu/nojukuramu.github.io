@@ -360,6 +360,7 @@ on("bossIntro", (b) => banner(b.type === "heart" ? "The Loom Heart" : "Warden of
 on("bossPhase", (b) => { if (b.type === "heart") toast("The Heart quickens", "skull"); else toast("The Warden is enraged", "skull"); });
 on("bossDown", (b) => { if (S.mode === "run" || S.mode === "coop") banner(b.type === "heart" ? "The Loom is unmade" : "The Warden falls", b.type === "heart" ? "Step into the light" : "Take the thread it drops", "gold"); });
 on("rankUp", (r) => banner("Circle rank " + r, "Your pages can hold more", "gold"));
+on("attune", (n) => banner("Attuned " + n, "Spells hit harder, and your pool is deeper", "gold"));
 on("portalOpen", (final) => { if (!final) toast("The portal is open", "portal"); });
 on("discover", (kind, id) => {
   const name = kind === "reactions" ? REACTIONS[id].name : kind === "forms" ? FORMS[id].name : (ELEMENTS[id] || elementInfo(id)).name;

@@ -74,6 +74,7 @@ function cleanLanding(L) {
     potions: isNum(L.potions) ? Math.max(0, Math.min(6, L.potions | 0)) : 2,
     time: isNum(L.time) ? Math.max(0, L.time) : 0,
     kills: isNum(L.kills) ? Math.max(0, L.kills | 0) : 0,
+    attune: isNum(L.attune) ? Math.max(0, Math.min(999, L.attune | 0)) : 0,
     boons
   };
 }

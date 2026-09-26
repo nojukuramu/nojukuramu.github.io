@@ -18,7 +18,20 @@ with the level, boons and circle rank you arrived with. Portals heal a third of 
 health; shrines heal half and hand back a potion; nothing respawns behind you.
 
 **Growing.** Levels offer three **boons** to choose from. Wardens drop a thread that raises
-your **circle rank**, and rank is what lets a page hold more.
+your **circle rank**, and rank is what lets a page hold more. Past rank 5 a thread
+**attunes** you instead (+8% spell damage, +10 mana), with no limit.
+
+**The pace.** The tower starts slow and easy and presses a little harder every floor:
+health, damage, how often enemies attack, how fast they move, how many to a camp. Past the
+Heart none of it stops growing (`floorScale` in [`js/themes.js`](js/themes.js)). The one
+thing with a floor is how long a warning shows, which never drops below three quarters, so
+every hit stays dodgeable. Mana orbs grow with the floor too.
+
+**Mana.** A page's **potential**, everything one cast can deal, sets both its cooldown
+(a straight line, so no page pours out more than about 85 damage a second) and its cost
+(a little steeper, so small pages are the thrifty ones). Mana comes back at 6 a second
+while you cast and twice that once you hold off for a moment. A Warden sheds a mana orb
+for every tenth of its health you take.
 
 **The spellbook.** A spell is a drawing on a page:
 

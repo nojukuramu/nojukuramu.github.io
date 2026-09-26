@@ -10,6 +10,12 @@
  * four bars were four things to watch for one decision; the cost of a spell
  * already depends on what is drawn in it.
  *
+ * Mana comes back slowly while you are casting and twice as fast once you
+ * have held off for a moment (BREATH). The old flat 15 a second refilled the
+ * pool faster than most pages could empty it, so mana was never a decision.
+ * Now it is: spend it in a burst, or keep a trickle of cheap shots going, and
+ * step back to catch your breath between the two.
+ *
  * The same function builds the other mages in a multiplayer match (remote:
  * true). Those are puppets: net.js moves them and they never run
  * updatePlayer, but they are real players in every other way — they carry
@@ -36,6 +42,12 @@ export function freshMods() {
 }
 export const xpNeed = (lv) => Math.round(18 + lv * 12 + lv * lv * 1.2);
 
+export const MANA_REGEN = 6;        // a second, while casting
+export const BREATH = { after: 1.2, mult: 2 };  // held off this long, regen this much faster
+/* A Warden's thread past the top rank is not wasted: it attunes you, and
+   attunement has no ceiling, because Endless has none either. */
+export const ATTUNE = { dmg: 0.08, mana: 10 };
+
 export function createPlayer(snap, opts) {
   snap = snap || {};
   opts = opts || {};
@@ -55,11 +67,11 @@ export function createPlayer(snap, opts) {
   const P = {
     x: 0, z: 0, vx: 0, vz: 0, r: 0.45, aim: -Math.PI / 2, alive: true,
     level: snap.level || 1, xp: snap.xp || 0, boons: Object.assign({}, snap.boons || {}),
-    rank: snap.rank || 1, potions: snap.potions === undefined ? 2 : snap.potions,
+    rank: snap.rank || 1, potions: snap.potions === undefined ? 2 : snap.potions, attune: snap.attune || 0,
     hp: 100, mana: 100, mods: freshMods(), iframe: 1, hurtT: 0,
     dashT: 0, dashCd: 0, dashAng: 0, dashing: false,
     selected: 0, cd: new Array(SLOTS).fill(0), gcd: 0, compiled: [], blocked: [], empty: [],
-    castT: 0, circleT: 0, revivesUsed: 0, pendingLevels: 0, echoQ: [],
+    castT: 0, circleT: 0, sinceCast: 9, revivesUsed: 0, pendingLevels: 0, echoQ: [],
     mesh, light, circleCanvas, circleTex, circleKey: "", nagT: 0, lowManaT: 0, walk: 0, deadT: 0,
     infiniteMana: false, noDeath: false, rankFloor: 1,
     isMage: true, remote, id: opts.id || 0, team: opts.team || 0, name: opts.name || "", designs: null, killedById: null
@@ -73,12 +85,12 @@ export function createPlayer(snap, opts) {
     for (const id in P.boons) { const b = BOON_BY_ID[id]; if (b) m[b.stat] += b.add * P.boons[id]; }
     P.mods = m;
     P.maxHp = 100 + m.maxHp;
-    P.maxMana = 100 + m.maxMana;
+    P.maxMana = 100 + m.maxMana + ATTUNE.mana * P.attune;
     P.potionCap = 3 + m.potionCap;
     P.hp = Math.min(P.hp, P.maxHp); P.mana = Math.min(P.mana, P.maxMana);
     P.recompile();
   };
-  P.spellMods = () => ({ dmg: 1 + P.mods.dmg, cost: Math.max(0.4, 1 + P.mods.cost), cd: Math.max(0.4, 1 + P.mods.cd),
+  P.spellMods = () => ({ dmg: 1 + P.mods.dmg + ATTUNE.dmg * P.attune, cost: Math.max(0.4, 1 + P.mods.cost), cd: Math.max(0.4, 1 + P.mods.cd),
     speed: 1 + P.mods.shotSpeed, range: 1 + P.mods.shotSpeed, kb: 1 + P.mods.kb, burn: 1 + P.mods.burn, chill: P.mods.chill });
   P.recompile = function () {
     const mods = P.spellMods();
@@ -157,7 +169,7 @@ export function createPlayer(snap, opts) {
     if (b.stat === "potionCap") P.potions = Math.min(P.potionCap, P.potions + 1);
     if (b.stat === "maxMana") P.mana = P.maxMana;
   };
-  P.snapshot = () => ({ level: P.level, xp: P.xp, boons: Object.assign({}, P.boons), rank: P.rank, potions: P.potions });
+  P.snapshot = () => ({ level: P.level, xp: P.xp, boons: Object.assign({}, P.boons), rank: P.rank, potions: P.potions, attune: P.attune });
   P.drinkPotion = function () {
     if (!P.alive || P.potions <= 0) return false;
     if (P.hp >= P.maxHp - 0.5) { emit("toast", "Already at full health"); return false; }
@@ -244,8 +256,9 @@ export function updatePlayer(P, dt, input) {
   }
 
   // regenerate
+  P.sinceCast += dt;
   if (P.infiniteMana) P.mana = P.maxMana;
-  else P.mana = Math.min(P.maxMana, P.mana + 15 * (1 + P.mods.manaRegen) * dt);
+  else P.mana = Math.min(P.maxMana, P.mana + manaRegen(P) * dt);
   if (P.mods.regen) P.heal(P.mods.regen * dt, true);
 
   // cast
@@ -265,6 +278,11 @@ export function updatePlayer(P, dt, input) {
   animate(P, dt, Math.hypot(P.vx, P.vz));
 }
 
+/** Mana a second right now: slow mid-fight, faster once you have held off. */
+export function manaRegen(P) {
+  return MANA_REGEN * (1 + P.mods.manaRegen) * (P.sinceCast >= BREATH.after ? BREATH.mult : 1);
+}
+
 function nag(P, msg) {
   if (P.nagT > 0) return;
   P.nagT = 2.2;
@@ -279,6 +297,7 @@ function tryCast(P) {
   if (c.cost > P.maxMana) { nag(P, "This page costs more mana than you have"); emit("denied"); return; }
   if (P.mana < c.cost) { P.lowManaT = 0.5; if (P.nagT <= 0) emit("noMana"); P.nagT = Math.max(P.nagT, 0.6); return; }
   P.mana -= c.cost;
+  P.sinceCast = 0;
   P.cd[i] = c.cooldown;
   P.gcd = 0.08;
   // One seed decides the scatter, and it travels with the cast, so every

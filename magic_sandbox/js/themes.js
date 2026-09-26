@@ -65,7 +65,32 @@ export function floorKind(f) {
   return f % 2 === 1 ? "anchors" : "warden";
 }
 
-/** Enemy toughness grows gently; the player grows by boons and rank. */
+/** How hard a floor pushes. One curve, no ceiling.
+ *
+ *  The climb opens slow and easy, and every lever turns a little at a time:
+ *  floors 1-3 are slower than the Unravelled's natural pace, with longer
+ *  warnings and softer hits; 4-6 are their own pace; 7-10 press harder; and
+ *  past the Loom Heart nothing stops growing — health and damage on a gentle
+ *  square, attacks coming ever closer together, more of them to a camp.
+ *  The player's side of the race is boons, rank and, in Endless, attunement.
+ *
+ *  hp, dmg   multipliers on an enemy's health and hit
+ *  pace      multiplier on the wait between an enemy's attacks (below 1 = more often)
+ *  tell      multiplier on how long a warning shows before it lands. The one
+ *            number with a floor: every hit must stay dodgeable, however
+ *            deep the climb goes, or it is not a fight any more
+ *  speed     multiplier on how fast they move (a slow log: felt, never absurd)
+ *  extra     more enemies to a camp, and to an Anchor's brood
+ *  loot      multiplier on a mana orb, so bigger pages stay fed deeper up */
 export function floorScale(f) {
-  return { hp: 1 + 0.26 * (f - 1) + (f > FINAL_FLOOR ? 0.12 * (f - FINAL_FLOOR) * (f - FINAL_FLOOR) / 4 : 0), dmg: 1 + 0.09 * (f - 1) };
+  const t = Math.max(0, f - 1);
+  return {
+    hp: 0.8 + 0.14 * t + 0.01 * t * t,
+    dmg: 0.9 + 0.07 * t + 0.0015 * t * t,
+    pace: 1.3 / (1 + 0.05 * t + 0.0006 * t * t),
+    tell: Math.max(0.75, 1.15 - 0.035 * t),
+    speed: 0.9 + 0.12 * Math.log(1 + t / 3),
+    extra: Math.floor(Math.sqrt(t * 0.9)),
+    loot: 1 + 0.05 * t
+  };
 }

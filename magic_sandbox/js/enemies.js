@@ -71,10 +71,18 @@ function freeBar(b) { if (b) { b.used = false; b.g.visible = false; } }
 /* ---------------------------------------------------------------
    Spawning
    --------------------------------------------------------------- */
+/* The floor's scale, worked out once per floor rather than per brain per
+   frame: pace and tell are read on every attack. */
+let tempoOf = -1, tempoNow = null;
+function tempo() {
+  if (tempoOf !== S.floor) { tempoNow = floorScale(S.floor); tempoOf = S.floor; }
+  return tempoNow;
+}
+
 export function spawnEnemy(type, x, z, opts) {
   opts = opts || {};
   const T = TYPES[type];
-  const sc = floorScale(S.floor);
+  const sc = tempo();
   const accent = S.world ? S.world.theme.accent : 0xff5ea8;
   let built;
   if (type === "anchor") built = buildAnchor(accent);
@@ -83,10 +91,10 @@ export function spawnEnemy(type, x, z, opts) {
   else built = buildEnemy(type, accent);
   const hp = T.hp * (type === "dummy" ? 1 : sc.hp * (S.match && S.match.hpScale ? S.match.hpScale : 1));
   const e = {
-    type, name: T.name, x, z, vx: 0, vz: 0, r: T.r, hp, maxHp: hp, dmg: T.dmg * sc.dmg, speed: T.speed,
+    type, name: T.name, x, z, vx: 0, vz: 0, r: T.r, hp, maxHp: hp, dmg: T.dmg * sc.dmg, speed: T.speed * (type === "dummy" ? 1 : sc.speed),
     xp: Math.round(T.xp * (1 + 0.08 * (S.floor - 1))), kbRes: T.kbRes, aggroR: T.aggro,
     alive: true, aggro: !!opts.aggro, home: { x, z }, face: rand(0, TAU),
-    state: "idle", t: rand(0.5, 2), atkCd: rand(0.6, 2.2), wander: null,
+    state: "idle", t: rand(0.5, 2), atkCd: rand(0.6, 2.2) * sc.pace, wander: null,
     kbx: 0, kbz: 0, burn: null, chill: 0, chillT: 0, chillSlow: 0, frozen: 0, mire: 0, mireT: 0, shield: 0,
     flashT: 0, hpShowT: 0, pop: 0, anim: rand(0, 10), mesh: built, bar: null, owner: opts.owner || null, spawned: 0,
     boss: type === "warden" || type === "heart", phase: 0, dmgLog: [],
@@ -387,8 +395,9 @@ const BRAINS = {
       e.state = "chase";
       e.lockFace = undefined;
       if (dP < 7.5 && e.atkCd <= 0 && S.world.clearLine(e.x, e.z, P.x, P.z)) {
-        e.state = "wind"; e.t = 0.6; e.atkCd = 2.3; e.lockFace = aP;
-        fx.decal(1, e.x, e.z, 0.7, DANGER, 0.6, { ang: aP, len: 8.5 });
+        const tell = 0.6 * tempo().tell;
+        e.state = "wind"; e.t = tell; e.atkCd = 2.3 * tempo().pace; e.lockFace = aP;
+        fx.decal(1, e.x, e.z, 0.7, DANGER, tell, { ang: aP, len: 8.5 });
       } else steer(e, aP, e.speed);
     }
   },
@@ -399,8 +408,8 @@ const BRAINS = {
       stop(e); e.t -= dt; e.lockFace = aP;
       if (e.t <= 0) {
         const n = S.floor >= 5 ? 5 : 3, spread = 0.24;
-        for (let k = 0; k < n; k++) enemyShot(e.x, e.z, aP + (k - (n - 1) / 2) * spread / (n > 3 ? 1.6 : 1), 7.5 + S.floor * 0.2, e.dmg, { y: 1.2, src: "a Spindle's bolt" });
-        e.state = "chase"; e.atkCd = rand(2.4, 3.2); e.lockFace = undefined;
+        for (let k = 0; k < n; k++) enemyShot(e.x, e.z, aP + (k - (n - 1) / 2) * spread / (n > 3 ? 1.6 : 1), 7.7 + Math.log(S.floor), e.dmg, { y: 1.2, src: "a Spindle's bolt" });
+        e.state = "chase"; e.atkCd = rand(2.4, 3.2) * tempo().pace; e.lockFace = undefined;
         fx.flash(e.x, 1.2, e.z, S.world.theme.accent, 10, 0.2, 6);
         emit("enemyFire", e);
       }
@@ -410,8 +419,8 @@ const BRAINS = {
     else if (dP < 7) steer(e, aP + Math.PI, e.speed);
     else { if (!e.strafe || Math.random() < dt * 0.4) e.strafe = Math.random() < 0.5 ? 1 : -1; steer(e, aP + e.strafe * Math.PI / 2, e.speed * 0.6); }
     if (e.atkCd <= 0 && dP < 14 && S.world.clearLine(e.x, e.z, P.x, P.z)) {
-      e.state = "charge"; e.t = 0.75;
-      fx.decal(1, e.x, e.z, 0.18, ENEMY_SHOT, 0.75, { ang: aP, len: Math.min(dP, 11), opacity: 0.5, fill: true });
+      e.state = "charge"; e.t = 0.75 * tempo().tell;
+      fx.decal(1, e.x, e.z, 0.18, ENEMY_SHOT, e.t, { ang: aP, len: Math.min(dP, 11), opacity: 0.5, fill: true });
     }
   },
   golem(e, dt, dP, aP, P) {
@@ -433,8 +442,8 @@ const BRAINS = {
     } else {
       e.state = "chase";
       if (dP < 3.3 && e.atkCd <= 0) {
-        e.state = "raise"; e.t = 0.85; e.atkCd = 2.6;
-        fx.decal(0, e.x, e.z, 3.5, DANGER, 0.85);
+        e.state = "raise"; e.t = 0.85 * tempo().tell; e.atkCd = 2.6 * tempo().pace;
+        fx.decal(0, e.x, e.z, 3.5, DANGER, e.t);
       } else steer(e, aP, e.speed);
     }
   },
@@ -458,15 +467,15 @@ const BRAINS = {
         }
         if (n) emit("shield");
       }
-    } else if (e.atkCd <= 0) { e.state = "weave"; e.t = 0.8; e.atkCd = 5.5; }
+    } else if (e.atkCd <= 0) { e.state = "weave"; e.t = 0.8; e.atkCd = 5.5 * tempo().pace; }
   },
   anchor(e, dt, dP) {
     stop(e);
     e.atkCd -= dt;
     if (dP < 20 && e.atkCd <= 0) {
-      e.atkCd = 6.5;
+      e.atkCd = 6.5 * tempo().pace;
       const mine = S.enemies.filter((o) => o.alive && o.owner === e).length;
-      if (mine < 5) {
+      if (mine < 5 + tempo().extra) {
         const roll = Math.random();
         const kinds = S.floor >= 5 && roll < 0.3 ? ["spindle"] : S.floor >= 3 && roll < 0.6 ? ["knot"] : ["mote", "mote"];
         kinds.forEach((k) => {
@@ -545,7 +554,7 @@ function bossBrain(e, dt, dP, aP, P) {
     const done = ACTS[e.act.name](e, e.act, dt, dP, aP, P);
     if (done) {
       e.act = null; e.state = "move"; e.lockFace = undefined;
-      e.t = rand(0.9, 1.5) * (e.phase ? 0.7 : 1) * (e.type === "heart" ? 0.8 : 1);
+      e.t = rand(0.9, 1.5) * (e.phase ? 0.7 : 1) * (e.type === "heart" ? 0.8 : 1) * tempo().pace;
     }
   }
 }
