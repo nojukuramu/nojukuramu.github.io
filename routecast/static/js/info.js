@@ -88,6 +88,19 @@ RC.info = (function () {
         "and you still have to let them in.</p>"
     },
 
+    "group-map": {
+      title: "How the ride is drawn",
+      body:
+        "<p>Everything on this tab changes <b>your screen only</b>. Nobody else is told, and " +
+        "nothing extra is sent: a trail is drawn from positions this phone was already " +
+        "receiving, and forgotten when you turn it off.</p>" +
+        "<p><b>Names</b> can be always on, on only once you zoom in far enough for them to be " +
+        "readable, or off — dots only. <b>Trails</b> are the last couple of minutes behind each " +
+        "rider, fading out, so you can see which road somebody is on.</p>" +
+        "<p>Tap any rider on the map, or in the Riders list, for a card: find them, or ride to " +
+        "where they are now. The host can remove somebody from the same card.</p>"
+    },
+
     voice: {
       title: "Voice in a ride",
       body:
@@ -112,6 +125,8 @@ RC.info = (function () {
         "<p>But it is <b>public</b>, and the people who can see it are strangers. Anyone nearby " +
         "running RouteCast can see roughly where you are for as long as it is on. Do not leave " +
         "it on from home.</p>" +
+        "<p>While it is on you can talk to the area, beep another rider, and pin what is on the " +
+        "road — traffic, a crash, a flood — for everyone riding towards it.</p>" +
         "<p>What leaves the phone is rounded to about eleven metres, there is a <b>Go dark</b> " +
         "button in the first card, and the rail button carries a live count the whole time PUBs " +
         "is on — so “am I still broadcasting” never needs a tap to answer.</p>"
@@ -139,6 +154,31 @@ RC.info = (function () {
         "public, and going public does not put you in a room.</p>" +
         "<p>Open one of your own and you are holding it: it is advertised to the area the moment " +
         "it exists, and it is gone when you leave.</p>"
+    },
+
+    "pubs-chat": {
+      title: "Talking to the area",
+      body:
+        "<p>A line said here goes to <b>everyone in this area</b> with PUBs on, and floats over " +
+        "your marker on their map for a few seconds, like a shout across a car park.</p>" +
+        "<p>It is short on purpose — one bubble's worth — and rationed to one every couple of " +
+        "seconds. The hub attaches your name from your own connection, so nobody can put words " +
+        "over somebody else's marker.</p>" +
+        "<p>Want a conversation instead? Open a PUB room: that is a chat room, with no positions " +
+        "in it at all.</p>"
+    },
+
+    "pubs-reports": {
+      title: "Road reports",
+      body:
+        "<p>A report is pinned <b>where you are</b> when you tap it — a pin more than a short " +
+        "ride from your own position is refused, so nobody can plant one across town.</p>" +
+        "<p>Each kind fades on its own: traffic after twenty minutes, a crash after forty-five, " +
+        "a hazard or a checkpoint after an hour, a flood after two, a closed road after three. " +
+        "Anyone riding past can say it is <b>still there</b>, which keeps it up, or <b>not " +
+        "there</b>; enough of those and it is gone early. You can take your own down.</p>" +
+        "<p>Riding towards one, you are told once, spoken and buzzed, while there is still time " +
+        "to do something about it. Nothing is kept once the area is empty.</p>"
     },
 
     "pubs-ignore": {
@@ -215,6 +255,52 @@ RC.info = (function () {
         "<p>What nothing can survive is the <b>browser itself</b> being closed. No web page can, " +
         "and this one does not pretend to.</p>" +
         "<p>Turned off, RouteCast behaves exactly as it did before any of this existed.</p>"
+    },
+
+    dashboard: {
+      title: "The dashboard",
+      body:
+        "<p><b>Strip</b> is the speed and a row of tiles you can swipe. <b>Big</b> puts the speed " +
+        "on a gauge with your first three tiles, large enough to read on a mount at arm's length. " +
+        "<b>Minimal</b> keeps the speed and one tile in a corner and gives the map the rest.</p>" +
+        "<p>Pick the tiles for navigating and for free drive separately — they are different " +
+        "rides. The arrow moves a tile earlier; the first ones are what Big and Minimal show.</p>" +
+        "<p><b>Rain</b> says when the next rain reaches you, read off the forecast already " +
+        "fetched. <b>Wind</b> points where it is blowing <i>relative to you</i> — the part " +
+        "that pushes a bike sideways is what matters, not the compass direction.</p>" +
+        "<p><b>Warn me above</b> is a speed you choose. There is no free, key-less source of " +
+        "speed limits, and a guessed limit would be worse than none, so this is yours: the " +
+        "number turns red and the phone buzzes once each time you cross it.</p>"
+    },
+
+    guidance: {
+      title: "Guidance out loud",
+      body:
+        "<p>Turns are said twice at most: once early enough to change lanes, about twenty " +
+        "seconds ahead at your speed, and once as the junction arrives. A road that only " +
+        "changes its name is not announced a kilometre early.</p>" +
+        "<p>Rain, wind or fog that the forecast marks as caution or danger is announced once, " +
+        "while it is still up to ten kilometres off — early enough to stop for a jacket.</p>" +
+        "<p>It uses the voice your phone already has, so nothing is downloaded and nothing " +
+        "leaves the phone. A helmet speaker paired to the phone hears it too. The speaker in the " +
+        "turn banner silences it for the rest of the ride.</p>" +
+        "<p><b>Buzz</b> needs a phone that can vibrate from a web page: Android can, iPhone " +
+        "cannot.</p>"
+    },
+
+    battery: {
+      title: "The battery saver",
+      body:
+        "<p>A navigator is the app most likely to be running at fifteen per cent, on a mount, in " +
+        "the sun. The saver makes it do less: the 3D camera moves less often, buildings stay " +
+        "flat, the decorative motion stops, and the forecast is refreshed half as often.</p>" +
+        "<p>None of that touches what matters: the position, the route, the turns and the " +
+        "recorder are exactly as they were.</p>" +
+        "<p><b>Auto</b> turns it on by itself at 20% when the phone is not charging — where the " +
+        "browser will say what the battery is doing. Chrome on Android does; Safari and Firefox " +
+        "do not, so on those Auto never switches on and <b>On</b> is the way to ask for it.</p>" +
+        "<p>Whatever this is set to, a stopped ride no longer keeps the 3D view redrawing a " +
+        "picture that is not changing.</p>"
     },
 
     update: {

@@ -6,7 +6,7 @@
    RC_VERSION; tools/validate.js refuses to let the two drift apart. Bumping it
    is what publishes an update: a changed sw.js is what a browser notices, and
    a new cache name is what makes the old shell go away. */
-var CACHE = "routecast-v13";
+var CACHE = "routecast-v15";
 var SHELL = [
   "./",
   "./index.html",
@@ -24,6 +24,7 @@ var SHELL = [
   "./static/js/icons.js",
   "./static/js/coords.js",
   "./static/js/background.js",
+  "./static/js/power.js",
   "./static/js/history.js",
   "./static/js/heat.js",
   "./static/js/traffic.js",
@@ -36,11 +37,13 @@ var SHELL = [
   "./static/js/weather.js",
   "./static/js/elevation.js",
   "./static/js/risk.js",
+  "./static/js/guide.js",
   "./static/js/pick.js",
   "./static/js/qr.js",
   "./static/js/peer.js",
   "./static/js/voice.js",
   "./static/js/rejoin.js",
+  "./static/js/who.js",
   "./static/js/group.js",
   "./static/js/groupui.js",
   "./static/js/pubs.js",
@@ -53,6 +56,9 @@ var SHELL = [
   "./static/js/gl.js",
   "./static/js/layers.js",
   "./static/js/layersui.js",
+  "./static/js/hud.js",
+  "./static/js/recap.js",
+  "./static/js/lock.js",
   "./static/js/app.js",
   "./static/js/pwa.js",
   "./vendor/leaflet/leaflet.js",

@@ -61,6 +61,27 @@
   var WX_REUSE_MS = 10 * 60 * 1000;
   var WX_REFRESH_MAX_POINTS = 24;
 
+  /* The ride as it happened, kept for the card at the end of it: the line
+     actually travelled (decimated like free drive's), the last dashboard
+     state, and when it began. Free drive keeps its own track; navigation
+     never had one, because until now nothing looked back at a ride. */
+  var ride = { track: [], last: null, startedAt: 0, introduced: false, dest: "" };
+  var RIDE_TRACK_GAP_M = 15;
+  var RIDE_TRACK_MAX = 6000;
+  var RECAP_MIN_M = 200;           // shorter than this is not a ride worth a card
+
+  // The forecast where a free ride actually is, kept whole so the dashboard
+  // can say when the next rain arrives without asking again.
+  var localSeries = null;
+
+  // What the map overlays were last drawn from, so a five-second refresh
+  // that changes nothing costs nothing. See refreshRideOverlays().
+  var overlaySig = "", tickSig = "", overlayLevels = null;
+
+  // The opening of a freshly planned route: fly to it, then draw it on.
+  var chipIntro = null;            // null | "wait" | "pop"
+  var drawOnTimer = null;
+
   var activePickTrigger = null, pickReopenPanel = false;
 
   // 76px screen-space decluttering threshold for weather chips.
@@ -288,14 +309,24 @@
     ep.active = -1;
   }
 
+  /* Pins that were already on the map stay put when the set is redrawn;
+     only a pin that is genuinely new drops in. Without the memory, choosing
+     a destination made the start pin bounce as well, which reads as the
+     start having changed. */
+  var drawnPins = {};
+
   function drawEndpoints() {
     endpointLayer.clearLayers();
     var pts = [];
+    var nowPins = {};
     for (var i = 0; i < state.endpoints.length; i++) {
       var ep = state.endpoints[i];
       if (!ep.place) continue;
       var isFirst = i === 0, isLast = i === state.endpoints.length - 1;
-      var cls = "rc-marker rc-marker-pin " + (isFirst ? "rc-marker-start" : isLast ? "rc-marker-end" : "rc-marker-stop");
+      var pinKey = (isFirst ? "s" : isLast ? "e" : "m") + ep.place.lat.toFixed(5) + "," + ep.place.lon.toFixed(5);
+      nowPins[pinKey] = true;
+      var cls = "rc-marker rc-marker-pin " + (isFirst ? "rc-marker-start" : isLast ? "rc-marker-end" : "rc-marker-stop") +
+        (drawnPins[pinKey] ? "" : " is-new");
       var icon = L.divIcon({
         className: "",
         html: '<span class="' + cls + '">' + RC.icons.ui(isLast && !isFirst ? "flag" : "pin") + "</span>",
@@ -305,11 +336,28 @@
       L.marker([ep.place.lat, ep.place.lon], { icon: icon, title: ep.place.name }).addTo(endpointLayer);
       pts.push([ep.place.lat, ep.place.lon]);
     }
+    drawnPins = nowPins;
     if (pts.length && !state.routes.length && state.mode === "plan") {
-      RC.follow.silently(function () {
-        map.fitBounds(L.latLngBounds(pts).pad(0.3), { maxZoom: 13 });
-      });
+      flyToBounds(L.latLngBounds(pts).pad(0.3), { maxZoom: 13 });
     }
+  }
+
+  /* Every planning-screen camera move that is the app's own idea goes
+     through here: a flight rather than a jump, so the eye can follow where
+     the map went — and a jump anyway when the flight would be a slideshow,
+     or the rider asked for less motion or less battery. */
+  function flyToBounds(bounds, opts) {
+    opts = opts || {};
+    RC.follow.silently(function () {
+      if (quietMotion()) { map.fitBounds(bounds, { maxZoom: opts.maxZoom }); return; }
+      map.flyToBounds(bounds, { maxZoom: opts.maxZoom, duration: opts.duration || 0.85, easeLinearity: 0.35 });
+    });
+  }
+
+  function quietMotion() {
+    if (RC.power && RC.power.saving()) return true;
+    try { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
+    catch (e) { return false; }
   }
 
   /* Marks on the map. Small, quiet and only in planning mode: a screen full
@@ -654,10 +702,14 @@
       })(a);
     }
 
-    routeLayers.push(L.polyline(route.coords, { color: themeColors().casing, weight: 9, opacity: 0.18 }).addTo(map));
+    var casing = L.polyline(route.coords, { color: themeColors().casing, weight: 9, opacity: 0.18 }).addTo(map);
+    routeLayers.push(casing);
+    var drawn = [casing];
     var cps = state.checkpoints;
     if (cps.length < 2) {
-      routeLayers.push(L.polyline(route.coords, { color: themeColors().accent, weight: 5 }).addTo(map));
+      var plain = L.polyline(route.coords, { color: themeColors().accent, weight: 5 }).addTo(map);
+      routeLayers.push(plain);
+      drawn.push(plain);
     } else {
       for (var c = 0; c < cps.length - 1; c++) {
         var seg = route.coords.slice(cps[c].i, cps[c + 1].i + 1);
@@ -665,17 +717,111 @@
         var la = levelOf(cps[c]), lb = levelOf(cps[c + 1]);
         var rank = { clear: 0, watch: 1, caution: 2, danger: 3 };
         var worse = rank[lb] > rank[la] ? lb : la;
-        routeLayers.push(L.polyline(seg, { color: colorFor(worse), weight: 5, opacity: 0.95 }).addTo(map));
+        var part = L.polyline(seg, { color: colorFor(worse), weight: 5, opacity: 0.95 }).addTo(map);
+        routeLayers.push(part);
+        drawn.push(part);
       }
     }
     // The 3D view mirrors these very polylines, so it only needs telling
     // that they changed.
     RC.layers.sync();
     if (!opts || opts.fit !== false) {
-      RC.follow.silently(function () {
-        map.fitBounds(L.latLngBounds(route.coords).pad(0.12));
-      });
+      /* A new route: the camera goes to it first, and only once it has
+         arrived does the line draw itself on, start to finish, with the
+         weather chips appearing as the line reaches each one. In that order
+         because Leaflet re-projects every path when a move ends, and a line
+         half-way through drawing on would be measured against the old one. */
+      var bounds = L.latLngBounds(route.coords).pad(0.12);
+      if (quietMotion() || state.mode !== "plan") {
+        flyToBounds(bounds);
+      } else {
+        prepareDrawOn(drawn);
+        var started = false;
+        var go = function () { if (started) return; started = true; drawOn(drawn); };
+        map.once("moveend", function () { setTimeout(go, 30); });
+        setTimeout(go, 1300);   // a route that already fits produces no move at all
+        flyToBounds(bounds);
+      }
     }
+  }
+
+  /* ---------- a route drawing itself on ----------
+     SVG paths with their dash pattern set to their own length and offset by
+     all of it are invisible; easing the offset to zero draws them. Each
+     stretch starts when the one before it has finished, so the line runs
+     from the start pin to the flag in one stroke. The styles are removed
+     afterwards: a dash pattern measured at one zoom is wrong at every other. */
+  var DRAW_ON_MS = 1150;
+
+  function pathsOf(layers) {
+    var out = [];
+    for (var i = 0; i < layers.length; i++) {
+      var p = layers[i] && layers[i]._path;
+      if (p && p.getTotalLength) out.push(p);
+    }
+    return out;
+  }
+
+  function prepareDrawOn(layers) {
+    clearDrawOn();
+    chipIntro = "wait";
+    var paths = pathsOf(layers);
+    for (var i = 0; i < paths.length; i++) paths[i].style.opacity = "0";
+  }
+
+  function drawOn(layers) {
+    if (drawOnTimer) { clearTimeout(drawOnTimer); drawOnTimer = null; }
+    // A plan replaced before its opening finished: the old line is gone.
+    if (!layers.length || !map.hasLayer(layers[0])) return;
+    var paths = pathsOf(layers);
+    if (!paths.length) { clearDrawOn(); return; }
+    // The casing is the first layer; it fades in under the line rather than
+    // racing it.
+    var casing = paths[0], parts = paths.slice(1);
+    var lens = [], total = 0;
+    for (var i = 0; i < parts.length; i++) {
+      var len = 0;
+      try { len = parts[i].getTotalLength(); } catch (e) { len = 0; }
+      lens.push(len);
+      total += len;
+    }
+    casing.style.transition = "opacity " + (DRAW_ON_MS * 0.8) + "ms ease";
+    casing.style.opacity = "";
+    if (!(total > 0)) { clearDrawOn(); return; }
+    var acc = 0;
+    for (var j = 0; j < parts.length; j++) {
+      var p = parts[j], l = lens[j];
+      p.style.transition = "none";
+      p.style.strokeDasharray = l + " " + l;
+      p.style.strokeDashoffset = String(l);
+      p.style.opacity = "";
+    }
+    void (parts[0] && parts[0].getBoundingClientRect());
+    for (var k = 0; k < parts.length; k++) {
+      var delay = acc / total * DRAW_ON_MS, dur = Math.max(40, lens[k] / total * DRAW_ON_MS);
+      acc += lens[k];
+      parts[k].style.transition = "stroke-dashoffset " + dur.toFixed(0) + "ms linear " + delay.toFixed(0) + "ms";
+      parts[k].style.strokeDashoffset = "0";
+    }
+    chipIntro = "pop";
+    redrawChips();
+    // Any zoom re-projects the paths, and a dash measured against the old
+    // ones is wrong; the line is simply shown whole instead.
+    map.once("zoomstart", clearDrawOn);
+    map.once("zoomend", clearDrawOn);
+    drawOnTimer = setTimeout(clearDrawOn, DRAW_ON_MS + 120);
+  }
+
+  function clearDrawOn() {
+    if (drawOnTimer) { clearTimeout(drawOnTimer); drawOnTimer = null; }
+    var hadIntro = chipIntro != null;
+    chipIntro = null;
+    var paths = pathsOf(routeLayers);
+    for (var i = 0; i < paths.length; i++) {
+      var s = paths[i].style;
+      s.transition = ""; s.strokeDasharray = ""; s.strokeDashoffset = ""; s.opacity = "";
+    }
+    if (hadIntro) redrawChips();
   }
 
   function drawWeatherMarkers() {
@@ -749,14 +895,24 @@
     var cps = state.checkpoints;
     if (!cps.length || !map) return;
     var keep = declutterIndices(cps);
+    var route = state.routes[state.routeIndex];
+    var total = (route && route.distance) || 1;
     for (var k = 0; k < keep.length; k++) {
       (function (cp, idx) {
         var level = levelOf(cp);
         var wx = cp.wx || {};
         var desc = wx.outOfRange ? { icon: "cloud" } : RC.weather.describe(wx.code, wx.isDay);
+        /* While a new route is drawing itself on, each chip waits for the
+           line to reach it and then pops up out of the road. */
+        var intro = "", introStyle = "";
+        if (chipIntro === "wait") intro = " is-wait";
+        else if (chipIntro === "pop") {
+          intro = " is-pop";
+          introStyle = ' style="animation-delay:' + Math.round(RC.clamp(cp.distance / total, 0, 1) * DRAW_ON_MS) + 'ms"';
+        }
         var html =
           '<div style="width:100%;height:100%;display:flex;align-items:flex-end;justify-content:center;">' +
-            '<span class="rc-marker is-' + level + (idx === state.selected ? " is-selected" : "") + '">' +
+            '<span class="rc-marker is-' + level + (idx === state.selected ? " is-selected" : "") + intro + '"' + introStyle + ">" +
               '<span class="rc-marker-icon">' + RC.icons.weather(desc.icon) + "</span>" +
               '<span class="rc-marker-temp">' + (wx.outOfRange ? "—" : RC.fmtTemp(wx.tempC, state.units)) + "</span>" +
               '<span class="rc-marker-stem"></span>' +
@@ -826,6 +982,14 @@
         Math.round(route.familiarity.score * 100) + "% of it runs on roads you have already ridden.");
     }
 
+    // Night falling part-way through is the one daylight fact worth a line.
+    var light = daylight();
+    if (light && light.darkMin >= 10 && !light.allDark && light.change && light.change.kind === "sunset") {
+      notes.push("Sunset catches you" + (light.change.at ? " at " + RC.fmtTime(light.change.at) : "") +
+        " — the last " + RC.fmtDur(light.darkMin * 60) + " is after dark." +
+        (state.vehicle === "motorcycle" ? " A clear visor and something reflective." : " Lights on before it does."));
+    }
+
     var advice = notes.concat(trip.advice).concat(trip.reasons);
     var html = "";
     for (var i = 0; i < Math.min(advice.length, 7); i++) {
@@ -873,6 +1037,20 @@
       });
     }
 
+    var light = daylight();
+    if (light) {
+      if (light.darkMin === 0) {
+        facts.push({ k: "Daylight", v: "All the way", level: "clear",
+          sub: light.after && light.after.kind === "sunset" ? "sunset " + RC.fmtTime(light.after.at) : "no dark stretch" });
+      } else if (light.allDark) {
+        facts.push({ k: "Daylight", v: "After dark", level: state.vehicle === "motorcycle" ? "watch" : null,
+          sub: light.after && light.after.kind === "sunrise" ? "sunrise " + RC.fmtTime(light.after.at) : "the whole ride" });
+      } else {
+        facts.push({ k: "Daylight", v: RC.fmtDur(light.darkMin * 60) + " dark", level: "watch",
+          sub: light.change ? light.change.kind + (light.change.at ? " " + RC.fmtTime(light.change.at) : "") : "" });
+      }
+    }
+
     var avg = route.duration > 0 ? (route.distance / route.duration) * 3.6 : 0;
     facts.push({ k: "Door to door", v: RC.fmtSpeed(avg, state.units), sub: "average, stops included" });
 
@@ -892,57 +1070,293 @@
     return { free: "clear", moderate: "watch", heavy: "caution", severe: "danger" }[level] || "clear";
   }
 
-  /* Elevation profile — an inline SVG area chart, drawn from the DEM
-     samples. The point is the SHAPE of the ride, not a reading. */
-  var ELEV_W = 320, ELEV_H = 72, ELEV_PAD = 6;
+  /* ---------------------------------------------------------
+     Daylight, and the wind against the road
+
+     Both are read off the forecast already in memory: the sunrise and
+     sunset times come back in the same request as the weather (see
+     weather.js), and the wind's direction is one more hourly field. Neither
+     costs a request of its own.
+     --------------------------------------------------------- */
+  function darkAt(i) {
+    var cp = state.checkpoints[i];
+    if (!cp) return null;
+    var s = state.series && state.series.sun ? state.series.sun(i, cp.eta) : null;
+    if (s && s.dark != null) return s.dark;
+    // No sun timeline (an older cached series, a stub): the hourly flag.
+    return cp.wx && !cp.wx.outOfRange ? !cp.wx.isDay : null;
+  }
+
+  /* How much of the ride is in the dark, where the light changes, and what
+     the sun does next after arrival. Legs are charged by their own travel
+     time, and a leg that crosses sunset counts half — the same trick the
+     rain estimate uses, for the same reason. */
+  function daylight() {
+    var cps = state.checkpoints;
+    if (!cps.length || !state.series) return null;
+    var darks = [], known = 0;
+    for (var i = 0; i < cps.length; i++) { darks.push(darkAt(i)); if (darks[i] != null) known++; }
+    if (!known) return null;
+    var darkS = 0, totalS = 0, change = null;
+    for (var j = 0; j < cps.length - 1; j++) {
+      var a = darks[j], b = darks[j + 1];
+      if (a == null || b == null) continue;
+      var leg = Math.max(0, (cps[j + 1].etaSeconds || 0) - (cps[j].etaSeconds || 0));
+      totalS += leg;
+      darkS += (a && b) ? leg : (a || b) ? leg / 2 : 0;
+      if (!change && a !== b) {
+        var sn = state.series.sun ? state.series.sun(j, cps[j].eta) : null;
+        change = (sn && sn.next && sn.next.at <= cps[j + 1].eta) ? sn.next : { at: null, kind: b ? "sunset" : "sunrise" };
+      }
+    }
+    if (cps.length === 1) { totalS = 1; darkS = darks[0] ? 1 : 0; }
+    var lastIdx = cps.length - 1;
+    var after = state.series.sun ? state.series.sun(lastIdx, cps[lastIdx].eta).next : null;
+    return {
+      darkMin: Math.round(darkS / 60),
+      allDark: totalS > 0 && darkS >= totalS - 1 && darks[0] === true,
+      change: change,
+      after: after
+    };
+  }
+
+  // The road's own bearing at a coordinate index, looking a few points ahead
+  // so one kinked vertex does not swing it.
+  function roadBearingAt(route, i) {
+    var c = route && route.coords;
+    if (!c || c.length < 2) return null;
+    var a = Math.max(0, Math.min(i, c.length - 2));
+    var b = Math.min(c.length - 1, a + 4);
+    return RC.bearing({ lat: c[a][0], lon: c[a][1] }, { lat: c[b][0], lon: c[b][1] });
+  }
+
+  function windArrowHtml(rel, kmh) {
+    return '<span class="rc-windarrow" style="transform:rotate(' + Math.round(rel + 180) + 'deg)">' +
+      RC.icons.ui("arrow") + "</span><span>" + RC.escapeHtml(RC.fmtSpeed(kmh, state.units).split(" ")[0]) + "</span>";
+  }
+
+  function windLevel(gustKmh) {
+    if (gustKmh == null) return null;
+    if (state.vehicle === "motorcycle") return gustKmh > 60 ? "danger" : gustKmh > 45 ? "caution" : gustKmh > 30 ? "watch" : "clear";
+    return gustKmh > 80 ? "caution" : gustKmh > 60 ? "watch" : "clear";
+  }
+
+  /* The ride profile — an inline SVG drawn from what is already in memory:
+     the DEM samples for the shape of the ground, a band under it in the
+     colour the forecast gave each stretch, and bars for the rain. One
+     picture that answers "where is the climb, and is it wet up there". The
+     point is the SHAPE of the ride; a finger along it reads any point. */
+  var ELEV_W = 320, ELEV_H = 96, ELEV_PAD = 6;
+  var ELEV_TOP = 4, ELEV_BASE = 62;          // the ground chart
+  var BAND_Y = 67, BAND_H = 6;               // the forecast band
+  var RAIN_BASE = 94, RAIN_MAX = 17;         // rain bars grow up from here
+
+  function profileGeometry() {
+    var route = state.routes[state.routeIndex];
+    var p = state.profile;
+    var hasElev = !!(p && p.points && p.points.length >= 2);
+    var totalM = (route && route.distance) || (hasElev ? p.points[p.points.length - 1].distance : 0) || 1;
+    var span = hasElev ? Math.max(p.maxM - p.minM, 40) : 1;
+    var mid = hasElev ? (p.maxM + p.minM) / 2 : 0;
+    var lo = mid - span / 2, hi = mid + span / 2;
+    return {
+      route: route, p: hasElev ? p : null, totalM: totalM,
+      x: function (d) { return ELEV_PAD + (d / totalM) * (ELEV_W - ELEV_PAD * 2); },
+      y: function (e) { return ELEV_BASE - ((e - lo) / (hi - lo)) * (ELEV_BASE - ELEV_TOP); },
+      d: function (px) { return RC.clamp((px - ELEV_PAD) / (ELEV_W - ELEV_PAD * 2), 0, 1) * totalM; }
+    };
+  }
 
   function renderElevation() {
     var box = RC.el("elev-profile");
     if (!box) return;
-    var p = state.profile;
-    if (!p || p.points.length < 2) { box.hidden = true; box.innerHTML = ""; return; }
+    var g = profileGeometry();
+    var cps = state.checkpoints;
+    if (!g.route || (!g.p && cps.length < 2)) { box.hidden = true; box.innerHTML = ""; return; }
+    var x = g.x, y = g.y;
 
-    var pts = p.points;
-    var totalM = pts[pts.length - 1].distance || 1;
-    var span = Math.max(p.maxM - p.minM, 40);
-    var mid = (p.maxM + p.minM) / 2;
-    var lo = mid - span / 2, hi = mid + span / 2;
-
-    function x(d) { return ELEV_PAD + (d / totalM) * (ELEV_W - ELEV_PAD * 2); }
-    function y(e) { return ELEV_H - ELEV_PAD - ((e - lo) / (hi - lo)) * (ELEV_H - ELEV_PAD * 2); }
-
-    var line = "";
-    for (var i = 0; i < pts.length; i++) {
-      line += (i === 0 ? "M" : "L") + x(pts[i].distance).toFixed(1) + " " + y(pts[i].elevationM).toFixed(1);
+    var ground = "";
+    if (g.p) {
+      var pts = g.p.points, line = "";
+      for (var i = 0; i < pts.length; i++) {
+        line += (i === 0 ? "M" : "L") + x(pts[i].distance).toFixed(1) + " " + y(pts[i].elevationM).toFixed(1);
+      }
+      var area = line + "L" + x(g.totalM).toFixed(1) + " " + ELEV_BASE + "L" + x(0).toFixed(1) + " " + ELEV_BASE + "Z";
+      ground = '<path class="rc-elev-area" d="' + area + '"/><path class="rc-elev-line" d="' + line + '"/>';
+    } else {
+      ground = '<path class="rc-elev-flat" d="M' + x(0) + " " + ELEV_BASE + "L" + x(g.totalM) + " " + ELEV_BASE + '"/>';
     }
-    var area = line + "L" + x(totalM).toFixed(1) + " " + (ELEV_H - ELEV_PAD) +
-               "L" + x(0).toFixed(1) + " " + (ELEV_H - ELEV_PAD) + "Z";
+
+    var band = "", rain = "";
+    for (var c = 0; c < cps.length - 1; c++) {
+      var x0 = x(cps[c].distance), x1 = x(cps[c + 1].distance);
+      if (!(x1 > x0)) continue;
+      var la = levelOf(cps[c]), lb = levelOf(cps[c + 1]);
+      var rank = { clear: 0, watch: 1, caution: 2, danger: 3 };
+      band += '<rect class="rc-prof-band is-' + (rank[lb] > rank[la] ? lb : la) + '" x="' + x0.toFixed(1) +
+              '" y="' + BAND_Y + '" width="' + (x1 - x0 + 0.4).toFixed(1) + '" height="' + BAND_H + '"/>';
+      var wa = cps[c].wx, wb = cps[c + 1].wx;
+      if (wa && wb && !wa.outOfRange && !wb.outOfRange) {
+        var mm = (wa.precipMm + wb.precipMm) / 2;
+        if (mm >= 0.05) {
+          var h = Math.max(1.5, Math.min(1, mm / 6) * RAIN_MAX);
+          rain += '<rect class="rc-prof-rain" x="' + (x0 + 0.6).toFixed(1) + '" y="' + (RAIN_BASE - h).toFixed(1) +
+                  '" width="' + Math.max(0.8, x1 - x0 - 1.2).toFixed(1) + '" height="' + h.toFixed(1) + '" rx="1"/>';
+        }
+      }
+    }
+
+    var meta = g.p
+      ? RC.fmtDist(Math.round(g.p.minM), state.units) + " – " + RC.fmtDist(Math.round(g.p.maxM), state.units)
+      : "Weather along the way";
+    var label = g.p
+      ? "Ride profile: climbs " + RC.fmtDist(g.p.climbM, state.units) + ", descends " + RC.fmtDist(g.p.descentM, state.units)
+      : "Weather along the ride";
 
     box.hidden = false;
     box.innerHTML =
       '<div class="rc-elev-head">' +
-        '<span class="rc-elev-title">Elevation</span>' +
-        '<span class="rc-elev-meta">' +
-          RC.escapeHtml(RC.fmtDist(Math.round(p.minM), state.units)) + " – " +
-          RC.escapeHtml(RC.fmtDist(Math.round(p.maxM), state.units)) +
-        "</span>" +
+        '<span class="rc-elev-title">Profile</span>' +
+        '<span class="rc-elev-meta">' + RC.escapeHtml(meta) + "</span>" +
       "</div>" +
       '<svg class="rc-elev-svg" viewBox="0 0 ' + ELEV_W + " " + ELEV_H +
-        '" preserveAspectRatio="none" role="img" aria-label="Elevation profile: climbs ' +
-        RC.escapeHtml(RC.fmtDist(p.climbM, state.units)) + ', descends ' +
-        RC.escapeHtml(RC.fmtDist(p.descentM, state.units)) + '">' +
-        '<path class="rc-elev-area" d="' + area + '"/>' +
-        '<path class="rc-elev-line" d="' + line + '"/>' +
-        (navElevMarker(x, totalM) || "") +
-      "</svg>";
+        '" preserveAspectRatio="none" role="img" aria-label="' + RC.escapeHtml(label) + '">' +
+        ground + band + rain +
+        (navElevMarker(x, g.totalM) || "") +
+        '<g class="rc-prof-cursor" visibility="hidden"><path class="rc-prof-cursor-line" d="M0 ' + ELEV_TOP +
+          "L0 " + RAIN_BASE + '"/><circle class="rc-prof-cursor-dot" cx="0" cy="0" r="3.2"/></g>' +
+      "</svg>" +
+      '<p class="rc-prof-read" aria-live="polite">Slide along it to read any point.</p>';
   }
 
   var navDistanceAlong = 0;
   function navElevMarker(x, totalM) {
     if (!RC.nav.isActive() || !(navDistanceAlong > 0)) return null;
     var px = x(RC.clamp(navDistanceAlong, 0, totalM));
-    return '<path class="rc-elev-here" d="M' + px.toFixed(1) + " " + ELEV_PAD +
-           "L" + px.toFixed(1) + " " + (ELEV_H - ELEV_PAD) + '"/>';
+    return '<path class="rc-elev-here" d="M' + px.toFixed(1) + " " + ELEV_TOP +
+           "L" + px.toFixed(1) + " " + ELEV_BASE + '"/>';
+  }
+
+  /* ---------- reading the profile with a finger ----------
+     Drag along it and it says what is at that point: how far in, how high,
+     when you get there and what the sky is doing — and a ring on the map
+     shows where that is. Nothing is fetched; it is all interpolated from
+     the route and the checkpoints already in memory. */
+  var scrubMarker = null, scrubHideTimer = null;
+
+  function pointAtDistance(route, d) {
+    var cum = route.cumDist, c = route.coords;
+    var lo = 0, hi = cum.length - 1;
+    while (lo < hi) { var mid = (lo + hi) >> 1; if (cum[mid] < d) lo = mid + 1; else hi = mid; }
+    var i = Math.max(1, lo);
+    var span = cum[i] - cum[i - 1] || 1;
+    var t = RC.clamp((d - cum[i - 1]) / span, 0, 1);
+    return [c[i - 1][0] + (c[i][0] - c[i - 1][0]) * t, c[i - 1][1] + (c[i][1] - c[i - 1][1]) * t];
+  }
+
+  // When a point along the route is reached, from the checkpoints either side
+  // of it — which navigation keeps re-timing, so this is the live answer.
+  function etaAtDistance(d) {
+    var cps = state.checkpoints;
+    if (!cps.length) return null;
+    for (var i = 0; i < cps.length - 1; i++) {
+      if (d <= cps[i + 1].distance) {
+        var span = cps[i + 1].distance - cps[i].distance || 1;
+        var t = RC.clamp((d - cps[i].distance) / span, 0, 1);
+        return new Date(cps[i].eta.getTime() + (cps[i + 1].eta.getTime() - cps[i].eta.getTime()) * t);
+      }
+    }
+    return cps[cps.length - 1].eta;
+  }
+
+  function nearestCheckpoint(d) {
+    var cps = state.checkpoints, best = -1, gap = Infinity;
+    for (var i = 0; i < cps.length; i++) {
+      var g = Math.abs(cps[i].distance - d);
+      if (g < gap) { gap = g; best = i; }
+    }
+    return best;
+  }
+
+  function scrubAt(clientX) {
+    var box = RC.el("elev-profile");
+    var svg = box && box.querySelector(".rc-elev-svg");
+    if (!svg) return;
+    var g = profileGeometry();
+    if (!g.route) return;
+    var r = svg.getBoundingClientRect();
+    if (!(r.width > 0)) return;
+    var px = RC.clamp((clientX - r.left) / r.width, 0, 1) * ELEV_W;
+    var d = g.d(px);
+    var cx = g.x(d);
+
+    var cursor = svg.querySelector(".rc-prof-cursor");
+    var elev = g.p ? g.p.at(d) : null;
+    if (cursor) {
+      cursor.setAttribute("visibility", "visible");
+      cursor.querySelector(".rc-prof-cursor-line").setAttribute("d", "M" + cx.toFixed(1) + " " + ELEV_TOP + "L" + cx.toFixed(1) + " " + RAIN_BASE);
+      var dot = cursor.querySelector(".rc-prof-cursor-dot");
+      dot.setAttribute("cx", cx.toFixed(1));
+      dot.setAttribute("cy", (elev ? g.y(elev.elevationM) : ELEV_BASE).toFixed(1));
+    }
+
+    var bits = [RC.fmtDist(d, state.units) + " in"];
+    if (elev) bits.push(RC.fmtDist(Math.round(elev.elevationM), state.units) + " up");
+    var eta = etaAtDistance(d);
+    if (eta) bits.push(RC.fmtTime(eta));
+    var ci = nearestCheckpoint(d);
+    var wx = ci > -1 ? state.checkpoints[ci].wx : null;
+    if (wx && !wx.outOfRange) {
+      bits.push(RC.fmtTemp(wx.tempC, state.units) + " " + RC.weather.describe(wx.code, wx.isDay).text.toLowerCase());
+    }
+    var read = box.querySelector(".rc-prof-read");
+    if (read) read.textContent = bits.join(" · ");
+
+    var ll = pointAtDistance(g.route, d);
+    if (scrubHideTimer) { clearTimeout(scrubHideTimer); scrubHideTimer = null; }
+    if (!scrubMarker) {
+      scrubMarker = L.circleMarker(ll, {
+        radius: 8, weight: 3, color: themeColors().accent, fillColor: "#FFFFFF", fillOpacity: 0.9,
+        interactive: false, className: "rc-scrub-ring"
+      }).addTo(map);
+    } else {
+      scrubMarker.setLatLng(ll);
+    }
+  }
+
+  function endScrub() {
+    if (scrubHideTimer) clearTimeout(scrubHideTimer);
+    scrubHideTimer = setTimeout(function () {
+      scrubHideTimer = null;
+      if (scrubMarker) { map.removeLayer(scrubMarker); scrubMarker = null; }
+      var box = RC.el("elev-profile");
+      var cursor = box && box.querySelector(".rc-prof-cursor");
+      if (cursor) cursor.setAttribute("visibility", "hidden");
+    }, 1600);
+  }
+
+  function initProfileScrub() {
+    var box = RC.el("elev-profile");
+    if (!box) return;
+    var down = false;
+    box.addEventListener("pointerdown", function (e) {
+      if (!e.target.closest || !e.target.closest(".rc-elev-svg")) return;
+      down = true;
+      try { box.setPointerCapture(e.pointerId); } catch (err) {}
+      scrubAt(e.clientX);
+    });
+    box.addEventListener("pointermove", function (e) {
+      // A mouse reads on hover; a finger only while it is down, or the page
+      // could never be scrolled past the chart.
+      if (down || e.pointerType === "mouse") {
+        if (e.target.closest && e.target.closest(".rc-elev-svg")) scrubAt(e.clientX);
+        else if (down) scrubAt(e.clientX);
+      }
+    });
+    ["pointerup", "pointercancel"].forEach(function (ev) {
+      box.addEventListener(ev, function () { down = false; endScrub(); });
+    });
+    box.addEventListener("pointerleave", function () { if (!down) endScrub(); });
   }
 
   function renderAlternatives() {
@@ -1050,6 +1464,20 @@
       ["Humidity", Math.round(wx.humidity) + "%"],
       ["Traffic", RC.traffic.LEVELS[RC.traffic.level(cp.eta)].label]
     ];
+    /* Where the wind hits, which is the part of it a rider feels: the same
+       gust is a shove in the back on one heading and a push into the next
+       lane on another. */
+    var rel = RC.risk.wind(wx.windDir, roadBearingAt(state.routes[state.routeIndex], cp.i), wx.gustKmh);
+    if (rel) {
+      rows.splice(5, 0, ["Wind hits", RC.risk.windWords(rel) +
+        (rel.kind === "cross" ? " · " + RC.fmtSpeed(Math.abs(rel.crossKmh), state.units) + " gusts" : "")]);
+    }
+    var dark = darkAt(state.selected);
+    if (dark != null) {
+      var sun = state.series && state.series.sun ? state.series.sun(state.selected, cp.eta) : null;
+      rows.push(["Light", (dark ? "After dark" : "Daylight") +
+        (sun && sun.next ? " · " + sun.next.kind + " " + RC.fmtTime(sun.next.at) : "")]);
+    }
     if (state.profile) {
       var terrain = state.profile.at(cp.distance);
       rows.push(["Elevation", RC.fmtDist(Math.round(terrain.elevationM), state.units) +
@@ -1098,7 +1526,16 @@
         (route.summary ? " · " + route.summary : "");
       badge.className = "rc-badge is-" + trip.level;
       badge.textContent = RC.risk.LEVELS[trip.level].label;
-      if (go) go.hidden = false;
+      if (go) {
+        // A route that has just become rideable says so, once: two soft rings
+        // round Go, the button the rider is about to want.
+        if (go.hidden) {
+          go.hidden = false;
+          go.classList.remove("is-ready");
+          void go.offsetWidth;
+          go.classList.add("is-ready");
+        }
+      }
     } else {
       var from = state.endpoints[0] && state.endpoints[0].place;
       var to = state.endpoints[state.endpoints.length - 1] && state.endpoints[state.endpoints.length - 1].place;
@@ -1108,9 +1545,102 @@
         : "Plan a route, or just drive";
       badge.className = "rc-badge";
       badge.textContent = "";
-      if (go) go.hidden = true;
+      if (go) { go.hidden = true; go.classList.remove("is-ready"); }
     }
+    renderQuick();
     updateBottomVar();
+  }
+
+  /* ---------------------------------------------------------
+     One tap to somewhere you have been before
+
+     Your marks and saved routes as chips over the map, while nothing is
+     planned. A mark is a trip from WHERE YOU ARE — the whole reason to tap
+     "Home" is that you want to go home from here — so it asks for a fix,
+     sets it as the start, and plans. A saved route loads as it always has.
+     --------------------------------------------------------- */
+  var QUICK_MARKS = 4, QUICK_ROUTES = 2;
+
+  function renderQuick() {
+    var el = RC.el("quick");
+    if (!el) return;
+    var show = state.mode === "plan" && !state.routes.length && !RC.pick.isActive();
+    var marks = show ? RC.marks.list().slice(0, QUICK_MARKS) : [];
+    var routes = show ? RC.routes.list().slice(0, QUICK_ROUTES) : [];
+    if (!marks.length && !routes.length) {
+      if (!el.hidden) { el.hidden = true; el.innerHTML = ""; }
+      return;
+    }
+    var html = "";
+    for (var i = 0; i < marks.length; i++) {
+      html += '<button type="button" class="rc-quick-chip" data-quick-mark="' + RC.escapeHtml(marks[i].id) + '" ' +
+        'title="Ride to ' + RC.escapeHtml(marks[i].name) + ' from here" style="--i:' + i + '">' +
+        RC.icons.ui("pin") + "<span>" + RC.escapeHtml(marks[i].name) + "</span></button>";
+    }
+    for (var r = 0; r < routes.length; r++) {
+      html += '<button type="button" class="rc-quick-chip is-route" data-quick-route="' + RC.escapeHtml(routes[r].id) + '" ' +
+        'title="Load ' + RC.escapeHtml(routes[r].name) + '" style="--i:' + (marks.length + r) + '">' +
+        RC.icons.ui("route") + "<span>" + RC.escapeHtml(routes[r].name) + "</span></button>";
+    }
+    if (el.innerHTML !== html) el.innerHTML = html;
+    el.hidden = false;
+  }
+
+  function quickToMark(id) {
+    var m = RC.marks.get(id);
+    if (!m) return;
+    RC.el("stops").innerHTML = "";
+    state.endpoints = [state.endpoints[0], state.endpoints[state.endpoints.length - 1]];
+    var end = state.endpoints[state.endpoints.length - 1];
+    end.place = RC.marks.toPlace(m);
+    end.inputEl.value = m.name;
+    RC.marks.touch(m.id);
+    saveTrip();
+    if (!navigator.geolocation) { drawEndpoints(); openPanel("route"); return; }
+    setStatus("Finding you, then " + m.name + "…", "busy");
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      setEndpointFromLatLon(state.endpoints[0], pos.coords.latitude, pos.coords.longitude);
+      plan();
+    }, function () {
+      // No fix is not the end of it: the destination is set, and the planner
+      // is the place to say where from.
+      setStatus("Could not find you — set a start and plan.", "error");
+      flashStatus(4000);
+      drawEndpoints();
+      openPanel("route");
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  }
+
+  /* Somewhere to go that did not come from the search box: the ride's
+     planned stops still ahead, or where a mate is right now. The same two
+     moves a quick destination makes — the places go into the fields, then
+     "from where you are" — so what comes out is an ordinary route that can be
+     looked at, saved, re-planned and started like any other. */
+  function planFromHere(places, label) {
+    if (!places || !places.length) return;
+    RC.el("stops").innerHTML = "";
+    state.endpoints = [state.endpoints[0], state.endpoints[state.endpoints.length - 1]];
+    for (var m = 0; m < places.length - 1; m++) addStop();
+    for (var i = 0; i < places.length; i++) {
+      var ep = state.endpoints[i + 1];
+      var p = places[i];
+      ep.place = { name: p.name || "Stop", address: p.address || p.name || "",
+                   lat: p.lat, lon: p.lon, precise: true };
+      ep.inputEl.value = ep.place.name;
+    }
+    drawEndpoints();
+    saveTrip();
+    if (!navigator.geolocation) { openPanel("route"); return; }
+    setStatus("Finding you, then " + (label || places[places.length - 1].name || "the way") + "…", "busy");
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      setEndpointFromLatLon(state.endpoints[0], pos.coords.latitude, pos.coords.longitude);
+      plan();
+    }, function () {
+      setStatus("Could not find you — set a start and plan.", "error");
+      flashStatus(4000);
+      drawEndpoints();
+      openPanel("route");
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
   }
 
   /* ---------------------------------------------------------
@@ -1146,6 +1676,8 @@
     var list = RC.el("saved-list");
     if (!section || !list) return;
     var items = RC.routes.list();
+    renderQuick();
+    updateBottomVar();
     if (!items.length) { section.hidden = true; list.innerHTML = ""; return; }
     section.hidden = false;
 
@@ -1211,9 +1743,10 @@
     var list = RC.el("marks-list");
     if (!list) return;
     var items = RC.marks.list();
+    renderQuick();
+    updateBottomVar();
     if (!items.length) {
-      list.innerHTML = '<p class="rc-history-empty">No marks yet. Drop a pin, or mark the centre of the map, ' +
-        'and it becomes a one-tap destination that goes exactly where you put it.</p>';
+      list.innerHTML = '<p class="rc-history-empty">No marks yet. A mark is a one-tap destination.</p>';
       drawMarks();
       return;
     }
@@ -1351,7 +1884,9 @@
       // Looking at a checkpoint is a decision, not a stray pan: the camera
       // stands down until Re-centre rather than snatching the view back.
       if (RC.follow.isFollowing()) RC.follow.release();
-      RC.follow.silently(function () { map.panTo([cp.lat, cp.lon]); });
+      if (!RC.layers.lookAt(cp.lat, cp.lon)) {
+        RC.follow.silently(function () { map.panTo([cp.lat, cp.lon], { animate: !quietMotion(), duration: 0.6 }); });
+      }
     }
     drawWeatherMarkers();
     renderTimeline();
@@ -1377,12 +1912,17 @@
      --------------------------------------------------------- */
   var statusTimer = null;
 
+  /* kind: "" | "busy" | "error", or a risk level — "watch", "caution",
+     "danger" — for the notices a ride raises about what is ahead. */
   function setStatus(msg, kind) {
     var el = RC.el("status");
     if (!el) return;
-    el.className = "rc-status" + (kind === "error" ? " rc-error" : kind === "busy" ? " rc-busy" : "");
+    var level = kind === "watch" || kind === "caution" || kind === "danger" ? kind : "";
+    el.className = "rc-status" + (kind === "error" ? " rc-error" : kind === "busy" ? " rc-busy" : "") +
+      (level ? " is-" + level : "");
     el.innerHTML = msg
-      ? (kind === "busy" ? '<span class="rc-spinner" aria-hidden="true"></span>' : "") + RC.escapeHtml(msg)
+      ? (kind === "busy" ? '<span class="rc-spinner" aria-hidden="true"></span>'
+         : level ? RC.icons.ui("alert") : "") + RC.escapeHtml(msg)
       : "";
   }
 
@@ -1444,6 +1984,8 @@
     if (state.checkpoints.length) { labelCheckpoints(); render(); }
     renderMarks();
     renderFreeSummary();
+    // The dashboard's speed warning is offered in the rider's own units.
+    if (RC.hud) RC.hud.refresh();
     // Every distance the room shows — how far away each rider is, how far off
     // the planned route — is in these units too.
     RC.groupui.refresh();
@@ -1551,8 +2093,15 @@
     var overviewBtn = RC.el("ctl-overview");
     var locateBtn = RC.el("ctl-locate");
     var markBtn = RC.el("ctl-mark");
+    var lockBtn = RC.el("ctl-lock");
+    var heatBtn = RC.el("ctl-heat");
     if (overviewBtn) overviewBtn.hidden = !state.routes.length;
     if (markBtn) markBtn.hidden = riding;
+    /* Riding swaps one button for another: the heat map is a thing you look
+       at over a coffee (it is still in Layers), the rain lock is a thing you
+       reach for at 60 km/h. The column stays the same height either way. */
+    if (lockBtn) lockBtn.hidden = !riding;
+    if (heatBtn) heatBtn.hidden = riding;
     if (locateBtn) {
       var label = riding ? "Re-centre on me" : "Use my location";
       locateBtn.setAttribute("aria-label", label);
@@ -1572,6 +2121,7 @@
                       the controls and the re-centre pill clear. */
   function updateBottomVar() {
     var el = state.mode === "plan" ? RC.el("dock") : RC.el("hud");
+    var root = document.documentElement;
     var h = 0;
     if (el && !el.hidden) {
       var rect = el.getBoundingClientRect();
@@ -1579,8 +2129,13 @@
       var landscapeColumn = window.matchMedia &&
         window.matchMedia("(orientation: landscape) and (max-height: 620px)").matches;
       if (!(landscapeColumn && el.id === "hud")) h = Math.round(rect.height) + 6;
+      if (el.id === "dock") root.style.setProperty("--rc-dock-h", Math.round(rect.height) + "px");
+      // The quick destinations stack on the dock, so the controls clear both.
+      var quick = RC.el("quick");
+      if (el.id === "dock" && quick && !quick.hidden && !landscapeColumn) {
+        h += Math.round(quick.getBoundingClientRect().height) + 6;
+      }
     }
-    var root = document.documentElement;
     root.style.setProperty("--rc-hud-h", h + "px");
 
     var rail = RC.el("mates-rail");
@@ -1623,13 +2178,17 @@
   function showOverview() {
     var route = state.routes[state.routeIndex];
     if (!route) return;
-    if (RC.compass.isRotated()) RC.compass.setMode("north", { gesture: false });
+    var bounds = L.latLngBounds(route.coords).pad(0.12);
     // Deliberate: the camera stands down until Re-centre rather than
     // undoing this on the next fix.
     RC.follow.release();
-    RC.follow.silently(function () {
-      map.fitBounds(L.latLngBounds(route.coords).pad(0.12));
-    });
+    /* With the 3D camera up, the camera itself pulls up — level, north up,
+       the whole route under it — and Re-centre dives back down. Asking the
+       hidden flat map to do it, as this used to, changed nothing anybody
+       could see. */
+    if (RC.layers.overview(bounds)) return;
+    if (RC.compass.isRotated()) RC.compass.setMode("north", { gesture: false });
+    flyToBounds(bounds);
   }
 
   function zoomBy(delta) {
@@ -1877,6 +2436,8 @@
     activePickTrigger = triggerBtn || null;
 
     RC.pick.start(ep, { center: center, title: title });
+    // The picker has the bottom of the screen; the quick chips step aside.
+    renderQuick();
   }
 
   function initPick() {
@@ -1912,6 +2473,8 @@
       clearPickActiveClass();
       if (pickReopenPanel) openPanel("route");
       pickReopenPanel = false;
+      renderQuick();
+      updateBottomVar();
     };
 
     var saveBtn = RC.el("pick-save");
@@ -1984,9 +2547,16 @@
     }
     if (name === "group") RC.groupui.refresh();
     if (name === "marks") renderMarks();
+    // Mid-ride the timeline and profile are only kept current while they
+    // can be seen (see refreshRideOverlays), so opening them brings them up
+    // to date first.
+    if (name === "trip" && state.mode !== "plan" && state.checkpoints.length) {
+      renderTimeline(); renderElevation(); renderDetails();
+    }
     if (name === "you") {
       renderHistoryPanel(); renderFreeSummary();
       renderBackgroundPanel(); renderVersionPanel();
+      renderGuidePanel(); RC.hud.renderSettings();
     }
     if (name === "pubs") RC.pubsui.render();
     if (name === "layers") { RC.layersui.render(); renderHeatPanel(); }
@@ -2075,8 +2645,16 @@
        whether that means changing anything. */
     if (mode === "plan") RC.layers.leaveDrive(); else RC.layers.enterDrive();
     lastHudRenderTs = 0;
-    hudPodKeys = "";
+    overlaySig = "";
+    tickSig = "";
+    overlayLevels = null;
+    RC.hud.setMode(mode === "plan" ? null : mode);
+    turnKey = "";
+    document.documentElement.setAttribute("data-then", "no");
+    // The lock is a riding thing; planning never inherits one.
+    if (mode === "plan" && RC.lock.isLocked()) RC.lock.unlock();
     drawMarks();
+    renderQuick();
     updateMapControls();
     updateBottomVar();
   }
@@ -2118,6 +2696,8 @@
     if (!places.length) { setStatus("Plan a route before navigating.", "error"); return; }
     rebuildNavTargets(route, places);
 
+    // Inside the tap: the voice needs a gesture before it may speak at all.
+    beginRide("nav", places[places.length - 1].name);
     setStatus("Starting navigation…", "busy");
     RC.nav.start({
       map: map,
@@ -2130,15 +2710,19 @@
     }).then(function () {
       setStatus("", "");
       setMode("nav");
-      RC.follow.enable({ zoom: Math.max(map.getZoom(), NAV_ZOOM) });
+      // The opening shot: a flight down to the rider, flat or tilted.
+      RC.follow.enable({ zoom: Math.max(map.getZoom(), NAV_ZOOM), intro: true });
+      RC.layers.intro();
       restoreCompassMode();
     }, function (err) {
+      RC.guide.end();
       setStatus(err && err.message ? err.message : "Could not start navigation.", "error");
       setMode("plan");
     });
   }
 
-  function stopNav() {
+  function stopNav(opts) {
+    opts = opts || {};
     var learned = RC.nav.stop();
     navTargets = [];
     navRerouteToken++;
@@ -2147,16 +2731,21 @@
     RC.compass.setMode("north", { gesture: false });
     RC.follow.disable();
     if (riderMarker) { map.removeLayer(riderMarker); riderMarker = null; riderArrow = null; }
+    RC.guide.end({ keep: !!opts.arrived });
     setMode("plan");
     renderHistoryPanel();
     RC.heat.invalidate();
     renderHeatPanel();
+    var note = "";
     if (learned) {
       var pct = Math.round((learned.actualS / learned.plannedS - 1) * 100);
-      setStatus(pct === 0
-        ? "Ride recorded — that one ran exactly to the estimate."
-        : "Ride recorded — you ran " + Math.abs(pct) + "% " + (pct > 0 ? "slower" : "faster") +
-          " than the estimate. Future ETAs will account for it.", "");
+      note = pct === 0
+        ? "That one ran exactly to the estimate."
+        : "You ran " + Math.abs(pct) + "% " + (pct > 0 ? "slower" : "faster") +
+          " than the estimate. Future ETAs will account for it.";
+    }
+    if (!finishRide("nav", { arrived: !!opts.arrived, note: note }) && note) {
+      setStatus("Ride recorded — " + note.charAt(0).toLowerCase() + note.slice(1), "");
       flashStatus(5000);
     }
   }
@@ -2175,6 +2764,7 @@
     var bearings = [ns.courseDeg == null ? null : { deg: ns.courseDeg, range: 75 }];
 
     setStatus("Off route — finding a new way…", "busy");
+    RC.guide.rerouting();
 
     return RC.router.route(waypoints, {
       vehicle: state.vehicle,
@@ -2209,6 +2799,10 @@
         labelCheckpoints();
         checkpoints[0].label = "You are here";
         RC.nav.setRoute(route, checkpoints, series);
+        RC.guide.routeChanged();
+        overlaySig = "";
+        tickSig = "";
+        overlayLevels = null;
         drawRoute({ fit: false });
         drawWeatherMarkers();
         renderSummary();
@@ -2256,19 +2850,23 @@
   function startFree() {
     if (RC.free.isActive()) { stopFree(); return; }
     if (RC.nav.isActive()) stopNav();
+    beginRide("free", "");
     setStatus("Starting the recorder…", "busy");
     RC.free.start({ vehicle: state.vehicle }).then(function () {
       setStatus("", "");
       setMode("free");
       state.freeSummary = null;
+      localSeries = null;
       if (!freeTrackLayer) {
         freeTrackLayer = L.polyline([], { color: themeColors().accent, weight: 5, opacity: 0.9 }).addTo(map);
       } else {
         freeTrackLayer.setLatLngs([]);
       }
-      RC.follow.enable({ zoom: Math.max(map.getZoom(), NAV_ZOOM) });
+      RC.follow.enable({ zoom: Math.max(map.getZoom(), NAV_ZOOM), intro: true });
+      RC.layers.intro();
       restoreCompassMode();
     }, function (err) {
+      RC.guide.end();
       setStatus(err && err.message ? err.message : "Could not start recording.", "error");
       setMode("plan");
     });
@@ -2281,18 +2879,18 @@
     RC.compass.setMode("north", { gesture: false });
     RC.follow.disable();
     if (riderMarker) { map.removeLayer(riderMarker); riderMarker = null; riderArrow = null; }
+    RC.guide.end();
     setMode("plan");
     renderHistoryPanel();
     renderFreeSummary();
     RC.heat.invalidate();
     renderHeatPanel();
-    if (summary && summary.distanceM > 200) {
-      setStatus("Ride recorded — " + RC.fmtDist(summary.distanceM, state.units) + " in " +
-        RC.fmtDur(summary.elapsedS) + ". The roads are yours now.", "");
-      flashStatus(5000);
+    if (summary && summary.distanceM > RECAP_MIN_M) {
       // The line stays on the map until the next ride or a reset: it is the
       // only record of the shape of the ride, and throwing it away the
       // instant you stop is the wrong instinct.
+      if (freeTrackLayer) freeTrackLayer.setLatLngs(summary.track || []);
+      finishRide("free", { summary: summary, note: "The roads are yours now — they count toward your heat map." });
     } else {
       if (freeTrackLayer) { map.removeLayer(freeTrackLayer); freeTrackLayer = null; }
       setStatus("Ride was too short to keep.", "");
@@ -2329,6 +2927,7 @@
     }];
 
     setStatus("Taking that way…", "busy");
+    beginRide("nav", ends[ends.length - 1].name);
     return loadWeatherFor(route, token).then(function () {
       if (token !== state.planToken) return false;
       rebuildNavTargets(route, ends);
@@ -2343,11 +2942,13 @@
       }).then(function () {
         setStatus("", "");
         setMode("nav");
-        RC.follow.enable({ zoom: Math.max(map.getZoom(), NAV_ZOOM) });
+        RC.follow.enable({ zoom: Math.max(map.getZoom(), NAV_ZOOM), intro: true });
+        RC.layers.intro();
         return true;
       });
     }).catch(function (err) {
       if (token !== state.planToken) return false;
+      RC.guide.end();
       setStatus(err && err.message ? err.message : "Could not take that way.", "error");
       return false;
     });
@@ -2385,132 +2986,347 @@
     return RC.weather.forecastSeries(point, { maxAgeMs: WX_REUSE_MS }).then(function (series) {
       if (!RC.free.isActive()) return;
       var wx = RC.weather.sampleSeries(series, 0, new Date());
+      // Kept whole: "rain in forty minutes" and the sunset are in here too.
+      localSeries = series;
       RC.free.setWeather(wx);
     }, function () { /* no forecast is not a reason to stop the ride */ });
   }
 
   /* ---------------------------------------------------------
+     A ride's beginning and end
+     --------------------------------------------------------- */
+  function beginRide(kind, dest) {
+    ride = { track: [], last: null, startedAt: Date.now(), introduced: kind !== "nav", dest: dest || "", kind: kind };
+    RC.recap.hide();
+    RC.guide.begin({ mode: kind });
+  }
+
+  function recordRideTrack(lat, lon) {
+    var t = ride.track;
+    if (t.length) {
+      var last = t[t.length - 1];
+      if (RC.haversine({ lat: last[0], lon: last[1] }, { lat: lat, lon: lon }) < RIDE_TRACK_GAP_M) return;
+    }
+    t.push([lat, lon]);
+    if (t.length > RIDE_TRACK_MAX) t.splice(0, t.length - RIDE_TRACK_MAX);
+  }
+
+  function trackLength(track) {
+    var m = 0;
+    for (var i = 1; i < track.length; i++) {
+      m += RC.haversine({ lat: track[i - 1][0], lon: track[i - 1][1] }, { lat: track[i][0], lon: track[i][1] });
+    }
+    return m;
+  }
+
+  // Metres climbed along the profile between two distances — the DEM, not
+  // the phone's altitude, which is why a navigated ride's climb is steady.
+  function profileClimb(fromM, toM) {
+    var p = state.profile;
+    if (!p || !p.points || p.points.length < 2) return null;
+    var up = 0, prev = null;
+    for (var i = 0; i < p.points.length; i++) {
+      var pt = p.points[i];
+      if (pt.distance < fromM || pt.distance > toM) continue;
+      if (prev != null && pt.elevationM > prev) up += pt.elevationM - prev;
+      prev = pt.elevationM;
+    }
+    return up;
+  }
+
+  function whenText(fromMs, toMs) {
+    var a = new Date(fromMs), b = new Date(toMs);
+    return RC.fmtDay(a) + " · " + RC.fmtTime(a) + " – " + RC.fmtTime(b);
+  }
+
+  /* The card at the end of a ride, and the camera pulling back to show the
+     whole of it. Returns false when there was not enough ride for a card. */
+  function finishRide(kind, info) {
+    info = info || {};
+    var stats = [], track, distanceM, title, kicker, startedAt = ride.startedAt || Date.now();
+    if (kind === "free") {
+      var s = info.summary;
+      track = s.track || [];
+      distanceM = s.distanceM;
+      kicker = "Free drive recorded";
+      title = RC.fmtDist(s.distanceM, state.units) + " in " + RC.fmtDur(s.elapsedS);
+      stats.push({ k: "Distance", v: RC.fmtDist(s.distanceM, state.units) });
+      stats.push({ k: "Time", v: RC.fmtDur(s.elapsedS) });
+      stats.push({ k: "Moving", v: RC.fmtDur(s.movingS) });
+      if (s.avgMovingKmh != null) stats.push({ k: "Average", v: RC.fmtSpeed(s.avgMovingKmh, state.units) });
+      if (s.maxSpeedKmh != null) stats.push({ k: "Top speed", v: RC.fmtSpeed(s.maxSpeedKmh, state.units) });
+      stats.push({ k: "Climb", v: s.climbM > 0 ? "+" + RC.fmtDist(s.climbM, state.units) : "—" });
+    } else {
+      track = ride.track;
+      distanceM = trackLength(track);
+      var last = ride.last || {};
+      if (!(distanceM > RECAP_MIN_M)) return false;
+      kicker = info.arrived ? "Arrived" : "Ride ended";
+      title = info.arrived ? (ride.dest || "Destination") : (RC.fmtDist(distanceM, state.units) + " ridden");
+      var elapsed = last.elapsedS || (Date.now() - startedAt) / 1000;
+      stats.push({ k: "Distance", v: RC.fmtDist(distanceM, state.units) });
+      stats.push({ k: "Time", v: RC.fmtDur(elapsed) });
+      if (last.avgSpeedKmh != null) stats.push({ k: "Average", v: RC.fmtSpeed(last.avgSpeedKmh, state.units) });
+      if (last.maxSpeedKmh) stats.push({ k: "Top speed", v: RC.fmtSpeed(last.maxSpeedKmh, state.units) });
+      var climb = profileClimb(0, last.distanceAlong || 0);
+      if (climb != null) stats.push({ k: "Climb", v: "+" + RC.fmtDist(Math.round(climb), state.units) });
+      // What the forecast said about this route — labelled as a forecast,
+      // because nothing measured whether it actually rained.
+      var wet = state.trip ? state.trip.rainMinutes : 0;
+      stats.push({ k: "Forecast rain", v: wet > 0 ? RC.fmtDur(wet * 60) : "None" });
+    }
+    if (!(distanceM > RECAP_MIN_M) || !track || track.length < 2) return false;
+
+    var dateText;
+    try {
+      dateText = new Date(startedAt).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    } catch (e) { dateText = new Date(startedAt).toDateString(); }
+    var shown = RC.recap.show({
+      kicker: kicker, title: title, sub: whenText(startedAt, Date.now()), when: dateText,
+      track: track, stats: stats, note: info.note || ""
+    });
+    if (shown) pullBackTo(track);
+    return shown;
+  }
+
+  /* After the ride, the camera rises to show all of it, framed above the
+     card rather than behind it — and waits for the tilted view to level out
+     first, so the two moves read as one. */
+  function pullBackTo(track) {
+    var bounds = L.latLngBounds(track);
+    var route = state.routes[state.routeIndex];
+    if (route && route.coords && route.coords.length) bounds.extend(L.latLngBounds(route.coords));
+    setTimeout(function () {
+      if (state.mode !== "plan") return;
+      var card = RC.el("recap");
+      var cardH = card && !card.hidden ? card.getBoundingClientRect().height : 0;
+      var landscape = window.matchMedia && window.matchMedia("(orientation: landscape) and (max-height: 620px)").matches;
+      RC.follow.silently(function () {
+        var opts = {
+          paddingTopLeft: [30, 80],
+          paddingBottomRight: landscape ? [Math.min(460, window.innerWidth * 0.62) + 20, 30] : [30, cardH + 30],
+          maxZoom: 16
+        };
+        if (quietMotion()) { map.fitBounds(bounds, opts); return; }
+        opts.duration = 1.1;
+        opts.easeLinearity = 0.3;
+        map.flyToBounds(bounds, opts);
+      });
+    }, (RC.gl.UNTILT_MS || 0) + 80);
+  }
+
+  /* ---------------------------------------------------------
      The HUD
 
-     Pods are rebuilt only when the SET of them changes; otherwise their
-     values are written in place. Rebuilding ten elements four times a second
-     under a moving map is how a dashboard starts dropping frames.
+     app.js works out every tile's value for the ride in progress, because
+     this is where the route, the forecast and the fix all are; RC.hud
+     decides which of them are on the screen and how they look, because the
+     rider decides that. See static/js/hud.js.
      --------------------------------------------------------- */
-  var hudPodKeys = "";
-  var hudPodEls = {};
-
-  function setPods(defs) {
-    var wrap = RC.el("hud-pods");
-    if (!wrap) return;
-    var keys = defs.map(function (d) { return d.k; }).join("|");
-    if (keys !== hudPodKeys) {
-      var html = "";
-      for (var i = 0; i < defs.length; i++) {
-        html += '<div class="rc-pod" data-k="' + RC.escapeHtml(defs[i].k) + '">' +
-                  '<span class="rc-pod-k">' + RC.escapeHtml(defs[i].k) + "</span>" +
-                  '<span class="rc-pod-v"></span>' +
-                "</div>";
-      }
-      wrap.innerHTML = html;
-      hudPodKeys = keys;
-      hudPodEls = {};
-      var nodes = wrap.querySelectorAll(".rc-pod");
-      for (var n = 0; n < nodes.length; n++) {
-        hudPodEls[nodes[n].getAttribute("data-k")] = {
-          pod: nodes[n],
-          v: nodes[n].querySelector(".rc-pod-v")
-        };
-      }
-    }
-    for (var d = 0; d < defs.length; d++) {
-      var def = defs[d];
-      var el = hudPodEls[def.k];
-      if (!el) continue;
-      if (def.html != null) el.v.innerHTML = def.html;
-      else el.v.textContent = def.v == null ? "—" : def.v;
-      el.pod.className = "rc-pod" + (def.level ? " is-" + def.level : "") + (def.wide ? " is-wide" : "");
-    }
-  }
-
-  function renderSpeed(kmh) {
-    var el = RC.el("hud-speed");
-    var unit = RC.el("hud-speed-unit");
-    if (!el) return;
-    if (kmh == null) {
-      el.textContent = "no fix";
-      el.setAttribute("data-empty", "yes");
-    } else {
-      el.textContent = String(state.units === "imperial" ? Math.round(kmh / 1.609344) : Math.round(kmh));
-      el.removeAttribute("data-empty");
-    }
-    if (unit) unit.textContent = state.units === "imperial" ? "mph" : "km/h";
-  }
-
   function gpsLevel(accuracy) {
     if (accuracy == null) return "clear";
     return accuracy > 40 ? "caution" : accuracy > 20 ? "watch" : "clear";
   }
 
+  var CARDINALS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  function headingPod(deg) {
+    if (deg == null || isNaN(deg)) return { v: "—" };
+    var d = ((deg % 360) + 360) % 360;
+    return { html: '<span class="rc-windarrow" style="transform:rotate(' + Math.round(d) + 'deg)">' +
+      RC.icons.ui("arrow") + "</span><span>" + CARDINALS[Math.round(d / 45) % 8] + "</span>" };
+  }
+
+  function batteryPod() {
+    var b = RC.power.battery();
+    if (!b) return { v: "—" };
+    var pct = Math.round(b.level * 100);
+    return {
+      html: (b.charging ? RC.icons.ui("bolt") : "") + "<span>" + pct + "%</span>",
+      level: b.charging ? null : pct <= 20 ? "caution" : pct <= 35 ? "watch" : null
+    };
+  }
+
+  function skyPod(wx) {
+    if (!wx) return { v: "—" };
+    if (wx.outOfRange) return { html: RC.icons.weather("cloud") + "<span>—</span>" };
+    var desc = RC.weather.describe(wx.code, wx.isDay);
+    return {
+      html: RC.icons.weather(desc.icon) + "<span>" + RC.escapeHtml(RC.fmtTemp(wx.tempC, state.units)) + "</span>",
+      level: RC.risk.score(wx, state.vehicle).level
+    };
+  }
+
+  function windPod(wx, courseDeg) {
+    if (!wx || wx.outOfRange || wx.windKmh == null) return { v: "—" };
+    var rel = RC.risk.wind(wx.windDir, courseDeg, wx.gustKmh);
+    if (!rel) return { v: RC.fmtSpeed(wx.windKmh, state.units), level: windLevel(wx.gustKmh) };
+    return { html: windArrowHtml(rel.rel, wx.windKmh), level: windLevel(wx.gustKmh) };
+  }
+
+  function minutesText(ms) {
+    var m = Math.max(1, Math.round(ms / 60000));
+    return m < 90 ? "in " + m + " min" : RC.fmtTime(new Date(Date.now() + ms));
+  }
+
+  /* When the next rain reaches the rider, along the route: the stretch they
+     are on, then each checkpoint ahead at the time they reach it. */
+  function rainPodAhead(ns) {
+    var cps = state.checkpoints, now = Date.now();
+    var from = 0;
+    while (from < cps.length && cps[from].distance <= ns.distanceAlong + 0.5) from++;
+    var a = cps[from - 1], b = cps[from];
+    if (a && b && a.wx && b.wx && !a.wx.outOfRange && !b.wx.outOfRange) {
+      var here = (a.wx.precipMm + b.wx.precipMm) / 2;
+      if (here >= 0.3) return { v: "Now", level: here > 2.5 ? "caution" : "watch" };
+    }
+    for (var i = from; i < cps.length; i++) {
+      var wx = cps[i].wx;
+      if (!wx || wx.outOfRange) continue;
+      if (wx.precipMm >= 0.3) {
+        var ms = cps[i].eta.getTime() - now;
+        if (ms > 4 * 3600000) break;
+        return { v: minutesText(ms), level: ms < 30 * 60000 ? "watch" : null };
+      }
+    }
+    return { v: "Dry", level: "clear" };
+  }
+
+  function rainPodLocal() {
+    if (!localSeries || !localSeries.rain) return { v: "—" };
+    var r = localSeries.rain(0, new Date(), 6);
+    if (r.now) return { v: "Now", level: "watch" };
+    if (r.at) {
+      var ms = r.at.getTime() - Date.now();
+      return { v: minutesText(ms), level: ms < 30 * 60000 ? "watch" : null };
+    }
+    return { v: "Dry", level: "clear" };
+  }
+
+  function sunPodFrom(sun) {
+    if (!sun || !sun.next) return { v: "—" };
+    var ms = sun.next.at.getTime() - Date.now();
+    var isSet = sun.next.kind === "sunset";
+    return {
+      label: isSet ? "Sunset" : "Sunrise",
+      v: RC.fmtTime(sun.next.at),
+      level: isSet && ms < 45 * 60000 ? "watch" : null
+    };
+  }
+
+  function sunPodAhead(ns) {
+    var cps = state.checkpoints;
+    if (!cps.length || !state.series || !state.series.sun) return { v: "—" };
+    var i = 0;
+    while (i < cps.length - 1 && cps[i].distance <= ns.distanceAlong) i++;
+    return sunPodFrom(state.series.sun(i, new Date()));
+  }
+
+  function commonPods(fix, traffic) {
+    return {
+      average: { v: fix.avgSpeedKmh == null ? "—" : RC.fmtSpeed(fix.avgSpeedKmh, state.units) },
+      top: { v: fix.maxSpeedKmh == null ? "—" : RC.fmtSpeed(fix.maxSpeedKmh, state.units) },
+      elev: { v: fix.elevationM == null ? "—" : RC.fmtDist(Math.round(fix.elevationM), state.units) },
+      elapsed: { v: RC.fmtDur(fix.elapsedS) },
+      traffic: { v: RC.traffic.LEVELS[traffic].label, level: trafficLevelClass(traffic) },
+      heading: headingPod(fix.courseDeg),
+      clock: { v: RC.fmtTime(new Date()) },
+      battery: batteryPod(),
+      gps: { v: fix.accuracy == null ? "—" : ("±" + RC.fmtDist(fix.accuracy, state.units)), level: gpsLevel(fix.accuracy) }
+    };
+  }
+
+  /* One line over the map for what is wrong ahead. Written only when it
+     changes: the same sentence rebuilt on every fix is a relayout a second
+     for nothing. */
+  var alertKey = "";
+  function setAlert(level, text) {
+    var alertEl = RC.el("nav-alert");
+    if (!alertEl) return;
+    var key = level ? level + "|" + text : "";
+    if (key === alertKey) return;
+    alertKey = key;
+    if (!level) { alertEl.hidden = true; return; }
+    alertEl.setAttribute("data-level", level);
+    alertEl.innerHTML = RC.icons.ui("alert") + "<span>" + RC.escapeHtml(text) + "</span>";
+    alertEl.hidden = false;
+  }
+
   function renderNavHud(ns) {
     navDistanceAlong = ns.distanceAlong;
-
-    renderSpeed(ns.displaySpeedKmh);
+    ride.last = ns;
+    recordRideTrack(ns.lat, ns.lon);
 
     var next = ns.nextCheckpoint;
-    var nextHtml = "—";
-    var nextLevel = "clear";
-    if (next) {
-      var wx = next.wx || {};
-      nextLevel = levelOf(next);
-      var desc = wx.outOfRange ? { icon: "cloud" } : RC.weather.describe(wx.code, wx.isDay);
-      nextHtml = RC.icons.weather(desc.icon) +
-        "<span>" + (wx.outOfRange ? "—" : RC.escapeHtml(RC.fmtTemp(wx.tempC, state.units))) + "</span>";
-    }
-
+    var nextLevel = next ? levelOf(next) : "clear";
     var traffic = RC.traffic.level(new Date());
 
-    setPods([
-      { k: "Left", v: RC.fmtDist(ns.remainingM, state.units) },
-      { k: "Arrive", v: RC.fmtTime(ns.etaDate) },
-      { k: "Time", v: RC.fmtDur(ns.remainingS) },
-      { k: "Sky ahead", html: nextHtml, level: nextLevel },
-      { k: "Elapsed", v: RC.fmtDur(ns.elapsedS) },
-      { k: "Average", v: ns.avgSpeedKmh == null ? "—" : RC.fmtSpeed(ns.avgSpeedKmh, state.units) },
-      { k: "Elev", v: ns.elevationM == null ? "—" : RC.fmtDist(Math.round(ns.elevationM), state.units) },
-      { k: "Grade", v: ns.gradePct == null ? "—" : ((ns.gradePct > 0 ? "+" : "") + ns.gradePct.toFixed(1) + "%") },
-      { k: "Traffic", v: RC.traffic.LEVELS[traffic].label, level: trafficLevelClass(traffic) },
-      { k: "GPS", v: ns.accuracy == null ? "—" : ("±" + RC.fmtDist(ns.accuracy, state.units)), level: gpsLevel(ns.accuracy) }
-    ]);
+    var pods = commonPods(ns, traffic);
+    pods.left = { v: RC.fmtDist(ns.remainingM, state.units) };
+    pods.arrive = { v: RC.fmtTime(ns.etaDate) };
+    pods.time = { v: RC.fmtDur(ns.remainingS) };
+    pods.sky = next ? skyPod(next.wx || { outOfRange: true }) : { v: "—" };
+    pods.rain = rainPodAhead(ns);
+    pods.wind = windPod(next && next.wx, ns.courseDeg);
+    pods.grade = { v: ns.gradePct == null ? "—" : ((ns.gradePct > 0 ? "+" : "") + ns.gradePct.toFixed(1) + "%") };
+    pods.sun = sunPodAhead(ns);
+    RC.hud.render(ns.displaySpeedKmh, pods);
+    setLockHint(pods.rain.v === "Now");
 
     var fill = RC.el("hud-progress-fill");
-    if (fill) fill.style.width = Math.round(ns.progress * 100) + "%";
+    if (fill) fill.style.width = (ns.progress * 100).toFixed(1) + "%";
     renderHudTicks();
     renderTurn(ns);
 
-    var alertEl = RC.el("nav-alert");
-    var cautionAhead = nextLevel === "caution" || nextLevel === "danger";
-    if (alertEl) {
-      if (ns.offRoute) {
-        alertEl.hidden = false;
-        alertEl.setAttribute("data-level", "caution");
-        alertEl.innerHTML = RC.icons.ui("alert") + "<span>You're off the planned route.</span>";
-      } else if (cautionAhead) {
-        alertEl.hidden = false;
-        alertEl.setAttribute("data-level", nextLevel);
-        var place = (next && next.label) || "the next checkpoint";
-        alertEl.innerHTML = RC.icons.ui("alert") + "<span>" +
-          RC.escapeHtml((nextLevel === "danger" ? "Danger conditions ahead at " : "Caution ahead at ") + place) +
-          "</span>";
-      } else {
-        alertEl.hidden = true;
-      }
+    if (ns.offRoute) {
+      setAlert("caution", "You're off the planned route.");
+    } else if (nextLevel === "caution" || nextLevel === "danger") {
+      var place = (next && next.label) || "the next checkpoint";
+      setAlert(nextLevel, (nextLevel === "danger" ? "Danger conditions ahead at " : "Caution ahead at ") + place);
+    } else {
+      setAlert(null);
     }
+
+    // What the camera frames by: faster is further ahead, a junction is closer.
+    RC.layers.context({ speedKmh: ns.displaySpeedKmh, turnM: ns.nextStep ? ns.nextStep.distanceM : null });
+
+    if (!ride.introduced) {
+      ride.introduced = true;
+      RC.guide.introduce(ride.dest, ns.remainingM, RC.fmtTime(ns.etaDate));
+    }
+    RC.guide.nav(ns, state.vehicle);
 
     var t = Date.now();
     if (t - lastHudRenderTs >= 5000) {
       lastHudRenderTs = t;
-      renderTimeline();
+      refreshRideOverlays();
+    }
+  }
+
+  /* The map's own overlays, mid-ride. The weather chips used to be torn
+     down and rebuilt every five seconds whether anything had changed or not
+     — and in the 3D view every rebuild threw away and re-created every
+     mirrored marker with it. Now they are redrawn when what they SHOW
+     changes, and the panel's timeline and profile only while the panel is
+     open to show them. */
+  function refreshRideOverlays() {
+    var cps = state.checkpoints;
+    var levels = "", sig = "";
+    for (var i = 0; i < cps.length; i++) {
+      var wx = cps[i].wx;
+      var lv = levelOf(cps[i]);
+      levels += lv + ",";
+      sig += lv + ":" + (wx && !wx.outOfRange ? Math.round(wx.tempC) + ":" + wx.code : "x") + "|";
+    }
+    sig += "#" + state.selected;
+    if (sig !== overlaySig) {
+      overlaySig = sig;
+      // A stretch that changed colour is a route that has to be repainted.
+      if (overlayLevels != null && overlayLevels !== levels) drawRoute({ fit: false });
+      overlayLevels = levels;
       drawWeatherMarkers();
+    }
+    if (isPanelOpen() && !RC.el("pane-trip").hidden) {
+      renderTimeline();
       renderElevation();
     }
   }
@@ -2518,10 +3334,15 @@
   function renderHudTicks() {
     var track = RC.el("hud-progress");
     if (!track) return;
-    var old = track.querySelectorAll(".rc-hud-tick");
-    for (var i = 0; i < old.length; i++) old[i].parentNode.removeChild(old[i]);
     var route = state.routes[state.routeIndex];
     var cps = state.checkpoints;
+    var sig = route ? route.distance + "|" : "";
+    for (var s = 0; s < cps.length; s++) sig += Math.round(cps[s].distance) + levelOf(cps[s]) + ",";
+    // The ticks only move when the checkpoints or their colours do.
+    if (sig === tickSig) return;
+    tickSig = sig;
+    var old = track.querySelectorAll(".rc-hud-tick");
+    for (var i = 0; i < old.length; i++) old[i].parentNode.removeChild(old[i]);
     if (!route || !cps.length || !route.distance) return;
     for (var j = 0; j < cps.length; j++) {
       var pct = RC.clamp(cps[j].distance / route.distance * 100, 0, 100);
@@ -2532,47 +3353,71 @@
     }
   }
 
+  /* The next turn: an arrow drawn the way a road sign draws it, how far,
+     and the words — with the manoeuvre after it hanging underneath when the
+     two are close enough to be one. A new instruction slides in, so the eye
+     catches that it changed without having to read it; the bar along the
+     bottom fills over the last few hundred metres. */
+  var TURN_APPROACH_M = 400;
+  var turnKey = "";
+
   function renderTurn(ns) {
     var box = RC.el("turn-banner");
     var textEl = RC.el("turn-text");
     var distEl = RC.el("turn-dist");
+    var glyphEl = RC.el("turn-glyph");
+    var thenEl = RC.el("turn-then");
+    var bar = RC.el("turn-approach");
     if (!box || !textEl || !distEl) return;
-    if (!ns.nextStep) {
-      textEl.textContent = "Continue to your destination";
+    var step = ns.nextStep;
+    var key = step ? step.index + "|" + step.text : "end";
+    if (key !== turnKey) {
+      turnKey = key;
+      textEl.textContent = step ? step.text : "Continue to your destination";
+      if (glyphEl) glyphEl.innerHTML = step ? RC.guide.glyph(step) : RC.icons.turn("arrive");
+      box.classList.remove("is-new");
+      void box.offsetWidth;
+      box.classList.add("is-new");
+      if (thenEl) {
+        var then = step && step.then;
+        var showThen = !!(then && then.gapM < 300 && then.type !== "arrive");
+        if (showThen) {
+          thenEl.innerHTML = "<span>Then</span>" + RC.guide.glyph(then);
+          thenEl.setAttribute("title", "Then " + then.text);
+        }
+        thenEl.hidden = !showThen;
+        // Everything that stacks under the banner moves down to clear it.
+        document.documentElement.setAttribute("data-then", showThen ? "yes" : "no");
+      }
+    }
+    if (!step) {
       distEl.textContent = "";
       box.removeAttribute("data-soon");
+      if (bar) bar.style.transform = "scaleX(0)";
       return;
     }
-    textEl.textContent = ns.nextStep.text;
-    distEl.textContent = RC.fmtDist(ns.nextStep.distanceM, state.units);
-    if (ns.nextStep.distanceM < 150) box.setAttribute("data-soon", "yes");
+    distEl.textContent = RC.fmtDist(step.distanceM, state.units);
+    if (step.distanceM < 150) box.setAttribute("data-soon", "yes");
     else box.removeAttribute("data-soon");
+    if (bar) bar.style.transform = "scaleX(" + (1 - RC.clamp(step.distanceM / TURN_APPROACH_M, 0, 1)).toFixed(3) + ")";
   }
 
   function renderFreeHud(fs) {
-    renderSpeed(fs.displaySpeedKmh);
-
-    var wxHtml = "—";
-    var wxLevel = null;
-    if (fs.wx && !fs.wx.outOfRange) {
-      var desc = RC.weather.describe(fs.wx.code, fs.wx.isDay);
-      wxHtml = RC.icons.weather(desc.icon) + "<span>" + RC.escapeHtml(RC.fmtTemp(fs.wx.tempC, state.units)) + "</span>";
-      wxLevel = RC.risk.score(fs.wx, state.vehicle).level;
-    }
+    ride.last = fs;
     var traffic = RC.traffic.level(new Date());
+    var pods = commonPods(fs, traffic);
+    pods.distance = { v: RC.fmtDist(fs.distanceM, state.units) };
+    pods.moving = { v: RC.fmtDur(fs.movingS) };
+    pods.sky = fs.wx ? skyPod(fs.wx) : { v: "—" };
+    pods.rain = rainPodLocal();
+    pods.wind = windPod(fs.wx, fs.courseDeg);
+    pods.climb = { v: fs.climbM > 0 ? "+" + RC.fmtDist(fs.climbM, state.units) : "—" };
+    pods.sun = localSeries && localSeries.sun ? sunPodFrom(localSeries.sun(0, new Date())) : { v: "—" };
+    RC.hud.render(fs.displaySpeedKmh, pods);
+    setLockHint(pods.rain.v === "Now");
 
-    setPods([
-      { k: "Distance", v: RC.fmtDist(fs.distanceM, state.units) },
-      { k: "Elapsed", v: RC.fmtDur(fs.elapsedS) },
-      { k: "Moving", v: RC.fmtDur(fs.movingS) },
-      { k: "Average", v: fs.avgSpeedKmh == null ? "—" : RC.fmtSpeed(fs.avgSpeedKmh, state.units) },
-      { k: "Top", v: fs.maxSpeedKmh == null ? "—" : RC.fmtSpeed(fs.maxSpeedKmh, state.units) },
-      { k: "Sky here", html: wxHtml, level: wxLevel },
-      { k: "Elev", v: fs.elevationM == null ? "—" : RC.fmtDist(Math.round(fs.elevationM), state.units) },
-      { k: "Climb", v: fs.climbM > 0 ? "+" + RC.fmtDist(fs.climbM, state.units) : "—" },
-      { k: "Traffic", v: RC.traffic.LEVELS[traffic].label, level: trafficLevelClass(traffic) },
-      { k: "GPS", v: fs.accuracy == null ? "—" : ("±" + RC.fmtDist(fs.accuracy, state.units)), level: gpsLevel(fs.accuracy) }
-    ]);
+    RC.layers.context({ speedKmh: fs.displaySpeedKmh, turnM: null });
+    RC.guide.free(fs);
 
     var label = RC.el("free-label");
     if (label) {
@@ -2580,26 +3425,38 @@
     }
 
     var t = Date.now();
-    if (freeTrackLayer && t - lastFreeTrackTs >= 2000) {
+    /* The travelled line. In 3D it is mirrored by re-reading the lines, which
+       is a whole pass over every line on the map — so there it is refreshed
+       less often than on the flat map, where it is one path. */
+    var every = RC.layers.isCameraOn() ? 5000 : 2000;
+    if (freeTrackLayer && t - lastFreeTrackTs >= every) {
       lastFreeTrackTs = t;
       freeTrackLayer.setLatLngs(fs.track);
+      if (RC.layers.isCameraOn()) RC.layers.sync();
     }
   }
 
   function riderIconHtml() {
-    return '<span class="rc-rider"><svg viewBox="0 0 24 24" aria-hidden="true">' +
-      '<path d="M12 3.2 18.4 19 12 15.4 5.6 19 12 3.2Z" fill="currentColor"/></svg></span>';
+    return '<span class="rc-rider-wrap"><span class="rc-rider-halo"></span>' +
+      '<span class="rc-rider"><svg viewBox="0 0 24 24" aria-hidden="true">' +
+      '<path d="M12 3.2 18.4 19 12 15.4 5.6 19 12 3.2Z" fill="currentColor"/></svg></span></span>';
   }
 
   /* The marker moves; the CAMERA is RC.follow's business. Keeping those two
-     apart is what stopped the map fighting the rider's thumb. */
-  function updateRiderMarker(lat, lon, courseDeg) {
+     apart is what stopped the map fighting the rider's thumb.
+
+     Two things it does now that it did not: it glides between fixes (a CSS
+     transition on the marker's own transform — composited, and switched off
+     around a zoom so it never slides across the screen after one), and it
+     carries a halo the size of the fix's own error circle, because "the GPS
+     is guessing" is information a dot cannot otherwise give. */
+  function updateRiderMarker(lat, lon, courseDeg, accuracy) {
     if (!map) return;
     lastOwnFix = { lat: lat, lon: lon, courseDeg: courseDeg };
     var latlng = [lat, lon];
     if (!riderMarker) {
       riderMarker = L.marker(latlng, {
-        icon: L.divIcon({ className: "", html: riderIconHtml(), iconSize: [26, 26], iconAnchor: [13, 13] }),
+        icon: L.divIcon({ className: "rc-rider-marker", html: riderIconHtml(), iconSize: [26, 26], iconAnchor: [13, 13] }),
         zIndexOffset: 1000,
         keyboard: false,
         /* The 3D view draws the rider as geometry on the road surface, so
@@ -2612,12 +3469,18 @@
       riderMarker.setLatLng(latlng);
     }
 
-    if (!riderArrow && riderMarker.getElement) {
-      var el = riderMarker.getElement();
-      riderArrow = el ? el.querySelector(".rc-rider") : null;
-    }
+    var el = riderMarker.getElement ? riderMarker.getElement() : null;
+    if (!riderArrow && el) riderArrow = el.querySelector(".rc-rider");
     if (riderArrow && courseDeg != null) {
       riderArrow.style.transform = "rotate(" + Math.round(courseDeg) + "deg)";
+    }
+    if (el) {
+      var px = 0;
+      if (typeof accuracy === "number" && accuracy > 0) {
+        var mPerPx = 40075016.686 * Math.abs(Math.cos(lat * Math.PI / 180)) / Math.pow(2, map.getZoom() + 8);
+        px = RC.clamp(accuracy / (mPerPx || 1) * 2, 0, 260);
+      }
+      el.style.setProperty("--acc", Math.round(px) + "px");
     }
 
     RC.follow.setTarget(lat, lon, { rotated: RC.compass.isRotated(), minZoom: NAV_ZOOM });
@@ -2628,20 +3491,18 @@
   RC.nav.onUpdate = function (ns) {
     RC.compass.setCourse(ns.headingDeg, ns.speedKmh, ns.routeBearingDeg);
     renderNavHud(ns);
-    updateRiderMarker(ns.lat, ns.lon, ns.courseDeg);
+    updateRiderMarker(ns.lat, ns.lon, ns.courseDeg, ns.accuracy);
     dropPassedTargets(ns.distanceAlong);
     RC.groupui.pushFix({ lat: ns.lat, lon: ns.lon, speedKmh: ns.speedKmh,
                          courseDeg: ns.courseDeg, accuracy: ns.accuracy });
   };
-  RC.nav.onArrive = function () { setStatus("You've arrived.", ""); flashStatus(5000); stopNav(); };
+  RC.nav.onArrive = function () {
+    RC.guide.arrived(ride.dest);
+    stopNav({ arrived: true });
+  };
   RC.nav.onOffRoute = function (ns) {
-    var alertEl = RC.el("nav-alert");
     if (ns && ns.error) { setStatus(ns.error, "error"); return; }
-    if (alertEl && ns) {
-      alertEl.hidden = false;
-      alertEl.setAttribute("data-level", "caution");
-      alertEl.innerHTML = RC.icons.ui("alert") + "<span>You're off the planned route.</span>";
-    }
+    if (ns) setAlert("caution", "You're off the planned route.");
   };
   RC.nav.onReroute = reroute;
   RC.nav.onWeatherRefresh = refreshDownstreamWeather;
@@ -2649,7 +3510,7 @@
   RC.free.onUpdate = function (fs) {
     RC.compass.setCourse(fs.headingDeg, fs.speedKmh, null);
     renderFreeHud(fs);
-    updateRiderMarker(fs.lat, fs.lon, fs.courseDeg);
+    updateRiderMarker(fs.lat, fs.lon, fs.courseDeg, fs.accuracy);
     RC.groupui.pushFix({ lat: fs.lat, lon: fs.lon, speedKmh: fs.speedKmh,
                          courseDeg: fs.courseDeg, accuracy: fs.accuracy });
   };
@@ -2657,11 +3518,205 @@
   RC.free.onError = function (msg) { setStatus(msg, "error"); };
 
   /* ---------------------------------------------------------
+     Guidance, power, the lock — the You tab and the ride's own buttons
+     --------------------------------------------------------- */
+  function renderVoiceButtons() {
+    var on = RC.guide.settings().voice && RC.guide.canSpeak();
+    ["nav-voice", "free-voice"].forEach(function (id) {
+      var b = RC.el(id);
+      if (!b) return;
+      b.innerHTML = RC.icons.ui(on ? "speaker" : "speaker-off");
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      b.title = on ? "Voice on — tap to silence" : "Voice off — tap to hear guidance";
+      b.hidden = !RC.guide.canSpeak();
+    });
+  }
+
+  function toggleVoice() {
+    var on = !RC.guide.settings().voice;
+    RC.guide.set("voice", on);
+    if (on) { RC.guide.prime(); RC.guide.say("Voice on."); }
+    renderVoiceButtons();
+    renderGuidePanel();
+  }
+
+  function renderGuidePanel() {
+    var s = RC.guide.settings();
+    var v = RC.el("guide-voice"), b = RC.el("guide-buzz"), br = RC.el("guide-break"), note = RC.el("guide-note");
+    if (v) { v.checked = s.voice; v.disabled = !RC.guide.canSpeak(); }
+    if (b) { b.checked = s.buzz; b.disabled = !RC.guide.canBuzz(); }
+    if (br) br.value = String(s.breakMin);
+    if (note) {
+      note.textContent = !RC.guide.canSpeak() ? "This browser has no voice to speak with."
+        : !RC.guide.canBuzz() ? "This phone cannot vibrate from a web page; the voice still works."
+        : "";
+    }
+  }
+
+  function renderPowerPanel() {
+    var mode = RC.power.mode();
+    var segs = document.querySelectorAll("[data-power-mode]");
+    for (var i = 0; i < segs.length; i++) {
+      segs[i].setAttribute("aria-pressed", segs[i].getAttribute("data-power-mode") === mode ? "true" : "false");
+    }
+    var note = RC.el("power-note");
+    if (!note) return;
+    var b = RC.power.battery();
+    var pct = b ? Math.round(b.level * 100) + "%" : null;
+    if (RC.power.saving()) {
+      note.textContent = RC.power.isAuto()
+        ? "Saving now — the battery is at " + pct + " and not charging."
+        : "Saving: a calmer camera, flat buildings, fewer refreshes.";
+    } else if (mode === "auto") {
+      note.textContent = b ? "Waiting. Starts by itself at 20% — now " + pct + (b.charging ? ", charging." : ".")
+        : "This browser will not say how the battery is; use On to save.";
+    } else {
+      note.textContent = "Never saves, whatever the battery says.";
+    }
+  }
+
+  function setLockHint(raining) {
+    var btn = RC.el("ctl-lock");
+    if (btn) btn.setAttribute("data-hint", raining ? "rain" : "none");
+  }
+
+  function openDashSettings() {
+    openPanel("you");
+    var dash = RC.el("dash-panel");
+    if (dash && dash.scrollIntoView) { try { dash.scrollIntoView({ block: "start" }); } catch (e) {} }
+  }
+
+  /* An ETA is the thing people at the other end actually want, and a phone
+     can say it in one line to whoever the rider picks — nothing is sent
+     anywhere else, and there is no link to a live position to leak. */
+  function shareEta() {
+    var route = state.routes[state.routeIndex];
+    if (!route) return;
+    var end = state.endpoints[state.endpoints.length - 1];
+    var dest = ride.dest || (end && end.place && end.place.name) || "my destination";
+    var live = RC.nav.isActive() && ride.last && ride.last.etaDate;
+    var eta = live ? ride.last.etaDate : new Date(state.departAt.getTime() + route.duration * 1000);
+    var left = live ? ride.last.remainingM : route.distance;
+    var text = (live ? "On my way to " : "Heading to ") + dest + " — arriving about " + RC.fmtTime(eta) +
+      (RC.fmtDay(eta) === "Today" ? "" : " " + RC.fmtDay(eta).toLowerCase()) +
+      " (" + RC.fmtDist(left, state.units) + " to go).";
+    if (navigator.share) {
+      navigator.share({ title: "My ETA", text: text }).catch(function () {});
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        setStatus("ETA copied — paste it anywhere.", "");
+        flashStatus(3000);
+      }, function () { setStatus(text, ""); flashStatus(8000); });
+    } else {
+      setStatus(text, "");
+      flashStatus(8000);
+    }
+  }
+
+  function initRideUi() {
+    RC.hud.init({
+      units: function () { return state.units; },
+      onLayout: updateBottomVar,
+      onChange: updateBottomVar,
+      openSettings: openDashSettings
+    });
+    RC.guide.init({
+      units: function () { return state.units; },
+      toast: function (msg, level) { setStatus(msg, level); flashStatus(7000); },
+      onChange: function () { renderVoiceButtons(); renderGuidePanel(); }
+    });
+    RC.lock.init();
+
+    ["nav-voice", "free-voice"].forEach(function (id) {
+      var b = RC.el(id);
+      if (b) b.addEventListener("click", toggleVoice);
+    });
+    RC.el("ctl-lock").addEventListener("click", function () { RC.lock.lock(); });
+
+    RC.el("guide-voice").addEventListener("change", function () {
+      RC.guide.set("voice", this.checked);
+      if (this.checked) RC.guide.prime();
+    });
+    RC.el("guide-buzz").addEventListener("change", function () {
+      RC.guide.set("buzz", this.checked);
+      if (this.checked) RC.guide.buzz([60, 60, 60]);
+    });
+    RC.el("guide-break").addEventListener("change", function () { RC.guide.set("breakMin", parseInt(this.value, 10) || 0); });
+    RC.el("guide-test").addEventListener("click", function () {
+      RC.guide.prime();
+      var said = RC.guide.say(RC.guide.phraseFar({ text: "Turn left onto Rizal Avenue" }, 300));
+      RC.guide.buzz([80, 70, 80]);
+      if (!said) { setStatus(RC.guide.settings().voice ? "No voice available here." : "Speaking is switched off.", ""); flashStatus(); }
+    });
+
+    var bg = RC.el("background-panel");
+    if (bg) bg.addEventListener("click", function (e) {
+      var seg = e.target.closest ? e.target.closest("[data-power-mode]") : null;
+      if (seg) { RC.power.setMode(seg.getAttribute("data-power-mode")); renderPowerPanel(); }
+    });
+    RC.power.on("change", function (d) {
+      renderPowerPanel();
+      // Said once, when the phone decided on its own: a choppier camera
+      // deserves a reason.
+      if (d && d.auto && state.mode !== "plan") {
+        setStatus("Battery low — saver on: calmer camera, flat buildings.", "watch");
+        flashStatus(6000);
+      }
+    });
+    RC.power.on("battery", renderPowerPanel);
+
+    var az = RC.el("drive-autozoom");
+    if (az) {
+      az.checked = RC.layers.autoZoom();
+      az.addEventListener("change", function () { RC.layers.setAutoZoom(this.checked); });
+    }
+
+    RC.el("recap-close").addEventListener("click", RC.recap.hide);
+    RC.el("recap-done").addEventListener("click", RC.recap.hide);
+    RC.el("recap-share").addEventListener("click", function () {
+      RC.recap.share().then(function (r) {
+        if (r === "saved") { setStatus("Picture saved.", ""); flashStatus(); }
+        else if (r === "failed") { setStatus("Could not draw the picture here.", "error"); flashStatus(); }
+      });
+    });
+    RC.el("share-eta").addEventListener("click", shareEta);
+
+    RC.el("quick").addEventListener("click", function (e) {
+      var m = e.target.closest ? e.target.closest("[data-quick-mark]") : null;
+      if (m) { quickToMark(m.getAttribute("data-quick-mark")); return; }
+      var r = e.target.closest ? e.target.closest("[data-quick-route]") : null;
+      if (r) loadSavedRoute(r.getAttribute("data-quick-route"));
+    });
+
+    initProfileScrub();
+
+    /* The rider marker glides between fixes, but must not glide after a
+       zoom: every marker is repositioned when the scale changes, and a
+       transition would slide it across the screen from where it used to
+       be. So the glide is suspended from the moment a zoom starts. */
+    var container = map.getContainer();
+    var settleZoom = null;
+    map.on("zoomstart viewreset", function () {
+      container.classList.add("rc-zooming");
+      if (settleZoom) { clearTimeout(settleZoom); settleZoom = null; }
+    });
+    map.on("zoomend viewreset", function () {
+      if (settleZoom) clearTimeout(settleZoom);
+      settleZoom = setTimeout(function () { settleZoom = null; container.classList.remove("rc-zooming"); }, 80);
+    });
+
+    renderVoiceButtons();
+    renderGuidePanel();
+    renderPowerPanel();
+  }
+
+  /* ---------------------------------------------------------
      Wiring
      --------------------------------------------------------- */
   function init() {
     initMap();
     initPick();
+    initRideUi();
 
     state.endpoints = [
       makeEndpoint("from", RC.el("from-input"), RC.el("from-results")),
@@ -2803,6 +3858,7 @@
     document.addEventListener("keydown", function (e) {
       if (e.key !== "Escape") return;
       if (RC.pick.isActive()) return;         // the picker owns Escape
+      if (RC.recap.isOpen()) { RC.recap.hide(); return; }
       if (isPanelOpen()) { closePanel(); return; }
       state.selected = -1;
       drawWeatherMarkers();
@@ -2818,6 +3874,10 @@
     window.addEventListener("resize", onViewportChange);
     window.addEventListener("orientationchange", onViewportChange);
 
+    /* One card for anything tapped on the map — a mate, a stranger, a pin.
+       Before the two modules that fill it. */
+    RC.who.init(map);
+
     /* The room is its own thing drawn over the same map. It gets the handful of
        app-level answers it cannot work out for itself and nothing else. */
     RC.groupui.init({
@@ -2828,6 +3888,7 @@
       avoidMotorways: function () { return state.avoidMotorways; },
       currentPlan: currentPlanForGroup,
       driveRoute: driveRoute,
+      planTo: planFromHere,
       setStatus: setStatus,
       flashStatus: flashStatus,
       openPanel: openPanel,
@@ -2851,7 +3912,15 @@
         // but the panel wants a distance the moment the pane is opened.
         return RC.group.myFix() || lastOwnFix;
       },
-      openPubs: function () { openPanel("pubs"); }
+      openPubs: function () { openPanel("pubs"); },
+      closePanel: closePanel,
+      isPanelOpen: isPanelOpen,
+      // Alerts about the road ahead are for a rider who is riding.
+      mode: function () { return state.mode; },
+      vehicle: function () { return state.vehicle; },
+      // The room's own notice line, so the map has one toast rather than two
+      // that land on top of each other.
+      toast: function (msg, kind) { RC.groupui.toast(msg, kind); }
     });
 
     /* The heat map is a second reading of the same record the planner uses,

@@ -158,10 +158,10 @@ section("Static: SVG well-formedness");
      so it is executed instead and every glyph it can return is parsed —
      including the two fallbacks, which are the ones nobody ever looks at. */
   var iconCtx = sandbox(true);
-  var names = { weather: [], ui: [] };
+  var names = { weather: [], ui: [], turn: [] };
   var iconSrc = read("static/js/icons.js");
-  ["weatherIcons", "uiIcons"].forEach(function (varName) {
-    var key = varName === "weatherIcons" ? "weather" : "ui";
+  ["weatherIcons", "uiIcons", "turnIcons"].forEach(function (varName) {
+    var key = varName === "weatherIcons" ? "weather" : varName === "turnIcons" ? "turn" : "ui";
     var block = iconSrc.slice(iconSrc.indexOf("var " + varName + " = {"));
     var re = /\n\s{4}"?([a-z-]+)"?:\s/g, m;
     while ((m = re.exec(block))) {
@@ -169,7 +169,7 @@ section("Static: SVG well-formedness");
       names[key].push(m[1]);
     }
   });
-  ["weather", "ui"].forEach(function (kind) {
+  ["weather", "ui", "turn"].forEach(function (kind) {
     names[kind].concat(["definitely-not-an-icon"]).forEach(function (name) {
       var svg = iconCtx.RC.icons[kind](name);
       count++;
@@ -181,9 +181,9 @@ section("Static: SVG well-formedness");
 
   check("every inline SVG is well formed (" + count + " checked, " + interpolated +
         " built at run time)", problems.length === 0, problems.slice(0, 5).join("; "));
-  check("the icon set covers weather and UI",
-        names.weather.length >= 9 && names.ui.length >= 15,
-        names.weather.length + " weather, " + names.ui.length + " ui");
+  check("the icon set covers weather, UI and every kind of turn",
+        names.weather.length >= 9 && names.ui.length >= 15 && names.turn.length >= 15,
+        names.weather.length + " weather, " + names.ui.length + " ui, " + names.turn.length + " turns");
   check("an unknown icon name still returns a drawable glyph",
         iconCtx.RC.icons.ui("nope").indexOf("<svg") === 0 &&
         iconCtx.RC.icons.weather("nope").indexOf("<svg") === 0);
@@ -330,6 +330,52 @@ section("Static: the info sheet");
   }
   check("no hint in the panel has grown back into a paragraph",
         long.length === 0, long.join(" | "));
+})();
+
+section("Static: sub-tabs and the road's glyphs");
+(function () {
+  var html = read("index.html");
+
+  /* A sub-tab button with no pane is a tab that shows nothing, and a pane with
+     no button is a part of the app nobody can reach. RC.subtabs pairs them by
+     name alone, so the pairing is checked here, strip by strip. */
+  var strips = {};
+  var rs = /data-subtabs="([a-z-]+)"([\s\S]*?)<\/div>/g, ms;
+  while ((ms = rs.exec(html))) {
+    var keys = [], rb = /data-sub="([a-z-]+)"/g, mb;
+    while ((mb = rb.exec(ms[2]))) keys.push(mb[1]);
+    strips[ms[1]] = keys;
+  }
+  check("the Ride and Pubs panes have sub-tabs", !!strips.group && !!strips.pubs, Object.keys(strips).join(", "));
+  var panes = {}, rp = /data-sub-pane="([a-z-]+):([a-z-]+)"/g, mp;
+  while ((mp = rp.exec(html))) (panes[mp[1]] = panes[mp[1]] || []).push(mp[2]);
+  var lonely = [];
+  Object.keys(strips).forEach(function (name) {
+    strips[name].forEach(function (k) { if ((panes[name] || []).indexOf(k) < 0) lonely.push(name + ":" + k + " has no pane"); });
+    (panes[name] || []).forEach(function (k) { if (strips[name].indexOf(k) < 0) lonely.push(name + ":" + k + " has no button"); });
+  });
+  Object.keys(panes).forEach(function (name) { if (!strips[name]) lonely.push(name + " has panes and no strip"); });
+  check("every sub-tab has a pane and every pane a sub-tab", lonely.length === 0, lonely.join(", "));
+
+  /* Every kind of road report and every marker a stranger can pick has to be
+     a real glyph: the fallback is a circle with an exclamation mark in it,
+     which on a map pin reads as a hazard whatever it was meant to be. */
+  var icons = sandbox(true).RC.icons;
+  var pubs = sandbox().RC.pubs;
+  var fallback = icons.ui("no-such-glyph");
+  var noGlyph = pubs.REPORT_KINDS.filter(function (k) { return icons.ui(k) === fallback; });
+  check("every report kind has its own glyph", pubs.REPORT_KINDS.length === 6 && noGlyph.length === 0,
+        noGlyph.join(", ") || String(pubs.REPORT_KINDS.length));
+  var ui = read("static/js/pubsui.js");
+  var m = /var AVATAR_ICON = \{([^}]*)\}/.exec(ui);
+  var map = {};
+  if (m) m[1].replace(/(\w+):\s*"([\w-]+)"/g, function (_, k, v) { map[k] = v; });
+  var missing = pubs.AVATARS.filter(function (a) { return !map[a] || icons.ui(map[a]) === fallback; });
+  check("every marker a stranger can pick is drawn", pubs.AVATARS.length > 0 && missing.length === 0,
+        missing.join(", "));
+  var kindsInUi = (ui.match(/\{ kind: "[a-z]+"/g) || []).length;
+  check("the report buttons cover every kind the area carries", kindsInUi === pubs.REPORT_KINDS.length,
+        kindsInUi + " vs " + pubs.REPORT_KINDS.length);
 })();
 
 section("Static: the basemaps");
@@ -531,6 +577,14 @@ section("Static: theme tokens");
     // by groupui.js from the room's palette; --pub is the same idea for a
     // stranger on the public road, written by pubsui.js.
     if (t === "--rider" || t === "--pub") return false;
+    // --who is the colour of whoever is on the tapped card, written by who.js
+    // from the rider's or stranger's own colour.
+    if (t === "--who") return false;
+    // --rc-dock-h is the dock's measured height (app.js, updateBottomVar),
+    // --acc the rider's GPS error circle in pixels (app.js), and --i an
+    // element's place in a staggered entrance, written inline by whatever
+    // builds the list (hud.js, recap.js, the quick destinations).
+    if (t === "--rc-dock-h" || t === "--acc" || t === "--i") return false;
     return !declared[t];
   });
   check("every var(--token) is defined", undef.length === 0, undef.join(", "));
@@ -1570,6 +1624,364 @@ section("Behaviour: what a PUB is allowed to be");
         blunt(14.59952345) === 14.5995, "got " + blunt(14.59952345));
   check("rounding is to about ten metres, not to a suburb",
         Math.abs(blunt(14.59952345) - 14.59952345) < 0.0001);
+})();
+
+section("Behaviour: the area talks, and nobody talks for anybody else");
+(function () {
+  /* Three phones in one area, on a broker that lives in this process. The
+     clock is a queue this test turns by hand, so the seven-second wait for an
+     existing hub costs nothing and the order things happen in is exact. */
+  var timers = [], seq = 0;
+  function fakeTimeout(fn, ms) { var id = ++seq; timers.push({ id: id, fn: fn, at: ms || 0 }); return id; }
+  function fakeClear(id) { timers = timers.filter(function (t) { return t.id !== id; }); }
+  function flush() {
+    var guard = 0;
+    while (timers.length && guard++ < 50) {
+      timers.sort(function (a, b) { return a.at - b.at; });
+      timers.shift().fn();
+    }
+  }
+  function copy(o) { return JSON.parse(JSON.stringify(o)); }
+
+  var rooms = {}, conn = 0;
+  var bus = {
+    normalizeCode: function (c) { return String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6); },
+    host: function (code, opts) {
+      var on = opts.on || {};
+      if (rooms[code]) { fakeTimeout(function () { if (on["code-taken"]) on["code-taken"](); }); return { stop: function () {}, broadcast: function () {}, guests: function () { return []; } }; }
+      var links = {};
+      var h = {
+        broadcast: function (o) { Object.keys(links).forEach(function (k) { links[k].send(o); }); },
+        guests: function () { return Object.keys(links).map(function (k) { return links[k]; }); },
+        stop: function () { if (rooms[code] && rooms[code].h === h) delete rooms[code]; }
+      };
+      rooms[code] = { h: h, on: on, links: links };
+      return h;
+    },
+    join: function (code, cb) {
+      var r = rooms[code];
+      var id = "L" + (++conn);
+      if (!r) return { send: function () {}, stop: function () {} };
+      var link = { id: id, send: function (o) { cb.message(copy(o)); } };
+      r.links[id] = link;
+      fakeTimeout(function () { cb.open(); });
+      return {
+        send: function (o) { if (rooms[code] === r) r.on["guest-message"](link, copy(o)); },
+        stop: function () { delete r.links[id]; }
+      };
+    }
+  };
+
+  function phone(name, lat, lon) {
+    var ctx = sandbox();
+    ctx.setTimeout = fakeTimeout;
+    ctx.clearTimeout = fakeClear;
+    ctx.navigator.geolocation = {
+      getCurrentPosition: function (ok) { ok({ coords: { latitude: lat, longitude: lon } }); },
+      watchPosition: function () { return 1; },
+      clearWatch: function () {}
+    };
+    var RC = ctx.RC;
+    RC.net = bus;
+    var said = { shouts: [], beeps: [], reports: [] };
+    RC.pubs.onShout = function (l) { said.shouts.push(l); };
+    RC.pubs.onBeep = function (b) { said.beeps.push(b); };
+    RC.pubs.onReport = function (r) { said.reports.push(r); };
+    RC.pubs.start(name);
+    return { RC: RC, said: said };
+  }
+
+  var hub = phone("Hub", 14.60, 121.00);
+  flush();                                   // nobody answered: it holds the area
+  var ana = phone("Ana", 14.6004, 121.0004);
+  var ben = phone("Ben", 14.602, 121.002);
+  flush();
+  check("the first phone in an area holds it", hub.RC.pubs.role() === "host");
+  check("the next ones join it", ana.RC.pubs.role() === "guest" && ben.RC.pubs.role() === "guest");
+
+  // Everybody says HI once the way the timer would.
+  hub.RC.pubs.setAvatar("moto");
+  ana.RC.pubs.setAvatar("car");
+  ben.RC.pubs.setAvatar("not-a-glyph");
+  flush();
+  hub.RC.pubs._tick();
+  var seen = ana.RC.pubs.world();
+  check("a guest sees the rest of the area", seen.length === 2, seen.length + " people");
+  var hubDot = seen.filter(function (p) { return p.name === "Hub"; })[0];
+  check("and the glyph each one chose", hubDot && hubDot.av === "moto");
+  check("a glyph that is not ours is nobody's",
+        ben.RC.pubs.avatar() === null && seen.every(function (p) { return p.name !== "Ben" || p.av === null; }));
+
+  // Shouts.
+  check("a shout is accepted", ana.RC.pubs.shout("Anyone riding to Tagaytay?"));
+  var benHeard = ben.said.shouts.filter(function (l) { return !l.mine; });
+  check("everybody else hears it", benHeard.length === 1 && benHeard[0].name === "Ana" &&
+        hub.said.shouts.length === 1);
+  check("it is attributed to the rider it came from", benHeard[0] && benHeard[0].from === ana.RC.pubs.myId());
+  check("the shouter sees their own line once, not echoed twice",
+        ana.said.shouts.length === 1 && ana.said.shouts[0].mine);
+  check("a second shout straight after is refused", !ana.RC.pubs.shout("again"));
+  check("a shout is capped at a bubble's length",
+        ana.RC.pubs._clean.shout(new Array(300).join("z")).length <= ana.RC.pubs.SHOUT_MAX);
+
+  // Beeps are addressed: only the target hears one.
+  check("a beep is sent", ben.RC.pubs.beep(ana.RC.pubs.myId()));
+  check("the rider it was for hears it", ana.said.beeps.length === 1 && ana.said.beeps[0].name === "Ben");
+  check("nobody else does", hub.said.beeps.length === 0);
+  check("and the horn cannot be leaned on", !ben.RC.pubs.beep(ana.RC.pubs.myId()));
+
+  // Reports.
+  check("a report is accepted", ana.RC.pubs.report("crash"));
+  var pins = ben.RC.pubs.reports();
+  check("the area carries it", pins.length === 1 && pins[0].kind === "crash" && pins[0].by === "Ana", JSON.stringify(pins));
+  check("the other riders are told once", ben.said.reports.length === 1 && hub.said.reports.length === 1);
+  check("the reporter is not told about their own pin", ana.said.reports.length === 0);
+  check("the reporter's own copy knows it is theirs", ana.RC.pubs.reports()[0].mine === true);
+  check("a kind we do not draw is refused", !ben.RC.pubs.report("ufo"));
+
+  // The same thing reported again nearby is a confirmation, not a second pin.
+  hub.RC.pubs.report("crash");
+  check("the same crash reported twice is one pin", ben.RC.pubs.reports().length === 1);
+  check("seen twice", ben.RC.pubs.reports()[0].ups === 2, "ups=" + ben.RC.pubs.reports()[0].ups);
+
+  // Voting it away.
+  var pin = ben.RC.pubs.reports()[0].id;
+  check("a rider can say it is gone", ben.RC.pubs.vote(pin, false));
+  check("once", !ben.RC.pubs.vote(pin, false));
+  check("one vote against two sightings does not end it", ben.RC.pubs.reports().length === 1);
+  check("the reporter can take their own pin back", ana.RC.pubs.vote(pin, false) &&
+        ben.RC.pubs.reports().length === 0);
+
+  // A pin placed somewhere the reporter is not is refused by the hub.
+  var hubRC = hub.RC;
+  var before = hubRC.pubs.reports().length;
+  hubRC.pubs._hubReportAs(ana.RC.pubs.myId(), { kind: "flood", lat: 15.5, lon: 121.0 });
+  check("a pin far from its reporter is refused", hubRC.pubs.reports().length === before);
+
+  // Nobody can wear somebody else's id while that somebody is still talking.
+  hubRC.pubs._hiAs("Lx", { id: ana.RC.pubs.myId(), name: "Not Ana", lat: 14.7, lon: 121.1 });
+  hub.RC.pubs._tick();
+  var anaNow = ben.RC.pubs.world().filter(function (p) { return p.id === ana.RC.pubs.myId(); })[0];
+  check("a second link cannot take over a rider's marker", anaNow && anaNow.name === "Ana",
+        anaNow ? anaNow.name : "gone");
+
+  // Ignoring somebody takes their words and pins with them.
+  ana.RC.pubs.report("flood");
+  ben.RC.pubs.block(ana.RC.pubs.myId());
+  check("an ignored rider's pins disappear", ben.RC.pubs.reports().every(function (r) { return r.byId !== ana.RC.pubs.myId(); }));
+  check("and so do their lines", ben.RC.pubs.shouts().every(function (l) { return l.from !== ana.RC.pubs.myId(); }));
+
+  hub.RC.pubs.stop(); ana.RC.pubs.stop(); ben.RC.pubs.stop();
+})();
+
+/* A context for the modules the main sandbox does not load: the forecast
+   and risk arithmetic, the voice, the dashboard's catalogue, the ride card
+   and the battery saver. Speech is a recorder, so what the guide SAYS is
+   what gets checked. */
+function rideSandbox(opts) {
+  opts = opts || {};
+  var ctx = sandbox();
+  ctx.__said = [];
+  ctx.speechSynthesis = {
+    speak: function (u) { ctx.__said.push(u.text); },
+    cancel: function () {}
+  };
+  ctx.SpeechSynthesisUtterance = function (t) { this.text = t; };
+  ctx.navigator.vibrate = function () { return true; };
+  if (opts.battery) ctx.navigator.getBattery = function () { return Promise.resolve(opts.battery); };
+  ["weather.js", "risk.js", "icons.js", "guide.js", "hud.js", "recap.js", "power.js"].forEach(function (f) {
+    vm.runInContext(read("static/js/" + f), ctx, { filename: f });
+  });
+  return ctx;
+}
+
+section("Behaviour: the sun and the wind, read off the forecast");
+(function () {
+  var RC = rideSandbox().RC;
+  /* A Manila day in UTC: sunset at 09:55, sunrise at 21:45 — which is the
+     next LOCAL morning. The timeline has to answer correctly without caring
+     which UTC day each event was filed under. */
+  var sun = RC.weather._parseSun({
+    sunrise: ["2026-09-26T21:45", "2026-09-27T21:45"],
+    sunset: ["2026-09-26T09:55", "2026-09-27T09:55"]
+  });
+  var entry = { sun: sun };
+  var noon = RC.weather._sunAt(entry, new Date("2026-09-26T04:00Z"));
+  check("mid-morning is daylight, with sunset next", noon.dark === false && noon.next.kind === "sunset",
+        JSON.stringify(noon));
+  var night = RC.weather._sunAt(entry, new Date("2026-09-26T14:00Z"));
+  check("late evening is dark, with sunrise next", night.dark === true && night.next.kind === "sunrise");
+  check("with no sun timeline the answer is 'unknown', not a guess",
+        RC.weather._sunAt({ sun: [] }, new Date()).dark === null);
+
+  var mid = RC.weather._lerpAngle(350, 10, 0.5);
+  check("wind direction is averaged on the shortest arc", mid < 0.001 || mid > 359.999, "got " + mid);
+
+  var t0 = Date.UTC(2026, 8, 26, 0, 0);
+  var times = [], precip = [];
+  for (var h = 0; h < 8; h++) { times.push(new Date(t0 + h * 3600000)); precip.push(h === 3 ? 1.2 : 0); }
+  var rainEntry = { times: times, precipitation: precip, temperature_2m: precip.map(function () { return 28; }),
+    apparent_temperature: precip.map(function () { return 30; }), precipitation_probability: precip,
+    weather_code: precip.map(function () { return 3; }), wind_speed_10m: precip, wind_gusts_10m: precip,
+    relative_humidity_2m: precip, cloud_cover: precip, visibility: precip, is_day: precip };
+  var next = RC.weather._nextRain(rainEntry, new Date(t0 + 30 * 60000), 6);
+  check("the next rain is found in the hours ahead", !next.now && next.at &&
+        next.at.getTime() === t0 + 2.5 * 3600000, next.at && next.at.toISOString());
+  check("and rain already falling is 'now'",
+        RC.weather._nextRain(rainEntry, new Date(t0 + 3 * 3600000), 6).now === true);
+
+  var head = RC.risk.wind(0, 0, 40), right = RC.risk.wind(90, 0, 40), tail = RC.risk.wind(180, 0, 40),
+      left = RC.risk.wind(270, 0, 40);
+  check("a wind from dead ahead is a headwind", head.kind === "head" && Math.round(head.headKmh) === 40);
+  check("a wind from the east, riding north, hits from the right", right.kind === "cross" && right.side === "right");
+  check("and from the west, from the left", left.kind === "cross" && left.side === "left");
+  check("a wind from behind is a tailwind", tail.kind === "tail");
+  check("no direction, no verdict", RC.risk.wind(null, 0, 40) === null);
+})();
+
+section("Behaviour: what the guide says, and when");
+(function () {
+  var ctx = rideSandbox();
+  var RC = ctx.RC;
+  var G = RC.guide;
+  G.init({ units: function () { return "metric"; } });
+
+  check("distances are said the way people say them",
+        G.spokenDistance(287, "metric") === "300 metres" && G.spokenDistance(1450, "metric") === "1.5 kilometres" &&
+        G.spokenDistance(62, "metric") === "60 metres",
+        [G.spokenDistance(287, "metric"), G.spokenDistance(1450, "metric"), G.spokenDistance(62, "metric")].join(" | "));
+  check("and in miles and feet for imperial",
+        G.spokenDistance(150, "imperial") === "500 feet" && G.spokenDistance(800, "imperial") === "half a mile",
+        G.spokenDistance(150, "imperial") + " | " + G.spokenDistance(800, "imperial"));
+
+  var kinds = [
+    [{ type: "turn", modifier: "right" }, "right"], [{ type: "turn", modifier: "sharp left" }, "sharp-left"],
+    [{ type: "end of road", modifier: "slight right" }, "slight-right"], [{ type: "turn", modifier: "uturn" }, "uturn"],
+    [{ type: "roundabout", modifier: "right" }, "roundabout"], [{ type: "rotary", modifier: "left" }, "roundabout-left"],
+    [{ type: "roundabout", modifier: "straight" }, "roundabout-straight"], [{ type: "fork", modifier: "slight left" }, "fork-left"],
+    [{ type: "off ramp", modifier: "right" }, "ramp-right"], [{ type: "merge", modifier: "left" }, "merge"],
+    [{ type: "new name", modifier: "straight" }, "straight"], [{ type: "arrive" }, "arrive"]
+  ];
+  var wrong = kinds.filter(function (k) { return G.kind(k[0]) !== k[1]; })
+    .map(function (k) { return JSON.stringify(k[0]) + " -> " + G.kind(k[0]); });
+  check("each manoeuvre is the arrow a road sign would draw", wrong.length === 0, wrong.join(", "));
+  var fallback = RC.icons.turn("definitely-not-a-turn");
+  var missing = kinds.filter(function (k) { return k[1] !== "straight" && RC.icons.turn(k[1]) === fallback; })
+    .map(function (k) { return k[1]; });
+  check("and every one of them has its own glyph", missing.length === 0, missing.join(", "));
+
+  check("two manoeuvres close together are one instruction",
+        G.phraseNow({ text: "Turn right onto Rizal Avenue", then: { text: "Turn left onto Taft Avenue", gapM: 80 } }) ===
+        "Turn right onto Rizal Avenue, then turn left onto Taft Avenue.");
+
+  G.begin({ mode: "nav" });
+  ctx.__said.length = 0;
+  G.introduce("14.64000, 121.04000", 11000, "6:29 AM");
+  check("a destination set by coordinate is not read out as numbers",
+        ctx.__said.length === 1 && ctx.__said[0].indexOf("your destination") > -1 && ctx.__said[0].indexOf("14.64") < 0,
+        ctx.__said[0]);
+
+  // Approaching one right turn at 50 km/h, a fix every 100 metres.
+  ctx.__said.length = 0;
+  var step = { index: 3, text: "Turn right onto Aurora Boulevard", type: "turn", modifier: "right" };
+  for (var d = 900; d >= 0; d -= 30) {
+    step.distanceM = d;
+    G.nav({ nextStep: step, displaySpeedKmh: 50, elapsedS: 60 }, "car");
+  }
+  check("a turn is announced twice: early, and as it arrives",
+        ctx.__said.length === 2 && ctx.__said[0].indexOf("In ") === 0 && ctx.__said[1] === "Turn right onto Aurora Boulevard.",
+        JSON.stringify(ctx.__said));
+
+  ctx.__said.length = 0;
+  var rename = { index: 4, text: "Continue onto Katipunan Avenue", type: "new name", modifier: "straight" };
+  for (var d2 = 900; d2 >= 0; d2 -= 30) {
+    rename.distanceM = d2;
+    G.nav({ nextStep: rename, displaySpeedKmh: 50, elapsedS: 60 }, "car");
+  }
+  check("a road changing its name is not announced at all", ctx.__said.length === 0, JSON.stringify(ctx.__said));
+
+  G.end();
+  G.set("breakMin", 60);
+  G.begin({ mode: "free" });
+  ctx.__said.length = 0;
+  G.free({ elapsedS: 3500 });
+  G.free({ elapsedS: 3620 });
+  G.free({ elapsedS: 3700 });
+  check("a break is suggested once per interval of riding",
+        ctx.__said.length === 1 && /riding for 1 hour/.test(ctx.__said[0]), JSON.stringify(ctx.__said));
+  G.end();
+
+  G.set("voice", false);
+  G.begin({ mode: "nav" });
+  ctx.__said.length = 0;
+  step.index = 9; step.distanceM = 60;
+  G.nav({ nextStep: step, displaySpeedKmh: 50, elapsedS: 60 }, "car");
+  check("switched off, it says nothing at all", ctx.__said.length === 0);
+})();
+
+section("Behaviour: the dashboard, the ride card and the battery saver");
+(function () {
+  var RC = rideSandbox().RC;
+  var ids = RC.hud.PODS.map(function (p) { return p.id; });
+  var dupes = ids.filter(function (id, i) { return ids.indexOf(id) !== i; });
+  check("every dashboard tile has its own name", dupes.length === 0, dupes.join(", "));
+
+  /* app.js works out the values and hud.js shows them, so a value written
+     under a name the dashboard does not know is a tile nobody can choose. */
+  var app = read("static/js/app.js");
+  var fed = {};
+  var rp = /pods\.(\w+)\s*=/g, mp;
+  while ((mp = rp.exec(app))) fed[mp[1]] = true;
+  var common = /function commonPods[\s\S]*?return \{([\s\S]*?)\n    \};/.exec(app);
+  if (common) {
+    var rk = /\n\s{6}(\w+):/g, mk;
+    while ((mk = rk.exec(common[1]))) fed[mk[1]] = true;
+  }
+  var unknown = Object.keys(fed).filter(function (k) { return ids.indexOf(k) < 0; });
+  check("app.js feeds only tiles the dashboard knows", Object.keys(fed).length >= 15 && unknown.length === 0,
+        unknown.join(", ") + " (" + Object.keys(fed).length + " fed)");
+  var starved = ids.filter(function (id) { return !fed[id]; });
+  check("and every tile the dashboard offers is fed", starved.length === 0, starved.join(", "));
+
+  // A ride due north, then due east: the sketch keeps north up and its shape.
+  var track = [];
+  for (var i = 0; i <= 10; i++) track.push([14.6 + i * 0.001, 121.0]);
+  for (var j = 1; j <= 10; j++) track.push([14.61, 121.0 + j * 0.001]);
+  var pts = RC.recap._project(track, 320, 150, 14);
+  var inside = pts.every(function (p) { return p[0] >= 13.9 && p[0] <= 306.1 && p[1] >= 13.9 && p[1] <= 136.1; });
+  check("the ride's sketch fits its box", inside);
+  check("and keeps north up: the start is below the corner",
+        pts[0][1] > pts[10][1] && Math.abs(pts[0][0] - pts[10][0]) < 0.5);
+  check("a ride too short to draw is not drawn", RC.recap._project([[14.6, 121]], 320, 150, 14) === null);
+
+  check("the battery saver is off by default where the battery will not say",
+        RC.power.mode() === "auto" && RC.power.saving() === false);
+  RC.power.setMode("on");
+  check("and on when asked", RC.power.saving() === true);
+  RC.power.setMode("off");
+
+  var low = rideSandbox({ battery: { level: 0.14, charging: false, addEventListener: function () {} } }).RC;
+  var charging = rideSandbox({ battery: { level: 0.14, charging: true, addEventListener: function () {} } }).RC;
+  Promise.resolve().then(function () { return null; }).then(function () {
+    check("Auto saves when the phone says it is low", low.power.saving() === true);
+    check("but not while it is charging", charging.power.saving() === false);
+  });
+})();
+
+section("Behaviour: a manoeuvre survives the trip to the screen");
+(function () {
+  var ctx = sandbox();
+  var RC = ctx.RC;
+  var r = fakeRoute(line(14.6, 121.0, 40, 50), 1 / 12);
+  r.steps = [{ text: "Turn left onto Taft Avenue", name: "Taft Avenue", distance: 900, duration: 75,
+               type: "turn", modifier: "left", exit: 0 }];
+  var cal = RC.eta.plan(r, new Date(Date.UTC(2026, 8, 26, 2)), "car").route;
+  check("calibrating an ETA keeps the manoeuvre, not just its sentence",
+        cal.steps[0].type === "turn" && cal.steps[0].modifier === "left", JSON.stringify(cal.steps[0]));
+  var round = RC.router._stepText({ name: "EDSA", maneuver: { type: "roundabout", modifier: "right", exit: 2 } });
+  check("a roundabout says which exit", round === "At the roundabout, take the 2nd exit onto EDSA", round);
+  check("and the 11th is not the 11st",
+        RC.router._stepText({ name: "", maneuver: { type: "rotary", exit: 11 } }) === "At the roundabout, take the 11th exit");
 })();
 
 /* ============================================================

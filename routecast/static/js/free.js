@@ -39,6 +39,8 @@ RC.free = (function () {
   // The local forecast: at most this often, and only after moving this far.
   var WX_INTERVAL_MS = 12 * 60 * 1000;
   var WX_DISTANCE_M = 5000;
+  // Doubled with the battery saver on, for the same reason navigation does.
+  function wxScale() { return (RC.power && RC.power.saving()) ? 2 : 1; }
 
   var st = null;
 
@@ -111,7 +113,8 @@ RC.free = (function () {
   function maybeFetchWeather(state, nowMs) {
     if (st.wxBusy) return;
     if (typeof RC.free.onWeather !== "function") return;
-    if (nowMs - st.lastWxTs < WX_INTERVAL_MS && st.distanceM - st.lastWxDistanceM < WX_DISTANCE_M) return;
+    if (nowMs - st.lastWxTs < WX_INTERVAL_MS * wxScale() &&
+        st.distanceM - st.lastWxDistanceM < WX_DISTANCE_M * wxScale()) return;
     if (!canGoOnline()) return;
     st.wxBusy = true;
     st.lastWxTs = nowMs;

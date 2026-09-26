@@ -364,10 +364,46 @@
     return Promise.resolve(results);
   }
 
+  /* ---------- the wind, relative to the road ----------
+     A forecast says where the wind comes FROM; a rider needs to know where
+     it hits. The same 40 km/h gust is a push in the back on one heading and
+     a shove toward the next lane on another, and for two wheels that
+     difference is the whole of the hazard. So the wind is split into the
+     part along the direction of travel (positive = headwind) and the part
+     across it (positive = from the right).
+
+     `rel` is the angle the wind arrives from, measured from straight ahead
+     and clockwise — 0 is a headwind, 90 from the right, 180 from behind —
+     which is also the rotation a HUD arrow needs to point where it blows. */
+  function windRelative(dirFrom, travelBearing, kmh) {
+    if (typeof dirFrom !== "number" || isNaN(dirFrom) ||
+        typeof travelBearing !== "number" || isNaN(travelBearing)) return null;
+    var rel = ((dirFrom - travelBearing) % 360 + 360) % 360;
+    var r = rel * Math.PI / 180;
+    var speed = typeof kmh === "number" ? kmh : 0;
+    var head = speed * Math.cos(r), cross = speed * Math.sin(r);
+    var kind = Math.abs(cross) >= Math.abs(head) ? "cross" : (head >= 0 ? "head" : "tail");
+    return {
+      rel: rel,
+      headKmh: head,
+      crossKmh: cross,
+      kind: kind,
+      side: cross >= 0 ? "right" : "left"
+    };
+  }
+
+  function windWords(w) {
+    if (!w) return "";
+    if (w.kind === "cross") return "across you, from the " + w.side;
+    return w.kind === "head" ? "in your face" : "behind you";
+  }
+
   RC.risk = {
     score: score,
     trip: trip,
     bestDeparture: bestDeparture,
+    wind: windRelative,
+    windWords: windWords,
     LEVELS: LEVELS
   };
 })();

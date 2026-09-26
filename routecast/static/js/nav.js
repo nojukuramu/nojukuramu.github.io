@@ -60,6 +60,13 @@ RC.nav = (function () {
 
   // Re-forecasting
   var WEATHER_REFRESH_MS = 15 * 60 * 1000; // downstream forecast refetch interval
+  // ...and with the battery saver on. A forecast half an hour old is still a
+  // good forecast; a radio woken every fifteen minutes is a real cost.
+  var WEATHER_REFRESH_SAVE_MS = 30 * 60 * 1000;
+
+  function refreshMs() {
+    return (RC.power && RC.power.saving()) ? WEATHER_REFRESH_SAVE_MS : WEATHER_REFRESH_MS;
+  }
 
   var st = null; // internal session state while navigating, null otherwise
 
@@ -157,7 +164,18 @@ RC.nav = (function () {
       // last step is "arrive", which has zero length and starts exactly at
       // the end, so it falls out of this naturally.
       if (starts[i] > distanceAlong + 1) {
-        return { text: steps[i].text, distanceM: starts[i] - distanceAlong, index: i };
+        /* And the one after it. Two turns a hundred metres apart are one
+           manoeuvre to a rider — the second has to be known before the first
+           is taken, or the lane is wrong by the time it is announced. */
+        var then = steps[i + 1] ? {
+          text: steps[i + 1].text, type: steps[i + 1].type || "", modifier: steps[i + 1].modifier || "",
+          gapM: steps[i].distance || 0
+        } : null;
+        return {
+          text: steps[i].text, distanceM: starts[i] - distanceAlong, index: i,
+          type: steps[i].type || "", modifier: steps[i].modifier || "", name: steps[i].name || "",
+          then: then
+        };
       }
     }
     return null;
@@ -311,7 +329,7 @@ RC.nav = (function () {
   function maybeRefreshWeather(state, nowMs) {
     if (st.weatherBusy) return;
     if (typeof RC.nav.onWeatherRefresh !== "function") return;
-    if (nowMs - st.lastWeatherRefreshTs < WEATHER_REFRESH_MS) return;
+    if (nowMs - st.lastWeatherRefreshTs < refreshMs()) return;
     if (!canGoOnline()) return;
     st.weatherBusy = true;
     st.lastWeatherRefreshTs = nowMs;

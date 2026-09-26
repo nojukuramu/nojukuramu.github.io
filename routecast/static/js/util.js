@@ -285,6 +285,64 @@ var RC = (function () {
 
   RC.clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
 
+  /* ---------- sub-tabs inside a pane ----------
+     A pane that has grown four jobs gets a strip of four buttons instead of
+     four screens of scrolling. The markup is the whole contract, so the Ride
+     tab and the Pubs tab behave identically and neither owns the idea:
+
+       <div data-subtabs="group"> <button data-sub="riders">…</button> … </div>
+       <div data-sub-pane="group:riders"> … </div>
+
+     The pane last chosen is remembered per strip, and a strip whose chosen
+     button has been hidden falls back to its first one rather than showing
+     an empty pane. */
+  RC.subtabs = function (name, onPick) {
+    var strip = document.querySelector('[data-subtabs="' + name + '"]');
+    var cur = null;
+    if (!strip) return { select: function () {}, current: function () { return null; } };
+
+    function select(key, quiet) {
+      var btns = strip.querySelectorAll("[data-sub]");
+      var ok = false;
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].getAttribute("data-sub") === key && !btns[i].hidden) ok = true;
+      }
+      if (!ok && btns.length) key = btns[0].getAttribute("data-sub");
+      cur = key;
+      for (var j = 0; j < btns.length; j++) {
+        var on = btns[j].getAttribute("data-sub") === key;
+        btns[j].setAttribute("aria-selected", on ? "true" : "false");
+        btns[j].tabIndex = on ? 0 : -1;
+      }
+      var panes = document.querySelectorAll('[data-sub-pane^="' + name + ':"]');
+      for (var k = 0; k < panes.length; k++) {
+        panes[k].hidden = panes[k].getAttribute("data-sub-pane") !== name + ":" + key;
+      }
+      RC.store.set("sub:" + name, key);
+      if (!quiet && typeof onPick === "function") onPick(key);
+    }
+
+    strip.addEventListener("click", function (e) {
+      var b = e.target.closest ? e.target.closest("[data-sub]") : null;
+      if (b) select(b.getAttribute("data-sub"));
+    });
+    // Arrow keys walk the strip, as a tab list should.
+    strip.addEventListener("keydown", function (e) {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      var btns = Array.prototype.filter.call(strip.querySelectorAll("[data-sub]"), function (b) { return !b.hidden; });
+      var at = -1;
+      for (var i = 0; i < btns.length; i++) if (btns[i].getAttribute("data-sub") === cur) at = i;
+      var next = btns[(at + (e.key === "ArrowRight" ? 1 : btns.length - 1)) % btns.length];
+      if (!next) return;
+      e.preventDefault();
+      select(next.getAttribute("data-sub"));
+      next.focus();
+    });
+
+    select(RC.store.get("sub:" + name, null), true);
+    return { select: select, current: function () { return cur; } };
+  };
+
   RC.escapeHtml = function (s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];

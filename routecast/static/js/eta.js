@@ -113,8 +113,10 @@ RC.eta = (function () {
       // re-integrated: they are used for display and for waypoint
       // boundaries, never for timing a checkpoint.
       steps: (route.steps || []).map(function (s) {
+        // The manoeuvre rides along: the turn arrow and the voice read it.
         return { text: s.text, name: s.name, ref: s.ref, distance: s.distance,
-                 duration: s.duration * mean, lat: s.lat, lon: s.lon };
+                 duration: s.duration * mean, lat: s.lat, lon: s.lon,
+                 type: s.type || "", modifier: s.modifier || "", exit: s.exit || 0 };
       }),
       legs: (route.legs || []).map(function (l) {
         return { distance: l.distance, duration: l.duration * mean };

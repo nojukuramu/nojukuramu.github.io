@@ -13,7 +13,17 @@
    2. the SUGGESTED ways back — grey, all of them, so the choice is visible
       rather than decided for you. The selected one is drawn over the top in
       the accent colour.
-   3. the RIDERS — one dot per member in their own colour, with a name.
+   3. each rider's TRAIL — a short tail of where they have just been, fading
+      out, so a dot on a map also says which road it is on and how it got
+      there.
+   4. the RIDERS — one dot per member in their own colour, with a name. Tap
+      one for a card (who.js): find them, ride to them, or — for the host —
+      remove them.
+
+   How much of that is drawn is the rider's own business and nobody else's:
+   names always / zoomed in / never, speeds on the labels, trails, the list
+   over the dashboard and the planned line itself are switches on the Map
+   sub-tab, kept on this phone only.
 
    The rule the rest of the app lives by holds here too: nothing grows into the
    middle of the viewport. The room is a tab in the planner, a button on the
@@ -34,12 +44,28 @@ RC.groupui = (function () {
   var TOAST_MS = 5200;
   var MEMBER_LABEL_ZOOM = 12;   // below this, dots only: names would be a wall
 
+  // A trail is the last few minutes, not the whole ride: enough to show which
+  // road somebody is on, short enough never to become a second route line.
+  var TRAIL_MS = 150000;
+  var TRAIL_MAX = 48;
+  var TRAIL_STEP_M = 12;
+
+  /* One-tap lines for the chat. Said at a fuel stop with gloves on, so each is
+     a whole sentence somebody would otherwise have to type. */
+  var SAYS = ["On my way", "Wait up", "Stopping for fuel", "All good", "Regroup at the next stop"];
+
+  var VIEW_DEFAULTS = { names: "zoom", speeds: true, trails: true, rail: true, plan: true };
+
   var bridge = null;
   var map = null;
 
   var plannedLayer = null;      // L.LayerGroup: casing + line + stop pins
   var suggestLayer = null;      // L.LayerGroup: the ways back
   var memberLayer = null;       // L.LayerGroup: everyone's dots
+  var trailLayer = null;        // L.LayerGroup: the tails behind them
+  var trails = {};              // member id -> [[lat, lon, t], ...]
+  var view = null;              // how the ride is drawn, on this phone only
+  var subs = null;              // the in-ride sub-tabs
 
   /* Two panes of our own, both UNDER Leaflet's overlay pane (400). Order by
      insertion would otherwise put the planned route on top of the rider's own
@@ -47,6 +73,7 @@ RC.groupui = (function () {
      is the background the rider's route is read against. */
   var PANE_PLANNED = "rcPlanned";
   var PANE_SUGGEST = "rcSuggest";
+  var PANE_TRAILS = "rcTrails";
 
   var suggestions = [];
   var selectedId = null;
@@ -79,6 +106,37 @@ RC.groupui = (function () {
   function colors() { return bridge.themeColors(); }
   function units() { return bridge.units(); }
 
+  function loadView() {
+    var saved = RC.store.get("groupView", null) || {};
+    var v = {};
+    for (var k in VIEW_DEFAULTS) {
+      if (VIEW_DEFAULTS.hasOwnProperty(k)) v[k] = saved.hasOwnProperty(k) ? saved[k] : VIEW_DEFAULTS[k];
+    }
+    if (["always", "zoom", "never"].indexOf(v.names) < 0) v.names = "zoom";
+    return v;
+  }
+
+  function setView(key, value) {
+    view[key] = value;
+    RC.store.set("groupView", view);
+    renderViewControls();
+    if (key === "plan") drawPlanned();
+    if (key === "trails" && !value) trails = {};
+    drawMembers();
+    renderMatesRail();
+  }
+
+  function renderViewControls() {
+    var btns = document.querySelectorAll("[data-mate-names]");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].setAttribute("aria-pressed", btns[i].getAttribute("data-mate-names") === view.names ? "true" : "false");
+    }
+    var sp = el("group-speeds"); if (sp) sp.checked = !!view.speeds;
+    var tr = el("group-trails"); if (tr) tr.checked = !!view.trails;
+    var ra = el("group-rail"); if (ra) ra.checked = !!view.rail;
+    var pv = el("group-plan-visible"); if (pv) pv.checked = !!view.plan;
+  }
+
   /* ---------------------------------------------------------
      The planned route — drawn once, never re-fitted
      --------------------------------------------------------- */
@@ -86,6 +144,9 @@ RC.groupui = (function () {
     if (plannedLayer) { map.removeLayer(plannedLayer); plannedLayer = null; }
     var plan = RC.group.planned();
     if (!plan || !plan.coords || plan.coords.length < 2) { renderPlanBlock(); return; }
+    // Hidden is a drawing choice, not a leaving of the plan: off-line
+    // detection and the ways back still read the line underneath.
+    if (!view.plan) { renderPlanBlock(); return; }
 
     var c = colors();
     plannedLayer = L.layerGroup().addTo(map);
@@ -120,6 +181,34 @@ RC.groupui = (function () {
     if (!plan || !plan.coords.length) return;
     RC.follow.silently(function () {
       map.fitBounds(L.latLngBounds(plan.coords).pad(0.12));
+    });
+  }
+
+  /* Everybody at once: every rider with a fix, and you. A look rather than a
+     new camera — while riding, the follow camera comes back on its own. */
+  function fitEveryone() {
+    var pts = [];
+    var list = RC.group.members();
+    for (var i = 0; i < list.length; i++) if (list[i].fix) pts.push([list[i].fix.lat, list[i].fix.lon]);
+    var me = RC.group.myFix();
+    if (me) pts.push([me.lat, me.lon]);
+    if (!pts.length) {
+      bridge.setStatus("Nobody has a position yet.", "");
+      bridge.flashStatus(2500);
+      return;
+    }
+    if (RC.follow.isEnabled()) RC.follow.looked();
+    RC.follow.silently(function () {
+      if (pts.length === 1) map.flyTo(pts[0], Math.max(map.getZoom(), 15), { duration: 0.8 });
+      else map.flyToBounds(L.latLngBounds(pts).pad(0.25), { duration: 0.9, maxZoom: 16 });
+    });
+  }
+
+  function findMate(m) {
+    if (!m || !m.fix) return;
+    if (RC.follow.isEnabled()) RC.follow.looked();
+    RC.follow.silently(function () {
+      map.flyTo([m.fix.lat, m.fix.lon], Math.max(map.getZoom(), 15), { duration: 0.9 });
     });
   }
 
@@ -260,23 +349,77 @@ RC.groupui = (function () {
     return '<span class="rc-mate-arrow" style="transform: rotate(' + Math.round(deg) + 'deg)"></span>';
   }
 
+  /* Where each rider has just been. Recorded here rather than in group.js
+     because it is a drawing, not a fact about the room: nothing is sent, and
+     a phone that turns trails off keeps nothing. */
+  function recordTrails(list) {
+    var t = Date.now();
+    var live = {};
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i];
+      if (!m.fix || m.me) continue;
+      live[m.id] = true;
+      var tr = trails[m.id] || (trails[m.id] = []);
+      var last = tr[tr.length - 1];
+      if (!last || RC.rejoin.metres(last[0], last[1], m.fix.lat, m.fix.lon) >= TRAIL_STEP_M) {
+        tr.push([m.fix.lat, m.fix.lon, t]);
+      }
+      while (tr.length && (tr.length > TRAIL_MAX || t - tr[0][2] > TRAIL_MS)) tr.shift();
+    }
+    for (var id in trails) if (trails.hasOwnProperty(id) && !live[id]) delete trails[id];
+  }
+
+  function drawTrails(list) {
+    if (!trailLayer) trailLayer = L.layerGroup().addTo(map);
+    trailLayer.clearLayers();
+    if (!view.trails) return;
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i];
+      var tr = trails[m.id];
+      if (!tr || tr.length < 2) continue;
+      // Three pieces, oldest faintest: a fade without a gradient, which
+      // Leaflet's SVG lines cannot do on their own.
+      var n = tr.length, cut1 = Math.floor(n / 3), cut2 = Math.floor(2 * n / 3);
+      var parts = [[0, cut1 + 1, 0.16], [cut1, cut2 + 1, 0.32], [cut2, n, 0.55]];
+      for (var p = 0; p < parts.length; p++) {
+        var seg = tr.slice(parts[p][0], parts[p][1]);
+        if (seg.length < 2) continue;
+        L.polyline(seg.map(function (q) { return [q[0], q[1]]; }), {
+          pane: PANE_TRAILS, color: m.color, weight: 4, opacity: parts[p][2],
+          lineCap: "round", lineJoin: "round", interactive: false
+        }).addTo(trailLayer);
+      }
+    }
+  }
+
+  function withNames() {
+    return view.names === "always" || (view.names === "zoom" && map.getZoom() >= MEMBER_LABEL_ZOOM);
+  }
+
   function drawMembers() {
     if (!memberLayer) memberLayer = L.layerGroup().addTo(map);
     memberLayer.clearLayers();
-    if (!RC.group.isActive()) return;
-    var withNames = map.getZoom() >= MEMBER_LABEL_ZOOM;
+    if (!RC.group.isActive()) {
+      trails = {};
+      if (trailLayer) trailLayer.clearLayers();
+      return;
+    }
+    var names = withNames();
     var list = RC.group.members();
+    if (view.trails) recordTrails(list);
+    drawTrails(list);
     for (var i = 0; i < list.length; i++) {
       var m = list[i];
       if (!m.fix || m.me) continue;     // your own dot is the rider marker app.js draws
-      var cls = "rc-mate" + (m.stale ? " is-stale" : "");
-      var label = withNames
+      var cls = "rc-mate" + (m.stale ? " is-stale" : "") + (RC.who.isOpen("mate:" + m.id) ? " is-picked" : "");
+      var label = names
         ? '<span class="rc-mate-name">' + RC.escapeHtml(m.name) +
           // A stationary rider's "0" is noise on a map label; their dot already
           // says where they are.
-          (m.fix.speedKmh > 3 ? ' <b>' + Math.round(m.fix.speedKmh) + '</b>' : "") + "</span>"
+          (view.speeds && m.fix.speedKmh > 3 ? ' <b>' + Math.round(
+            units() === "imperial" ? m.fix.speedKmh / 1.609344 : m.fix.speedKmh) + '</b>' : "") + "</span>"
         : "";
-      L.marker([m.fix.lat, m.fix.lon], {
+      var marker = L.marker([m.fix.lat, m.fix.lon], {
         icon: L.divIcon({
           className: "",
           html: '<span class="' + cls + '" style="--rider: ' + m.color + '">' +
@@ -287,7 +430,66 @@ RC.groupui = (function () {
         keyboard: false,
         title: m.name
       }).addTo(memberLayer);
+      marker.on("click", mateClick(m.id));
     }
+  }
+
+  /* ---------------------------------------------------------
+     A rider, tapped
+     --------------------------------------------------------- */
+  function memberById(id) {
+    var list = RC.group.members();
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  }
+
+  function mateSpec(m) {
+    var me = RC.group.myFix();
+    var sub = [];
+    if (!m.online) sub.push("offline");
+    else if (m.stale) sub.push("quiet for a while");
+    if (m.fix && me && !m.me) sub.push(RC.fmtDist(RC.rejoin.metres(me.lat, me.lon, m.fix.lat, m.fix.lon), units()) + " away");
+    if (m.fix && m.fix.speedKmh != null) sub.push(m.fix.speedKmh > 3 ? RC.fmtSpeed(m.fix.speedKmh, units()) : "stopped");
+    if (!m.fix) sub.push("no position yet");
+    if (m.host) sub.push("host");
+    var acts = [];
+    if (m.fix) acts.push({ label: "Find", icon: "location", keep: true, run: function () { findMate(memberById(m.id) || m); } });
+    if (m.fix && !m.me && bridge.planTo) {
+      acts.push({ label: "Ride to them", icon: "go", kind: "primary", run: function () {
+        var now = memberById(m.id) || m;
+        bridge.planTo([{ lat: now.fix.lat, lon: now.fix.lon, name: now.name }], now.name);
+      } });
+    }
+    if (RC.group.isHost() && !m.me) {
+      acts.push({ label: "Remove", icon: "close", kind: "danger", run: function () { RC.group.kick(m.id); } });
+    }
+    return {
+      key: "mate:" + m.id,
+      kind: "mate",
+      color: m.color,
+      face: '<span class="rc-who-dot"></span>',
+      name: m.me ? m.name + " (you)" : m.name,
+      sub: sub.join(" · "),
+      actions: acts,
+      onClose: function () { drawMembers(); }
+    };
+  }
+
+  function mateClick(id) { return function () { openMate(id); }; }
+
+  function openMate(id) {
+    var m = memberById(id);
+    if (!m) return;
+    RC.who.open(mateSpec(m));
+    drawMembers();
+  }
+
+  function refreshMateCard() {
+    var key = RC.who.current();
+    if (!key || key.indexOf("mate:") !== 0) return;
+    var m = memberById(key.slice(5));
+    if (!m) { RC.who.close(key); return; }
+    RC.who.update(key, mateSpec(m));
   }
 
 
@@ -379,7 +581,7 @@ RC.groupui = (function () {
     var live = RC.group.isActive();
     var riding = bridge.mode() === "nav" || bridge.mode() === "free";
     var me = RC.group.myFix();
-    if (!live || !riding) {
+    if (!live || !riding || !view.rail) {
       rail.hidden = true;
       rail.innerHTML = "";
       if (typeof RC.onMatesRailChange === "function") RC.onMatesRailChange();
@@ -536,7 +738,7 @@ RC.groupui = (function () {
 
   function toggleQr() {
     qrOpen = !qrOpen;
-    text("group-qr-label", qrOpen ? "Hide QR" : "Show QR");
+    text("group-qr-label", qrOpen ? "Hide" : "QR");
     renderQr();
   }
 
@@ -664,6 +866,68 @@ RC.groupui = (function () {
     show("group-scan-btn", true);
   }
 
+  /* ---------------------------------------------------------
+     Out of a room: start one, or join one
+
+     One question first, then only what that answer needs. A joiner never
+     sees the door switch or the "choose your own code" field; a host never
+     sees the scanner. The last choice is remembered, and an invite link
+     answers the question for you.
+     --------------------------------------------------------- */
+  var setupMode = "start";
+
+  function setMode(m) {
+    setupMode = m === "join" ? "join" : "start";
+    var off = el("group-off");
+    if (off) off.setAttribute("data-mode", setupMode);
+    var btns = document.querySelectorAll("[data-group-mode]");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].setAttribute("aria-pressed", btns[i].getAttribute("data-group-mode") === setupMode ? "true" : "false");
+    }
+    show("group-start-box", setupMode === "start");
+    show("group-join-box", setupMode === "join");
+    if (setupMode === "start" && scan) { stopScan(); scanStatus(""); }
+    RC.store.set("groupMode", setupMode);
+    renderStartPlan();
+  }
+
+  /* What goes out with the ride if it is started now: the route on the
+     planner, said as a destination and three numbers, with a switch to keep
+     it back. Read fresh every time the pane is shown, because the rider may
+     have planned something since. */
+  function renderStartPlan() {
+    var plan = bridge.currentPlan ? bridge.currentPlan() : null;
+    var card = el("group-start-plan");
+    if (card) card.setAttribute("data-has", plan ? "yes" : "no");
+    show("group-start-share-row", !!plan);
+    if (!plan) {
+      text("group-start-plan-title", "No route planned");
+      text("group-start-plan-sub", "You can share one once the ride is open.");
+      return;
+    }
+    var last = plan.stops[plan.stops.length - 1];
+    text("group-start-plan-title", "To " + (last && last.name ? last.name : "your destination"));
+    text("group-start-plan-sub", RC.fmtDist(plan.distance, units()) + " · " + RC.fmtDur(plan.duration) +
+      (plan.stops.length > 1 ? " · " + plan.stops.length + " stops" : ""));
+  }
+
+  function panelShowsTalk() {
+    return panelShowsRide() && !!subs && subs.current() === "talk";
+  }
+
+  /* The small numbers on the sub-tabs: how many are riding, what has been
+     said that you have not seen, and a dot on Route while you are off it. */
+  function renderSubBadges() {
+    var live = RC.group.isActive();
+    var n = live ? RC.group.members().filter(function (m) { return m.approved; }).length : 0;
+    var rn = el("group-sub-riders-n");
+    if (rn) { rn.textContent = n > 1 ? String(n) : ""; rn.hidden = n < 2; }
+    var tn = el("group-sub-talk-n");
+    if (tn) { tn.textContent = unread ? String(unread) : ""; tn.hidden = !unread; }
+    var rd = el("group-sub-route-dot");
+    if (rd) rd.hidden = !(live && RC.group.planned() && suggestState.offRoute);
+  }
+
   function renderLobby() {
     var live = RC.group.isActive();
     show("group-off", !live);
@@ -674,6 +938,8 @@ RC.groupui = (function () {
     if (!live) {
       qrOpen = false;
       qrDrawn = null;
+      renderStartPlan();
+      RC.who.close();
       return;
     }
 
@@ -705,6 +971,8 @@ RC.groupui = (function () {
     renderPlanBlock();
     renderChat();
     renderVoice();
+    renderViewControls();
+    renderSubBadges();
   }
 
   function renderPending() {
@@ -763,7 +1031,9 @@ RC.groupui = (function () {
       if (!m.fix) sub.push("no fix yet");
       else if (away) sub.push(away);
       if (speed) sub.push(speed);
-      html += '<div class="rc-mate-row' + (m.stale ? " is-stale" : "") + '">' +
+      html += '<div class="rc-mate-row is-tappable' + (m.stale ? " is-stale" : "") +
+        '" data-mate="' + RC.escapeHtml(m.id) + '" role="button" tabindex="0" aria-label="' +
+        RC.escapeHtml(m.name) + ' — show on the map">' +
         '<span class="rc-mate-swatch" style="background:' + m.color + '"></span>' +
         '<span class="rc-mate-meta">' +
           '<span class="rc-mate-rowname">' + RC.escapeHtml(m.name) +
@@ -782,10 +1052,27 @@ RC.groupui = (function () {
     var countEl = el("group-members-count");
     if (countEl) {
       var inRoom = list.filter(function (m2) { return m2.approved; }).length;
-      countEl.textContent = inRoom > 1 ? inRoom + " on the ride" : "just you";
+      countEl.textContent = inRoom > 1 ? inRoom + " on the ride. Tap one to find them."
+        : "Just you so far — Invite puts the code on their phone.";
     }
     drawMembers();
     renderMatesRail();
+    refreshMateCard();
+    renderSubBadges();
+  }
+
+  /* The same route twice is not a new route. Compared on what survives the
+     trip to the room — the distance and the stops — rather than point by
+     point, because the shared copy is simplified on the way out and never
+     has the same number of points as the planner's. */
+  function samePlan(a, b) {
+    if (!a || !b || !a.stops || !b.stops) return false;
+    if (Math.abs((a.distance || 0) - (b.distance || 0)) > 1) return false;
+    if (a.stops.length !== b.stops.length) return false;
+    for (var i = 0; i < a.stops.length; i++) {
+      if (RC.rejoin.metres(a.stops[i].lat, a.stops[i].lon, b.stops[i].lat, b.stops[i].lon) > 30) return false;
+    }
+    return true;
   }
 
   function renderPlanBlock() {
@@ -793,22 +1080,67 @@ RC.groupui = (function () {
     if (!box) return;
     var plan = RC.group.planned();
     var host = RC.group.isHost();
-    show("group-plan-set", host);
-    show("group-plan-clear", host && !!plan);
-    show("group-plan-show", !!plan);
-    show("group-rejoin-btn", !!plan);
+    var mine = host && bridge.currentPlan ? bridge.currentPlan() : null;
+
+    show("group-plan-steps", !plan && host);
     show("group-plan-stats", !!plan);
+    show("group-plan-show", !!plan);
+    show("group-plan-ride", !!plan && !!bridge.planTo);
+    show("group-rejoin-btn", !!plan);
+    show("group-plan-clear", host && !!plan);
+    // Share is offered when there is something new to share: the host has a
+    // route of their own that is not already the ride's.
+    var canShare = host && !!mine && (!plan || !samePlan(plan, mine));
+    show("group-plan-set", canShare);
+    text("group-plan-set", plan ? "Replace with my route" : "Share my planned route");
+
     if (!plan) {
       show("group-plan-off", false);
-      box.textContent = host
-        ? "No planned route yet. Plan one on the Route tab, then set it for the whole ride."
-        : "The host has not set a planned route yet.";
+      show("group-plan-stoplist", false);
+      if (host) {
+        var step1 = el("group-step-plan");
+        if (step1) step1.setAttribute("data-done", mine ? "yes" : "no");
+        show("group-plan-goto", !mine);
+        if (mine) {
+          var last = mine.stops[mine.stops.length - 1];
+          text("group-step-plan-sub", RC.fmtDist(mine.distance, units()) + " to " +
+            (last && last.name ? last.name : "your destination") + ".");
+        } else {
+          text("group-step-plan-sub", "On the Route tab, like any trip.");
+        }
+        box.textContent = "";
+        box.hidden = true;
+      } else {
+        box.hidden = false;
+        box.textContent = "The host has not shared a route yet.";
+      }
       return;
     }
+    box.hidden = false;
     text("group-plan-dist", RC.fmtDist(plan.distance, units()));
     text("group-plan-time", RC.fmtDur(plan.duration));
     text("group-plan-stops", String(plan.stops.length));
-    box.textContent = "Set by " + plan.by + ". It does not move — the same line on every phone.";
+    box.textContent = "Set by " + plan.by + ". The same line on every phone." +
+      (view.plan ? "" : " Hidden on your map.");
+
+    // The stops, in order, with the ones already behind you greyed — "where
+    // are we stopping next" is the question this list answers.
+    var sl = el("group-plan-stoplist");
+    if (sl) {
+      var me = RC.group.myFix();
+      var myAlong = me ? alongPlan(plan, me.lat, me.lon) : null;
+      var html = "";
+      for (var i = 0; i < plan.stops.length; i++) {
+        var st = plan.stops[i];
+        var at = myAlong != null ? alongPlan(plan, st.lat, st.lon) : null;
+        var passed = at != null && at < myAlong - 150;
+        var isLast = i === plan.stops.length - 1;
+        html += '<li class="rc-plan-stop' + (passed ? " is-passed" : "") + (isLast ? " is-last" : "") + '">' +
+          RC.escapeHtml(st.name || (isLast ? "Destination" : "Stop " + (i + 1))) + "</li>";
+      }
+      sl.innerHTML = html;
+      sl.hidden = !plan.stops.length;
+    }
 
     // How far off the line you are is the one number here that changes while
     // riding, so it gets its own coloured row rather than a clause at the end
@@ -823,6 +1155,37 @@ RC.groupui = (function () {
               : "You are on the planned line.";
       off.setAttribute("data-off", isOff ? "yes" : "no");
     }
+    renderSubBadges();
+  }
+
+  /* Riding the agreed line: the stops still ahead of you, from where you are,
+     through the ordinary planner. Stops already behind you are dropped, so a
+     rider who joins at the second fuel stop is not sent back to the first. */
+  function rideThePlan() {
+    var plan = RC.group.planned();
+    if (!plan || !plan.stops.length || !bridge.planTo) return;
+    var stops = plan.stops.slice();
+    var me = RC.group.myFix();
+    var myAlong = me ? alongPlan(plan, me.lat, me.lon) : null;
+    if (myAlong != null) {
+      var ahead = stops.filter(function (st) {
+        var at = alongPlan(plan, st.lat, st.lon);
+        return at == null || at > myAlong + 150;
+      });
+      stops = ahead.length ? ahead : stops.slice(-1);
+    }
+    var last = stops[stops.length - 1];
+    bridge.planTo(stops, last && last.name ? last.name : "the destination");
+  }
+
+  function renderSays() {
+    var box = el("group-says");
+    if (!box) return;
+    var html = "";
+    for (var i = 0; i < SAYS.length; i++) {
+      html += '<button type="button" class="rc-say" data-say="' + i + '">' + RC.escapeHtml(SAYS[i]) + "</button>";
+    }
+    box.innerHTML = html;
   }
 
   function renderChat() {
@@ -847,6 +1210,8 @@ RC.groupui = (function () {
     var s = RC.group.settings() || {};
     var input = el("group-chat-input");
     if (input) input.disabled = s.chat === false;
+    var says = el("group-says");
+    if (says) says.hidden = s.chat === false;
   }
 
   function renderVoice() {
@@ -1018,10 +1383,12 @@ RC.groupui = (function () {
     RC.group.onChat = function (msg) {
       renderChat();
       if (msg.kind === "mine" || msg.from === RC.group.myId()) return;
-      if (!panelShowsRide()) {
-        unread++;
-        toast(msg.kind === "system" ? msg.text : msg.name + ": " + msg.text, "chat");
-      }
+      // Unread is anything said while the chat itself was not on screen —
+      // including while the Ride tab was open on another sub-tab, which is
+      // what the number on Talk is for. The toast is only for when the
+      // planner is shut: an open Ride tab already has the number.
+      if (!panelShowsTalk()) unread++;
+      if (!panelShowsRide()) toast(msg.kind === "system" ? msg.text : msg.name + ": " + msg.text, "chat");
       renderMembers();
     };
     RC.group.onVoice = function (v) {
@@ -1041,13 +1408,21 @@ RC.groupui = (function () {
 
   function startHosting() {
     var name = el("group-name").value;
-    var code = el("group-code").value;
+    var own = el("group-own-code");
+    var code = own ? own.value : "";
     var approval = el("group-approval") ? el("group-approval").checked : true;
+    var shareBox = el("group-start-share");
+    var share = !!(shareBox && shareBox.checked && !el("group-start-share-row").hidden);
     bridge.setStatus("Opening the ride…", "busy");
     RC.group.host({ name: name, code: code, approval: approval }).then(function (out) {
       RC.store.set("groupName", RC.group.myName());
       bridge.setStatus("Ride open on code " + out.code + ".", "");
       bridge.flashStatus(5000);
+      // The route goes out with the ride when the host asked for that, read
+      // now rather than when the form was drawn: it carries the host's name.
+      var plan = share ? bridge.currentPlan() : null;
+      if (plan && RC.group.setPlanned(plan)) drawPlanned();
+      if (subs) subs.select("riders", true);
       renderLobby();
     }, function (err) {
       bridge.setStatus(err && err.message ? err.message : "Could not open the ride.", "error");
@@ -1057,6 +1432,11 @@ RC.groupui = (function () {
   function startJoining() {
     var name = el("group-name").value;
     var code = el("group-code").value;
+    if (!code.trim()) {
+      bridge.setStatus("Type the room code, or scan it.", "error");
+      el("group-code").focus();
+      return;
+    }
     bridge.setStatus("Looking for the ride…", "busy");
     RC.group.join({ name: name, code: code }).then(function (out) {
       RC.store.set("groupName", RC.group.myName());
@@ -1075,6 +1455,9 @@ RC.groupui = (function () {
     closeRejoin();
     if (plannedLayer) { map.removeLayer(plannedLayer); plannedLayer = null; }
     if (memberLayer) memberLayer.clearLayers();
+    if (trailLayer) trailLayer.clearLayers();
+    trails = {};
+    RC.who.close();
     suggestState.offRoute = false;
     suggestState.distM = null;
     unread = 0;
@@ -1090,6 +1473,7 @@ RC.groupui = (function () {
     }
     if (RC.group.setPlanned(plan)) {
       drawPlanned();
+      renderPlanBlock();
       bridge.setStatus("Planned route sent to the ride.", "");
       bridge.flashStatus(4000);
     }
@@ -1151,9 +1535,24 @@ RC.groupui = (function () {
     map = b.map;
 
     if (!map.getPane(PANE_PLANNED)) map.createPane(PANE_PLANNED).style.zIndex = 370;
+    if (!map.getPane(PANE_TRAILS)) map.createPane(PANE_TRAILS).style.zIndex = 380;
     if (!map.getPane(PANE_SUGGEST)) map.createPane(PANE_SUGGEST).style.zIndex = 385;
 
+    view = loadView();
     memberLayer = L.layerGroup().addTo(map);
+    trailLayer = L.layerGroup().addTo(map);
+
+    subs = RC.subtabs("group", function (key) {
+      if (key === "talk") unread = 0;
+      if (key === "route") renderPlanBlock();
+      renderMembers();
+    });
+    var modeBtns = document.querySelectorAll("[data-group-mode]");
+    for (var mb = 0; mb < modeBtns.length; mb++) {
+      modeBtns[mb].addEventListener("click", function () { setMode(this.getAttribute("data-group-mode")); });
+    }
+    setMode(RC.store.get("groupMode", "start"));
+    renderSays();
 
     var savedName = RC.store.get("groupName", "");
     if (savedName && el("group-name")) el("group-name").value = savedName;
@@ -1195,6 +1594,26 @@ RC.groupui = (function () {
     on("group-voice-on", "change", function () { RC.group.setVoiceEnabled(this.checked); });
 
     on("group-plan-set", "click", shareCurrentPlan);
+    on("group-plan-goto", "click", function () { bridge.openPanel("route"); });
+    on("group-plan-ride", "click", rideThePlan);
+    on("group-fit", "click", function () { bridge.closePanel(); fitEveryone(); });
+
+    var nameBtns = document.querySelectorAll("[data-mate-names]");
+    for (var nb = 0; nb < nameBtns.length; nb++) {
+      nameBtns[nb].addEventListener("click", function () { setView("names", this.getAttribute("data-mate-names")); });
+    }
+    on("group-speeds", "change", function () { setView("speeds", this.checked); });
+    on("group-trails", "change", function () { setView("trails", this.checked); });
+    on("group-rail", "change", function () { setView("rail", this.checked); });
+    on("group-plan-visible", "change", function () { setView("plan", this.checked); renderPlanBlock(); });
+
+    var says = el("group-says");
+    if (says) says.addEventListener("click", function (e) {
+      var b = e.target.closest ? e.target.closest("[data-say]") : null;
+      if (!b) return;
+      RC.group.say(SAYS[+b.getAttribute("data-say")]);
+      renderChat();
+    });
     on("group-plan-clear", "click", function () { RC.group.clearPlanned(); drawPlanned(); clearSuggestions(); });
     on("group-plan-show", "click", function () { fitPlanned(); bridge.closePanel(); });
     on("group-rejoin-btn", "click", function () { bridge.closePanel(); openRejoin(); askForWaysBack(true); });
@@ -1209,9 +1628,27 @@ RC.groupui = (function () {
     on("group-mute", "change", function () { RC.group.setMuted(this.checked); });
 
     var members = el("group-members");
+    function pickRow(row) {
+      var m = memberById(row.getAttribute("data-mate"));
+      if (!m) return;
+      // The card and the rider are both on the map, and the planner is on
+      // top of the map: close it, go there, then say who it is.
+      bridge.closePanel();
+      if (m.fix && !m.me) findMate(m);
+      openMate(m.id);
+    }
     if (members) members.addEventListener("click", function (e) {
       var kick = e.target.closest ? e.target.closest("[data-kick]") : null;
-      if (kick) RC.group.kick(kick.getAttribute("data-kick"));
+      if (kick) { RC.group.kick(kick.getAttribute("data-kick")); return; }
+      var row = e.target.closest ? e.target.closest("[data-mate]") : null;
+      if (row) pickRow(row);
+    });
+    if (members) members.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      var row = e.target.closest ? e.target.closest("[data-mate]") : null;
+      if (!row || e.target !== row) return;
+      e.preventDefault();
+      pickRow(row);
     });
     var pending = el("group-pending");
     if (pending) pending.addEventListener("click", function (e) {
@@ -1232,8 +1669,10 @@ RC.groupui = (function () {
     });
 
     on("group-btn", "click", function () {
-      unread = 0;
       bridge.openPanel("group");
+      // Something was said while the planner was shut: that is what the
+      // number on the button meant, so that is where the button goes.
+      if (unread && subs && RC.group.isActive()) subs.select("talk");
       renderMembers();
     });
 
@@ -1253,6 +1692,7 @@ RC.groupui = (function () {
     try {
       var m = /[?&]ride=([A-Za-z0-9]{4,8})/.exec(location.search);
       if (m && el("group-code")) {
+        setMode("join");
         el("group-code").value = RC.net.normalizeCode(m[1]);
         toast("Ride code " + RC.net.normalizeCode(m[1]) + " is filled in — add your name to join.", "ok");
       }
@@ -1264,6 +1704,7 @@ RC.groupui = (function () {
 
   return {
     init: init,
+    toast: toast,
     redraw: function () { drawPlanned(); drawSuggestions(); drawMembers(); renderMatesRail(); },
     refresh: function () { renderLobby(); },
     plannedRoute: function () { return RC.group.planned(); },

@@ -73,7 +73,7 @@
     "temperature_2m", "apparent_temperature", "precipitation",
     "precipitation_probability", "weather_code", "wind_speed_10m",
     "wind_gusts_10m", "relative_humidity_2m", "cloud_cover",
-    "visibility", "is_day"
+    "visibility", "is_day", "wind_direction_10m"
   ];
   var CHUNK = 20;
 
@@ -162,6 +162,10 @@
       "?latitude=" + lats.join(",") +
       "&longitude=" + lons.join(",") +
       "&hourly=" + HOURLY_FIELDS.join(",") +
+      /* Sunrise and sunset, the way the home page asks for them — the same
+         `daily` block, from the same request, so a ride's daylight costs
+         nothing extra. With timezone=UTC they arrive as UTC instants. */
+      "&daily=sunrise,sunset" +
       "&timezone=UTC&forecast_days=" + forecastDays +
       "&wind_speed_unit=kmh&precipitation_unit=mm";
   }
@@ -178,13 +182,48 @@
     var times = (h.time || []).map(parseUtc);
     var out = {
       lat: entry.latitude, lon: entry.longitude,
-      times: times
+      times: times,
+      sun: parseSun(entry.daily)
     };
     for (var i = 0; i < HOURLY_FIELDS.length; i++) {
       var f = HOURLY_FIELDS[i];
       out[f] = h[f] || [];
     }
     return out;
+  }
+
+  /* Every sunrise and sunset in the fetched range as one timeline of
+     events, oldest first. Which UTC day each belongs to is irrelevant — the
+     question is always "what was the last thing the sun did before this
+     instant", and a flat list answers that without caring where midnight
+     fell. */
+  function parseSun(daily) {
+    var ev = [];
+    if (!daily) return ev;
+    var up = daily.sunrise || [], down = daily.sunset || [];
+    for (var i = 0; i < up.length; i++) if (up[i]) ev.push({ t: parseUtc(up[i]).getTime(), up: true });
+    for (var j = 0; j < down.length; j++) if (down[j]) ev.push({ t: parseUtc(down[j]).getTime(), up: false });
+    ev = ev.filter(function (e) { return !isNaN(e.t); });
+    ev.sort(function (a, b) { return a.t - b.t; });
+    return ev;
+  }
+
+  /* { dark, next: { at, kind } } at `date`, from an entry's sun timeline.
+     dark is null when the timeline does not reach back that far — the
+     caller falls back to the hourly is_day flag rather than guessing. */
+  function sunAt(entry, date) {
+    var ev = entry && entry.sun;
+    if (!ev || !ev.length) return { dark: null, next: null };
+    var t = date.getTime();
+    var before = null, after = null;
+    for (var i = 0; i < ev.length; i++) {
+      if (ev[i].t <= t) before = ev[i];
+      else { after = ev[i]; break; }
+    }
+    return {
+      dark: before ? !before.up : (after ? after.up : null),
+      next: after ? { at: new Date(after.t), kind: after.up ? "sunrise" : "sunset" } : null
+    };
   }
 
   /* Fetch one chunk (<=20 unique coords) and return parsed entries keyed
@@ -227,6 +266,15 @@
 
   function lerp(a, b, frac) { return a + (b - a) * frac; }
 
+  /* Wind direction is an angle, and the average of 350 and 10 is 0, not
+     180. Interpolated on the shortest arc, like every other bearing here. */
+  function lerpAngle(a, b, frac) {
+    if (typeof a !== "number" || isNaN(a)) return typeof b === "number" && !isNaN(b) ? b : null;
+    if (typeof b !== "number" || isNaN(b)) return a;
+    var d = ((b - a) % 360 + 540) % 360 - 180;
+    return ((a + d * frac) % 360 + 360) % 360;
+  }
+
   function sampleEntry(entry, date) {
     var br = bracket(entry.times, date);
     if (!br) return { outOfRange: true };
@@ -246,8 +294,37 @@
       humidity: lerp(entry.relative_humidity_2m[i0], entry.relative_humidity_2m[i1], frac),
       cloud: lerp(entry.cloud_cover[i0], entry.cloud_cover[i1], frac),
       visibilityM: lerp(entry.visibility[i0], entry.visibility[i1], frac),
-      isDay: !!entry.is_day[nearest]
+      isDay: !!entry.is_day[nearest],
+      // Where the wind blows FROM, degrees clockwise from north — the
+      // meteorological convention. Null where the series has none.
+      windDir: entry.wind_direction_10m && entry.wind_direction_10m.length
+        ? lerpAngle(entry.wind_direction_10m[i0], entry.wind_direction_10m[i1], frac) : null
     };
+  }
+
+  /* The first hour at or after `date` with rain worth mentioning, within
+     `hours`, at one location: { now: bool, at: Date|null }. Read off the
+     series already in memory, so "rain in forty minutes" costs nothing. */
+  function nextRain(entry, date, hours, thresholdMm) {
+    var out = { now: false, at: null };
+    if (!entry || !entry.times || !entry.times.length) return out;
+    var mm = thresholdMm == null ? 0.3 : thresholdMm;
+    var cur = sampleEntry(entry, date);
+    if (!cur.outOfRange && cur.precipMm >= mm) { out.now = true; out.at = date; return out; }
+    var t0 = date.getTime(), t1 = t0 + (hours || 6) * 3600000;
+    for (var i = 0; i < entry.times.length; i++) {
+      var t = entry.times[i].getTime();
+      if (t <= t0) continue;
+      if (t > t1) break;
+      if ((entry.precipitation[i] || 0) >= mm) {
+        /* The hourly figure is the hour ENDING at that timestamp, so the rain
+           is under way by half past the previous one — say that, not the
+           top of the hour, or "rain in 50 minutes" arrives wet. */
+        out.at = new Date(Math.max(t0, t - 30 * 60000));
+        return out;
+      }
+    }
+    return out;
   }
 
   function forecastSeries(checkpoints, opts) {
@@ -314,6 +391,12 @@
           var entry = perCheckpoint[checkpointIndex];
           if (!entry) return { outOfRange: true };
           return sampleEntry(entry, date);
+        },
+        sun: function (checkpointIndex, date) {
+          return sunAt(perCheckpoint[checkpointIndex], date);
+        },
+        rain: function (checkpointIndex, date, hours) {
+          return nextRain(perCheckpoint[checkpointIndex], date, hours);
         }
       };
       return series;
@@ -378,6 +461,11 @@
     clearCache: clearCache,
     forecast: forecast,
     sampleSeries: sampleSeriesFn,
-    describe: describe
+    describe: describe,
+    // Exposed for the harness, and for anything holding a series of its own.
+    _parseSun: parseSun,
+    _sunAt: sunAt,
+    _nextRain: nextRain,
+    _lerpAngle: lerpAngle
   };
 })();
