@@ -478,11 +478,14 @@ export function buildWorld(opts) {
   /* explored map for the minimap */
   const MAP = 64, explored = new Uint8Array(MAP * MAP);
   const mapExt = R * 1.2;
+  // Counts cells as they first turn explored, so the minimap repaints its
+  // ground only when something new was uncovered, not every tenth second.
+  let revealed = 0;
   function reveal(x, z, r) {
     const cx = (x + mapExt) / (2 * mapExt) * MAP, cz = (z + mapExt) / (2 * mapExt) * MAP, cr = r / (2 * mapExt) * MAP;
     for (let j = Math.max(0, Math.floor(cz - cr)); j <= Math.min(MAP - 1, Math.ceil(cz + cr)); j++)
       for (let i = Math.max(0, Math.floor(cx - cr)); i <= Math.min(MAP - 1, Math.ceil(cx + cr)); i++)
-        if ((i - cx) * (i - cx) + (j - cz) * (j - cz) <= cr * cr) explored[j * MAP + i] = 1;
+        if (!explored[j * MAP + i] && (i - cx) * (i - cx) + (j - cz) * (j - cz) <= cr * cr) { explored[j * MAP + i] = 1; revealed++; }
   }
   function isExplored(x, z) {
     const i = Math.floor((x + mapExt) / (2 * mapExt) * MAP), j = Math.floor((z + mapExt) / (2 * mapExt) * MAP);
@@ -554,7 +557,7 @@ export function buildWorld(opts) {
   const world = {
     theme: T, floor, kind, seed, R, radiusAt, inside, spawn, portal, arena, anchors, shrines, chests, geodes, camps, dummies, spawns, teamSpawns,
     group, colliders, hitCollider, resolve, addDynamic, clearLine, update, dispose,
-    reveal, isExplored, mapExt, get lightning() { return lightning; }, onThunder: null
+    reveal, isExplored, mapExt, explored, MAP, get revealed() { return revealed; },get lightning() { return lightning; }, onThunder: null
   };
   return world;
 }

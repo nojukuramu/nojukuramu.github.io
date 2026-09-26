@@ -138,6 +138,53 @@ on("bookOpened", () => { coachProg.book = true; });
    Minimap
    --------------------------------------------------------------- */
 let mapT = 0;
+/* The minimap's ground (coastline and explored cells) is painted into its own
+   canvas and repainted only when a new cell is uncovered. It used to be a
+   fillRect per explored cell under a clip, ten times a second: up to 4096 of
+   them, so the map cost more with every step taken on a floor and only got
+   cheap again when the next floor wiped it. */
+const ground = { cv: null, g: null, cells: null, cellG: null, img: null, world: null, px: 0, revealed: -1 };
+function paintGround(W, size, dpr) {
+  const px = Math.round(size * dpr);
+  if (!ground.cv) {
+    ground.cv = document.createElement("canvas"); ground.g = ground.cv.getContext("2d");
+    ground.cells = document.createElement("canvas"); ground.cellG = ground.cells.getContext("2d");
+  }
+  if (ground.world === W && ground.px === px && ground.revealed === W.revealed) return ground.cv;
+  const N = W.MAP;
+  if (ground.cells.width !== N) { ground.cells.width = ground.cells.height = N; ground.img = null; }
+  if (!ground.img) ground.img = ground.cellG.createImageData(N, N);
+  // explored cells, one pixel each, in the same colour the rectangles were
+  const d = ground.img.data, ex = W.explored;
+  for (let k = 0; k < N * N; k++) {
+    const o = k * 4;
+    if (ex[k]) { d[o] = 232; d[o + 1] = 221; d[o + 2] = 200; d[o + 3] = 51; } else d[o + 3] = 0;
+  }
+  ground.cellG.putImageData(ground.img, 0, 0);
+
+  if (ground.cv.width !== px) ground.cv.width = ground.cv.height = px;
+  const g = ground.g;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, size, size);
+  const ext = W.mapExt, sc = size / (2 * ext);
+  const coast = () => {
+    g.beginPath();
+    for (let i = 0; i <= 96; i++) { const a = i / 96 * Math.PI * 2, r = W.radiusAt(a); const x = (Math.cos(a) * r + ext) * sc, y = (Math.sin(a) * r + ext) * sc; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.closePath();
+  };
+  g.save();
+  coast();
+  g.fillStyle = "rgba(255,255,255,0.06)"; g.fill();
+  g.clip();
+  g.imageSmoothingEnabled = false;
+  g.drawImage(ground.cells, 0, 0, size, size);
+  g.restore();
+  g.strokeStyle = "rgba(201,164,92,0.55)"; g.lineWidth = 1;
+  coast();
+  g.stroke();
+  ground.world = W; ground.px = px; ground.revealed = W.revealed;
+  return ground.cv;
+}
 function drawMap() {
   const cv = $("minimap"), W = S.world, P = S.player;
   if (!cv || !W || !P) return;
@@ -145,28 +192,13 @@ function drawMap() {
   const size = cv.clientWidth || 120;
   if (cv.width !== Math.round(size * dpr)) { cv.width = cv.height = Math.round(size * dpr); }
   const g = cv.getContext("2d");
+  const base = paintGround(W, size, dpr);
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, cv.width, cv.height);
+  g.drawImage(base, 0, 0);
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.clearRect(0, 0, size, size);
   const ext = W.mapExt, sc = size / (2 * ext);
   const X = (x) => (x + ext) * sc, Z = (z) => (z + ext) * sc;
-  // explored ground, coastline clipped
-  g.save();
-  g.beginPath();
-  for (let i = 0; i <= 96; i++) { const a = i / 96 * Math.PI * 2, r = W.radiusAt(a); const x = X(Math.cos(a) * r), y = Z(Math.sin(a) * r); i ? g.lineTo(x, y) : g.moveTo(x, y); }
-  g.closePath();
-  g.fillStyle = "rgba(255,255,255,0.06)"; g.fill();
-  g.clip();
-  const cell = (2 * ext) / 64;
-  g.fillStyle = "rgba(232,221,200,0.2)";
-  for (let j = 0; j < 64; j++) for (let i = 0; i < 64; i++) {
-    const x = -ext + (i + 0.5) * cell, z = -ext + (j + 0.5) * cell;
-    if (W.isExplored(x, z)) g.fillRect(X(-ext + i * cell), Z(-ext + j * cell), cell * sc + 0.6, cell * sc + 0.6);
-  }
-  g.restore();
-  g.strokeStyle = "rgba(201,164,92,0.55)"; g.lineWidth = 1;
-  g.beginPath();
-  for (let i = 0; i <= 96; i++) { const a = i / 96 * Math.PI * 2, r = W.radiusAt(a); const x = X(Math.cos(a) * r), y = Z(Math.sin(a) * r); i ? g.lineTo(x, y) : g.moveTo(x, y); }
-  g.stroke();
   const dot = (x, z, r, col) => { g.fillStyle = col; g.beginPath(); g.arc(X(x), Z(z), r, 0, Math.PI * 2); g.fill(); };
   for (const p of S.props) {
     if (p.kind === "portal") { if (p.on || W.isExplored(p.x, p.z)) { g.strokeStyle = p.on ? "#ffd97a" : "#8fa0ab"; g.lineWidth = 1.5; g.beginPath(); g.arc(X(p.x), Z(p.z), 4, 0, 7); g.stroke(); } }
