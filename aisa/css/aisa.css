@@ -1,0 +1,125 @@
+/* Aisa — one stage, one drawer of controls, one sheet for the long copy. */
+:root {
+  --bg: #1b1b1b;
+  --panel: #232226;
+  --panel-2: #2c2a30;
+  --line: #3a3740;
+  --ink: #e9e6ee;
+  --ink-2: #a9a3b3;
+  --accent: #c0393a;
+  --accent-2: #d6d3dc;
+  --radius: 12px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); }
+body {
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+button { font: inherit; color: inherit; }
+
+.stage { position: fixed; inset: 0; }
+#aisa { width: 100%; height: 100%; display: block; touch-action: none; }
+.status {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  margin: 0; color: var(--ink-2); font-size: 13px; text-align: center; padding: 0 16px;
+}
+.status:empty { display: none; }
+
+.rig-btn {
+  position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom));
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 1px solid var(--line); background: rgba(35, 34, 38, 0.82);
+  display: grid; place-items: center; cursor: pointer;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.rig-btn svg { width: 20px; height: 20px; }
+.rig-btn[aria-expanded="true"] { opacity: 0; pointer-events: none; }
+
+.rig {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 100%);
+  background: rgba(35, 34, 38, 0.96); border-left: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.rig[hidden] { display: none; }
+@media (max-width: 640px) {
+  .rig { top: auto; left: 0; width: 100%; height: 58vh; border-left: 0; border-top: 1px solid var(--line);
+         border-radius: var(--radius) var(--radius) 0 0; }
+  body.rig-open .stage { bottom: 58vh; }
+}
+@media (min-width: 641px) {
+  body.rig-open .stage { right: min(360px, 100%); }
+}
+.rig-head { display: flex; align-items: center; gap: 4px; padding: 12px 12px 8px 16px; border-bottom: 1px solid var(--line); }
+.rig-head h1 { margin: 0 auto 0 0; font-size: 16px; font-weight: 600; letter-spacing: 0.02em; }
+.rig-body { overflow-y: auto; padding: 4px 16px calc(24px + env(safe-area-inset-bottom)); overscroll-behavior: contain; }
+.rig section { padding: 12px 0 4px; }
+.rig h2 {
+  display: flex; align-items: center; gap: 6px; margin: 0 0 8px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2);
+}
+
+.icon-btn, .info {
+  border: 0; background: none; cursor: pointer; display: grid; place-items: center; border-radius: 8px;
+}
+.icon-btn { width: 36px; height: 36px; }
+.icon-btn svg { width: 18px; height: 18px; }
+.info { width: 22px; height: 22px; color: var(--ink-2); }
+.info svg { width: 15px; height: 15px; }
+.icon-btn:hover, .info:hover { background: var(--panel-2); color: var(--ink); }
+.text-btn {
+  margin-left: auto; border: 1px solid var(--line); background: none; border-radius: 999px;
+  padding: 2px 10px; font-size: 11px; letter-spacing: 0.04em; text-transform: none; color: var(--ink-2); cursor: pointer;
+}
+.text-btn:hover { color: var(--ink); border-color: var(--ink-2); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  border: 1px solid var(--line); background: var(--panel-2); border-radius: 999px;
+  padding: 5px 11px; font-size: 13px; cursor: pointer; text-transform: capitalize;
+}
+.chip:hover { border-color: var(--ink-2); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+.toggles label {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px;
+  padding: 4px 11px 4px 8px; font-size: 13px; cursor: pointer; background: var(--panel-2);
+}
+.toggles input { accent-color: var(--accent); margin: 0; }
+
+details.group { border-top: 1px solid var(--line); }
+details.group summary {
+  cursor: pointer; padding: 9px 0; font-size: 13px; font-weight: 600; list-style: none; display: flex; align-items: center;
+}
+details.group summary::-webkit-details-marker { display: none; }
+details.group summary::after { content: ""; margin-left: auto; width: 7px; height: 7px; border-right: 2px solid var(--ink-2);
+  border-bottom: 2px solid var(--ink-2); transform: rotate(45deg); transition: transform 0.15s; }
+details.group[open] summary::after { transform: rotate(-135deg); }
+.param { display: grid; grid-template-columns: 1fr 44px; gap: 2px 8px; align-items: center; padding: 3px 0 7px; }
+.param label { font-size: 12px; color: var(--ink-2); }
+.param output { font-size: 11px; color: var(--ink-2); text-align: right; font-variant-numeric: tabular-nums; }
+.param input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); margin: 0; }
+.param code { font-size: 10px; color: #77717f; }
+
+.info-scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 9; }
+.info-sheet {
+  position: fixed; z-index: 10; left: 50%; bottom: 0; transform: translateX(-50%);
+  width: min(560px, 100%); max-height: 78vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0; padding: 4px 16px calc(20px + env(safe-area-inset-bottom));
+}
+.info-sheet[hidden], .info-scrim[hidden] { display: none; }
+.info-sheet header { display: flex; align-items: center; padding: 8px 0; position: sticky; top: 0; background: var(--panel); }
+.info-sheet h2 { margin: 0 auto 0 0; font-size: 16px; }
+.info-body p { margin: 0 0 10px; color: var(--ink-2); }
+.info-body b { color: var(--ink); font-weight: 600; }
+.info-body pre {
+  margin: 0 0 12px; padding: 10px 12px; background: #17161a; border: 1px solid var(--line); border-radius: 8px;
+  overflow-x: auto; font-size: 12px; line-height: 1.5; color: var(--ink);
+}
+.info-body code { font-size: 12px; color: var(--ink); }
