@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <!-- Not linked from anywhere, and not to be found: this page is reached by
+       its address and nothing else. -->
+  <meta name="robots" content="noindex, nofollow, noarchive" />
+  <title>Aisa</title>
+  <meta name="theme-color" content="#1b1b1b" />
+  <meta name="color-scheme" content="dark" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%231b1b1b'/><circle cx='22' cy='34' r='7' fill='%23a3262a'/><circle cx='42' cy='34' r='7' fill='%23a3262a'/><path d='M10 26 Q32 4 54 26' fill='none' stroke='%23d0d0d6' stroke-width='6' stroke-linecap='round'/></svg>" />
+  <link rel="stylesheet" href="css/aisa.css" />
+</head>
+<body>
+  <main class="stage">
+    <canvas id="aisa" aria-label="Aisa, a rigged drawing" role="img"></canvas>
+    <p class="status" id="status" role="status"></p>
+  </main>
+
+  <button class="rig-btn" id="rig-open" aria-controls="rig" aria-expanded="false" title="Rig controls">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></svg>
+  </button>
+
+  <aside class="rig" id="rig" hidden aria-label="Rig controls">
+    <header class="rig-head">
+      <h1>Aisa</h1>
+      <button class="icon-btn" data-info="api" aria-label="How to drive her from code">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.01" /></svg>
+      </button>
+      <button class="icon-btn" id="rig-close" aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    </header>
+
+    <div class="rig-body">
+      <section>
+        <h2>Expression <button class="info" data-info="expressions" aria-label="About expressions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.01" /></svg></button></h2>
+        <div class="chips" id="expr"></div>
+      </section>
+
+      <section>
+        <h2>Motion <button class="info" data-info="motions" aria-label="About motions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.01" /></svg></button></h2>
+        <div class="chips" id="motion"></div>
+      </section>
+
+      <section>
+        <h2>Alive <button class="info" data-info="auto" aria-label="About the live behaviours"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.01" /></svg></button></h2>
+        <div class="toggles" id="auto"></div>
+      </section>
+
+      <section>
+        <h2>Parameters <button class="info" data-info="params" aria-label="About the parameters"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.01" /></svg></button>
+          <button class="text-btn" id="reset">Reset</button></h2>
+        <div id="params"></div>
+      </section>
+    </div>
+  </aside>
+
+  <div class="info-scrim" id="info-scrim" hidden></div>
+  <div class="info-sheet" id="info-sheet" role="dialog" aria-modal="true" aria-labelledby="info-title" hidden>
+    <header><h2 id="info-title"></h2><button class="icon-btn" id="info-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button></header>
+    <div class="info-body" id="info-body"></div>
+  </div>
+
+  <script src="js/rig.js"></script>
+  <script src="js/model.js"></script>
+  <script src="js/expressions.js"></script>
+  <script src="js/aisa.js"></script>
+  <script src="js/info.js"></script>
+  <script src="js/panel.js"></script>
+</body>
+</html>
