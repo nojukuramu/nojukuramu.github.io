@@ -31,6 +31,7 @@ AISA.info = (function () {
         "Aisa.leg(\"left\", 12);\n" +
         "Aisa.set(\"ParamCheek\", 1);         // any parameter by id\n" +
         "Aisa.auto({ idle: false });        // blink, breath, idle, physics\n" +
+        "Aisa.pause(); Aisa.step(1 / 30);   // your own clock\n" +
         "Aisa.on(\"frame\", function (values, dt) { ... });</pre>" +
         "<p><b>left</b> and <b>right</b> are hers, as in Live2D: her right arm is the one on " +
         "the left of the screen.</p>" +
@@ -46,6 +47,7 @@ AISA.info = (function () {
         "<p>An expression is a held pose of the face. Picking one fades the last one out " +
         "and this one in over a third of a second.</p>" +
         "<p>Her own drawing is <b>neutral</b> - a level stare - so neutral changes nothing. " +
+        "A change that changes her eyes is hidden behind a blink, as an animator would. " +
         "Expressions sit on top of the parameters, so a raised arm or a turned head stays " +
         "where it is while her face changes.</p>"
     },
@@ -55,8 +57,9 @@ AISA.info = (function () {
       body:
         "<p>A motion is a short performance - a nod, a wave, a hop - added on top of " +
         "whatever she is already doing, so nodding while smiling is still a smile.</p>" +
-        "<p>Each is a few keyframes in <code>js/expressions.js</code>; adding one is adding " +
-        "an entry there.</p>"
+        "<p>Each is a few keyframes in <code>js/expressions.js</code>, and the curve runs " +
+        "smoothly through them rather than stopping at each, so a wave swings and a laugh " +
+        "bounces. Adding one is adding an entry there.</p>"
     },
 
     auto: {

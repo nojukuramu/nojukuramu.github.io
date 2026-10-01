@@ -76,14 +76,25 @@ AISA.Rig = (function () {
     return s;
   }
 
-  function texture(gl, source) {
+  function pot(n) { return n > 0 && (n & (n - 1)) === 0; }
+
+  function texture(gl, source, mip) {
     var t = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, t);
     // premultiplied on upload, so bilinear filtering never drags the
     // colour of a transparent texel into an edge
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    /* The atlas is drawn four texels to a source pixel and shown at two or
+       three screen pixels to one, so it is nearly always shrunk. Shrunk
+       without mipmaps, a one-texel line is sampled or skipped depending on
+       where it falls - lines that flicker and break as she moves. */
+    if (mip && pot(source.width) && pot(source.height)) {
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    } else {
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    }
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -158,7 +169,7 @@ AISA.Rig = (function () {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
-    var atlasTex = texture(gl, atlas);
+    var atlasTex = texture(gl, atlas, true);
     var covered = coverage(atlas);
     var parts = [], byId = {};
     var S = meta.scale, AW = meta.width, AH = meta.height;
@@ -249,8 +260,13 @@ AISA.Rig = (function () {
     this.resize();
     var st = model.prepare(values);
 
+    /* Nothing invisible is moved or painted: the tears, the sweat drop and
+       the rest spend most of their life at zero, and a hidden eyeball
+       during a blink needs no vertices. */
     for (var i = 0; i < this.parts.length; i++) {
       var p = this.parts[i];
+      p.a = model.alpha(p.id, st);
+      if (p.a <= 0.002) continue;
       model.deform(p.id, p.rest, p.out, st);
       if (p.sprite) {
         var key = p.sprite.key ? p.sprite.key(values) : "static";
@@ -286,7 +302,7 @@ AISA.Rig = (function () {
     for (i = 0; i < order.length; i++) {
       p = this.byId[order[i]];
       if (!p || !p.icount || !p.tex) continue;
-      var a = model.alpha(p.id, st);
+      var a = p.a;
       if (a <= 0.002) continue;
       var clip = model.clip(p.id, st);
       gl.uniform1f(loc.alpha, a);
