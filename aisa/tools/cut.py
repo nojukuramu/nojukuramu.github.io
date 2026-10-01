@@ -90,7 +90,8 @@ def poly(pts, dil=0.0):
 
 # ---- who owns each pixel ----------------------------------------------
 PARTS = list(dict.fromkeys(r[0] for r in REGIONS))
-DIL = {'browR': 0.3, 'browL': 0.3, 'lidR': 0.5, 'lidL': 0.5, 'mouth': 0.3, 'ballR': 0.5, 'ballL': 0.5, 'armR': 0.8, 'armL': 0.8}
+DIL = {'browR': 0.3, 'browL': 0.3, 'lidR': 0.5, 'lidL': 0.5, 'mouth': 0.3, 'ballR': 0.5, 'ballL': 0.5, 'armR': 0.8, 'armL': 0.8,
+       'face': 0.4, 'neck': 0.6, 'dress': 0.8}
 cand = [poly(p, DIL.get(n, 2.0)) & fg for n, p, _ in REGIONS]
 plain = [poly(p) & fg for n, p, _ in REGIONS]
 key = np.zeros((H, W), np.int64)
@@ -145,12 +146,106 @@ for name in ('armR', 'armL', 'legR', 'legL', 'shoeR', 'shoeL', 'ear', 'sideR', '
         ring = cv2.dilate(reg.astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool) & ~reg
         nb = assign[ring]; nb = nb[(nb >= 0) & (nb != i)]
         if len(nb): assign[reg] = np.bincount(nb).argmax()
+
+# A line between two parts belongs to the one in front: it is that part's
+# outline. Where the colour test split a line down the middle - half to a
+# side lock, half to the hair behind it - the two halves part company the
+# moment the lock sways, and the outline reads as broken. So line pixels
+# touching a front part's fill are handed to it, front to back. Limbs and
+# the eyes are left out: their polygons are traced to the pixel already.
+isdark = np.isin(domc, list(DARK))
+L_SKIN = float(np.array(PAL['skin'], np.float32) @ np.array([0.299, 0.587, 0.114]))
+LINE_OWNERS = ['ahoge', 'frontHair', 'sideL', 'sideR', 'face', 'ear', 'collar', 'ponytail']
+NOT_VICTIMS = {PARTS.index(p) for p in ('ballR', 'ballL', 'lidR', 'lidL', 'browR', 'browL', 'mouth',
+                                          'armR', 'armL', 'legR', 'legL', 'shoeR', 'shoeL')}
+for name in sorted(LINE_OWNERS, key=lambda n: -DRAW.index(n)):
+    i = PARTS.index(name)
+    behind = [PARTS.index(p) for p in DRAW[:DRAW.index(name)] if PARTS.index(p) not in NOT_VICTIMS]
+    near = cv2.dilate(((assign == i) & ~isdark).astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
+    # grow along the line itself, so a line claimed at one end is claimed
+    # along its width rather than in a 1px sliver
+    victim = np.isin(assign, behind)
+    steal = near & isdark & victim
+    for _ in range(5):
+        steal |= cv2.dilate(steal.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool) & isdark & victim
+    # and the line's anti-aliased fringe on the far side, or that fringe
+    # stays behind when the part moves, as a dotted ghost of the line
+    lines = steal | ((assign == i) & isdark)
+    # (darker than the part it lies on: on skin, nearly anything that is
+    # not skin; on hair, what is darker than the hair's own shadow)
+    dark_for = np.where(np.isin(assign, [PARTS.index(p) for p in ('face', 'ear', 'neck')]), L_SKIN - 12, 150)
+    fringe = cv2.dilate(lines.astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool) & victim & ~isdark & (lum < dark_for)
+    # on skin the fringe runs on into the soft shadow a lock or the bangs
+    # cast just under their edge; that shadow is theirs too, and goes with
+    # them
+    on_skin = victim & np.isin(assign, [PARTS.index(p) for p in ('face', 'ear', 'neck')]) & ~isdark & (lum < L_SKIN - 12)
+    for _ in range(4):
+        fringe |= cv2.dilate(fringe.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool) & on_skin
+    fringe &= ~np.isin(assign, [PARTS.index('dress')])
+    assign[steal | fringe] = i
+# An eyeball is what is inside its outline, and the outline. The light
+# halo the upscaler drew round it outside matches the eye's own whites and
+# highlights, so it was claimed too; left there it is a ring of pale and
+# pink specks on skin that is otherwise clean. It goes to the face, which
+# repaints it.
+EYE_C = {'ballR': (103.6, 206.2), 'ballL': (148.2, 205.6)}
+# Under the lash, the iris and its highlights are the eye's, however close
+# they come to the ink: the lash takes only what is ink, or nearly. Taken
+# by the lash, a pink glint is measured as faint ink over skin and drawn as
+# a grey smudge over the iris.
+for lid, ball in (('lidR', 'ballR'), ('lidL', 'ballL')):
+    inner = poly([p for n, p, pal in REGIONS if n == ball and pal is None][0])
+    m = inner & (assign == PARTS.index(lid)) & (U[..., 0] > 75)
+    assign[m] = PARTS.index(ball)
+for name, (ecx, ecy) in EYE_C.items():
+    i = PARTS.index(name)
+    m = assign == i
+    # along each ray out from the middle of the eye, the outermost pixel of
+    # its outline; anything of the eye's beyond that is halo. Rays that
+    # meet no outline (the top, where the lash is the lid's) are left be.
+    cx, cy = ecx * S, ecy * S
+    ang = np.linspace(-np.pi, np.pi, 1440, endpoint=False)
+    rad = np.arange(0, 20 * S, 0.5)
+    px = np.clip((cx + np.cos(ang)[:, None] * rad[None]).astype(int), 0, W - 1)
+    py = np.clip((cy + np.sin(ang)[:, None] * rad[None]).astype(int), 0, H - 1)
+    hit = m[py, px] & isdark[py, px]
+    last = np.where(hit.any(1), rad[hit.shape[1] - 1 - np.argmax(hit[:, ::-1], axis=1)], np.inf)
+    # the iris has dark of its own; only a hit out near where the outline
+    # should be counts, and never upwards, where the outline is the lash's
+    ell_r = S / np.sqrt((np.cos(ang) / 9.8) ** 2 + (np.sin(ang) / 14.0) ** 2)
+    last[(last < 0.8 * ell_r) | (np.sin(ang) < -0.35)] = np.inf
+    ys, xs = np.nonzero(m)
+    a = np.arctan2(ys - cy, xs - cx)
+    k = ((a + np.pi) / (2 * np.pi) * len(ang)).astype(int) % len(ang)
+    r = np.hypot(ys - cy, xs - cx)
+    halo = r > last[k] + 2
+    assign[ys[halo], xs[halo]] = PARTS.index('face')
 np.save(os.path.join(OUT, 'assign.npy'), assign)
 
-# ---- painting each part -------------------------------------------------
+# The upscaler left a light halo beside every line. On skin it is lighter
+# than the skin itself, which nothing on her face legitimately is (the eye
+# highlights belong to the eyes), so it goes: a halo that stayed would slide
+# out from under a lock of hair as a white stripe when she turns.
 SKIN = np.array(PAL['skin'], np.float32)
-INK = np.array([10, 6, 8], np.float32)
 L_SKIN = float(SKIN @ np.array([0.299, 0.587, 0.114]))
+for name in ('face', 'ear', 'neck'):
+    m = (assign == PARTS.index(name)) & (lum > L_SKIN + 1.5)
+    U[m] = SKIN
+    lum[m] = L_SKIN
+
+# What each pixel is, judged against the whole palette rather than only the
+# colours of the parts that could own it. Where only the hair could own a
+# pixel, a stray of skin from the edge of a forearm reads as the hair's
+# white highlight; against everything, it reads as skin.
+ALLPAL = [i for i in range(len(NP)) if i != BG] + [BG]
+dom_all = np.full((H, W), -1, np.int16)
+ys_, xs_ = np.nonzero(assign >= 0)
+for k in range(0, len(ys_), 400000):
+    dom_all[ys_[k:k + 400000], xs_[k:k + 400000]] = dominant(U[ys_[k:k + 400000], xs_[k:k + 400000]], ALLPAL)
+SKINLIKE = [NP.index(k) for k in ('skin', 'skinsh', 'necksh')]
+
+# ---- painting each part -------------------------------------------------
+INK = np.array([10, 6, 8], np.float32)
 
 def nearest_fill(src_mask, want):
     """Colour every pixel of `want` with the colour of the nearest pixel of
@@ -166,26 +261,64 @@ def nearest_fill(src_mask, want):
     out[want] = lut[labels[want]]
     return out
 
-def smooth_fill(src_mask, want):
-    """A soft continuation of the colours in `src_mask`: normalized
-    convolution at growing radii, so skin under an eye or a fringe of hair
-    comes out as one smooth tone, not the facets a nearest-pixel fill
-    leaves behind."""
+def strand_fill(src_mask, want, reach=60 * S):
+    """Hair hangs, and so does a sock: a hidden stretch of either is what
+    is above it and what is below it in the same column, blended down the
+    gap - strand lines, stripes and highlights carried through - rather
+    than the nearest colour smeared sideways. A column with only one side
+    within reach takes that side; one with neither falls back to the
+    nearest colour."""
     out = nearest_fill(src_mask, want)
-    m = src_mask.astype(np.float32)
-    done = np.zeros((H, W), bool)
-    for sigma in (8, 24, 64):
-        den = cv2.GaussianBlur(m, (0, 0), sigma)
-        ok = want & ~done & (den > 0.05)
-        if ok.any():
-            for ch in range(3):
-                num = cv2.GaussianBlur(U[..., ch] * m, (0, 0), sigma)
-                out[..., ch][ok] = (num[ok] / den[ok])
-        done |= ok
+    rowi = np.arange(H)[:, None]
+    above = np.maximum.accumulate(np.where(src_mask, rowi, -1), axis=0)
+    below = np.minimum.accumulate(np.where(src_mask, rowi, H)[::-1], axis=0)[::-1]
+    ok_a = want & (above >= 0) & (rowi - above <= reach)
+    ok_b = want & (below < H) & (below - rowi <= reach)
+    cols = np.broadcast_to(np.arange(W)[None, :], (H, W))
+    both = ok_a & ok_b
+    ys, xs = np.nonzero(both)
+    t = ((ys - above[ys, xs]) / np.maximum(below[ys, xs] - above[ys, xs], 1))[:, None]
+    out[ys, xs] = U[above[ys, xs], xs] * (1 - t) + U[below[ys, xs], xs] * t
+    ys, xs = np.nonzero(ok_a & ~ok_b); out[ys, xs] = U[above[ys, xs], xs]
+    ys, xs = np.nonzero(ok_b & ~ok_a); out[ys, xs] = U[below[ys, xs], xs]
     return out
 
+def smooth_fill(src_mask, want):
+    """A soft continuation of the colours in `src_mask`, for skin: an
+    average of the source around each pixel at several radii, the finer
+    ones trusted wherever they have enough to go on. Blended rather than
+    switched between radii, so the fill has no contours of its own - a
+    switched fill draws a faint ring wherever one radius hands over to the
+    next, and a closing eye uncovers it."""
+    m = src_mask.astype(np.float32)
+    out = np.zeros((H, W, 3), np.float32)
+    first = True
+    for sigma in (256, 96, 32, 12, 5):
+        den = cv2.GaussianBlur(m, (0, 0), sigma)
+        est = np.zeros((H, W, 3), np.float32)
+        for ch in range(3):
+            est[..., ch] = cv2.GaussianBlur(U[..., ch] * m, (0, 0), sigma) / np.maximum(den, 1e-6)
+        if first:
+            out = est; first = False
+        else:
+            conf = np.clip(den / 0.25, 0, 1)[..., None]
+            out = out * (1 - conf) + est * conf
+    res = np.zeros((H, W, 3), np.float32)
+    res[want] = out[want]
+    return res
+
+FACE_BG = None   # the face's own luminance, shading and all, once painted
+
 def ink_alpha(mask):
-    a = np.clip((L_SKIN - lum) / (L_SKIN - 4.0), 0, 1)
+    """How much ink is on each pixel: how far it is from the skin under it
+    towards black. The skin under it is the face as painted (with the pink
+    of the shadow under the bangs), not one flat skin tone - measured
+    against flat skin, that shadow reads as faint ink and slides about
+    with the lash as a grey film. The faintest tenth is dropped for the
+    same reason."""
+    bgl = FACE_BG if FACE_BG is not None else np.full((H, W), L_SKIN, np.float32)
+    a = np.clip((bgl - lum) / np.maximum(bgl - 4.0, 1), 0, 1)
+    a = np.clip((a - 0.1) / 0.9, 0, 1)
     a[~mask] = 0
     return a
 
@@ -213,50 +346,183 @@ for name in DRAW:
         # The side locks too: the upscaler left a light halo beside every
         # line, and when the face turns under a lock the halo would slide
         # out from under it as a white stripe.
-        feat = np.isin(assign, [PARTS.index(p) for p in ('ballR', 'ballL', 'lidR', 'lidL', 'browR', 'browL', 'mouth', 'sideR', 'sideL')])
-        ring = cv2.dilate(feat.astype(np.uint8), np.ones((17, 17), np.uint8)).astype(bool) & own
+        feat = np.isin(assign, [PARTS.index(p) for p in ('ballR', 'ballL', 'lidR', 'lidL', 'mouth')])
+        thin = np.isin(assign, [PARTS.index(p) for p in ('browR', 'browL')])
+        ring = (cv2.dilate(feat.astype(np.uint8), np.ones((17, 17), np.uint8)).astype(bool) |
+                cv2.dilate(thin.astype(np.uint8), np.ones((11, 11), np.uint8)).astype(bool)) & own
+        face_ring = ring
         own = own & ~ring
-    grow = cv2.dilate(own.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))).astype(bool)
-    region = own | (grow & np.isin(assign, front) & fg)
+    # a short way under its neighbours in front, enough that no hairline of
+    # background opens between two parts at rest; the collar stops at the
+    # chin, or lifting her head would lift white out from under it
+    grow = cv2.dilate(own.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13))).astype(bool)
+    ext_into = [p for p in front if not (name == 'collar' and p == PARTS.index('face'))]
+    ext = grow & np.isin(assign, ext_into) & fg
+    # Where a painted-in stretch has a drawn edge of its own (the end of the
+    # hair behind an arm, the side seam under a sleeve), that edge is where
+    # the part stops: the seam-hiding margin above may not spill past it,
+    # or the moment the arm moves there is a sliver of hair beyond the tips.
+    ol_mask = np.zeros((H, W), bool)
+    for pn, pts, ol in UNDER:
+        if pn == name and ol:
+            ol_mask |= poly(pts)
+    if ol_mask.any():
+        ext &= ~(cv2.dilate(ol_mask.astype(np.uint8), np.ones((41, 41), np.uint8)).astype(bool) & ~ol_mask)
+    region = own | ext
     outline = np.zeros((H, W), bool)
-    inset = cv2.erode(fg.astype(np.uint8), np.ones((13, 13), np.uint8)).astype(bool)
+    rim = cv2.distanceTransform(fg.astype(np.uint8), cv2.DIST_L2, 5) < 1.1 * S
     for pn, pts, ol in UNDER:
         if pn != name: continue
         # only ever under something drawn over this part: an underlay that
         # reached a part drawn behind it would paint over what is visible
         um = poly(pts) & fg & np.isin(assign, front)
-        if name == 'hairBack':
-            # the back of the head shows past the bangs when she turns; kept
-            # a little inside the silhouette, so what shows is an edge of
-            # hair rather than a shelf without an outline
-            um &= inset
         region |= um
         if ol:
             o = np.zeros((H, W), np.uint8)
             cv2.polylines(o, [np.array([[x*S, y*S] for x, y in pts], np.int32)], True, 1, thickness=5)
             outline |= o.astype(bool) & um
+        if name == 'hairBack':
+            # the back of the head shows past the bangs when she turns: it
+            # reaches the silhouette and carries the silhouette's outline,
+            # so what shows is the back of her hair, not a shelf of grey.
+            # Only up there: lower down the silhouette beside a hidden stretch
+            # of hair is an arm's, and the hair does not end at it.
+            crown_rows = np.zeros((H, W), bool); crown_rows[:244 * S] = True
+            outline |= rim & um & crown_rows
+    # A light halo along the edge of a part, where a part in front of it
+    # meets it, is the upscaler's and not the drawing's: when the front part
+    # moves, it would stay behind as a pale line. Hair keeps the highlights
+    # that are part of its strands; only the edge band goes.
+    if name in ('hairBack', 'ponytail', 'sideR', 'sideL', 'neck', 'dress', 'collar'):
+        infront = np.isin(assign, [p for p in front if p != pi])
+        band = cv2.dilate(infront.astype(np.uint8), np.ones((11, 11), np.uint8)).astype(bool) & own
+        own = own & ~(band & (lum > 222) & (U.max(2) - U.min(2) < 30))
+    if name in ('hairBack', 'ponytail', 'dress'):
+        # and neither hair nor dress is ever skin: what is, is the edge of
+        # an arm or the neck beside it, and is painted over as the part
+        own = own & ~(np.isin(dom_all, SKINLIKE) &
+                      cv2.dilate(infront.astype(np.uint8), np.ones((13, 13), np.uint8)).astype(bool))
+    if name == 'dress':
+        # Beside each forearm the bodice keeps the arm's outline, its soft
+        # edge and a dark sliver of background from the gap between them.
+        # When the arm swings out those are left on the dress as streaks and
+        # specks. Down the arm (not below the hands, where the dress's own
+        # edge shows) anything that is not dress-coloured is repainted, and
+        # the painted-in side seam carries the outline instead.
+        arms = np.isin(assign, [PARTS.index('armR'), PARTS.index('armL')])
+        near_arm = cv2.dilate(arms.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))).astype(bool)
+        band = np.zeros((H, W), bool); band[250 * S:336 * S] = True
+        own = own & ~(near_arm & band & ((lum < 62) | (dom_all != NP.index('dress'))))
+    if name in ('hairBack', 'dress'):
+        # and in the narrow gaps between an arm and her side, what is left
+        # of either part is a few slivers a pixel wide: too small to carry
+        # the part's colour, big enough to show as specks once the arm
+        # moves. Pieces that small go and are painted over.
+        arms = np.isin(assign, [PARTS.index('armR'), PARTS.index('armL')])
+        near_arm = cv2.dilate(arms.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))).astype(bool)
+        nl, cc, stt, _ = cv2.connectedComponentsWithStats(own.astype(np.uint8), connectivity=8)
+        small = np.zeros(nl, bool)
+        small[1:] = stt[1:, cv2.CC_STAT_AREA] < 160
+        hit = np.zeros(nl, bool); hit[np.unique(cc[near_arm & own])] = True
+        own = own & ~(small & hit)[cc]
+        # and the soft grey edge of the arm's outline, left on the hair
+        # beside it, which shows as a dotted ghost of the arm
+        hug = cv2.dilate(arms.astype(np.uint8), np.ones((9, 9), np.uint8)).astype(bool)
+        if name == 'hairBack':
+            own = own & ~(hug & (lum < 176))
     # the colours a hidden area continues: the part's own, away from its
     # anti-aliased edges and never its line work
     clean = cv2.erode(own.astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool)
     clean &= ~np.isin(domc, list(DARK))
     skin = name in ('face', 'neck', 'ear')
     if name == 'face':
-        # and only from skin that is skin: not the light halo, not a shadow
-        clean &= np.linalg.norm(U - SKIN, axis=2) < 10
+        # skin and its shading - the pink under the bangs included - but
+        # never the red the upscaler smeared round the iris, nor ink
+        clean &= ((U[..., 0] - U[..., 1]) < 42) & (lum > 175) & ((U[..., 0] - U[..., 2]) > 14)
     if not clean.any(): clean = own
     halo = cv2.dilate(region.astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool)
-    fill = (smooth_fill if skin else nearest_fill)(clean, halo & ~own)
+    want = halo & ~own
+    if skin:
+        fill = smooth_fill(clean, want)
+    elif name in ('hairBack', 'ponytail'):
+        # from the hair's own colours: not its line work, which carried down
+        # a gap becomes a streak, and not the anti-aliasing beside it. The
+        # long hair hangs, so it
+        # is carried down its strands; the crown under the bangs is seen
+        # only at its edges as she turns, and is better soft than streaked.
+        src_h = own & ~rim & ~cv2.dilate(isdark.astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool)
+        # a highlight glimpsed in the gap beside an arm is a glint on one
+        # strand, not the colour of everything hidden above it
+        src_h &= ~((lum > 225) & cv2.dilate(np.isin(assign, [PARTS.index('armR'), PARTS.index('armL')]).astype(np.uint8),
+                                             np.ones((41, 41), np.uint8)).astype(bool))
+        fill = strand_fill(src_h, want)
+        # a glint carried down a hidden stretch becomes a white stripe the
+        # length of it: hidden hair keeps its tone, not its highlights
+        fl = fill @ np.array([0.299, 0.587, 0.114], np.float32)
+        hot = want & (fl > 214)
+        k = np.clip((fl[hot] - 214) / 30, 0, 1)[:, None]
+        fill[hot] = fill[hot] * (1 - k) + np.array(PAL['hair'], np.float32) * k
+        # softened across the strands, so a column that happened to start
+        # from a highlight does not run down the gap as a hard stripe
+        # (a normalized blur: nothing outside the gap is averaged in, or the
+        # black of the empty texture bleeds into its edges as a seam)
+        wm = want.astype(np.float32)
+        den = cv2.GaussianBlur(wm, (0, 0), sigmaX=5, sigmaY=2)
+        for ch in range(3):
+            num = cv2.GaussianBlur(fill[..., ch] * wm, (0, 0), sigmaX=5, sigmaY=2)
+            fill[..., ch] = np.where(want, num / np.maximum(den, 1e-3), fill[..., ch])
+        if name == 'hairBack':
+            crown = np.zeros((H, W), bool); crown[:244 * S] = True
+            soft = smooth_fill(src_h & (lum < 225), want & crown)
+            fill[crown] = soft[crown]
+    elif name in ('legR', 'legL'):
+        fill = strand_fill(clean, want)
+    else:
+        fill = nearest_fill(clean, want)
     rgb = np.where(own[..., None], U, fill)
+    if name == 'face':
+        # the repainted ring blends into the skin round it over a pixel or
+        # so, instead of stopping at a hard edge that shows the moment a
+        # brow lifts off it
+        # distance from the ring, for every pixel outside it
+        dist = cv2.distanceTransform((~face_ring).astype(np.uint8), cv2.DIST_L2, 5)
+        blend = (np.clip(1 - dist / 6.0, 0, 1) * (~face_ring))[..., None]
+        near = (blend[..., 0] > 0) & own & ~isdark
+        soft = smooth_fill(clean & ~face_ring, near)
+        rgb[near] = rgb[near] * (1 - blend[near]) + soft[near] * blend[near]
+    # The silhouette is smoothed, so a part's edge can take in a sliver of
+    # the background beside it. Painted with the part's colour, that sliver
+    # shows at rest as a faint light line in the gaps between her hair and
+    # her face; painted with what the drawing has there - the dark of the
+    # outline running into the background - it does not show at all.
+    # The soft edge of the alpha reaches a texel or two past the region
+    # too; over background those texels take the background's own colour,
+    # or three parts' light edges meeting in one narrow gap add up to a line.
+    stray = halo & (assign < 0) & ~own
+    rgb[stray] = np.minimum(U[stray], INK + 30)
     fillonly = region & ~own
-    rgb[outline & fillonly] = INK
-    # straight cuts are softened by half a texel; the silhouette keeps the
-    # source's own anti-aliasing because the outline is dark against dark
+    # An underlay's outline is for when it is uncovered. Right beside what
+    # is visible it would show through the soft edge of the part over it,
+    # as a line the drawing does not have.
+    far = cv2.distanceTransform((~own).astype(np.uint8), cv2.DIST_L2, 5) > 2.0
+    # and only where the painted-in area actually ends: an underlay's edge
+    # that runs on into more of the same part (the hair behind an arm
+    # meeting the hair behind the neck) is not an edge at all
+    edge = region & cv2.dilate((~region).astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))).astype(bool)
+    rgb[outline & fillonly & far & edge] = INK
+    if name == 'face':
+        FACE_BG = (rgb @ np.array([0.299, 0.587, 0.114], np.float32)).astype(np.float32)
+    # Straight cuts are softened by half a texel - outwards only. A part's
+    # own pixels are always opaque: softened inwards, the outermost texel
+    # of a line drawn along its edge goes half transparent and the line
+    # thins wherever something lighter lies under it.
     alpha = cv2.GaussianBlur(region.astype(np.float32), (0, 0), 0.7)
+    alpha[own] = 1.0
     rgb = np.where(halo[..., None], rgb, 0)
     rgba[name] = (rgb, alpha)
 
 # ---- pack ------------------------------------------------------------
-PAD = 3
+PAD = 8
 boxes = []
 for name in DRAW:
     rgb, a = rgba[name]
@@ -271,9 +537,9 @@ x = y = shelf = 0
 for name, x0, y0, x1, y1 in order:
     w, h = x1 - x0, y1 - y0
     if x + w > AW:
-        x, y, shelf = 0, y + shelf + 2, 0
+        x, y, shelf = 0, y + shelf + 4, 0
     placed[name] = (x, y)
-    x += w + 2; shelf = max(shelf, h)
+    x += w + 4; shelf = max(shelf, h)
 AH = y + shelf
 AH = 1 << int(np.ceil(np.log2(AH)))
 atlas = np.zeros((AH, AW, 4), np.uint8)

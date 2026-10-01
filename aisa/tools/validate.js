@@ -114,7 +114,7 @@ section("Static: hidden");
 
 /* ---------------------------------------------------------------- the rig */
 
-var ctx = { console: console, Math: Math, Object: Object, Float32Array: Float32Array, Array: Array };
+var ctx = { console: console, Math: Math, Object: Object, Float32Array: Float32Array, Array: Array, WeakMap: WeakMap };
 vm.createContext(ctx);
 ["js/model.js", "js/expressions.js"].forEach(function (f) {
   vm.runInContext(read(f), ctx, { filename: f });
@@ -173,6 +173,28 @@ section("Rig: at rest she is the drawing");
     }
   });
   check("no part moves at the default parameters", worst < 1e-3, worst.toFixed(4) + " px in " + where);
+
+  /* The eyeball is clipped along an edge worked out point by point
+     (eyeClip), while the lash it hides under is a mesh whose depths were
+     baked once. The two must land in the same place, or a closing eye
+     shows a sliver of iris above the lash or a gap below it. */
+  var v2 = defaults(), worstClip = 0;
+  [[0.5, 0], [0, 0], [0.4, 1], [1.2, 0]].forEach(function (os) {
+    v2.ParamEyeROpen = v2.ParamEyeLOpen = os[0]; v2.ParamEyeRSmile = v2.ParamEyeLSmile = os[1];
+    v2.ParamAngleX = 18; v2.ParamAngleY = -10; v2.ParamAngleZ = 7; v2.ParamEyeRAngle = 0.6;
+    var st2 = model.prepare(v2);
+    [["lidR", "ballR", model.landmarks.lids.R], ["lidL", "ballL", model.landmarks.lids.L]].forEach(function (k) {
+      var c = model.clip(k[1], st2), e = k[2], x0 = e[0][0], x1 = e[e.length - 1][0];
+      for (var i = 0; i < 8; i++) {
+        var x = x0 + (x1 - x0) * i / 7, y = 0;
+        for (var j = 1; j < e.length; j++) if (x <= e[j][0] + 1e-6) { y = e[j - 1][1] + (e[j][1] - e[j - 1][1]) * (x - e[j - 1][0]) / (e[j][0] - e[j - 1][0]); break; }
+        var o = new Float32Array(2);
+        model.deform(k[0], new Float32Array([x, y - 0.7]), o, st2);
+        worstClip = Math.max(worstClip, Math.hypot(o[0] - (c.origin[0] + c.top[i * 2]), o[1] - (c.origin[1] + c.top[i * 2 + 1])));
+      }
+    });
+  });
+  check("the eye clip follows the lash mesh", worstClip < 0.35, worstClip.toFixed(3) + " px");
 })();
 
 section("Rig: extremes");
@@ -230,6 +252,27 @@ section("Rig: expressions, motions, physics");
     if (!(c.hz > 0 && c.damp > 0)) badPhys.push(c.out + " (needs hz and damp)");
   });
   check("every pendulum reads and writes parameters that exist", badPhys.length === 0, badPhys.join(", "));
+
+  /* A motion adds its keys to whatever she is doing, and the curve through
+     them never overshoots a key, so a key further than a parameter's whole
+     span can only ever be clamped - a typo, not a pose. */
+  var wild = [];
+  Object.keys(AISA.motions).forEach(function (name) {
+    var m = AISA.motions[name];
+    Object.keys(m).forEach(function (id) {
+      if (id === "loop" || !P[id]) return;
+      var span = P[id].max - P[id].min;
+      if (m[id].some(function (k) { return Math.abs(k[1]) > span; })) wild.push(name + "." + id);
+    });
+  });
+  check("no motion key reaches past a parameter's whole span", wild.length === 0, wild.join(", "));
+
+  // the panel builds itself from these lists; the README is written by hand
+  var readme = read("README.md").replace(/\s+/g, " ");
+  var undocumented = Object.keys(AISA.expressions).concat(Object.keys(AISA.motions)).filter(function (n) {
+    return !new RegExp("[ ,(]" + n + "[ ,).]").test(readme);
+  });
+  check("README lists every expression and motion", undocumented.length === 0, undocumented.join(", "));
 })();
 
 process.stdout.write("\n" + (checks - failures.length) + "/" + checks + " checks passed\n");

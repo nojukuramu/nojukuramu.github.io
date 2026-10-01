@@ -37,9 +37,11 @@ AISA.create = function (canvas, opts) {
 
   var auto = { blink: true, breath: true, idle: true, physics: true };
   var listeners = {};
-  function emit(type) {
-    var args = Array.prototype.slice.call(arguments, 1);
-    (listeners[type] || []).slice().forEach(function (fn) { try { fn.apply(null, args); } catch (e) { console.error(e); } });
+  function emit(type, a, b) {
+    var l = listeners[type];
+    if (!l || !l.length) return;
+    l = l.slice();
+    for (var i = 0; i < l.length; i++) { try { l[i](a, b); } catch (e) { console.error(e); } }
   }
 
   function clampParam(id, v) {
@@ -58,25 +60,54 @@ AISA.create = function (canvas, opts) {
   Object.keys(AISA.expressions).forEach(function (k) { exprW[k] = 0; exprTarget[k] = 0; });
 
   // ---- motions ------------------------------------------------------------
-  var playing = [];
-  function trackValue(keys, t) {
-    if (t <= keys[0][0]) return keys[0][1];
-    for (var i = 1; i < keys.length; i++) {
-      if (t <= keys[i][0]) {
-        var a = keys[i - 1], b = keys[i], u = (t - a[0]) / (b[0] - a[0]);
-        return a[1] + (b[1] - a[1]) * ease(u);
+  /* A track is a smooth curve through its keys - a monotone cubic, the
+     Fritsch-Carlson kind - rather than an ease from each key to the next.
+     Eased key to key, every key is a dead stop, and a wave or a laugh reads
+     as a robot hitting its marks; through the keys, the arm only stops
+     where the animator held it. Monotone, so it never overshoots a key: a
+     held pose stays held, and an arm told to stop at 104 degrees does not
+     swing on to 110 first. A looping track takes its end tangents from
+     across the loop, so it does not pause where it wraps. */
+  var compiled = {};
+  function compile(name) {
+    if (compiled[name]) return compiled[name];
+    var def = AISA.motions[name], tracks = [], len = 0;
+    Object.keys(def).forEach(function (id) {
+      var k = def[id];
+      if (!Array.isArray(k)) return;
+      var n = k.length, t = new Float64Array(n), v = new Float64Array(n), m = new Float64Array(n), d = new Float64Array(n);
+      for (var i = 0; i < n; i++) { t[i] = k[i][0]; v[i] = k[i][1]; }
+      for (i = 0; i < n - 1; i++) d[i] = (v[i + 1] - v[i]) / Math.max(t[i + 1] - t[i], 1e-6);
+      for (i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+      if (def.loop && n > 2) {
+        var T = t[n - 1];
+        m[0] = m[n - 1] = (v[1] - v[n - 2]) / Math.max(t[1] + (T - t[n - 2]), 1e-6);
       }
-    }
-    return keys[keys.length - 1][1];
+      for (i = 0; i < n - 1; i++) {
+        if (d[i] === 0) { m[i] = m[i + 1] = 0; continue; }
+        var a = m[i] / d[i], b = m[i + 1] / d[i], h = a * a + b * b;
+        if (h > 9) { var s3 = 3 / Math.sqrt(h); m[i] = s3 * a * d[i]; m[i + 1] = s3 * b * d[i]; }
+      }
+      tracks.push({ id: id, t: t, v: v, m: m });
+      len = Math.max(len, t[n - 1]);
+    });
+    return (compiled[name] = { tracks: tracks, len: len, loop: !!def.loop });
   }
-  function motionLength(m) {
-    var len = 0;
-    Object.keys(m).forEach(function (k) { if (Array.isArray(m[k])) len = Math.max(len, m[k][m[k].length - 1][0]); });
-    return len;
+  function trackValue(tr, x) {
+    var t = tr.t, n = t.length;
+    if (x <= t[0]) return tr.v[0];
+    if (x >= t[n - 1]) return tr.v[n - 1];
+    var i = 1;
+    while (t[i] < x) i++;
+    var h = t[i] - t[i - 1], u = (x - t[i - 1]) / h, u2 = u * u, u3 = u2 * u;
+    return (2 * u3 - 3 * u2 + 1) * tr.v[i - 1] + (u3 - 2 * u2 + u) * h * tr.m[i - 1] +
+           (-2 * u3 + 3 * u2) * tr.v[i] + (u3 - u2) * h * tr.m[i];
   }
+  var playing = [];
 
   // ---- look-at, idle, blink, voice ----------------------------------------
-  var look = { x: 0, y: 0, tx: 0, ty: 0, on: false };
+  // the eyes get there first, the head follows, the body last of all
+  var look = { ex: 0, ey: 0, hx: 0, hy: 0, bx: 0, tx: 0, ty: 0, on: false };
   var seed = [Math.random() * 100, Math.random() * 100, Math.random() * 100, Math.random() * 100, Math.random() * 100];
   var saccade = { x: 0, y: 0, tx: 0, ty: 0, next: 1 };
   var blink = { next: 1.5 + Math.random() * 3, t: -1, twice: false };
@@ -110,13 +141,15 @@ AISA.create = function (canvas, opts) {
   }
 
   // ---- physics ------------------------------------------------------------
-  var phys = (AISA.physics || []).map(function (c) { return { c: c, b: null, vb: 0 }; });
+  var phys = (AISA.physics || []).map(function (c) {
+    return { c: c, b: null, vb: 0, ink: Object.keys(c.in), hk: Object.keys(c.hang) };
+  });
   function stepPhysics(v, dt) {
     var steps = Math.max(1, Math.ceil(dt / (1 / 120))), h = dt / steps;
-    phys.forEach(function (p) {
-      var c = p.c, a = 0, g = 0;
-      Object.keys(c.in).forEach(function (k) { a += (v[k] || 0) * c.in[k]; });
-      Object.keys(c.hang).forEach(function (k) { g += (v[k] || 0) * c.hang[k]; });
+    for (var j = 0; j < phys.length; j++) {
+      var p = phys[j], c = p.c, a = 0, g = 0, q;
+      for (q = 0; q < p.ink.length; q++) a += (v[p.ink[q]] || 0) * c.in[p.ink[q]];
+      for (q = 0; q < p.hk.length; q++) g += (v[p.hk[q]] || 0) * c.hang[p.hk[q]];
       if (p.b === null) p.b = a;
       var k = Math.pow(2 * Math.PI * c.hz, 2), d = 2 * c.damp * Math.sqrt(k);
       for (var i = 0; i < steps; i++) {
@@ -127,7 +160,7 @@ AISA.create = function (canvas, opts) {
       // behind it, on the left
       var o = (p.b - a) * c.gain + g;
       v[c.out] = clampParam(c.out, v[c.out] + (auto.physics ? o : 0));
-    });
+    }
   }
 
   // ---- the frame ----------------------------------------------------------
@@ -138,16 +171,23 @@ AISA.create = function (canvas, opts) {
     for (k in values) v[k] = values[k];
 
     // look-at
-    var lk = 1 - Math.exp(-dt * 6);
-    look.x += ((look.on ? look.tx : 0) - look.x) * lk;
-    look.y += ((look.on ? look.ty : 0) - look.y) * lk;
-    v.ParamAngleX += look.x * 22; v.ParamAngleY += look.y * 16;
-    v.ParamEyeBallX += look.x * 0.85; v.ParamEyeBallY += look.y * 0.8;
-    v.ParamBodyAngleX += look.x * 4; v.ParamAngleZ -= look.x * look.y * 4;
+    var gx = look.on ? look.tx : 0, gy = look.on ? look.ty : 0;
+    var ke = 1 - Math.exp(-dt * 18), kh = 1 - Math.exp(-dt * 5), kb = 1 - Math.exp(-dt * 2.2);
+    look.ex += (gx - look.ex) * ke; look.ey += (gy - look.ey) * ke;
+    look.hx += (gx - look.hx) * kh; look.hy += (gy - look.hy) * kh;
+    look.bx += (gx - look.bx) * kb;
+    v.ParamAngleX += look.hx * 22; v.ParamAngleY += look.hy * 16;
+    // the eyes cover whatever of the turn the head has not made yet
+    v.ParamEyeBallX += look.ex * 0.55 + (look.ex - look.hx) * 0.9;
+    v.ParamEyeBallY += look.ey * 0.5 + (look.ey - look.hy) * 0.9;
+    v.ParamBodyAngleX += look.bx * 4; v.ParamAngleZ -= look.hx * look.hy * 4;
 
     if (auto.idle) {
       v.ParamAngleX += wave(time, 0) * 4; v.ParamAngleY += wave(time, 1) * 3; v.ParamAngleZ += wave(time, 2) * 3;
       v.ParamBodyAngleX += wave(time, 3) * 1.5; v.ParamBodyAngleZ += wave(time, 4) * 1.2;
+      // the arms are not bolted on: they hang a little out of time with
+      // the body, and drift as the weight shifts
+      v.ParamArmRA += 1.6 + wave(time + 1.3, 4) * 2.2; v.ParamArmLA += 1.6 + wave(time + 2.1, 3) * 2.2;
       saccade.next -= dt;
       if (saccade.next <= 0) {
         saccade.tx = (Math.random() - 0.5) * 0.4; saccade.ty = (Math.random() - 0.5) * 0.3;
@@ -157,7 +197,13 @@ AISA.create = function (canvas, opts) {
       saccade.x += (saccade.tx - saccade.x) * sk; saccade.y += (saccade.ty - saccade.y) * sk;
       v.ParamEyeBallX += saccade.x; v.ParamEyeBallY += saccade.y;
     }
-    if (auto.breath) v.ParamBreath += 0.5 + 0.5 * Math.sin(time * 2 * Math.PI / 3.6);
+    if (auto.breath) {
+      var br = 0.5 + 0.5 * Math.sin(time * 2 * Math.PI / 3.6);
+      v.ParamBreath += br;
+      // a breath lifts the head a touch, and the shoulders the arms
+      v.ParamAngleY += (br - 0.5) * 0.8;
+      v.ParamArmRA += br * 1.2; v.ParamArmLA += br * 1.2;
+    }
 
     // expressions: weights ease towards their targets
     var step = exprFade > 0 ? dt / exprFade : 1;
@@ -179,8 +225,8 @@ AISA.create = function (canvas, opts) {
       m.t += dt * m.speed;
       if (m.stopping) m.env = Math.max(0, m.env - dt / 0.2);
       else m.env = Math.min(1, m.env + dt / 0.12);
-      var mt = m.loop ? m.t % m.len : Math.min(m.t, m.len);
-      for (id in m.def) if (Array.isArray(m.def[id]) && id in v) v[id] += trackValue(m.def[id], mt) * m.weight * m.env;
+      var mt = m.loop ? m.t % m.len : Math.min(m.t, m.len), tr = m.c.tracks, f = m.weight * ease(m.env);
+      for (var q = 0; q < tr.length; q++) if (tr[q].id in v) v[tr[q].id] += trackValue(tr[q], mt) * f;
       if ((!m.loop && m.t >= m.len) || (m.stopping && m.env <= 0)) {
         playing.splice(i, 1);
         emit("motion", m.name, "end");
@@ -285,6 +331,18 @@ AISA.create = function (canvas, opts) {
       var weight = o.weight == null ? 1 : Math.max(0, Math.min(1, +o.weight));
       if (!o.mix) for (var k in exprTarget) exprTarget[k] = 0;
       exprTarget[name] = weight;
+      // A change of face is covered by a blink, as an animator would: the
+      // eyes shut on the old expression and open on the new one, and the
+      // in-between never shows. Only when the eyes change, and only once.
+      if (auto.blink && blink.t < 0 && name !== current && o.blink !== false) {
+        var a = AISA.expressions[current] || {}, b = AISA.expressions[name];
+        var eyes = ["ParamEyeLOpen", "ParamEyeROpen", "ParamEyeLSmile", "ParamEyeRSmile"];
+        for (var q = 0; q < eyes.length; q++) {
+          if (Math.abs((a[eyes[q]] == null ? DEF[eyes[q]] : a[eyes[q]]) - (b[eyes[q]] == null ? DEF[eyes[q]] : b[eyes[q]])) > 0.15) {
+            blink.t = 0; blink.twice = false; break;
+          }
+        }
+      }
       current = name;
       emit("expression", name, weight);
       return api;
@@ -298,8 +356,9 @@ AISA.create = function (canvas, opts) {
       var def = AISA.motions[name];
       if (!def) return Promise.reject(new Error("unknown motion " + name));
       if (!o.layer) api.stop();
+      var c = compile(name);
       return new Promise(function (resolve) {
-        playing.push({ name: name, def: def, t: 0, len: motionLength(def), loop: o.loop != null ? !!o.loop : !!def.loop,
+        playing.push({ name: name, c: c, t: 0, len: c.len, loop: o.loop != null ? !!o.loop : c.loop,
                        speed: o.speed || 1, weight: o.weight == null ? 1 : +o.weight, env: 0, resolve: resolve });
         emit("motion", name, "start");
       });
@@ -315,8 +374,12 @@ AISA.create = function (canvas, opts) {
        lookAt(null) looks straight ahead again. */
     lookAt: function (x, y) {
       if (x == null) { look.on = false; return api; }
+      var nx = Math.max(-1, Math.min(1, +x)), ny = Math.max(-1, Math.min(1, +y || 0));
+      // a big glance away is often a blink as well
+      var jump = Math.abs(nx - look.tx) + Math.abs(ny - look.ty);
+      if (auto.blink && blink.t < 0 && jump > 0.9 && Math.random() < 0.5) { blink.t = 0; blink.twice = false; }
       look.on = true;
-      look.tx = Math.max(-1, Math.min(1, +x)); look.ty = Math.max(-1, Math.min(1, +y || 0));
+      look.tx = nx; look.ty = ny;
       return api;
     },
     /* The same, at a point on the page: she looks at the pointer, a
@@ -427,6 +490,16 @@ AISA.create = function (canvas, opts) {
     off: function (type, fn) {
       var l = listeners[type] || [], i = l.indexOf(fn);
       if (i >= 0) l.splice(i, 1);
+      return api;
+    },
+    /* Advance time by hand, in steps of 1/60 s, and draw the result: for
+       a test, a recording, or a page that runs its own clock (pause()
+       first, or the animation frame keeps time as well). */
+    step: function (seconds) {
+      if (!rig) return api;
+      var n = Math.max(1, Math.round((+seconds || 0) * 60));
+      for (var i = 0; i < n; i++) { build(1 / 60); emit("frame", out, 1 / 60); }
+      rig.render(out);
       return api;
     },
     stats: function () { return rig ? rig.stats : null; }

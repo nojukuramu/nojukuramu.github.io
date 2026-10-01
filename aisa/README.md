@@ -22,25 +22,48 @@ does what Cubism does, by hand:
 1. **Upscale.** The drawing is 224×512. `tools/upscale.py` redraws it 4× with
    Real-ESRGAN's anime model, so the lines stay clean when stretched.
 2. **Cut.** `tools/cut.py` slices the upscale into 23 parts (back hair, ponytail,
-   face, each eyeball, lash and crease, side locks, bangs, ahoge, arms, legs,
-   shoes, dress, collar, neck, ear). Where a part is hidden under another,
-   it's painted in, so moving a lock of hair uncovers more face rather than a
-   hole. The part outlines are hand-drawn polygons in `tools/parts_def.py`, and
-   colour decides which part owns each pixel. Output: `art/atlas.png` and
-   `art/parts.json`.
+   face, each eyeball, lash, brow strokes, side locks, bangs, ahoge, arms, legs,
+   shoes, dress, collar, neck, ear). The part outlines are hand-drawn polygons in
+   `tools/parts_def.py`, and colour decides which part owns each pixel. Output:
+   `art/atlas.png` and `art/parts.json`.
+
+   What is hidden under another part is painted in, so a move uncovers more of
+   her rather than a hole:
+   - Long hair is carried down its own strands.
+   - Skin is a smooth continuation of the skin around it.
+   - The neck is a column that shows a throat when she looks up.
+   - The thighs continue up under the skirt.
+   - The bodice continues under the sleeves.
+   - The back hair continues behind each arm and under the bangs, with an
+     outline wherever it becomes a silhouette.
+
+   Lines are kept whole:
+   - A line between two parts, and its anti-aliased edge, belongs to the part
+     in front, so it moves as one piece instead of splitting down the middle.
+   - The soft shadow the bangs and locks cast on the skin goes with them.
+   - The upscaler's pale halos are removed wherever a moving part would drag
+     them out into view.
 3. **Rig.** Each part is a mesh over its piece of the atlas (`js/rig.js`, WebGL).
    Every frame, every vertex goes through the deformers in `js/model.js`:
    - **Body.** Bends at the hips. The head, arms and hair ride on it.
    - **Head.** Rolls at the neck and turns with parallax: bangs move more than
      eyes, eyes more than cheeks, and the back hair moves the other way.
    - **Eyes.** The lash comes down along a curve, and the eyeball is clipped
-     under it rather than squashed.
+     under it rather than squashed. A smile closes the eye from below, with a
+     fine lower lid drawn along the cheek.
    - **Arms and legs.** Shoulder, elbow and wrist each rotate everything below
      them, blended across the joint so the sleeve bends rather than tearing.
-   - **Hair and skirt.** Sway from pendulums.
-4. **Drawn parts.** The mouth, blush, tears, sweat drop, anger mark and gloom
-   lines are painted by code (`js/model.js`). The mouth is redrawn whenever its
-   parameters change, and its neutral shape is the drawn one.
+   - **Hair and skirt.** Sway from pendulums. A swinging leg carries the hem.
+
+   Everything a deformer needs that depends only on where a vertex was drawn
+   (its depth in the head, how far down a lock it is, how much of a joint it
+   is) is worked out once, the first time the mesh moves. Only what changes is
+   computed per frame. On a desktop, about 8,000 vertices take a millisecond.
+4. **Drawn parts.** The mouth, the smiling lower lids, blush, tears, sweat drop,
+   anger mark and gloom are painted by code (`js/model.js`). They are redrawn
+   only when their parameters change. The mouth's neutral shape is the drawn
+   one, and it opens through a closed smile or frown into an "o", a wide "D",
+   or an upside-down one.
 
 ## Driving her
 
@@ -81,6 +104,7 @@ Aisa.on("frame", function (values, dt) {});
 Aisa.on("expression", function (name, weight) {});
 Aisa.on("motion", function (name, "start" | "end") {});
 Aisa.params(); Aisa.expressions(); Aisa.motions(); Aisa.snapshot();
+Aisa.pause(); Aisa.step(1 / 30);          // run your own clock: tests, recording
 ```
 
 **Left and right are hers**, as in Live2D. Her right arm and right eye are the
@@ -99,6 +123,14 @@ Each frame, the parameters are built up in layers, in this order:
 
 So an arm held up with `set()` stays up while she smiles, nods and blinks over
 it.
+
+A few things happen without being asked, because an animator would do them:
+- When she looks somewhere, her eyes get there first, her head follows and
+  her body comes last.
+- A change of expression that changes her eyes is covered by a blink.
+- A big glance away is sometimes a blink too.
+- While idle, her arms hang slightly out of step with her body, and her
+  breathing lifts her shoulders.
 
 ## Parameters
 
@@ -122,14 +154,20 @@ slant raises it, for a sad one. A positive shoulder, elbow or wrist value
 moves outward and up; a negative one folds inward.
 
 **Expressions:** neutral (the drawing), happy, joy, sad, crying, angry, annoyed,
-surprised, scared, shy, sleepy, smug, pout, confused, wink.
+surprised, scared, shy, sleepy, smug, pout, confused, thinking, determined,
+wink.
 
 **Motions:** nod, shake, tilt, wave, bow, hop, cheer, shrug, lookAround, sigh,
-sway (loops).
+laugh, jolt, sway (loops).
 
 Both are plain data in `js/expressions.js`, along with the hair pendulums.
 Adding one means adding an entry there. The panel builds itself from those
-lists.
+lists, and the validator checks that this list keeps up.
+
+A motion's keys are points the curve passes through, not stops. The curve is
+a monotone cubic, so it is smooth through every key, never overshoots one, and
+holds still only where two keys hold the same value. A key before the big
+move is the anticipation, and one after it is the follow-through.
 
 ## Files
 
