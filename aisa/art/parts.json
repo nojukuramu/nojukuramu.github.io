@@ -258,5 +258,9 @@
   "sideL",
   "frontHair",
   "ahoge"
- ]
+ ],
+ "source": {
+  "file": "aisa.ora",
+  "sha1": "80d808c602ae44b02e5a7124424a88d21c132534"
+ }
 }

@@ -1,10 +1,12 @@
 """Cut the 4x upscale of Aisa into the parts the rig moves.
 
   python3 upscale.py ../art/source.png RealESRGAN_x4plus_anime_6B.pth up4.png
-  python3 cut.py up4.png ../art
+  python3 cut.py up4.png ../art [debug_dir]
 
-Writes atlas.png and parts.json (and rest.png, the parts laid back
-together, to compare against up4.png; and assign.npy, who owns which
+Writes the parts as the base layers of aisa.ora - keeping everything
+painted over them there (layers.py) - then packs the file into atlas.png
+and parts.json. With a debug_dir, also rest.png there (the parts laid back
+together, to compare against up4.png) and assign.npy (who owns which
 pixel). Every part is the real artwork where it can be seen, plus a
 painted-in continuation wherever another part covers it, so that moving a
 lock of hair uncovers more face rather than a hole. Where the parts are is
@@ -26,6 +28,7 @@ from parts_def import REGIONS, UNDER, LID_EDGE, DRAW
 S = 4
 U8 = np.array(Image.open(sys.argv[1]).convert('RGB'))
 OUT = sys.argv[2]
+DEBUG = sys.argv[3] if len(sys.argv) > 3 else None
 U = U8.astype(np.float32)
 H, W = U.shape[:2]
 lum = U @ np.array([0.299, 0.587, 0.114], np.float32)
@@ -220,7 +223,8 @@ for name, (ecx, ecy) in EYE_C.items():
     r = np.hypot(ys - cy, xs - cx)
     halo = r > last[k] + 2
     assign[ys[halo], xs[halo]] = PARTS.index('face')
-np.save(os.path.join(OUT, 'assign.npy'), assign)
+if DEBUG:
+    np.save(os.path.join(DEBUG, 'assign.npy'), assign)
 
 # The upscaler left a light halo beside every line. On skin it is lighter
 # than the skin itself, which nothing on her face legitimately is (the eye
@@ -521,44 +525,22 @@ for name in DRAW:
     rgb = np.where(halo[..., None], rgb, 0)
     rgba[name] = (rgb, alpha)
 
-# ---- pack ------------------------------------------------------------
-PAD = 8
-boxes = []
+# ---- into the layered file, and from it the atlas ----------------------
+import layers
+bases = {}
 for name in DRAW:
     rgb, a = rgba[name]
-    ys, xs = np.nonzero(a > 0.004)
-    x0, x1 = max(xs.min() - PAD, 0), min(xs.max() + PAD + 1, W)
-    y0, y1 = max(ys.min() - PAD, 0), min(ys.max() + PAD + 1, H)
-    boxes.append((name, x0, y0, x1, y1))
-AW = 2048
-order = sorted(boxes, key=lambda b: -(b[4] - b[2]))
-placed = {}
-x = y = shelf = 0
-for name, x0, y0, x1, y1 in order:
-    w, h = x1 - x0, y1 - y0
-    if x + w > AW:
-        x, y, shelf = 0, y + shelf + 4, 0
-    placed[name] = (x, y)
-    x += w + 4; shelf = max(shelf, h)
-AH = y + shelf
-AH = 1 << int(np.ceil(np.log2(AH)))
-atlas = np.zeros((AH, AW, 4), np.uint8)
-meta = {'scale': S, 'width': AW, 'height': AH, 'parts': {}}
-for name, x0, y0, x1, y1 in boxes:
-    rgb, a = rgba[name]
-    u, v = placed[name]
-    sub = np.dstack([np.clip(rgb[y0:y1, x0:x1], 0, 255), np.clip(a[y0:y1, x0:x1] * 255, 0, 255)])
-    atlas[v:v + (y1 - y0), u:u + (x1 - x0)] = (sub + 0.5).astype(np.uint8)
-    meta['parts'][name] = {'x': x0 / S, 'y': y0 / S, 'w': (x1 - x0) / S, 'h': (y1 - y0) / S,
-                           'u': int(u), 'v': int(v), 'tw': int(x1 - x0), 'th': int(y1 - y0)}
-meta['order'] = DRAW
-Image.fromarray(atlas, 'RGBA').save(os.path.join(OUT, 'atlas.png'), optimize=True)
-json.dump(meta, open(os.path.join(OUT, 'parts.json'), 'w'), indent=1)
+    px = np.dstack([np.clip(rgb, 0, 255), np.clip(a * 255, 0, 255)])
+    bases[name] = Image.fromarray((px + 0.5).astype(np.uint8), 'RGBA')
+ora = os.path.join(OUT, 'aisa.ora')
+layers.write_ora(ora, bases)
+meta = layers.pack(ora, OUT, quiet=True)
 
-# ---- rest-pose check: the parts laid back together over the background
-comp = np.zeros((H, W, 3), np.float32); comp[:] = 27
-for name in DRAW:
-    rgb, a = rgba[name]
-    comp = comp * (1 - a[..., None]) + rgb * a[..., None]
-Image.fromarray(np.clip(comp, 0, 255).astype(np.uint8)).save(os.path.join(OUT, 'rest.png'))
-print('atlas', AW, AH)
+if DEBUG:
+    # rest-pose check: the parts laid back together over the background
+    comp = np.zeros((H, W, 3), np.float32); comp[:] = 27
+    for name in DRAW:
+        rgb, a = rgba[name]
+        comp = comp * (1 - a[..., None]) + rgb * a[..., None]
+    Image.fromarray(np.clip(comp, 0, 255).astype(np.uint8)).save(os.path.join(DEBUG, 'rest.png'))
+print('atlas', meta['width'], meta['height'])

@@ -169,6 +169,70 @@ a monotone cubic, so it is smooth through every key, never overshoots one, and
 holds still only where two keys hold the same value. A key before the big
 move is the anticipation, and one after it is the follow-through.
 
+## Painting her by hand
+
+Every part lives in one layered file, `art/aisa.ora`. You can paint the
+hidden areas yourself, or extend a part past its edge, and the atlas the page
+loads is packed from that file.
+
+It's an OpenRaster file, which Krita opens directly (so do GIMP 2.10+ and
+MyPaint). The canvas is the drawing at 4× (896×2048). Each part the rig moves
+is a group named for it, with the frontmost part at the top:
+
+```
+ahoge
+  guide: hidden at rest   off by default; turn it on to see pink wherever
+                          nothing shows until she moves
+  paint                   yours: paint here
+  base (generated)        cut from the drawing; locked
+frontHair
+  ...
+hairBack
+background                the page colour, to judge against; not packed
+```
+
+1. Open `aisa/art/aisa.ora` and find the part's group.
+2. Paint on its `paint` layer. You can also add layers and groups of your own
+   inside the part's group. What you paint moves with that part, so hair
+   painted in the `face` group turns with the face.
+3. To extend a part, paint past its edge inside its group. The part grows,
+   and the rig gives it a mesh to match: a longer ahoge sways as the ahoge,
+   and a longer lock swings as the lock.
+4. Save, keeping the `.ora` format and the canvas size.
+5. Pack the file into the atlas, then reload the page:
+   ```
+   python3 aisa/tools/layers.py pack
+   ```
+   It needs only Pillow (`pip install pillow`). It says how much of each part
+   you painted, and warns when a stroke lands somewhere that shows at rest,
+   where she no longer matches the drawing. Extending a part usually does
+   that, on purpose.
+6. `node aisa/tools/validate.js` fails if the atlas wasn't packed from the
+   file as it is now, so commit the `.ora`, `atlas.png` and `parts.json`
+   together.
+
+What the packer does with each group:
+- It uses every visible layer except the guides. A hidden layer is left out;
+  hiding the base doesn't remove it.
+- Layer opacity is honoured.
+- These blending modes are honoured: Normal, Multiply, Screen, Overlay,
+  Darken, Lighten, Addition, Hard Light, Soft Light and Erase. Any other mode
+  is packed as Normal, and the packer says so.
+- A shading layer set to Multiply darkens only where the part already is.
+
+Things to know:
+- **Don't paint on `base (generated)`.** It's locked because `cut.py`
+  replaces it when the parts are cut again. Everything else in each group is
+  kept when that happens.
+- **Redraw the guides after you extend a part.** The pink guides are worked
+  out from the parts as they were. Close the file in your editor first, then
+  run `python3 aisa/tools/layers.py guides`, which rewrites the file.
+- **Some parts aren't in the file.** The mouth, the smiling lower lids, blush,
+  tears, sweat, the anger mark and gloom are drawn by code in `js/model.js`.
+- **In GIMP,** layers have a fixed size. The `paint` layers are as big as the
+  canvas, but give any layer you add the canvas size too
+  (Layer → Layer to Image Size).
+
 ## Files
 
 | File | What it is |
@@ -181,17 +245,21 @@ move is the anticipation, and one after it is the follow-through.
 | `js/info.js` | the (i) sheet, in the shape of `routecast/static/js/info.js` |
 | `js/panel.js` | boots her and builds the drawer |
 | `art/source.png` | the original drawing |
-| `art/atlas.png`, `art/parts.json` | the cut parts (generated) |
-| `tools/upscale.py`, `tools/cut.py`, `tools/parts_def.py` | how the atlas was made |
+| `art/aisa.ora` | every part as a layered file: the generated bases and anything painted over them |
+| `art/atlas.png`, `art/parts.json` | the parts packed for the page, from `aisa.ora` (generated) |
+| `tools/layers.py` | `pack` turns `aisa.ora` into the atlas; `guides` redraws the hidden-area guides |
+| `tools/upscale.py`, `tools/cut.py`, `tools/parts_def.py` | how the base layers were cut from the drawing |
 | `tools/validate.js` | `node tools/validate.js`, the checks to run before committing |
 
-To remake the atlas after changing `parts_def.py`, run this from `tools/`:
+To cut the parts again after changing `parts_def.py`, run this from `tools/`:
 
 ```
 python3 upscale.py ../art/source.png RealESRGAN_x4plus_anime_6B.pth /tmp/up4.png
 python3 cut.py /tmp/up4.png ../art
 ```
 
-`cut.py` needs numpy, opencv-python and Pillow. `upscale.py` also needs torch
-and the model weights (the link is in its header). Both are build-time only.
-The page needs nothing but a browser with WebGL.
+`cut.py` replaces the base layers in `aisa.ora`, keeps everything painted over
+them, and packs the atlas. It needs numpy, opencv-python and Pillow.
+`upscale.py` also needs torch and the model weights (the link is in its
+header). All of this is build-time only: the page needs nothing but a browser
+with WebGL.

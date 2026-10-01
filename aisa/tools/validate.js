@@ -23,6 +23,8 @@
 var fs = require("fs");
 var path = require("path");
 var vm = require("vm");
+var zlib = require("zlib");
+var crypto = require("crypto");
 
 var ROOT = path.join(__dirname, "..");
 var SITE = path.join(ROOT, "..");
@@ -136,6 +138,51 @@ section("Rig: assets");
   });
   check("every part lies inside the atlas", outside.length === 0, outside.join(", "));
   check("a texel is a quarter of a source pixel", parts.scale === 4);
+})();
+
+/* The zip entries of an .ora, from its central directory - enough of the
+   format to read stack.xml back without a library. */
+function readZip(buf) {
+  var eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  if (eocd < 0) return null;
+  var count = buf.readUInt16LE(eocd + 10), at = buf.readUInt32LE(eocd + 16), entries = [];
+  for (var i = 0; i < count; i++) {
+    if (buf.readUInt32LE(at) !== 0x02014b50) return null;
+    var method = buf.readUInt16LE(at + 10), size = buf.readUInt32LE(at + 20);
+    var nlen = buf.readUInt16LE(at + 28), elen = buf.readUInt16LE(at + 30), clen = buf.readUInt16LE(at + 32);
+    var local = buf.readUInt32LE(at + 42), name = buf.toString("utf8", at + 46, at + 46 + nlen);
+    var start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
+    entries.push({ name: name, method: method, local: local, data: buf.slice(start, start + size) });
+    at += 46 + nlen + elen + clen;
+  }
+  return entries;
+}
+
+section("Rig: the layered file");
+(function () {
+  /* art/aisa.ora is where the parts are painted (tools/layers.py); the
+     atlas is packed from it. These keep the file one an editor will open,
+     with every part in it, and the atlas the one packed from it. */
+  var file = path.join(ROOT, "art/aisa.ora");
+  if (!fs.existsSync(file)) { fail("art/aisa.ora exists"); return; }
+  var buf = fs.readFileSync(file), zip = readZip(buf);
+  check("aisa.ora is a zip", !!zip);
+  if (!zip) return;
+  var first = zip.slice().sort(function (a, b) { return a.local - b.local; })[0];
+  check("aisa.ora begins with an uncompressed mimetype of image/openraster",
+        first.name === "mimetype" && first.method === 0 && first.data.toString() === "image/openraster");
+  var st = zip.filter(function (e) { return e.name === "stack.xml"; })[0];
+  if (!st) { fail("aisa.ora has a stack.xml"); return; }
+  var xml = (st.method === 8 ? zlib.inflateRawSync(st.data) : st.data).toString("utf8");
+  var names = {};
+  xml.replace(/<(stack|layer)\b[^>]*?\bname="([^"]*)"/g, function (_, tag, n) { names[n] = (names[n] || 0) + 1; });
+  var missing = parts.order.filter(function (p) { return !names[p]; });
+  check("aisa.ora has a layer or group for every part", missing.length === 0, missing.join(", "));
+  var twice = parts.order.filter(function (p) { return names[p] > 1; });
+  check("no part name is used twice in aisa.ora", twice.length === 0, twice.join(", "));
+  var sha = crypto.createHash("sha1").update(buf).digest("hex");
+  check("the atlas is packed from the aisa.ora as it is now", parts.source && parts.source.sha1 === sha,
+        "run: python3 aisa/tools/layers.py pack");
 })();
 
 section("Rig: structure");
