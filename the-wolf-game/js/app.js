@@ -49,7 +49,10 @@
   function toast(text, kind) {
     var box = $("toasts");
     if (!box) return;
-    var t = el("div", { class: "toast " + (kind || "") }, [
+    var life = kind === "bad" ? 6000 : 3800;
+    // The thin line along the bottom is how long it has left, so a toast that
+    // matters can be read before it goes rather than chased.
+    var t = el("div", { class: "toast " + (kind || ""), style: "--life:" + life + "ms" }, [
       WG.icons.node(TOAST_ICON[kind] || "star", 16),
       el("span", { class: "grow", text: text })
     ]);
@@ -58,7 +61,7 @@
       t.style.transition = "opacity .3s, transform .3s";
       t.style.opacity = "0"; t.style.transform = "translateY(6px)";
       setTimeout(function () { t.remove(); }, 320);
-    }, kind === "bad" ? 6000 : 3800);
+    }, life);
   }
 
   function fmt(ms) {
@@ -568,17 +571,24 @@
     if (!v || !v.phase) { WG.sound.scene("none"); lastPhase = null; return; }
     var soundOn = !v.config || !v.config.look || v.config.look.sound !== false;
     WG.sound.setEnabled(soundOn);
+
+    /* The turn of a phase is seen whether or not it is heard. This used to sit
+     * below the sound switch, so a room with the sound off never got the
+     * sweep across the screen either. */
+    var turned = v.phase !== lastPhase || v.round !== lastRound;
+    if (turned) {
+      if (lastPhase) { sweep(v.phase); announce(v); }
+      lastPhase = v.phase; lastRound = v.round;
+    }
     if (!soundOn) return;
 
     var dark = v.phase === "night" || v.phase === "verdict" || v.phase === "role_reveal";
     WG.sound.scene(v.phase === "lobby" || v.phase === "game_over" ? "none" : dark ? "night" : "day");
 
-    if (v.phase !== lastPhase || v.round !== lastRound) {
+    if (turned) {
       if (v.phase === "night") WG.sound.play("howl");
       else if (v.phase === "dawn") WG.sound.play(deathsThisRound(v) ? "crow" : "dawn");
       else if (v.phase === "verdict") WG.sound.play("bell");
-      if (lastPhase) sweep(v.phase);
-      lastPhase = v.phase; lastRound = v.round;
     }
 
     // The last ten seconds of a timed phase get a pulse under them.
@@ -603,6 +613,28 @@
     el2.style.animation = "none";
     void el2.offsetWidth;
     el2.style.animation = "";
+  }
+
+  /* ...and the name of the phase, said once across the middle of the screen:
+   * "Night 3", "Dawn 3", or who won. The phase bar already says it, but the
+   * phase bar is what you look at when you already know. */
+  function announce(v) {
+    if (!WG.fx || v.phase === "lobby") return;
+    var p = WG.clock.phase(v.phase) || { name: v.phase, icon: "star" };
+    var dark = v.phase === "night" || v.phase === "verdict" || v.phase === "role_reveal";
+    if (v.phase === "game_over") {
+      var w = v.winner || {}, team = (WG.roles.teams || {})[w.team] || {};
+      WG.fx.titleCard({ title: team.name || "Game over", sub: w.message || "", tone: w.team || "night",
+        icon: WG.icons.node(team.icon || "flag", 34, { weight: 1.15 }) });
+      return;
+    }
+    var ev = v.currentEvent && v.phase === "night" ? v.currentEvent : null;
+    WG.fx.titleCard({
+      title: p.name + (p.showRound && v.round ? " " + v.round : ""),
+      sub: ev ? ev.name : p.description || "",
+      tone: ev && ev.id === "blood_moon" ? "werewolf" : dark ? "night" : "day",
+      icon: WG.icons.node(ev ? ev.icon : p.icon, 30, { weight: 1.1 })
+    });
   }
 
   function deathsThisRound(v) {
@@ -687,13 +719,12 @@
   /* ---------------- home ---------------- */
 
   function renderHome() {
-    var stage = el("div", { class: "pane grow center reveal" });
+    var stage = el("div", { class: "pane grow center" + WG.fx.enter("reveal", "home") });
     var dock = el("div");
 
-    stage.appendChild(el("div", { style: "text-align:center;margin-bottom:14px" }, [
-      el("div", { style: "color:var(--accent);display:flex;justify-content:center" },
-        [WG.icons.node("moon", 54, { weight: 1.1 })]),
-      el("h1", { style: "margin:8px 0 2px", text: "The Wolf Game" }),
+    stage.appendChild(el("div", { class: "home-head" }, [
+      WG.screens.hero(),
+      el("h1", { style: "margin:4px 0 2px", text: "The Wolf Game" }),
       el("p", { class: "muted small", style: "max-width:30ch;margin:0 auto",
         text: "A village. A pack. Everyone on their own phone." })
     ]));
@@ -779,7 +810,7 @@
 
   function renderLobbyWait() {
     return {
-      stage: el("div", { class: "pane grow center reveal" }, [
+      stage: el("div", { class: "pane grow center" + WG.fx.enter("reveal", "door-wait") }, [
         el("div", { class: "empty" }, [
           WG.icons.node("door", 44, { weight: 1.2 }),
           el("h2", { text: "At the door" }),
