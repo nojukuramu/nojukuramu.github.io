@@ -25,6 +25,18 @@
  *   dead tonight   door hanging open, blood at the threshold, and a slow pulse
  *                  until somebody raises the alarm
  *   visited        a footpath trodden from the square to the door
+ *
+ * And it moves, in the few ways that carry something:
+ *
+ *   - a house you point at lifts and is lit from beneath; one you tap gives a
+ *     little jump, so a knock reads as a knock before the sheet arrives
+ *   - the houses settle into the valley once at the start of each round, and
+ *     never again on the repaints in between
+ *   - when you learn somebody is dead, their lights go out in front of you:
+ *     the window flickers and dies, the smoke stops, the lantern goes dark
+ *   - embers climb off the fire, cloud shadows cross the fields by day, and at
+ *     night there are eyes in the woods. They belong to nobody — they are the
+ *     same for every phone and say nothing about where the pack is
  */
 (function (global) {
   "use strict";
@@ -270,8 +282,11 @@
         });
       }
     });
-    // Painter's order: nearer things last.
-    return out.sort(function (a, b) { return a.y - b.y; });
+    // Painter's order: nearer things last. The same order is the order they
+    // arrive in, back to front, like a valley coming out of the mist.
+    out.sort(function (a, b) { return a.y - b.y; });
+    out.forEach(function (o, k) { o.order = k; });
+    return out;
   }
 
   /* ---------------- scenery ---------------- */
@@ -297,9 +312,13 @@
    * that also carries a `transform` *attribute* replaces it outright — which
    * quietly stacked every tree in the village at the origin the first time the
    * sway was added. Placement lives on the outer group, motion on the inner. */
-  function tree(x, y, s, kind) {
+  /* Only the near trees sway. Half a degree on a tree twelve pixels tall is a
+   * sub-pixel wobble nobody can see, but every animated element asks the
+   * browser to repaint the board under it, and the far woods are most of the
+   * trees. */
+  function tree(x, y, s, kind, sway) {
     var outer = el("g", { transform: "translate(" + n2(x) + "," + n2(y) + ") scale(" + n2(s) + ")" });
-    var g = el("g", { class: "ln-tree" });
+    var g = el("g", { class: sway ? "ln-tree" : "ln-tree-still" });
     outer.appendChild(g);
     g.appendChild(el("ellipse", { class: "ln-tree-shadow", cx: 0, cy: 2, rx: 14, ry: 3.5 }));
     g.appendChild(el("path", { class: "ln-trunk", d: "M-2.2 0 h4.4 l-1 -16 h-2.4 z" }));
@@ -356,32 +375,56 @@
     var w = shape.w * s, roof = shape.roof * s, wall = shape.wall * s;
     var dead = !h.occupantAlive;
     var fresh = h.state === "dead-tonight";
+    // Dead as of a moment ago: drawn as a living house whose lights are going
+    // out, and only for the couple of seconds that takes.
+    var diedAgo = Date.now() - (memory.dying[h.id] || 0);
+    var dying = dead && diedAgo < DYING_MS;
+    var lit = !dead || dying;
 
     var cls = ["hs", "hs-" + shape.name];
     if (h.isOwn) cls.push("own");
     if (dead) cls.push("dead");
+    if (dying) cls.push("dying");
     if (fresh) cls.push("fresh");
     if (h.reported) cls.push("reported");
     if (h.visited) cls.push("visited");
     if (opts.selectable === false) cls.push("static");
 
+    var pick = opts.onPick && opts.selectable !== false;
     var g = el("g", {
       class: cls.join(" "),
       transform: "translate(" + n2(spot.x) + "," + n2(spot.y) + ")",
+      "data-house": h.id,
+      /* A repaint in the middle of the lights going out picks the animation
+       * up where it was, rather than switching the lights back on to start
+       * again: the delay is how long ago it began, as a negative number. */
+      style: "--i:" + spot.order + (dying ? ";--died:-" + diedAgo + "ms" : ""),
       role: opts.selectable === false ? null : "button",
       tabindex: opts.selectable === false ? null : "0",
       "aria-label": p.name + (dead ? ", dead" : ""),
-      onclick: opts.onPick ? function () { opts.onPick(h.id); } : null,
-      onkeydown: opts.onPick ? function (e) {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); opts.onPick(h.id); }
-      } : null
+      onclick: pick ? function () { knockFx(g, h.id); opts.onPick(h.id); } : null,
+      onkeydown: pick ? function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); knockFx(g, h.id); opts.onPick(h.id); }
+      } : null,
+      onpointerenter: pick ? function () { hot(g, h.id, true); } : null,
+      onpointerleave: pick ? function () { hot(g, h.id, false); } : null,
+      onfocus: pick ? function () { hot(g, h.id, true); } : null,
+      onblur: pick ? function () { hot(g, h.id, false); } : null
     });
 
+    // The light you are pointing with: a pool on the ground under the house.
+    g.appendChild(el("ellipse", { class: "hs-halo", cx: 0, cy: n2(2 * s), rx: n2(w * 0.95), ry: n2(22 * s) }));
     g.appendChild(el("ellipse", { class: "hs-shadow", cx: 2 * s, cy: 3 * s, rx: w * 0.64, ry: 8 * s }));
 
+    /* Everything that lifts when the house is pointed at lives in here. It is
+     * its own group with no transform attribute of its own, because a CSS
+     * transform on an element that already carries one replaces it. */
+    var lift = el("g", { class: "hs-lift" });
+    g.appendChild(lift);
+
     // Smoke first, so it rises from behind the roof rather than over it.
-    if (!dead) {
-      g.appendChild(el("path", {
+    if (lit) {
+      lift.appendChild(el("path", {
         class: "hs-smoke",
         d: "M" + n2(-w * 0.30) + " " + n2(-wall - roof * 0.62) +
            " c" + n2(-6 * s) + " " + n2(-14 * s) + " " + n2(9 * s) + " " + n2(-19 * s) + " " + n2(2 * s) + " " + n2(-33 * s) +
@@ -389,7 +432,7 @@
       }));
     }
 
-    var lean = dead ? (spot.i % 2 ? 1.8 : -1.8) : 0;
+    var lean = dead && !dying ? (spot.i % 2 ? 1.8 : -1.8) : 0;
     var body = el("g", { transform: "rotate(" + lean + ")" });
 
     body.appendChild(el("path", {
@@ -435,6 +478,11 @@
       d: "M" + n2(w / 2 + 9 * s) + " " + n2(-wall) + " L0 " + n2(-wall - roof) +
          " L" + n2(10 * s) + " " + n2(-wall - roof + 5 * s) +
          " L" + n2(w / 2 + 21 * s) + " " + n2(-wall + 5 * s) + " Z"
+    }));
+    // The ridge catches whatever light there is: sun by day, moon by night.
+    body.appendChild(el("path", {
+      class: "hs-ridge",
+      d: "M" + n2(-w / 2 - 9 * s) + " " + n2(-wall) + " L0 " + n2(-wall - roof)
     }));
     // Chimney, with a cap.
     body.appendChild(el("path", {
@@ -504,22 +552,22 @@
     lamp.appendChild(swing);
     body.appendChild(lamp);
 
-    g.appendChild(body);
+    lift.appendChild(body);
 
-    if (!dead) g.appendChild(el("ellipse", { class: "hs-spill", cx: 0, cy: 5 * s, rx: w * 0.74, ry: 16 * s }));
+    if (lit) lift.appendChild(el("ellipse", { class: "hs-spill", cx: 0, cy: 5 * s, rx: w * 0.74, ry: 16 * s }));
 
     // Something in the yard, on about half of them.
     if (spot.i % 3 === 0) {
-      g.appendChild(el("path", {
+      lift.appendChild(el("path", {
         class: "hs-props",
         d: "M" + n2(-w * 0.62) + " 0 h" + n2(15 * s) + " v" + n2(-9 * s) + " h" + n2(-15 * s) + " z"
       }));
-      g.appendChild(el("path", {
+      lift.appendChild(el("path", {
         class: "hs-props-line",
         d: "M" + n2(-w * 0.62) + " " + n2(-4.5 * s) + " h" + n2(15 * s)
       }));
     } else if (spot.i % 3 === 1) {
-      g.appendChild(el("path", {
+      lift.appendChild(el("path", {
         class: "hs-props",
         d: "M" + n2(w * 0.56) + " 0 q" + n2(2 * s) + " " + n2(-11 * s) + " " + n2(11 * s) + " " + n2(-11 * s) +
            " q" + n2(9 * s) + " 0 " + n2(11 * s) + " " + n2(11 * s) + " z"
@@ -527,13 +575,13 @@
     }
 
     if (fresh) {
-      g.appendChild(el("path", {
+      lift.appendChild(el("path", {
         class: "hs-smear",
         d: "M" + n2(doorX - 23 * s) + " " + n2(-33 * s) +
            " q" + n2(5 * s) + " " + n2(16 * s) + " " + n2(2 * s) + " " + n2(33 * s) +
            " l" + n2(8 * s) + " 0 q" + n2(2 * s) + " " + n2(-18 * s) + " " + n2(-2 * s) + " " + n2(-33 * s) + " z"
       }));
-      g.appendChild(el("path", {
+      lift.appendChild(el("path", {
         class: "hs-blood",
         d: "M" + n2(-w * 0.30) + " " + n2(3 * s) +
            " q" + n2(16 * s) + " " + n2(14 * s) + " " + n2(40 * s) + " " + n2(6 * s) +
@@ -541,17 +589,50 @@
            " q" + n2(-12 * s) + " " + n2(13 * s) + " " + n2(-44 * s) + " " + n2(10 * s) +
            " q" + n2(-30 * s) + " " + n2(2 * s) + " " + n2(-22 * s) + " " + n2(-21 * s) + " z"
       }));
-      g.appendChild(el("circle", { class: "hs-drop", cx: n2(w * 0.50), cy: n2(15 * s), r: n2(4 * s) }));
-      g.appendChild(el("circle", { class: "hs-drop", cx: n2(-w * 0.44), cy: n2(11 * s), r: n2(2.6 * s) }));
-      if (!h.reported) g.appendChild(el("circle", { class: "hs-alarm", cx: 0, cy: n2(-wall * 0.5), r: n2(w * 0.66) }));
+      lift.appendChild(el("circle", { class: "hs-drop", cx: n2(w * 0.50), cy: n2(15 * s), r: n2(4 * s) }));
+      lift.appendChild(el("circle", { class: "hs-drop", cx: n2(-w * 0.44), cy: n2(11 * s), r: n2(2.6 * s) }));
+      if (!h.reported) lift.appendChild(el("circle", { class: "hs-alarm", cx: 0, cy: n2(-wall * 0.5), r: n2(w * 0.66) }));
     }
 
-    g.appendChild(el("text", { class: "hs-name", x: 0, y: n2(23 * s), "text-anchor": "middle" }, [txt(p.name)]));
+    // Your own house carries a marker over the roof, so you can find yourself
+    // in a village of twenty at a glance.
+    if (h.isOwn) {
+      // Never smaller than a near house's: at the back of the valley a pin
+      // scaled with its house is a speck, and finding yourself is its job.
+      var ps = Math.max(s, 0.9), py = -wall - roof - 12 * s;
+      lift.appendChild(el("path", {
+        class: "hs-pin",
+        d: "M0 " + n2(py) + " l" + n2(-8 * ps) + " " + n2(-12 * ps) + " h" + n2(16 * ps) + " z"
+      }));
+    }
+
+    /* The label's type size does not scale with the house, so neither can its
+     * offset: hung at 23 x scale, the name on a house at the back of the
+     * valley sat across its own front door. */
+    g.appendChild(el("text", { class: "hs-name", x: 0, y: n2(6 * s + 17), "text-anchor": "middle" }, [txt(p.name)]));
     if (opts.subtitle) {
       var sub = opts.subtitle(h, p);
-      if (sub) g.appendChild(el("text", { class: "hs-sub", x: 0, y: n2(36 * s), "text-anchor": "middle" }, [txt(sub)]));
+      if (sub) g.appendChild(el("text", { class: "hs-sub", x: 0, y: n2(6 * s + 31), "text-anchor": "middle" }, [txt(sub)]));
     }
     return g;
+  }
+
+  /* A house and its stand-ins in the lit layer (see relight) answer to the
+   * same id, so a class set on one is set on all of them. CSS :hover cannot do
+   * this — the copies of the windows are not inside the house any more. */
+  function twins(g, id) {
+    var svg = g.ownerSVGElement;
+    if (!svg) return [g];
+    var q = global.CSS && global.CSS.escape ? global.CSS.escape(id) : String(id).replace(/"/g, '\\"');
+    return [].slice.call(svg.querySelectorAll('[data-house="' + q + '"]'));
+  }
+  function hot(g, id, on) {
+    twins(g, id).forEach(function (n) { n.classList.toggle("hot", on); });
+  }
+  function knockFx(g, id) {
+    var all = twins(g, id);
+    all.forEach(function (n) { n.classList.remove("knock"); void n.getBoundingClientRect(); n.classList.add("knock"); });
+    setTimeout(function () { all.forEach(function (n) { n.classList.remove("knock"); }); }, 450);
   }
 
   /* ---------------- the scene ---------------- */
@@ -577,6 +658,33 @@
     lamp.appendChild(el("stop", { offset: "0%", "stop-color": "#ffc978", "stop-opacity": "0.55" }));
     lamp.appendChild(el("stop", { offset: "100%", "stop-color": "#ffc978", "stop-opacity": "0" }));
     d.appendChild(lamp);
+
+    /* Mist used to be a rectangle under an SVG blur, which the browser has to
+     * re-rasterise every time anything near it moves — and on this board
+     * something always is. A gradient with soft ends looks the same and costs
+     * nothing. The stops take their colour from the sky in CSS. */
+    var mist = el("linearGradient", { id: "wg-mist", x1: "0", y1: "0", x2: "0", y2: "1" });
+    mist.appendChild(el("stop", { class: "mist-stop", offset: "0%", "stop-opacity": "0" }));
+    mist.appendChild(el("stop", { class: "mist-stop", offset: "50%", "stop-opacity": "1" }));
+    mist.appendChild(el("stop", { class: "mist-stop", offset: "100%", "stop-opacity": "0" }));
+    d.appendChild(mist);
+
+    var shade = el("radialGradient", { id: "wg-cloud-shade" });
+    shade.appendChild(el("stop", { offset: "0%", "stop-color": "#0b141c", "stop-opacity": "0.5" }));
+    shade.appendChild(el("stop", { offset: "70%", "stop-color": "#0b141c", "stop-opacity": "0.2" }));
+    shade.appendChild(el("stop", { offset: "100%", "stop-color": "#0b141c", "stop-opacity": "0" }));
+    d.appendChild(shade);
+
+    var fire = el("radialGradient", { id: "wg-fire" });
+    fire.appendChild(el("stop", { offset: "0%", "stop-color": "#ffbf73", "stop-opacity": "0.75" }));
+    fire.appendChild(el("stop", { offset: "40%", "stop-color": "#f08a3e", "stop-opacity": "0.28" }));
+    fire.appendChild(el("stop", { offset: "100%", "stop-color": "#f08a3e", "stop-opacity": "0" }));
+    d.appendChild(fire);
+
+    var halo = el("radialGradient", { id: "wg-halo" });
+    halo.appendChild(el("stop", { class: "halo-stop", offset: "0%", "stop-opacity": "0.55" }));
+    halo.appendChild(el("stop", { class: "halo-stop", offset: "100%", "stop-opacity": "0" }));
+    d.appendChild(halo);
     return d;
   }
 
@@ -586,12 +694,17 @@
     var geo = terrain(rnd, VH);
     var spots = layout(houses.length, VH, seed, geo);
     var night = view.phase === "night" || view.phase === "verdict" || view.phase === "role_reveal";
-    svg.setAttribute("class", "village-svg" + (night ? " night" : ""));
+    /* Same for the houses settling in: the host repaints whenever anybody does
+     * anything, and the start of a night is exactly when everybody does. */
+    var since = Date.now() - memory.arrivedAt;
+    var arrive = since < ARRIVE_MS && !(WG.fx && WG.fx.reduced());
+    svg.setAttribute("class", "village-svg" + (night ? " night" : "") + (arrive ? " arrive" : ""));
+    if (arrive) svg.setAttribute("style", "--since:-" + since + "ms");
     svg.appendChild(defs());
 
     /* --- the land, back to front, with mist in the gaps --- */
     svg.appendChild(ridge(rnd, VH, 0.145, 0.045, "ln-field far"));
-    svg.appendChild(el("rect", { class: "ln-mist", x: -20, y: n2(VH * 0.125), width: VW + 40, height: n2(VH * 0.10) }));
+    svg.appendChild(el("rect", { class: "ln-mist", x: -80, y: n2(VH * 0.105), width: VW + 160, height: n2(VH * 0.14) }));
     svg.appendChild(ridge(rnd, VH, 0.36, 0.06, "ln-field mid"));
 
     /* --- the river --- */
@@ -599,7 +712,7 @@
     svg.appendChild(el("path", { class: "ln-river", d: geo.riverD }));
     svg.appendChild(el("path", { class: "ln-river-glint", d: geo.riverD }));
 
-    svg.appendChild(el("rect", { class: "ln-mist", x: -20, y: n2(VH * 0.36), width: VW + 40, height: n2(VH * 0.09) }));
+    svg.appendChild(el("rect", { class: "ln-mist slow", x: -80, y: n2(VH * 0.34), width: VW + 160, height: n2(VH * 0.13) }));
     svg.appendChild(ridge(rnd, VH, 0.55, 0.05, "ln-field near"));
 
     /* Nightfall over the land.
@@ -671,18 +784,28 @@
     /* --- everything from here is depth-sorted together, so a tree can stand
      *     in front of a far house and behind a near one --- */
     var props = trees.map(function (t) {
-      return { y: t.y, node: function () { return tree(t.x, t.y, t.s, t.kind); } };
+      return { y: t.y, node: function () { return tree(t.x, t.y, t.s, t.kind, t.y > VH * 0.62); } };
     });
 
     // The square: a well, a fire, and the ground worn bare around them.
     props.push({ y: geo.square.y + 1, node: function () {
       var g = el("g", { class: "ln-square", transform: "translate(" + n2(geo.square.x) + "," + n2(geo.square.y) + ")" });
       g.appendChild(el("ellipse", { class: "ln-clearing", cx: 0, cy: 0, rx: 124, ry: 44 }));
-      g.appendChild(el("circle", { class: "ln-fire-glow", cx: -6, cy: -4, r: 66 }));
+      g.appendChild(el("circle", { class: "ln-fire-glow", cx: -6, cy: -4, r: 86 }));
       g.appendChild(el("path", { class: "ln-logs", d: "M-24 4 L22 -6 M-24 -6 L22 4" }));
+      // Three tongues, each flickering on its own beat: a flame that moves as
+      // one shape reads as a sticker.
       g.appendChild(el("path", {
         class: "ln-flame",
         d: "M-4 -36 C6 -24 12 -15 12 -7 C12 3 5 9 -4 9 C-13 9 -20 3 -20 -7 C-20 -15 -14 -24 -4 -36 Z"
+      }));
+      g.appendChild(el("path", {
+        class: "ln-flame inner",
+        d: "M-3 -25 C3 -17 7 -11 7 -5 C7 2 3 6 -3 6 C-9 6 -13 2 -13 -5 C-13 -11 -9 -17 -3 -25 Z"
+      }));
+      g.appendChild(el("path", {
+        class: "ln-flame core",
+        d: "M-3 -13 C0 -9 2 -6 2 -3 C2 1 0 3 -3 3 C-6 3 -8 1 -8 -3 C-8 -6 -6 -9 -3 -13 Z"
       }));
       g.appendChild(el("path", { class: "ln-well", d: "M44 4 h34 v-16 h-34 z" }));
       g.appendChild(el("path", { class: "ln-well-frame", d: "M46 -12 v-20 h30 v20 M42 -32 h38 l-6 -9 h-26 z" }));
@@ -739,11 +862,57 @@
     props.sort(function (a, b) { return a.y - b.y; });
     props.forEach(function (pr) { svg.appendChild(pr.node()); });
 
+    /* Cloud shadows, crossing the whole valley — fields, trees, roofs — the
+     * way a real one does. They fade out with the daylight in CSS, so at night
+     * there is nothing here to see. */
+    if (!night) {
+      for (var cs = 0; cs < 2; cs++) {
+        svg.appendChild(el("ellipse", {
+          class: "ln-cloud-shade",
+          cx: n2(-260), cy: n2(VH * (0.42 + cs * 0.28 + rnd() * 0.08)),
+          rx: n2(220 + rnd() * 120), ry: n2(VH * (0.07 + rnd() * 0.04)),
+          style: "animation-duration:" + n2(70 + rnd() * 40) + "s;animation-delay:" + n2(-rnd() * 80) + "s"
+        }));
+      }
+    }
+
     /* A second, lighter scrim over the houses and trees. Windows, the fire and
      * the blood are drawn after it, so the only things that stay bright at
      * night are the things that ought to be. */
     svg.appendChild(el("rect", { class: "ln-night", x: -20, y: -20, width: VW + 40, height: VH + 40 }));
     relight(svg);
+
+    /* --- embers off the fire. On top of everything, because they are light --- */
+    var fireAt = el("g", { transform: "translate(" + n2(geo.square.x - 4) + "," + n2(geo.square.y - 14) + ")" });
+    for (var em = 0; em < 9; em++) {
+      fireAt.appendChild(el("circle", {
+        class: "ln-ember", cx: n2(rnd() * 18 - 9), cy: 0, r: n2(1.4 + rnd() * 1.4),
+        style: "--dx:" + n2(rnd() * 36 - 18) + "px;--rise:" + n2(-50 - rnd() * 50) + "px;" +
+               "animation-duration:" + n2(2.2 + rnd() * 2) + "s;animation-delay:" + n2(-rnd() * 4) + "s"
+      }));
+    }
+    svg.appendChild(fireAt);
+
+    /* --- eyes in the woods, at night. Pairs of them, low between the far
+     *     trees, opening for a few seconds at long random intervals. They are
+     *     generated from the room code like everything else, so they are the
+     *     same on every phone and are nobody in particular. --- */
+    if (night) {
+      var far = trees.filter(function (t) { return t.y < VH * 0.5 && t.kind !== "bare"; });
+      for (var ey = 0; ey < Math.min(4, far.length); ey++) {
+        var t = far[Math.floor(rnd() * far.length)];
+        var side = rnd() < 0.5 ? -1 : 1;
+        var ex = t.x + side * 13 * t.s, eyY = t.y - 7 * t.s;
+        var pair = el("g", {
+          class: "ln-eyes",
+          style: "animation-duration:" + n2(15 + rnd() * 14) + "s;animation-delay:" + n2(-rnd() * 26) + "s"
+        });
+        pair.appendChild(el("circle", { class: "ln-eyes-glow", cx: n2(ex), cy: n2(eyY), r: 11 }));
+        pair.appendChild(el("ellipse", { class: "ln-eye", cx: n2(ex - 4.6), cy: n2(eyY), rx: 2.8, ry: 2.1 }));
+        pair.appendChild(el("ellipse", { class: "ln-eye", cx: n2(ex + 4.6), cy: n2(eyY), rx: 2.8, ry: 2.1 }));
+        svg.appendChild(pair);
+      }
+    }
 
     /* --- fireflies, at night only, in the near field --- */
     if (night) {
@@ -779,32 +948,74 @@
    * it: window glass, the spill on the ground beneath it, the fire, anything
    * bleeding — and the names, which the blood pool was otherwise painting over.
    * Cloning is cheaper and far less error-prone than trying to hold a z-order
-   * through a depth sort. */
+   * through a depth sort.
+   *
+   * A clone has to arrive with everything its original was inside, not just
+   * the transforms. It used to carry only those, so the copy of a dead
+   * house's window had no idea the house was dead and sat there lit — and the
+   * name over it lost its strike-through. So the chain of ancestors is rebuilt
+   * above each clone: the house's own state classes (as `hs-relit`, so a query
+   * for `.hs` still counts houses), each transform, and the lift group, so a
+   * house that rises when pointed at takes its lit windows with it. Siblings
+   * share one rebuilt chain. */
+  var LIT = ".hs-window, .hs-spill, .hs-pin, .ln-flame, .ln-fire-glow, .hs-blood, .hs-smear, " +
+            ".hs-drop, .hs-alarm, .ln-fly, .hs-name, .hs-sub";
+
   function relight(svg) {
-    var lit = svg.querySelectorAll(
-      ".hs-window, .hs-spill, .ln-flame, .ln-fire-glow, .hs-blood, .hs-smear, .hs-drop, .hs-alarm, .ln-fly, .hs-name, .hs-sub");
+    var lit = svg.querySelectorAll(LIT);
     var layer = el("g", { class: "ln-lit" });
+    var made = [];                       // [original ancestor, its rebuilt stand-in]
+    function standIn(a) {
+      for (var k = 0; k < made.length; k++) if (made[k][0] === a) return made[k][1];
+      return null;
+    }
     for (var i = 0; i < lit.length; i++) {
-      var node = lit[i].cloneNode(true);
-      // Carry the ancestors' transforms down onto the clone.
-      var t = [], p = lit[i];
-      while (p && p !== svg) {
-        var tr = p.getAttribute && p.getAttribute("transform");
-        if (tr) t.unshift(tr);
-        p = p.parentNode;
+      var chain = [];
+      for (var p = lit[i].parentNode; p && p !== svg; p = p.parentNode) chain.unshift(p);
+      var host = layer;
+      for (var c = 0; c < chain.length; c++) {
+        var a = chain[c], known = standIn(a);
+        if (known) { host = known; continue; }
+        var cl = a.classList;
+        if (cl && cl.contains("hs")) {
+          var w = el("g");
+          w.setAttribute("class", a.getAttribute("class").split(/\s+/).map(function (x) {
+            return x === "hs" ? "hs-relit" : x;
+          }).join(" "));
+          w.setAttribute("data-house", a.getAttribute("data-house"));
+          if (a.getAttribute("style")) w.setAttribute("style", a.getAttribute("style"));
+          host.appendChild(w); host = w;
+        }
+        var tr = a.getAttribute && a.getAttribute("transform");
+        if (tr) { var t = el("g"); t.setAttribute("transform", tr); host.appendChild(t); host = t; }
+        if (cl && cl.contains("hs-lift")) { var l = el("g"); l.setAttribute("class", "hs-lift"); host.appendChild(l); host = l; }
+        made.push([a, host]);
       }
-      if (t.length) {
-        var wrap = el("g", { transform: t.join(" ") });
-        wrap.appendChild(node);
-        layer.appendChild(wrap);
-      } else {
-        layer.appendChild(node);
-      }
+      host.appendChild(lit[i].cloneNode(true));
     }
     svg.appendChild(layer);
   }
 
   /* ---------------- mounting ---------------- */
+
+  /* What this phone last saw of each house, so a death can be shown happening
+   * rather than simply being there on the next repaint. A new room starts with
+   * a clean slate and animates nothing — reloading into a game halfway through
+   * should not put every light in the village out at once. */
+  var memory = { code: null, alive: {}, dying: {}, arrivedAt: 0 };
+  var DYING_MS = 2400, ARRIVE_MS = 2600;
+
+  function remember(view, houses) {
+    var fresh = memory.code !== view.code;
+    if (fresh) memory = { code: view.code, alive: {}, dying: {}, arrivedAt: 0 };
+    var now = Date.now();
+    houses.forEach(function (h) {
+      if (!fresh && memory.alive[h.id] === true && !h.occupantAlive) memory.dying[h.id] = now;
+      memory.alive[h.id] = !!h.occupantAlive;
+    });
+    // Once a round, the first time this phone draws it, the houses settle in.
+    if (WG.fx && WG.fx.once("village:" + view.code + ":" + view.round)) memory.arrivedAt = now;
+  }
 
   function render(view, opts) {
     opts = opts || {};
@@ -812,6 +1023,7 @@
       var p = playerOf(view, h.id);
       return p && !p.spectator;
     });
+    remember(view, houses);
 
     var svg = el("svg", {
       class: "village-svg",

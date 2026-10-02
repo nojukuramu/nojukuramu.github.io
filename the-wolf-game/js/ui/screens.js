@@ -24,6 +24,9 @@
     return n;
   }
   function teamClass(p) { return p && p.role ? "team-" + p.role.team : ""; }
+  /* An entrance, the first time this exact thing is drawn and never on the
+   * repaints after it (see fx.once). */
+  function enter(cls, key) { return WG.fx.enter(cls, key); }
   function playerOf(v, id) {
     for (var i = 0; i < v.players.length; i++) if (v.players[i].id === id) return v.players[i];
     return null;
@@ -35,8 +38,14 @@
     var manage = H.canManage(v);
     var body = el("div", { class: "pane grow scroll" });
 
+    /* The code as tiles you could read across a room, dealt in one at a time
+     * the first time the room is shown. Nothing between the letters, so the
+     * code is still the element's text. */
+    var dealIn = enter("deal", "code:" + v.code);
     body.appendChild(el("div", { class: "card" }, [
-      el("div", { class: "roomcode", text: v.code }),
+      el("div", { class: "roomcode" + dealIn, "aria-label": "Room code " + v.code }, String(v.code || "").split("").map(function (c, k) {
+        return el("span", { class: "tile", style: "--i:" + k, text: c });
+      })),
       el("div", { class: "spread", style: "margin-top:6px" }, [
         el("button", { class: "btn small grow", onclick: function () { shareRoom(v.code); } }, [icon("link", 15), "Share"]),
         el("button", { class: "btn small grow", onclick: function () { copy(v.code); } }, [icon("copy", 15), "Copy code"])
@@ -87,7 +96,8 @@
           onclick: function () { if (confirm("Remove " + p.name + "?")) dispatch({ type: CMD.KICK, id: p.id }); }
         }, [icon("close", 14)]));
       }
-      card.appendChild(el("div", { class: "row" }, [
+      // Somebody new walking in gets a moment; everybody already seated does not.
+      card.appendChild(el("div", { class: "row" + enter("arrive-row", "seat:" + v.code + ":" + p.id) }, [
         face(p, 30),
         el("div", { class: "grow" }, [
           el("div", { class: "row-title", text: p.name + (p.isMe ? " (you)" : "") }),
@@ -350,8 +360,8 @@
       ]) };
     }
     var r = me.role;
-    var body = el("div", { class: "pane grow scroll reveal" });
-    body.appendChild(el("div", { class: "rolecard team-" + r.team }, [
+    var body = el("div", { class: "pane grow scroll" });
+    var card = el("div", { class: "rolecard team-" + r.team }, [
       el("div", { class: "crest" }, [icon(r.icon, 46, { weight: 1.15 })]),
       el("div", { class: "name", text: r.name }),
       el("div", { class: "tagline", text: r.tagline }),
@@ -359,7 +369,22 @@
       r.lore ? el("div", { class: "lore", text: r.lore }) : null,
       el("dl", { style: "margin:0" }, [el("dt", { text: "You win by" }), el("dd", { text: r.winCondition })]),
       H.abilityList(r)
-    ]));
+    ]);
+    /* The card is dealt face down and turned over, once. Two faces turning in
+     * opposite directions rather than one container in 3D, so nothing is left
+     * holding a 3D transform afterwards — that quietly switches off the
+     * frosted-glass blur behind the card in some browsers. */
+    if (WG.fx.once("deal:" + v.code + ":" + v.round + ":" + r.id) && !WG.fx.reduced()) {
+      var back = el("div", { class: "card-back", "aria-hidden": "true" }, [
+        el("div", { class: "card-back-crest" }, [icon("moon", 52, { weight: 1.1 })]),
+        el("div", { class: "card-back-mark", text: "The Wolf Game" })
+      ]);
+      back.addEventListener("animationend", function () { back.remove(); card.classList.remove("turning"); });
+      card.classList.add("turning", "shine");
+      body.appendChild(el("div", { class: "flip" }, [card, back]));
+    } else {
+      body.appendChild(card);
+    }
     if (me.brief) body.appendChild(briefCard(me.brief));
     return {
       body: body,
@@ -433,7 +458,7 @@
         el("span", { class: "dim", text: v.night.turnsSpent + "/" + v.night.turnsTotal })
       ]);
     }
-    return el("div", { class: "turn-state" }, [
+    return el("div", { class: "turn-state ready" }, [
       icon("door", 16), el("span", { class: "grow", text: "Pick a house." }),
       el("span", { class: "dim", text: v.night.turnsSpent + "/" + v.night.turnsTotal })
     ]);
@@ -614,7 +639,7 @@
   }
 
   function quizScreen(q) {
-    var body = el("div", { class: "pane grow scroll reveal" });
+    var body = el("div", { class: "pane grow scroll" + enter("reveal", "quiz:" + q.question) });
     body.appendChild(el("div", { class: "card" }, [
       el("div", { class: "spread", style: "margin-bottom:6px" }, [icon("phone", 20), el("h2", { text: "Please hold" })]),
       el("p", { class: "muted small", text: "You cannot act until you answer." }),
@@ -628,7 +653,7 @@
   }
 
   function promptScreen(pr) {
-    var body = el("div", { class: "pane grow center reveal" });
+    var body = el("div", { class: "pane grow center" + enter("reveal", "prompt:" + pr.id) });
     body.appendChild(el("div", { class: "card" }, [
       el("div", { class: "spread", style: "margin-bottom:6px" }, [icon("door", 20), el("h2", { text: "Someone is at your door" })]),
       el("p", { class: "muted", text: pr.question }),
@@ -685,10 +710,12 @@
     var lines = v.publicLog.filter(function (e) { return e.round === v.round; });
     if (!lines.length) lines = v.publicLog.slice(-4);
 
-    var card = el("div", { class: "card reveal" });
+    // The morning's news is read out a line at a time, the first time only.
+    var first = WG.fx.once("dawn:" + v.code + ":" + v.phase + ":" + v.round);
+    var card = el("div", { class: "card news" + (first ? " reveal told" : "") });
     var list = el("ul", { class: "log" });
-    lines.forEach(function (e) {
-      list.appendChild(el("li", { class: e.kind || "" }, [icon(logIcon(e.kind), 16), el("span", { text: e.text })]));
+    lines.forEach(function (e, k) {
+      list.appendChild(el("li", { class: e.kind || "", style: "--i:" + k }, [icon(logIcon(e.kind), 16), el("span", { text: e.text })]));
     });
     card.appendChild(list);
     body.appendChild(card);
@@ -773,6 +800,8 @@
 
   /* ================= voting ================= */
 
+  var lastCounts = {};
+
   function voting(v) {
     var votes = v.votes || {};
     var body = el("div", { class: "pane grow", style: "display:flex;flex-direction:column;gap:8px;min-height:0" });
@@ -787,12 +816,22 @@
     ]));
 
     var grid = el("div", { class: "vote-grid pane scroll grow" });
+    /* With the tally shown, each name carries a bar of its share of the room,
+     * and the one in front is marked — the gallows is a race, and a race you
+     * can see is a different conversation. A count that just went up gives a
+     * small kick, which is only ever a vote that just landed. */
+    var top = 0;
+    if (votes.counts) Object.keys(votes.counts).forEach(function (k) { if (k !== "SKIP") top = Math.max(top, votes.counts[k]); });
     v.players.filter(function (p) { return p.alive && !p.spectator; }).forEach(function (p) {
       var n = votes.counts ? (votes.counts[p.id] || 0) : null;
       var who = votes.detail ? Object.keys(votes.detail).filter(function (k) { return votes.detail[k] === p.id; })
         .map(function (k) { var x = playerOf(v, k); return x ? x.name : "?"; }) : [];
+      var key = v.code + ":" + v.round + ":" + p.id;
+      var rose = n != null && lastCounts[key] != null && n > lastCounts[key];
+      if (n != null) lastCounts[key] = n;
       grid.appendChild(el("button", {
-        class: "vote-btn" + (votes.mine === p.id ? " mine" : ""),
+        class: "vote-btn" + (votes.mine === p.id ? " mine" : "") + (n && n === top ? " lead" : ""),
+        style: n != null ? "--share:" + (votes.total ? n / votes.total : 0).toFixed(3) : null,
         disabled: !v.me || !v.me.alive || (p.isMe && !v.config.rules.allowSelfVote),
         onclick: function () { dispatch({ type: CMD.VOTE, targetId: p.id }); }
       }, [
@@ -801,7 +840,7 @@
           el("div", { class: "row-title", text: p.name }),
           who.length ? el("div", { class: "voters", text: who.join(", ") }) : null
         ]),
-        n != null ? el("span", { class: "n", text: String(n) }) : null
+        n != null ? el("span", { class: "n" + (rose ? " bump" : ""), text: String(n) }) : null
       ]));
     });
     body.appendChild(grid);
@@ -826,18 +865,29 @@
 
   function gameOver(v) {
     var w = v.winner || {};
-    var body = el("div", { class: "pane grow scroll reveal" });
-    body.appendChild(el("div", { class: "card", style: "text-align:center" }, [
-      el("div", { style: "color:var(--team," + "var(--accent))" , class: "team-" + w.team },
-        [icon((WG.roles.teams[w.team] || {}).icon || "flag", 44, { weight: 1.15 })]),
+    /* The win lands once: rays behind the winning side's crest, confetti in
+     * its colours — fired up from the corners for a side that won by
+     * surviving, falling from above for the pack — and the cast turned over
+     * one row at a time. A repaint after that shows the same screen standing
+     * still. */
+    var first = WG.fx.once("over:" + v.code + ":" + v.round + ":" + w.team);
+    var body = el("div", { class: "pane grow scroll" + (first ? " reveal" : "") });
+    body.appendChild(el("div", { class: "card victory team-" + w.team + (first ? " first" : "") }, [
+      el("div", { class: "victory-crest" }, [icon((WG.roles.teams[w.team] || {}).icon || "flag", 44, { weight: 1.15 })]),
       el("h1", { style: "margin:6px 0 2px", text: (WG.roles.teams[w.team] || {}).name || "Over" }),
       el("p", { class: "muted small", text: w.message || "" })
     ]));
+    if (first) {
+      setTimeout(function () {
+        if (w.team === "werewolf") WG.fx.rain(document.body, "werewolf");
+        else WG.fx.cannons(document.body, w.team);
+      }, 450);
+    }
 
-    var card = el("div", { class: "card flush" });
+    var card = el("div", { class: "card flush" + (first ? " cast" : "") });
     card.appendChild(el("div", { class: "card-head" }, [icon("users", 16), el("h3", { text: "Everybody" })]));
-    v.players.filter(function (p) { return !p.spectator; }).forEach(function (p) {
-      card.appendChild(el("div", { class: "row " + teamClass(p) }, [
+    v.players.filter(function (p) { return !p.spectator; }).forEach(function (p, k) {
+      card.appendChild(el("div", { class: "row " + teamClass(p) + (p.alive ? "" : " gone"), style: "--i:" + k }, [
         el("span", { class: "team-dot" }),
         face(p, 30),
         el("div", { class: "grow" }, [
@@ -891,9 +941,68 @@
     else toast(text);
   }
 
+  /* ================= the home screen's picture ================= */
+
+  /* A wolf on a rock against the moon, howling. One silhouette path, drawn by
+   * hand, in the page's darkest tone so it reads in both themes; the moon
+   * behind it breathes, and every few seconds the howl goes out in rings.
+   * It is the one illustration in the app, on the one screen that has room
+   * for it. */
+  function hero() {
+    var NS = "http://www.w3.org/2000/svg";
+    function s(tag, attrs) {
+      var n = document.createElementNS(NS, tag);
+      Object.keys(attrs).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+      return n;
+    }
+    var svg = s("svg", { class: "hero", viewBox: "0 0 200 170", "aria-hidden": "true" });
+    var defs = s("defs", {});
+    var g = s("radialGradient", { id: "hero-moon", cx: "40%", cy: "62%", r: "64%" });
+    g.appendChild(s("stop", { offset: "0%", class: "hero-moon-hi" }));
+    g.appendChild(s("stop", { offset: "100%", class: "hero-moon-lo" }));
+    defs.appendChild(g);
+    var glow = s("radialGradient", { id: "hero-glow" });
+    glow.appendChild(s("stop", { offset: "45%", class: "hero-glow-stop", "stop-opacity": "0.45" }));
+    glow.appendChild(s("stop", { offset: "100%", class: "hero-glow-stop", "stop-opacity": "0" }));
+    defs.appendChild(glow);
+    svg.appendChild(defs);
+    svg.appendChild(s("circle", { class: "hero-glow", cx: 98, cy: 58, r: 90, fill: "url(#hero-glow)" }));
+    svg.appendChild(s("circle", { class: "hero-moon", cx: 98, cy: 58, r: 56, fill: "url(#hero-moon)" }));
+    [[124, 38, 9], [138, 70, 6], [118, 90, 7], [74, 30, 4.5], [140, 50, 4]].forEach(function (c) {
+      svg.appendChild(s("circle", { class: "hero-mare", cx: c[0], cy: c[1], r: c[2] }));
+    });
+    // The howl, as arcs going out from the muzzle, each a little later.
+    [0, 1, 2].forEach(function (k) {
+      var r = 6 + k * 5.5, cx = 57, cy = 18, a0 = 3.4, a1 = 4.35;
+      svg.appendChild(s("path", {
+        class: "hero-howl", style: "animation-delay:" + (k * 0.35) + "s",
+        d: "M" + (cx + r * Math.cos(a0)).toFixed(1) + " " + (cy + r * Math.sin(a0)).toFixed(1) +
+           " A" + r + " " + r + " 0 0 1 " + (cx + r * Math.cos(a1)).toFixed(1) + " " + (cy + r * Math.sin(a1)).toFixed(1)
+      }));
+    });
+    svg.appendChild(s("path", {
+      class: "hero-rock",
+      d: "M4 170 C14 152 36 142 64 140 C92 138 124 139 148 143 C170 148 186 158 198 170 Z"
+    }));
+    var wolf = s("g", { transform: "translate(12 0)" });
+    wolf.appendChild(s("path", {
+      class: "hero-wolf",
+      d: "M46 18 C54 22 64 28 70 32 C72 31 73 31 74 30 L79 6 L86 24 L90 10 L95 28 " +
+         "C99 32 102 37 104 43 C108 50 110 56 115 60 C117 62 116 66 119 69 " +
+         "C121 72 123 75 124 78 C128 86 130 92 134 98 C140 104 150 110 156 120 " +
+         "C160 127 160 134 156 139 C164 135 174 134 184 138 C176 142 166 143 152 142 L128 142 " +
+         "C124 142 123 138 126 137 C130 135 134 130 135 124 C130 118 120 117 112 119 " +
+         "C108 120 105 125 105 132 L105 142 L90 142 C88 142 88 139 91 138 " +
+         "C93 130 93 120 92 112 C91 104 89 98 86 92 C83 84 79 74 74 64 " +
+         "C70 56 66 48 61 42 L50 28 L60 30 Z"
+    }));
+    svg.appendChild(wolf);
+    return svg;
+  }
+
   WG.screens = {
     lobby: lobby, reveal: reveal, night: night, dawn: dawn,
     discussion: discussion, voting: voting, gameOver: gameOver,
-    hostControls: hostControls, doorSheet: doorSheet, logIcon: logIcon
+    hostControls: hostControls, doorSheet: doorSheet, logIcon: logIcon, hero: hero
   };
 })(typeof window !== "undefined" ? window : globalThis);

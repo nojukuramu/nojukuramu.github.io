@@ -7,7 +7,8 @@
  * plays again. It reads as the page randomly refreshing itself.
  *
  * So: scroll something, type something, focus it, force a render, and check
- * that all three are still where they were.
+ * that all three are still where they were — and that an entrance which has
+ * already played does not play again.
  *
  * Run: node tools/render-test.js
  */
@@ -115,6 +116,38 @@ function serve() {
     ok("the first snapshot paints", q.rebuiltOnce === true);
     ok("an identical one does not", q.keptSecond === true);
   }
+
+  console.log("\nAn entrance plays once, not on every repaint");
+  var e = await page.evaluate(function (sceneSrc) {
+    var scene = eval("(" + sceneSrc + ")");
+    window.WG_APP.role = "host";
+    scene("game_over");
+    var first = !!document.querySelector(".victory.first");
+    WG.app.render();
+    var again = !!document.querySelector(".victory.first");
+    return { first: first, again: again };
+  }, scene.toString());
+  ok("the win lands the first time it is drawn", e.first === true);
+  ok("and stands still on the repaint after", e.again === false);
+
+  var a = await page.evaluate(function (sceneSrc) {
+    var scene = eval("(" + sceneSrc + ")");
+    scene("night");
+    window.__st.round = 7;                       // a round this page has not drawn yet
+    WG.app.render();
+    var svg = document.querySelector(".village-svg");
+    return { arriving: !!(svg && svg.classList.contains("arrive")) };
+  }, scene.toString());
+  await page.waitForTimeout(400);
+  var b = await page.evaluate(function () {
+    WG.app.render();
+    var svg = document.querySelector(".village-svg");
+    var since = svg ? parseFloat((svg.getAttribute("style") || "").replace(/.*--since:/, "")) : NaN;
+    return { since: since };
+  });
+  ok("the houses settle in at the start of a round", a.arriving === true);
+  ok("and a repaint halfway through resumes them rather than starting over",
+    b.since <= -300, "--since " + b.since);
 
   ok("no page errors", errs.length === 0, errs[0]);
 

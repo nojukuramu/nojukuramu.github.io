@@ -99,10 +99,14 @@ of the square and of each other, and preferably near enough the road to have a
 track running down to the door. The bridge is drawn at the point where the road
 and the river actually cross, not at a hard-coded guess.
 
-Behind it, a drawn sky: a star field that fades in as the sun goes down, the sun
-and the moon on opposite ends of one arc, a warm band along the ridge at sunrise
-and sunset, clouds lit from wherever the sun is, birds crossing by day and bats
-at night.
+Behind it, a drawn sky: a star field that fades in as the sun goes down, with
+the Milky Way across it and now and then a shooting star; the sun and the moon on
+opposite ends of one arc; a warm band along the ridge at sunrise and sunset;
+clouds built out of lobes and lit from wherever the light is; birds crossing by
+day and bats at night. The moon fills out as the game goes on — a thin crescent
+the first night, full by the fifth — and the night's event is in the weather: a
+blood moon turns the whole sky red, the festival sets off fireworks over the
+hills, and a sickness lies over the valley as a green haze.
 
 Both are driven by the same two numbers the phase clock produces — the hour, and
 how much starlight is showing — so the sky, the valley and the interface can
@@ -120,6 +124,34 @@ alone cannot take a colour below the darkest thing in the mix.
 Both light and dark modes are the same **Ash Blue** family. Surfaces move a lot
 with the hour, ink barely moves — text that drifts with the light is text you
 cannot read at dusk.
+
+### It moves where moving says something
+
+The valley is never still — mist drifts between the bands, embers climb off the
+fire, cloud shadows cross the fields by day, and at night there are eyes in the
+woods (generated from the room code, the same on every phone, and nobody in
+particular). A house you point at lifts and is lit from beneath; one you tap gives
+a little jump, so a knock reads as a knock before the sheet arrives. Your own
+house carries a marker over the roof. And when you learn that somebody is dead,
+their lights go out in front of you: the window gutters and dies, the smoke thins,
+the lantern goes dark.
+
+On top of that are the moments, in `js/ui/fx.js`: the phase said once in big
+letters across the middle of the screen as it turns over; the role card dealt
+face down and turned over; the houses settling into the valley at the start of
+each round; the winning side's crest with slow rays behind it and confetti in its
+colours — fired up from the corners for a side that won by surviving, falling from
+above for the pack.
+
+Every one of those is an entrance, and the host rebuilds the stage whenever
+anybody does anything. So each asks `fx.once()` first, keyed by what it is
+introducing, and plays the first time only; the ones that can be caught halfway
+(the houses arriving, the lights going out) are given a negative animation delay
+of however long ago they began, so a repaint resumes them instead of starting
+over. `tools/render-test.js` holds both down.
+
+With "Reduce motion" on, or the system asking for it, none of this plays and the
+valley stands still. Everything it was introducing is already on screen.
 
 ### It is one screen, and it never scrolls
 
@@ -239,8 +271,9 @@ js/
     icons.js           every glyph, drawn. no emoji anywhere
     sound.js           the whole soundtrack, synthesised. no audio files
     theme.js           light/dark, and the time-of-day blend
-    sky.js             the drawn sky: stars, sun, moon, hills, blood
+    sky.js             the drawn sky: stars, sun, moon, hills, weather, blood
     village.js         the valley: river, road, woods, houses at depth
+    fx.js              the moments: phase titles, confetti, entrances that play once
     screens.js         the drawing half
   app.js               the wiring half: transport, identity, who may ask what
 tools/                 tests, the local broker stand-in, the icon generator
@@ -303,7 +336,8 @@ node tools/role-interaction-test.js
                              #   fixed — see tools/ROLE-INTERACTIONS.md
 node tools/consistency.js    #  22 checks for drift between files that must agree
 node tools/fit-test.js       #  12 viewport sizes, nothing may scroll or overflow
-node tools/render-test.js    #   9 checks: a repaint keeps the reader's place
+node tools/render-test.js    #  13 checks: a repaint keeps the reader's place,
+                             #   and an entrance never plays twice
 node tools/version-check.js  #  16 checks: one version number across three files
 node tools/sound-test.js     #  13 checks: every voice renders real audio
 node tools/e2e.js            #  41 assertions: four real browsers, one real room
