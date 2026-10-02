@@ -328,6 +328,13 @@ def smooth_curve(pts, n=8):
     out.append(np.array(pts[-1], np.float64))
     return [tuple(q) for q in out]
 
+def seam_mask():
+    m = np.zeros((H, W), np.uint8)
+    for seam in (SEAM_L, SEAM_R):
+        cv2.polylines(m, [np.array([[x * S, y * S] for x, y in smooth_curve(seam)], np.int32)],
+                      False, 1, thickness=5, lineType=cv2.LINE_AA)
+    return m.astype(bool)
+
 # ---- painting each part -------------------------------------------------
 INK = np.array([10, 6, 8], np.float32)
 
@@ -468,6 +475,12 @@ for name in DRAW:
     region = own | ext
     if name == 'dress':
         region &= poly(DRESS_SIL, 2.5) | own
+        # The seam is drawn where the arm's outline is, and the dress goes on
+        # a few pixels under the arm past it (no ink there): if it stopped at
+        # the seam, the first sway of the body would slide the seam off the
+        # arm's outline and show the background down the gap.
+        under_arm = cv2.dilate(seam_mask().astype(np.uint8), np.ones((19, 19), np.uint8)).astype(bool)
+        region |= under_arm & np.isin(assign, [PARTS.index('armR'), PARTS.index('armL')]) & fg
     outline = np.zeros((H, W), bool)
     rim = cv2.distanceTransform(fg.astype(np.uint8), cv2.DIST_L2, 5) < 1.1 * S
     for pn, pts, ol in UNDER:
@@ -541,12 +554,9 @@ for name in DRAW:
         # is replaced by the seam itself: everything outside the line goes,
         # and the line is drawn once, smooth. Below the hand, where the edge
         # is the dress's own, the drawing is kept.
-        seam_ink = np.zeros((H, W), np.uint8)
         for seam, edge_x in ((SEAM_L, 60), (SEAM_R, 175)):
             own &= ~poly(seam + [(edge_x, seam[-1][1]), (edge_x, seam[0][1])])
-            cv2.polylines(seam_ink, [np.array([[x * S, y * S] for x, y in smooth_curve(seam)], np.int32)],
-                          False, 1, thickness=5, lineType=cv2.LINE_AA)
-        seam_ink = seam_ink.astype(bool) & fg
+        seam_ink = seam_mask() & fg
         own |= seam_ink
     # the colours a hidden area continues: the part's own, away from its
     # anti-aliased edges and never its line work
