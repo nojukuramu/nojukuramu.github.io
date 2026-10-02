@@ -144,6 +144,28 @@
       c.fillText("{ }", w * 0.08, h * 0.2);
     },
 
+    /* three keycaps taking turns to be pressed, and a caret typing across a line beneath */
+    keys: function (c, w, h, p, a) {
+      var kw = h * 0.26, gap = h * 0.05, x0 = w / 2 - (kw * 3 + gap * 2) / 2, y0 = h * 0.2;
+      var hot = Math.floor(p * 2.4) % 3;
+      for (var i = 0; i < 3; i++) {
+        var down = i === hot && (p * 2.4) % 1 < 0.6;
+        c.globalAlpha = down ? 1 : 0.55;
+        c.fillStyle = down ? a : "rgba(255,243,226,.12)";
+        c.beginPath(); c.roundRect(x0 + i * (kw + gap), y0 + (down ? 3 : 0), kw, kw, 5); c.fill();
+        c.strokeStyle = a; c.lineWidth = 1.2; c.stroke();
+      }
+      c.globalAlpha = 0.5; c.fillStyle = "#FFF3E2";
+      var line = w * 0.64, lx = w / 2 - line / 2, ly = h * 0.72, done = clamp((p % 4) / 3, 0, 1);
+      for (var k = 0; k < 14; k++) {
+        var cw = line / 14 - 3;
+        c.globalAlpha = k / 14 < done ? 0.85 : 0.22;
+        c.fillRect(lx + k * (line / 14), ly, cw, 3);
+      }
+      c.globalAlpha = 1; c.fillStyle = a;
+      c.fillRect(lx + done * line, ly - 6, 2, 14);
+    },
+
     /* an alarm that will not be ignored */
     alarm: function (c, w, h, p, a) {
       var cx = w / 2, cy = h * 0.54, r = h * 0.30;
@@ -402,6 +424,10 @@
       desc: "A Source-style movement shooter where writing the cheats is the lesson.",
       hi: ["Bunny hop, air strafe, surf, wall climb, wall jump, lunge", "Write ESP, aimbots and bhop scripts in JavaScript, in game", "Bots, rooms with friends, phone controls you can rearrange"],
       tags: ["Three.js", "WebRTC", "learn to code"] },
+    { name: "Type", href: "type/", badge: "Typing", accent: "#E0401F", kind: "games", motif: "keys",
+      desc: "A typing trainer that never runs out of things to type, and will race you.",
+      hi: ["Sentences, shell sessions, code in sixteen languages, random keys", "Race friends in a room, in public, or by quick match", "No box to click: the keyboard goes straight into the challenge"],
+      tags: ["typing", "multiplayer", "offline"] },
     { name: "Task Notes", href: "task-notes/", badge: "PWA", accent: "#E8B44A", kind: "tools", motif: "alarm",
       desc: "A notebook with a real alarm clock inside it.",
       hi: ["Repeating alarms that ring until you answer them", "Markdown notes, notebooks, tags, five views", "Entirely offline, on IndexedDB"],

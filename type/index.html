@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Type — a typing trainer that never repeats</title>
+<meta name="description" content="Type sentences, terminal sessions, source code and random keyboard characters. Every challenge is built on the spot, and there is nothing to click: you just type.">
+<meta name="theme-color" content="#f4efe4">
+<meta name="color-scheme" content="light">
+<link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Type">
+<link rel="stylesheet" href="css/type.css">
+<!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
+<script>window.TY_VERSION = "2";</script>
+</head>
+<body data-screen="solo">
+
+<header id="top">
+  <a class="brand" href="../" aria-label="nojukuramu — home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="3"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>
+    <span>type</span>
+  </a>
+
+  <nav id="cats" role="tablist" aria-label="Category">
+    <button role="tab" data-cat="all" title="Alt+1">Mixed</button>
+    <button role="tab" data-cat="text" title="Alt+2">Text</button>
+    <button role="tab" data-cat="terminal" title="Alt+3">Terminal</button>
+    <button role="tab" data-cat="code" title="Alt+4">Code</button>
+    <button role="tab" data-cat="keys" title="Alt+5">Keys</button>
+    <button class="info" data-info="categories" aria-label="About the categories"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></button>
+  </nav>
+
+  <div id="lens" role="group" aria-label="Length">
+    <button data-len="short">Short</button>
+    <button data-len="medium">Medium</button>
+    <button data-len="long">Long</button>
+  </div>
+
+  <button id="btnVersus" class="versus" aria-label="Race other people">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V4M5 5h11l-2 3.5 2 3.5H5"/></svg>
+    <span>Race</span>
+  </button>
+</header>
+
+<main id="stage" data-kind="text" data-state="idle">
+  <div id="lanes" hidden aria-label="Race progress"></div>
+  <div id="hud" aria-live="off">
+    <div class="stat"><b id="liveWpm">0</b><span>wpm</span></div>
+    <div class="stat"><b id="liveAcc">100</b><span>% acc</span></div>
+    <div class="stat"><b id="liveTime">0.0</b><span>s</span></div>
+    <div class="meter" aria-hidden="true"><i id="prog"></i></div>
+    <div class="stat best"><b id="bestWpm">--</b><span>best</span></div>
+  </div>
+
+  <div id="board">
+    <!-- the five faces of the same box; main.js fills the one the challenge needs -->
+    <section id="v-text" class="view" hidden><div class="doc" id="docText"></div></section>
+
+    <section id="v-terminal" class="view" hidden>
+      <div class="win term">
+        <div class="bar"><i></i><i></i><i></i><span id="termTitle">bash</span></div>
+        <div class="body" id="termBody"></div>
+      </div>
+    </section>
+
+    <section id="v-code" class="view" hidden>
+      <div class="win editor">
+        <div class="bar tabs"><span class="tab" id="codeFile">main.js</span></div>
+        <div class="body" id="codeBody"></div>
+        <div class="status"><span id="codeLang">JavaScript</span><span id="codePos">Ln 1, Col 1</span></div>
+      </div>
+    </section>
+
+    <section id="v-keys" class="view" hidden>
+      <div class="keycap" id="nextKey" aria-hidden="true"></div>
+      <div class="doc keysdoc" id="keysText"></div>
+    </section>
+
+    <section id="v-convo" class="view" hidden>
+      <div class="win chat">
+        <div class="bar"><span id="chatTitle">chat</span></div>
+        <div class="body" id="chatBody"></div>
+        <div class="composer"><div class="doc" id="chatInput"></div></div>
+      </div>
+    </section>
+  </div>
+
+  <div id="result" hidden>
+    <div class="big"><b id="rWpm">0</b><span>wpm</span></div>
+    <dl>
+      <div><dt>accuracy</dt><dd id="rAcc">100%</dd></div>
+      <div><dt>time</dt><dd id="rTime">0s</dd></div>
+      <div><dt>characters</dt><dd id="rChars">0</dd></div>
+      <div><dt>steadiness <button class="info" data-info="scoring" aria-label="How this is scored"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></button></dt><dd id="rSteady">100</dd></div>
+    </dl>
+    <svg id="spark" viewBox="0 0 160 36" preserveAspectRatio="none" aria-hidden="true"><polyline points=""/></svg>
+    <p id="rNote"></p>
+    <div class="actions">
+      <button id="btnNext" class="primary">Next <kbd>Enter</kbd></button>
+      <button id="btnRetry">Again <kbd>Tab</kbd></button>
+    </div>
+  </div>
+
+  <div id="count" hidden aria-live="assertive"></div>
+
+  <div id="raceResult" hidden>
+    <h2 id="rrTitle">Results</h2>
+    <table><tbody id="rrBody"></tbody></table>
+    <p id="rrNote"></p>
+    <div class="actions">
+      <button id="rrBack" class="primary">Back to the room</button>
+      <button id="rrLeave">Leave</button>
+    </div>
+  </div>
+
+  <p id="focusHint" hidden>Click here, or press any key, to carry on typing</p>
+</main>
+
+<section id="mp">
+  <div id="mp-home">
+    <div class="mp-top">
+      <h1>Race</h1>
+      <label class="name">Your name <input id="mpName" maxlength="16" autocomplete="off" spellcheck="false"></label>
+      <button class="info" data-info="versus" aria-label="What a race shares"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></button>
+      <button id="mpBack" class="ghost">Back to solo</button>
+    </div>
+    <p id="mpError" class="err" hidden></p>
+    <div class="cards">
+      <article class="card">
+        <h2>Private room</h2>
+        <p>A code for your friends.</p>
+        <button id="mpCreate" class="primary">Create a room</button>
+        <form id="mpJoinForm"><input id="mpCode" maxlength="6" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="Room code"><button id="mpJoin" type="submit">Join</button></form>
+      </article>
+      <article class="card">
+        <h2>Public rooms</h2>
+        <p id="mpListNote">Looking for rooms...</p>
+        <ul id="mpList"></ul>
+        <button id="mpHostPublic">Host a public room</button>
+      </article>
+      <article class="card">
+        <h2>Quick match</h2>
+        <p id="mpQuickNote">We find a room, or start one for the next person.</p>
+        <button id="mpQuick" class="primary">Find a match</button>
+      </article>
+    </div>
+  </div>
+
+  <div id="mp-room" hidden>
+    <div class="room-head">
+      <div><span class="tag" id="roomKind">Private</span><h1 id="roomTitle">Room</h1></div>
+      <div class="codebox"><span>code</span><b id="roomCode">------</b><button id="roomCopy" class="ghost">Copy link</button></div>
+    </div>
+    <div class="room-body">
+      <ul id="roster"></ul>
+      <div id="roomSet">
+        <h2>The race</h2>
+        <div class="chips" id="setCats" role="group" aria-label="Category">
+          <button data-set-cat="all">Mixed</button><button data-set-cat="text">Text</button><button data-set-cat="terminal">Terminal</button><button data-set-cat="code">Code</button><button data-set-cat="keys">Keys</button>
+        </div>
+        <div class="chips" id="setLens" role="group" aria-label="Length">
+          <button data-set-len="short">Short</button><button data-set-len="medium">Medium</button><button data-set-len="long">Long</button>
+        </div>
+        <p id="roomSummary"></p>
+      </div>
+    </div>
+    <p id="roomNote" class="note"></p>
+    <div class="actions">
+      <button id="roomStart" class="primary" hidden>Start the race</button>
+      <button id="roomReady" hidden>I am ready</button>
+      <button id="roomLeave">Leave room</button>
+    </div>
+  </div>
+</section>
+
+<!-- The one place keystrokes go. It is kept focused for you, so nobody has to click it. -->
+<textarea id="cap" aria-label="Type here" autofocus autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" rows="1"></textarea>
+
+<footer>
+  <span class="keyhints"><kbd>Esc</kbd> new <kbd>Tab</kbd> again <kbd>Enter</kbd> next</span>
+  <span class="meta"><button class="info" data-info="about" aria-label="About this page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></button>
+    <span id="seedLine"></span> · <span id="verLine"></span> · <button id="btnCheckUpdate" class="linkbtn">Check for updates</button></span>
+</footer>
+
+<div id="info-scrim" hidden></div>
+<div id="info-sheet" role="dialog" aria-modal="true" aria-labelledby="info-title" hidden>
+  <div class="sheet-head"><h2 id="info-title"></h2><button id="info-close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div id="info-body"></div>
+</div>
+
+<div id="update-bar" hidden>
+  <span>A new version of Type is ready.</span>
+  <button id="update-go" class="primary small">Reload</button>
+  <button id="update-later" aria-label="Later"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+</div>
+
+<noscript><p class="noscript">Type needs JavaScript, since the keys are the whole point.</p></noscript>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
