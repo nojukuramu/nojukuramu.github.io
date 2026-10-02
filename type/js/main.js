@@ -115,7 +115,9 @@ function buildCode(ch) {
     for (const L of lines) if (n >= L.start && n <= L.end) { at = L; break; }
     lines.forEach((L) => L.row.classList.toggle("active", L === at));
     $("codePos").textContent = "Ln " + (lines.indexOf(at) + 1) + ", Col " + (Math.max(0, Math.min(n, at.end) - at.start) + 1);
-    if (at.row.scrollIntoView) at.row.scrollIntoView({ block: "nearest" });
+    // the caret itself, not the row: on a phone a long line scrolls sideways and the caret must stay in view
+    const cur = chars[Math.min(n, chars.length - 1)];
+    if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: "nearest", inline: "nearest" });
   } };
 }
 
@@ -330,6 +332,8 @@ function showResult() {
   stage.dataset.state = "done";
   $("result").hidden = false;
   S.state = "done";
+  // a phone leaves the editor scrolled sideways at the last character; show it from the start again
+  if (ch.kind === "code" && $("codeBody").scrollTo) $("codeBody").scrollTo(0, 0);
   // a long chat or a tall editor can push the numbers below the fold
   if ($("result").scrollIntoView) $("result").scrollIntoView({ block: "nearest" });
   if (S.hook) S.hook(S.typed.length);
@@ -338,6 +342,8 @@ function showResult() {
 function drawSpark() {
   const h = store.history().map((x) => x.wpm);
   const poly = $("spark").querySelector("polyline");
+  // two points make a meaningless V; a trend needs a few
+  $("spark").style.visibility = h.length < 4 ? "hidden" : "visible";
   if (h.length < 2) { poly.setAttribute("points", ""); return; }
   const lo = Math.min.apply(null, h), hi = Math.max.apply(null, h), span = Math.max(1, hi - lo);
   poly.setAttribute("points", h.map((v, i) => (i / (h.length - 1) * 160).toFixed(1) + "," + (34 - ((v - lo) / span) * 32).toFixed(1)).join(" "));

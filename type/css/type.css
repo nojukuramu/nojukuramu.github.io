@@ -3,7 +3,7 @@
 
 :root {
   --bg: #0d1117; --panel: #151b23; --panel2: #1b232d; --line: #263140;
-  --fg: #d7e0ea; --mute: #7d8b9b; --dim: #4a5666; --accent: #6fd3b8;
+  --fg: #d7e0ea; --mute: #7d8b9b; --dim: #5f6d7e; --accent: #6fd3b8;
   --ok: #d7e0ea; --bad: #f2777a; --warn: #e6b450;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -51,6 +51,7 @@ header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; pa
 .c { color: var(--dim); position: relative; white-space: pre; }
 .c.ok { color: var(--ok); }
 .c.bad { color: var(--bad); background: rgba(242, 119, 122, .14); border-radius: 2px; }
+.c.sp { white-space: pre-wrap; } /* a space that ends a line hangs off it; with `pre` it would start the next one */
 .c.sp.bad { background: rgba(242, 119, 122, .35); }
 .c.cur::before { content: ""; position: absolute; left: -1px; top: 8%; bottom: 8%; width: 2px; background: var(--accent); border-radius: 1px; animation: blink 1s steps(1) infinite; }
 .c.cur-end::after { content: ""; position: absolute; right: -1px; top: 8%; bottom: 8%; width: 2px; background: var(--accent); }
@@ -126,9 +127,9 @@ header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; pa
 #result .big b { font: 700 56px var(--mono); color: var(--accent); line-height: 1; }
 #result .big span { color: var(--mute); font: 14px var(--mono); }
 #result dl { display: grid; grid-template-columns: repeat(4, auto); gap: 6px 22px; margin: 0; }
-#result dt { font-size: 12px; color: var(--mute); }
+#result dt { font-size: 12px; color: var(--mute); display: flex; align-items: center; gap: 2px; white-space: nowrap; }
 #result dd { margin: 0; font: 600 20px var(--mono); }
-#spark { width: 160px; height: 36px; }
+#spark { width: 160px; height: 36px; justify-self: end; }
 #spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
 #rNote { grid-column: 1 / 3; margin: 0; color: var(--mute); font-size: 14px; }
 .actions { grid-column: 3; grid-row: 2; display: flex; gap: 8px; justify-content: flex-end; }
@@ -169,7 +170,7 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-b
   #result { grid-template-columns: 1fr; }
   #result dl { grid-template-columns: repeat(2, auto); }
   #rNote, .actions { grid-column: 1; grid-row: auto; justify-content: flex-start; }
-  #spark { width: 100%; }
+  #spark { width: 160px; justify-self: start; }
   .msg { max-width: 92%; }
 }
 @media (prefers-reduced-motion: reduce) { .view, .msg, #result { animation: none; } .c.cur::before { animation: none; } }

@@ -20,6 +20,11 @@
        the room answers, and the result arrives after the last line
      - paste is refused
      - a phone-sized screen has no horizontal scroll
+     - the interface itself, on a desktop and a phone, mid-typing and at the
+       result: the caret is on screen, wrapped lines do not start with a stray
+       space, the result card is fully in view, the pending text is readable
+       against the page, the sheet opens and hands the keyboard back, the
+       update bar and the "click to carry on" hint appear and clear
 
    Skipped (not failed) where Playwright is not installed.
    ============================================================ */
@@ -208,6 +213,77 @@ server.listen(0, async () => {
         check(cat + " has no sideways scroll at 390px", over <= 0, "overflow " + over);
       }
       if (shotsDir) await page.screenshot({ path: path.join(shotsDir, "phone.png") });
+      await page.context().close();
+    }
+
+    section("The interface");
+    for (const [dev, vp] of [["desktop", { width: 1100, height: 760 }], ["phone", { width: 390, height: 780 }]]) {
+      const page = await open("?seed=ui-" + dev, vp);
+      await page.click('[data-cat="text"]');
+      // pending text must be readable: at least 3:1 against the page, the usual floor for large text
+      const contrast = await page.evaluate(() => {
+        const lum = (c) => { const m = c.match(/[\d.]+/g).map(Number); const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]); };
+        const el = document.querySelector("#docText .c:not(.ok)");
+        const a = lum(getComputedStyle(el).color), b = lum(getComputedStyle(document.body).backgroundColor);
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+      });
+      check(dev + ": untyped text is readable against the page (" + contrast.toFixed(1) + ":1)", contrast >= 3);
+      for (const cat of ["text", "terminal", "code", "keys"]) {
+        await page.click('[data-cat="' + cat + '"]');
+        await page.waitForTimeout(350); // the face fades in; measure it settled
+        const t = (await state(page)).target;
+        await page.keyboard.type(t.slice(0, Math.floor(t.length * 0.6)));
+        const at = Math.floor(t.length * 0.6);
+        await page.keyboard.type(t[at] === "~" ? "`" : "~"); // a key that is certainly wrong here
+        const mid = await page.evaluate((cat) => {
+          const cur = document.querySelector(".view:not([hidden]) .c.cur");
+          if (!cur) return { cur: false };
+          const r = cur.getBoundingClientRect(), vw = innerWidth, vh = innerHeight;
+          const box = cur.closest(".body");
+          const br = box ? box.getBoundingClientRect() : null;
+          // a space that starts a line sits at the container's left edge, which is where the first letter of any line is
+          const sps = [...document.querySelectorAll(".view:not([hidden]) .c.sp")];
+          const words = [...document.querySelectorAll(".view:not([hidden]) .w")];
+          const edge = words.length ? Math.min.apply(null, words.map((w) => w.getBoundingClientRect().left)) : 0;
+          const stray = sps.filter((sp) => sp.getBoundingClientRect().left <= edge + 1).length;
+          return { cur: true, onScreen: r.left >= 0 && r.right <= vw + 1 && r.top >= 0 && r.bottom <= vh, inBox: !br || (r.left >= br.left - 1 && r.right <= br.right + 1 && r.top >= br.top - 1 && r.bottom <= br.bottom + 1), stray, bad: document.querySelectorAll(".view:not([hidden]) .c.bad").length };
+        }, cat);
+        check(dev + " " + cat + ": the caret is on screen and inside its window mid-typing", mid.cur && mid.onScreen && mid.inBox, JSON.stringify(mid));
+        check(dev + " " + cat + ": the mistake is marked", mid.bad === 1, "bad " + mid.bad);
+        check(dev + " " + cat + ": no wrapped line starts with a stray space", mid.stray === 0, mid.stray + " spaces");
+        await page.keyboard.press("Backspace");
+        await page.keyboard.type(t.slice(Math.floor(t.length * 0.6)));
+        await page.waitForTimeout(150);
+        const res = await page.evaluate(() => {
+          const r = document.getElementById("result").getBoundingClientRect();
+          return { shown: !document.getElementById("result").hidden, top: r.top, bottom: r.bottom, vh: innerHeight, over: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+        });
+        check(dev + " " + cat + ": the result card is fully in view", res.shown && res.top >= 0 && res.bottom <= res.vh + 1, JSON.stringify(res));
+        check(dev + " " + cat + ": the result state has no sideways scroll", res.over <= 0, "overflow " + res.over);
+        if (shotsDir) await page.screenshot({ path: path.join(shotsDir, "ui-" + dev + "-" + cat + ".png") });
+      }
+      // the sheet takes the keyboard while it is open and hands it back
+      await page.keyboard.press("Escape");
+      const before = (await state(page)).id;
+      await page.click('[data-info="categories"]');
+      check(dev + ": the (i) opens its sheet", await page.evaluate(() => !document.getElementById("info-sheet").hidden));
+      await page.keyboard.press("Escape");
+      const after = await state(page);
+      check(dev + ": Esc closes the sheet and does not also deal a new challenge", await page.evaluate(() => document.getElementById("info-sheet").hidden) && after.id === before);
+      await page.keyboard.type(after.target.slice(0, 3));
+      check(dev + ": typing carries on straight after the sheet closes", (await state(page)).typed === after.target.slice(0, 3));
+      // the update bar sits clear of the toolbar's controls and can be dismissed
+      await page.evaluate(() => { document.getElementById("update-bar").hidden = false; });
+      const bar = await page.evaluate(() => { const r = document.getElementById("update-bar").getBoundingClientRect(); return { l: r.left, r: r.right, vw: innerWidth }; });
+      check(dev + ": the update bar fits on screen", bar.l >= 0 && bar.r <= bar.vw + 1, JSON.stringify(bar));
+      await page.evaluate(() => { document.getElementById("update-bar").hidden = true; });
+      // losing focus says so, and any key brings it back
+      await page.evaluate(() => document.getElementById("cap").blur());
+      await page.waitForTimeout(250);
+      check(dev + ": the focus hint appears when the box loses focus", await page.evaluate(() => !document.getElementById("focusHint").hidden));
+      await page.keyboard.type("x");
+      await page.waitForTimeout(100);
+      check(dev + ": a key press hides it and is not lost", await page.evaluate(() => document.getElementById("focusHint").hidden && document.activeElement === document.getElementById("cap")));
       await page.context().close();
     }
 
