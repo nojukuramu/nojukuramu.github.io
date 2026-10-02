@@ -9,12 +9,16 @@
 
    What it guards is the stuff that has drifted before or would fail
    silently in a browser: an emoji slipping into the source, an inline SVG
-   that does not parse (it just does not draw), an element id or data hook
-   the scripts reach for that the page no longer has, a custom property
-   used and never set, a card pointing at a folder that is not there or
-   not in the sitemap, a motif name with no drawing behind it — and the
-   heading that counts the projects in words, which once said "twelve"
-   while the carousel held fourteen.
+   that does not parse (it just does not draw), an element id the scripts
+   reach for that the page no longer has, a custom property used and never
+   set, a project pointing at a folder that is not there or not in the
+   sitemap, a motif name with no drawing behind it, the heading that counts
+   the projects in words (it once said "twelve" while the page held
+   fourteen), the logo drifting between its copies — and the two ways this
+   page has been broken without a single error: an overflow on body, which
+   the browser hands to the viewport and which stopped the page scrolling
+   at all, and a class put on <html> that an element also wears, which
+   once turned the whole document into the intro's fixed, fading overlay.
    ============================================================ */
 "use strict";
 
@@ -119,32 +123,36 @@ section("Static: what the scripts reach for");
   var re = /\sid="([^"]+)"/g, m;
   while ((m = re.exec(html))) ids[m[1]] = true;
 
-  var missing = [];
+  var missing = [], looked = 0;
   JS.forEach(function (rel) {
     var src = read(rel);
-    var r1 = /getElementById\("([^"]+)"\)|\$\("#([\w-]+)"\)/g, x;
+    /* getElementById, a jQuery-ish $("#id"), and the wheel's own $("id") */
+    var byId = /var \$ = function \(id\) \{ return document\.getElementById\(id\)/.test(src);
+    var r1 = byId ? /getElementById\("([^"]+)"\)|\$\("#?([\w-]+)"\)/g : /getElementById\("([^"]+)"\)|\$\("#([\w-]+)"\)/g, x;
     while ((x = r1.exec(src))) {
       var id = x[1] || x[2];
+      looked++;
       if (!ids[id]) missing.push(rel + " #" + id);
     }
   });
-  check("every element id the scripts look up exists in index.html", missing.length === 0, missing.join(", "));
+  check("every element id the scripts look up (" + looked + ") exists in index.html", looked >= 40 && missing.length === 0, missing.join(", "));
 
-  /* The carousel is found through data attributes, not ids. */
-  var hooks = [];
-  var src = read("static/home/js/projects.js");
-  var r2 = /querySelector\("\[(data-[\w-]+)\]"\)/g, y;
-  while ((y = r2.exec(src))) if (hooks.indexOf(y[1]) === -1) hooks.push(y[1]);
-  var absent = hooks.filter(function (h) { return html.indexOf(h) === -1; });
-  check("every carousel hook (" + hooks.length + ") is in the markup", hooks.length >= 8 && absent.length === 0, absent.join(", "));
-
-  /* The splash is found through classes. A missing one does not throw —
-     the spark or the curtain just silently is not there. */
-  var ssrc = read("static/home/js/splash.js"), classes = [], r4 = /querySelector\("\.([\w-]+)/g, w;
-  while ((w = r4.exec(ssrc))) if (classes.indexOf(w[1]) === -1) classes.push(w[1]);
-  var noClass = classes.filter(function (c) { return !new RegExp('class="[^"]*\\b' + c + '\\b').test(html); });
-  check("every splash element splash.js looks for (" + classes.length + ") is in the markup",
-        classes.length >= 6 && noClass.length === 0, noClass.join(", "));
+  /* A class on <html> that an element also wears styles both. The intro's
+     overlay and the root's "intro is running" flag once shared a name, and
+     the root became a fixed, clipped, fading box: no error, no scrolling. */
+  var rootClasses = [];
+  JS.forEach(function (rel) {
+    var r = /(?:docEl|doc|document\.documentElement)\.classList\.(?:add|toggle)\("([\w-]+)"/g, m2;
+    var src = read(rel);
+    while ((m2 = r.exec(src))) if (rootClasses.indexOf(m2[1]) === -1) rootClasses.push(m2[1]);
+  });
+  var inline = (html.match(/documentElement\.classList\.add\("([\w-]+)"\)/) || [])[1];
+  if (inline && rootClasses.indexOf(inline) === -1) rootClasses.push(inline);
+  var worn = rootClasses.filter(function (c) {
+    return new RegExp('<(?!html)[a-z]+[^>]*\\sclass="(?:[^"]*\\s)?' + c + '(?:\\s|")').test(html);
+  });
+  check("no class the scripts put on <html> (" + rootClasses.join(", ") + ") is also an element's class",
+        rootClasses.length >= 4 && worn.length === 0, worn.join(", "));
 
   var scripts = [], r3 = /<script[^>]+src="([^"]+)"/g, z;
   while ((z = r3.exec(html))) scripts.push(z[1]);
@@ -152,6 +160,54 @@ section("Static: what the scripts reach for");
   check("every script the page loads is on disk (" + scripts.length + ")", gone.length === 0, gone.join(", "));
   var unloaded = JS.filter(function (rel) { return scripts.indexOf(rel) === -1; });
   check("every script in static/home/js is loaded by the page", unloaded.length === 0, unloaded.join(", "));
+
+  var lost = read("404.html"), lostScripts = [], r5 = /<script[^>]+src="\/([^"]+)"/g, v;
+  while ((v = r5.exec(lost))) lostScripts.push(v[1]);
+  var lostGone = lostScripts.filter(function (s2) { return !exists(s2); });
+  check("every script the 404 page loads is on disk (" + lostScripts.length + ")", lostGone.length === 0, lostGone.join(", "));
+})();
+
+section("Static: the stylesheet");
+(function () {
+  var css = read(CSS).replace(/\/\*[\s\S]*?\*\//g, "");
+  /* Body's overflow is handed to the viewport, where clip becomes hidden
+     and the page stops scrolling; html's is the viewport's own. Either
+     would also unpin the stage. */
+  var bad = [], re = /(^|\})\s*((?:html|body)[^{]*)\{([^}]*)\}/g, m;
+  while ((m = re.exec(css))) {
+    var sel = m[2].trim();
+    if (/^(html|body)(\s*,\s*(html|body))*$/.test(sel) && /overflow/.test(m[3])) bad.push(sel);
+  }
+  check("neither html nor body sets an overflow", bad.length === 0, bad.join(", "));
+
+  /* The page and its 404 share this sheet; the fonts it names are the
+     ones both pages ask Google for. */
+  var fam = ["Inter+Tight", "JetBrains+Mono"];
+  var lost = read("404.html");
+  var noFont = fam.filter(function (f) { return html.indexOf(f) === -1 || lost.indexOf(f) === -1; });
+  check("both pages load the two faces the stylesheet uses", noFont.length === 0 &&
+        /"Inter Tight"/.test(css) && /"JetBrains Mono"/.test(css), noFont.join(", "));
+})();
+
+section("Static: the mark");
+(function () {
+  /* One geometry everywhere: the header, the footer, the 404 and the
+     favicon all carry the same four outlines under the same transform, so
+     the intro (which copies the header's) and the mark at the bottom
+     (likewise) cannot drift either. */
+  var groups = [];
+  [["index.html", html], ["404.html", read("404.html")]].forEach(function (pair) {
+    var re = /<g class="mark-word" transform="([^"]+)">([\s\S]*?)<\/g>/g, m;
+    while ((m = re.exec(pair[1]))) groups.push({ where: pair[0], t: m[1], d: (m[2].match(/ d="([^"]+)"/g) || []).join("|") });
+  });
+  var fav = (html.match(/<link rel="icon" href="([^"]+)"/) || [])[1] || "";
+  var favD = (fav.match(/ d='([^']+)'/g) || []).map(function (x) { return x.replace(/'/g, '"'); }).join("|");
+  var favT = (fav.match(/<g transform='([^']+)'/) || [])[1];
+  var first = groups[0] || { t: "", d: "" };
+  var off = groups.filter(function (g) { return g.t !== first.t || g.d !== first.d; }).map(function (g) { return g.where; });
+  check("the mark is drawn from one geometry in every copy (" + groups.length + " + the favicon)",
+        groups.length >= 3 && first.d.split("|").length === 4 && off.length === 0 && favD === first.d && favT === first.t,
+        off.join(", ") + (favD !== first.d || favT !== first.t ? " favicon" : ""));
 })();
 
 section("Static: custom properties");
@@ -159,8 +215,7 @@ section("Static: custom properties");
   /* Set from JavaScript per element or per frame, so they are never
      declared in the stylesheet — and every one of them has a fallback or a
      setter that is checked for below. */
-  var DYNAMIC = ["accent", "accent-rgb", "car-accent", "car-accent-rgb", "dim", "rx", "ry", "mx", "my",
-                 "p", "hp", "tx", "ty", "i", "d", "spin"];
+  var DYNAMIC = ["glow", "i", "d", "k", "dev"];
   var css = read(CSS);
   var declared = {};
   var re = /(--[\w-]+)\s*:/g, m;
@@ -234,8 +289,22 @@ section("The projects");
         "says " + word + ", list has " + P.length + " (" + NJ.inWords(P.length) + ")");
   var stat = (html.match(/data-count-to="projects">(\d+)</) || [])[1];
   check("the stat says the same number", +stat === P.length, "says " + stat);
-  var count = (html.match(/data-count><b>\d+<\/b> \/ (\d+)</) || [])[1];
-  check("the carousel's counter starts with the same total", +count === P.length, "says " + count);
+  var total = (html.match(/id="info-total">(\d+)</) || [])[1];
+  check("the wheel's counter starts with the same total", +total === P.length, "says " + total);
+  var spec = (html.match(/data-projects-num>(\d+)</) || [])[1];
+  check("the spec sheet says the same number", +spec === P.length, "says " + spec);
+
+  /* What the wheel shows before its script has run is the first project,
+     written in; it has to be the first project. */
+  var name = (html.match(/id="info-name">([^<]+)</) || [])[1];
+  var href = (html.match(/id="info-open" href="([^"]+)"/) || [])[1];
+  check("the wheel's written-in frame is the first project (" + name + ")", name === P[0].name && href === P[0].href,
+        "says " + name + " → " + href);
+
+  /* The dial's engravings are a fifteenth of a turn apart. Past about
+     nineteen projects the names stop fitting and are dropped; past forty
+     the numbers would touch. */
+  check("the dial has room for every number (" + P.length + " of at most 40)", P.length <= 40);
 })();
 
 /* ============================================================

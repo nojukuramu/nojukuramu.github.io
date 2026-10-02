@@ -1,19 +1,24 @@
 /* ============================================================
    nojukuramu — the page's own movement
 
-   Everything on the page that moves and is not the sky or a card: the
-   headings that rise a word at a time, the paragraphs that follow them in,
-   the two ribbons of names crossing under the hero, the counters, the
-   buttons that lean towards a pointer, the hairline along the top that is
-   the evening's progress, and the mark at the very bottom writing itself
-   the way the splash wrote it at the top.
+   Everything that moves and is not the lens or a frame on the contact
+   sheet: the headings that rise a word at a time, the paragraphs that
+   follow them in, the statement that lights a word at a time as it is
+   scrolled through, the two strips of film crossing between the wheel and
+   the sheet, the small dials that turn their numbers down to nothing, the
+   hairline along the top that is how much of the roll has gone past, and
+   the mark at the very bottom writing itself.
+
+   It also owns `glide`, the one way the page scrolls itself. The browser's
+   smooth scrolling has no say over how long a trip takes, and the trips
+   here are long — rewinding the roll goes back through every frame on the
+   wheel, and that is only worth watching at a speed someone chose.
 
    None of it is load-bearing. The root only gets `.motion` — the class
    every "start hidden" rule in the stylesheet hangs off — once this file
    is running and able to reveal things again, so a page where it never
-   loads is simply all there. Under prefers-reduced-motion the same
-   classes are set and the stylesheet collapses every transition to
-   nothing, so things arrive in place rather than moving into it.
+   loads is simply all there. Under prefers-reduced-motion the same classes
+   are set and the stylesheet collapses every transition to nothing.
    ============================================================ */
 (function (global) {
   "use strict";
@@ -25,20 +30,95 @@
   var $$ = function (s) { return Array.prototype.slice.call(document.querySelectorAll(s)); };
 
   function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
-  function esc(s) {
-    return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
-  }
+  var esc = NJ.projects ? NJ.projects.esc : function (s) { return String(s); };
 
   var P = NJ.projects ? NJ.projects.projects : null;
   var canWatch = "IntersectionObserver" in global;
   if (canWatch) doc.classList.add("motion");
 
   /* ---------- the count, in words ----------
-     The heading says how many projects there are. It is written into the
-     HTML for anyone without scripts, and corrected from the list here, so
-     adding a project can never leave it saying twelve again. */
-  var word = $("[data-projects-word]");
-  if (word && P && NJ.projects.inWords) word.textContent = NJ.projects.inWords(P.length);
+     Written into the HTML for anyone without scripts and corrected from
+     the list here, so adding a project can never leave it saying twelve. */
+  if (P) {
+    $$("[data-projects-word]").forEach(function (el) { el.textContent = NJ.projects.inWords(P.length); });
+    $$("[data-projects-num]").forEach(function (el) { el.textContent = P.length; });
+  }
+
+  /* ---------- glide: the page scrolling itself ---------- */
+  var glideRaf = 0, glideDone = null;
+  function maxScroll() { return Math.max(0, doc.scrollHeight - global.innerHeight); }
+  function easeInOut(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
+
+  function stopGlide() {
+    if (!glideRaf) return;
+    cancelAnimationFrame(glideRaf);
+    glideRaf = 0;
+    NJ.gliding = false;
+    var d = glideDone; glideDone = null;
+    if (d) d(false);
+  }
+
+  /* Scroll to `y` over `ms` (or a duration that grows with the distance,
+     gently). `done(true)` when it arrives, `done(false)` if a hand on the
+     wheel or the screen took over first. */
+  function glide(y, ms, done) {
+    stopGlide();
+    var from = global.scrollY, to = clamp(Math.round(y), 0, maxScroll()), d = to - from;
+    if (reduced || Math.abs(d) < 2) {
+      global.scrollTo(0, to);
+      if (done) done(true);
+      return;
+    }
+    if (ms == null) ms = clamp(320 + Math.sqrt(Math.abs(d) / global.innerHeight) * 360, 380, 1800);
+    var t0 = 0;
+    glideDone = done || null;
+    NJ.gliding = true;
+    glideRaf = requestAnimationFrame(function step(now) {
+      if (!t0) t0 = now;
+      var p = clamp((now - t0) / ms, 0, 1);
+      global.scrollTo(0, from + d * easeInOut(p));
+      if (p < 1) { glideRaf = requestAnimationFrame(step); return; }
+      glideRaf = 0;
+      NJ.gliding = false;
+      var cb = glideDone; glideDone = null;
+      if (cb) cb(true);
+    });
+  }
+  ["wheel", "touchstart", "pointerdown"].forEach(function (t) {
+    global.addEventListener(t, stopGlide, { passive: true });
+  });
+  /* A key that scrolls takes over from a glide — unless something on the
+     page already took that key, like the wheel turning on an arrow, in
+     which case the glide is its answer to it. */
+  global.addEventListener("keydown", function (e) {
+    if (!e.defaultPrevented && /^(Arrow|Page|Home|End| )/.test(e.key)) stopGlide();
+  });
+
+  /* In-page links glide rather than jump. The skip link is left to the
+     browser — it is for someone on a keyboard who wants to be there now. */
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a || a.classList.contains("skip-link") || e.defaultPrevented) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
+    var id = a.getAttribute("href").slice(1);
+    var y = null;
+    if (a.getAttribute("data-glide") === "first" && NJ.wheel) y = NJ.wheel.yOf(0);
+    else if (!id || id === "top") y = 0;
+    else {
+      var t = document.getElementById(id);
+      if (t) y = t.getBoundingClientRect().top + global.scrollY;
+    }
+    if (y == null) return;
+    e.preventDefault();
+    var byKey = e.detail === 0;
+    glide(y, null, function (arrived) {
+      if (!arrived || !byKey || !id) return;
+      var t = document.getElementById(id);
+      if (!t) return;
+      if (!t.hasAttribute("tabindex")) t.setAttribute("tabindex", "-1");
+      t.focus({ preventScroll: true });
+    });
+  });
 
   /* ---------- headings, a word at a time ----------
      Each word is wrapped twice: an outer window that clips, and an inner
@@ -76,15 +156,17 @@
      The first counts up to how many projects there are. The others count
      *down* to nothing — build steps, trackers, accounts — because the
      point of those numbers is what got taken away. */
-  var projectsCount = $('[data-count-to="projects"]');
-  if (projectsCount && P) projectsCount.textContent = P.length;
+  function countTarget(el) {
+    var to = el.getAttribute("data-count-to");
+    return to === "projects" ? (P ? P.length : +el.textContent) : +(to || 0);
+  }
+  function countDuration(from, end) { return 1300 + Math.abs(end - from) * 25; }
 
   function count(el) {
-    var to = el.getAttribute("data-count-to");
-    var end = to === "projects" ? (P ? P.length : +el.textContent) : +(to || 0);
+    var end = countTarget(el);
     var from = +(el.getAttribute("data-count-from") || 0);
     if (reduced || from === end) { el.textContent = end; return; }
-    var t0 = 0, dur = 1300 + Math.abs(end - from) * 25;
+    var t0 = 0, dur = countDuration(from, end);
     el.textContent = from;
     requestAnimationFrame(function step(now) {
       if (!t0) t0 = now;
@@ -94,10 +176,91 @@
       if (p < 1) requestAnimationFrame(step);
     });
   }
+  /* a counter that will count starts at its first number, not its last */
+  if (canWatch && !reduced) {
+    $$("[data-count-from]").forEach(function (el) { el.textContent = el.getAttribute("data-count-from"); });
+    $$('[data-count-to="projects"]').forEach(function (el) { el.textContent = "0"; });
+  }
+
+  /* ---------- the small dials ----------
+     Each counter sits under a dial engraved with its numbers, and the dial
+     turns with the count — the same duration, the same curve — so the
+     number under the red mark is always the number printed below it. */
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function miniDial(el) {
+    var from = +el.getAttribute("data-dial-from");
+    var toAttr = el.getAttribute("data-dial-to");
+    var to = toAttr === "projects" ? (P ? P.length : 0) : +toAttr;
+    var top = Math.max(from, to);
+    var sp = Math.min(30, 340 / (top + 1));
+    var marks = "";
+    for (var k = 0; k <= top; k++) {
+      var a = k * sp;
+      marks += '<g transform="rotate(' + a.toFixed(2) + ')">' +
+               '<line x1="0" y1="-95" x2="0" y2="-86" class="md-tick"/>' +
+               '<text x="0" y="-66" class="md-num' + (k === to ? " md-to" : "") + '">' + k + "</text></g>";
+      if (k < top) {
+        marks += '<line x1="0" y1="-95" x2="0" y2="-90" class="md-minor" transform="rotate(' + (a + sp / 2).toFixed(2) + ')"/>';
+      }
+    }
+    el.innerHTML = '<svg viewBox="-100 -100 200 200" aria-hidden="true"><g class="md-face">' + marks + "</g></svg>";
+    var face = el.querySelector(".md-face");
+    face.style.transform = "rotate(" + (-from * sp) + "deg)";
+    return {
+      turn: function () {
+        var dur = countDuration(from, to);
+        face.style.transition = reduced ? "none" : "transform " + dur + "ms cubic-bezier(.33,1,.68,1)";
+        face.style.transform = "rotate(" + (-to * sp) + "deg)";
+        el.classList.add("turned");
+      }
+    };
+  }
+  var dials = new Map();
+  $$(".mini-dial[data-dial-from]").forEach(function (el) { dials.set(el.closest(".dial-stat") || el, miniDial(el)); });
+
+  /* ---------- the statement, lit a word at a time ----------
+     Not a reveal that fires once: the words light as the paragraph is
+     scrolled up through the screen and go dark again on the way back, so
+     the reader's own pace is what reads it out. */
+  var statement = $("#statement");
+  var sWords = [];
+  if (statement && canWatch) {
+    (function wrap(node) {
+      Array.prototype.slice.call(node.childNodes).forEach(function (ch) {
+        if (ch.nodeType === 3) {
+          var frag = document.createDocumentFragment();
+          ch.textContent.split(/(\s+)/).forEach(function (part) {
+            if (!part) return;
+            if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); return; }
+            var s = document.createElement("span");
+            s.className = "sw";
+            s.textContent = part;
+            sWords.push(s);
+            frag.appendChild(s);
+          });
+          node.replaceChild(frag, ch);
+        } else if (ch.nodeType === 1) {
+          wrap(ch);
+        }
+      });
+    })(statement);
+    statement.classList.add("lightable");
+  }
+  var litCount = -1;
+  function lightStatement(vh) {
+    if (!sWords.length) return;
+    var r = statement.getBoundingClientRect();
+    if (r.bottom < -vh || r.top > vh * 2) return;
+    var p = reduced ? 1 : clamp((vh * 0.86 - r.top) / (r.height + vh * 0.32), 0, 1);
+    var n = Math.round(p * sWords.length);
+    if (n === litCount) return;
+    for (var i = 0; i < sWords.length; i++) sWords[i].classList.toggle("lit", i < n);
+    litCount = n;
+  }
 
   /* ---------- the mark at the bottom ----------
      The same four outlines the header uses, copied in rather than written
-     out a fifth time, and stroked on exactly as splash.js strokes them. */
+     out a fourth time, and stroked on a letter at a time. */
   var finale = $(".finale");
   var finaleInk = $(".finale-ink");
   var finalePaths = [];
@@ -122,19 +285,6 @@
       p.style.strokeDashoffset = "0";
     });
     finale.classList.add("drawn");
-    /* The splash's cue, once more — but only for someone who turned the
-       evening's sound on. Nobody is surprised by a bell at the bottom of a
-       page they have been reading in silence. */
-    if (!reduced && NJ.ambience && NJ.ambience.on && NJ.ambience.logo) {
-      NJ.ambience.logo({
-        plate: 0,
-        letters: finalePaths.map(function (_, i) { return LEAD + i * STAGGER; }),
-        draw: DRAW,
-        flood: LEAD + (finalePaths.length - 1) * STAGGER + DRAW * 0.55,
-        /* the same stroke as the splash's, so the same nib */
-        speed: NJ.splash && NJ.splash.speed
-      });
-    }
   }
 
   /* ---------- reveal ---------- */
@@ -148,25 +298,25 @@
         if (el === finale) writeFinale();
         var n = el.querySelector && el.querySelector("[data-count-to], [data-count-from]");
         if (n) count(n);
+        var d = dials.get(el);
+        if (d) d.turn();
       });
     }, { rootMargin: "0px 0px -10% 0px" });
     $$(".reveal, .split").forEach(function (el) { io.observe(el); });
     if (finale) io.observe(finale);
   }
 
-  /* ---------- the ribbons ----------
-     Two copies of each list end to end, moved left by exactly one copy's
-     width and wrapped, which is a loop with no seam. The speed leans on
-     the scroll: the faster the page moves the faster they run, and they
-     turn round when the page does. */
-  var ribbonsEl = $(".ribbons");
-  var tracks = [];
+  /* ---------- the leader: two strips of film crossing ----------
+     Driven by the scroll, not by a clock: they slide as far as the page
+     moves and stop when it stops, the way the old ribbons of names under
+     the hero leaned on it, only without running on their own. */
+  var leader = $("#leader");
+  var strips = [];
   (function () {
-    if (!ribbonsEl || !P) return;
-    var star = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.2 7.3 7.3 2.2-7.3 2.2L12 21.5l-2.2-7.3L2.5 12l7.3-2.2z"/></svg>';
-    var dot = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="5"/></svg>';
+    if (!leader || !P) return;
+    var tri = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 1.5l6.5 3.5L2 8.5z" fill="currentColor"/></svg>';
     var names = P.map(function (p, i) {
-      return '<a class="rb-item' + (i % 2 ? " ghost" : "") + '" href="' + esc(p.href) + '" tabindex="-1">' + esc(p.name) + star + "</a>";
+      return '<span class="strip-item"><i class="strip-no">' + NJ.projects.pad(i + 1) + tri + "</i>" + esc(p.name) + "</span>";
     }).join("");
     var seen = {}, tags = [];
     P.forEach(function (p) {
@@ -175,62 +325,44 @@
         if (!seen[k]) { seen[k] = 1; tags.push(t); }
       });
     });
-    var tagHtml = tags.map(function (t) { return '<span class="rb-item">' + esc(t) + dot + "</span>"; }).join("");
-
-    var a = ribbonsEl.querySelector('[data-ribbon="names"]');
-    var b = ribbonsEl.querySelector('[data-ribbon="tags"]');
-    if (a) { a.innerHTML = names + (reduced ? "" : names); tracks.push({ el: a, dir: -1, speed: 52, x: 0, half: 0, slow: 1, want: 1 }); }
-    if (b) { b.innerHTML = tagHtml + (reduced ? "" : tagHtml); tracks.push({ el: b, dir: 1, speed: 34, x: 0, half: 0, slow: 1, want: 1 }); }
-    tracks.forEach(function (t) {
-      /* a name you are reaching for should not run away from the pointer */
-      t.el.parentNode.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse") t.want = 0.12; });
-      t.el.parentNode.addEventListener("pointerleave", function () { t.want = 1; });
-    });
+    var tagHtml = tags.map(function (t) { return '<span class="strip-item ghost">' + esc(t) + "</span>"; }).join("");
+    var a = leader.querySelector('[data-strip="names"]');
+    var b = leader.querySelector('[data-strip="tags"]');
+    if (a) { a.innerHTML = names + names + names; strips.push({ el: a, dir: -1, x: 0, want: 0, half: 0 }); }
+    if (b) { b.innerHTML = tagHtml + tagHtml + tagHtml; strips.push({ el: b, dir: 1, x: 0, want: 0, half: 0 }); }
   })();
-
-  function measureRibbons() {
-    tracks.forEach(function (t) { t.half = t.el.scrollWidth / 2; });
-  }
-
-  var ribbonsOn = false, ribbonRaf = 0, ribbonLast = 0, lastY = global.scrollY, boost = 0, heading = 1;
-  function ribbonFrame(now) {
-    ribbonRaf = 0;
-    var dt = ribbonLast ? Math.min(0.1, (now - ribbonLast) / 1000) : 1 / 60;
-    ribbonLast = now;
-    var y = global.scrollY, dy = y - lastY;
-    lastY = y;
-    if (dy) heading = dy > 0 ? 1 : -1;
-    boost += (Math.min(Math.abs(dy) / Math.max(dt, 0.001), 2600) * 0.32 - boost) * clamp(dt * 7, 0, 1);
-    tracks.forEach(function (t) {
-      if (!t.half) return;
-      t.slow += (t.want - t.slow) * clamp(dt * 6, 0, 1);
-      t.x += (t.speed + boost) * t.dir * heading * t.slow * dt;
-      if (t.x <= -t.half) t.x += t.half;
-      else if (t.x > 0) t.x -= t.half;
-      t.el.style.transform = "translate3d(" + t.x.toFixed(1) + "px,0,0)";
+  function measureStrips() { strips.forEach(function (s) { s.half = s.el.scrollWidth / 3; }); }
+  var stripRaf = 0;
+  function stripFrame() {
+    stripRaf = 0;
+    var moving = false;
+    strips.forEach(function (s) {
+      s.x += (s.want - s.x) * (reduced ? 1 : 0.16);
+      if (Math.abs(s.want - s.x) > 0.3) moving = true; else s.x = s.want;
+      s.el.style.transform = "translate3d(" + s.x.toFixed(1) + "px,0,0)";
     });
-    if (ribbonsOn) ribbonRaf = requestAnimationFrame(ribbonFrame);
-    else ribbonLast = 0;
+    if (moving) stripRaf = requestAnimationFrame(stripFrame);
+  }
+  function aimStrips(vh) {
+    if (!strips.length) return;
+    var r = leader.getBoundingClientRect();
+    if (r.bottom < -200 || r.top > vh + 200) return;
+    var p = clamp((vh - r.top) / (vh + r.height), 0, 1);
+    strips.forEach(function (s) {
+      var travel = s.half * 0.9;
+      s.want = s.dir < 0 ? -s.half * 0.5 - p * travel : -s.half * 1.4 + p * travel;
+    });
+    if (!stripRaf) stripRaf = requestAnimationFrame(stripFrame);
+  }
+  if (strips.length) {
+    measureStrips();
+    global.addEventListener("resize", measureStrips);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { measureStrips(); onScroll(); });
   }
 
-  if (tracks.length && !reduced) {
-    measureRibbons();
-    if (canWatch) {
-      new IntersectionObserver(function (en) {
-        ribbonsOn = en[0].isIntersecting;
-        if (ribbonsOn && !ribbonRaf) { lastY = global.scrollY; ribbonRaf = requestAnimationFrame(ribbonFrame); }
-      }).observe(ribbonsEl);
-    } else {
-      ribbonsOn = true;
-      ribbonRaf = requestAnimationFrame(ribbonFrame);
-    }
-    global.addEventListener("resize", measureRibbons);
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(measureRibbons);
-  }
-
-  /* ---------- scroll: the hairline, the hero, the nav ---------- */
+  /* ---------- scroll: the hairline, the header, the nav ---------- */
   var fill = $("#progress-fill");
-  var heroEl = $(".hero");
+  var header = $(".site-header");
   var spyLinks = $$("[data-spy]");
   var spyTargets = spyLinks.map(function (a) { return document.getElementById(a.getAttribute("data-spy")); });
   var ticking = false;
@@ -241,9 +373,10 @@
     requestAnimationFrame(function () {
       ticking = false;
       var y = global.scrollY, vh = global.innerHeight;
-      var max = Math.max(1, doc.scrollHeight - vh);
-      if (fill) fill.style.transform = "scaleX(" + clamp(y / max, 0, 1).toFixed(4) + ")";
-      if (heroEl && !reduced) heroEl.style.setProperty("--hp", clamp(y / (vh * 0.9), 0, 1).toFixed(3));
+      if (fill) fill.style.transform = "scaleX(" + clamp(y / Math.max(1, maxScroll()), 0, 1).toFixed(4) + ")";
+      if (header) header.classList.toggle("stuck", y > 8);
+      lightStatement(vh);
+      aimStrips(vh);
       /* the section under the middle of the screen is the one you are in */
       var mid = vh * 0.45, here = -1;
       spyTargets.forEach(function (t, i) {
@@ -261,30 +394,7 @@
   global.addEventListener("resize", onScroll);
   onScroll();
 
-  /* ---------- things that lean towards the pointer ---------- */
-  if (!reduced) {
-    $$("[data-magnetic]").forEach(function (b) {
-      b.addEventListener("pointermove", function (e) {
-        if (e.pointerType !== "mouse") return;
-        var r = b.getBoundingClientRect();
-        var x = e.clientX - (r.left + r.width / 2), y = e.clientY - (r.top + r.height / 2);
-        b.style.setProperty("--tx", (x * 0.2).toFixed(1) + "px");
-        b.style.setProperty("--ty", (y * 0.28).toFixed(1) + "px");
-      });
-      b.addEventListener("pointerleave", function () {
-        b.style.removeProperty("--tx");
-        b.style.removeProperty("--ty");
-      });
-    });
-
-    $$("[data-spot]").forEach(function (el) {
-      el.addEventListener("pointermove", function (e) {
-        var r = el.getBoundingClientRect();
-        el.style.setProperty("--mx", (e.clientX - r.left).toFixed(0) + "px");
-        el.style.setProperty("--my", (e.clientY - r.top).toFixed(0) + "px");
-      });
-    });
-  }
-
   NJ.motion = { split: split, count: count };
+  NJ.glide = glide;
+  NJ.stopGlide = stopGlide;
 })(window);
