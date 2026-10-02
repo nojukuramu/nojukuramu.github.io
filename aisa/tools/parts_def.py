@@ -134,14 +134,15 @@ UNDER = [
  ("hairBack", [(144,240),(170,240),(172,286),(165,294),(158,290),(151,297),(146,290)], True),
  # thighs up under the skirt to the hips, so a swinging leg has a leg
  # above the sock rather than a cut edge
- # The sleeves, in the part of them the drawing hides. Each is a sleeve's
- # inner half tucked behind the bodice - at rest wholly under the dress, the
- # collar and its own cap - and carried by the arm, so that a raised arm
- # comes out of the armhole as a sleeve with a body, not a cap with a flat
- # cut, or a ribbon. Its edge towards the cap runs under the cap, where its
- # outline cannot show.
- ("sleeveR",  closed_smooth([(96,250.6),(101,249.8),(106.6,251),(111,255),(113.2,261),(113.4,268),(111.4,275.4),(107.4,282),(102.4,287.6),(98,290.4),(95.8,285),(95.4,268)]), True),
- ("sleeveL",  closed_smooth([(147.4,251.4),(142.4,250.2),(136.6,251.4),(132,255.4),(129.8,261.4),(129.6,268.4),(131.6,275.6),(135.6,281.6),(140.6,286.2),(145,288.6),(147.4,284),(147.8,268)]), True),
+ # The armpit gusset of each sleeve, which the drawing hides under the
+ # bodice and under the cap: a small wedge from the crease towards the
+ # armhole, a third of the way down the sleeve. js/model.js holds its crease
+ # edge to the arm and its far edge to the torso, so it stretches as the arm
+ # rises; its free edge is the fold that appears. At rest nothing of it shows.
+ ("sleeveR",  closed_smooth([(96,250.4),(101,249.8),(105.6,251.4),(109.4,256),(109.6,261),(107,266),(103.4,271),(99.6,275),(96,275.4),(95.4,263)]), True),
+ # (her left sleeve is seen three-quarter on: the drawing shows a crescent of a tube whose body is behind the chest, so this one is the body of the tube
+ # as well, about as thick as the right one, and only its shoulder end is a gusset)
+ ("sleeveL",  closed_smooth([(146,251),(141,251.4),(137.6,255),(136.2,261),(137,268),(139.4,275),(142.6,281.4),(146,286.8),(148.6,288.4),(149.2,276),(148.6,264),(147.2,256)]), True),
  ("legR",     [(90,326),(111,326),(112,362),(88.5,362)], True),
  ("legL",     [(125,326),(146,326),(147.5,362),(124,362)], True),
  # and the sock on down into the shoe, so a leg swinging a shoe out of

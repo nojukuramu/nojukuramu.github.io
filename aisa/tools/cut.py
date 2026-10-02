@@ -472,6 +472,7 @@ for name in DRAW:
             ol_mask |= poly(pts)
     if ol_mask.any():
         ext &= ~(cv2.dilate(ol_mask.astype(np.uint8), np.ones((41, 41), np.uint8)).astype(bool) & ~ol_mask)
+    under_arm = None
     region = own | ext
     if name == 'dress':
         region &= poly(DRESS_SIL, 2.5) | own
@@ -479,7 +480,7 @@ for name in DRAW:
         # a few pixels under the arm past it (no ink there): if it stopped at
         # the seam, the first sway of the body would slide the seam off the
         # arm's outline and show the background down the gap.
-        under_arm = cv2.dilate(seam_mask().astype(np.uint8), np.ones((19, 19), np.uint8)).astype(bool)
+        under_arm = cv2.dilate(seam_mask().astype(np.uint8), np.ones((13, 13), np.uint8)).astype(bool)
         region |= under_arm & np.isin(assign, [PARTS.index('armR'), PARTS.index('armL')]) & fg
     outline = np.zeros((H, W), bool)
     rim = cv2.distanceTransform(fg.astype(np.uint8), cv2.DIST_L2, 5) < 1.1 * S
@@ -612,9 +613,9 @@ for name in DRAW:
             k = np.clip((rows - 232 * S) / (14 * S), 0, 1)
             fill = np.where(want[..., None], soft * (1 - k) + base * k, fill)
     elif name in ('sleeveR', 'sleeveL'):
-        # the sleeve's own colour, flat, as it is drawn; the cap's shading is
-        # too slight to matter on a part that is mostly under the dress
-        fill = np.zeros((H, W, 3), np.float32); fill[:] = PAL['dress']
+        # the underside of the sleeve: flat, and a shade darker than the
+        # outside, which is all the shading a wedge this small wants
+        fill = np.zeros((H, W, 3), np.float32); fill[:] = np.array(PAL['dress'], np.float32) * 0.86   # underside, a shade darker
     elif name in ('legR', 'legL'):
         # the sock carries its stripes down the column, which is right for
         # a sock and wrong for skin: carried down, a thigh turns to bars.
@@ -630,6 +631,10 @@ for name in DRAW:
     else:
         fill = nearest_fill(clean, want)
     rgb = np.where(own[..., None], U, fill)
+    if name == 'dress':
+        # what the dress carries on under an arm is dress, whatever the fill
+        # found nearest: the arm's skin and its anti-aliasing are right there
+        rgb[region & ~own & under_arm] = np.array(PAL['dress'], np.float32)
     if seam_ink is not None:
         rgb[seam_ink] = INK
     if name == 'face':

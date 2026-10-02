@@ -247,6 +247,26 @@ AISA.model = (function () {
     if (W3 > 0 && r.s) rotW(a.s[0], a.s[1], r.s, W3, r.sc, r.ss);
     rigid(st, a.s, k === "R" ? st.sr : st.sl);
   }
+  // weights of a sleeve's gusset: the arm's own three joint weights, and in
+  // the fourth how much of the arm each vertex follows - all of it at the
+  // crease, none of it under the bodice
+  function gussetPre(k, nearX, farX, fullY0, fullY1) {
+    return function (x, y, o) {
+      armWeights(k, x, y, o);
+      o[4] = smooth(farX, nearX, x);
+      // her left sleeve is drawn three-quarter on, so the drawing shows only
+      // a crescent of a tube whose body is behind her chest: below the
+      // shoulder that body goes with the arm entirely
+      if (fullY0 != null) o[4] = Math.max(o[4], smooth(fullY0, fullY1, y));
+    };
+  }
+  function gusset(st, k) {
+    var x0 = X, y0 = Y;
+    arm(st, k);
+    var ax = X, ay = Y;
+    X = x0; Y = y0; torso(st);
+    X += (ax - X) * W4; Y += (ay - Y) * W4;
+  }
   function leg(st, k) {
     var p = LEG[k], r = st.leg[k] * W1;
     if (r) rotSmall(p[0], p[1], r);
@@ -326,11 +346,13 @@ AISA.model = (function () {
     },
     armR: { pre: function (x, y, o) { armWeights("R", x, y, o); }, run: function (st) { arm(st, "R"); } },
     armL: { pre: function (x, y, o) { armWeights("L", x, y, o); }, run: function (st) { arm(st, "L"); } },
-    // the inner half of each sleeve, tucked behind the bodice: it goes where
-    // its arm goes, and is what a raised arm's sleeve is made of past the
-    // drawing's cut
-    sleeveR: { pre: function (x, y, o) { armWeights("R", x, y, o); }, run: function (st) { arm(st, "R"); } },
-    sleeveL: { pre: function (x, y, o) { armWeights("L", x, y, o); }, run: function (st) { arm(st, "L"); } },
+    // The underside of each sleeve (tools/parts_def.py). Hers right: a small
+    // wedge of fabric tucked under the bodice's armhole. Its edge by the crease goes
+    // where the arm goes; its edge under the bodice stays with the torso; the
+    // mesh between stretches, which is what the fabric at an armpit does when
+    // an arm is raised. At rest it is wholly under the cap and the dress.
+    sleeveR: { pre: gussetPre("R", 100.5, 106), run: function (st) { gusset(st, "R"); } },
+    sleeveL: { pre: gussetPre("L", 146.7, 141.2, 258, 268), run: function (st) { gusset(st, "L"); } },
     neck: {
       // the top of the neck goes with the chin, so the shadow under it
       // stays under it and the neck stretches as she looks up
