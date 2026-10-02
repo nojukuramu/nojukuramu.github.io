@@ -334,8 +334,10 @@
       ctx.globalAlpha = 1;
     }
 
-    /* --- the sun, and the low glow it throws when it is near the horizon --- */
-    if (sun.up) {
+    /* --- the sun, and the low glow it throws when it is near the horizon ---
+     * Not on the home screen either: its picture is a moon, and a sun hanging
+     * directly over it makes the light theme's noon look like a mistake. */
+    if (sun.up && view) {
       var sx = sun.x * W, sy = sun.y * H, sr = Math.max(18, Math.min(W, H) * 0.055);
       var lowSun = Math.max(0, 1 - sun.high * 2.6);              // strongest at the horizon
       var warm = lowSun > 0.15;

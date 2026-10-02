@@ -1089,6 +1089,9 @@ body.struck .app { animation: struck 0.5s var(--ease); }
 @keyframes moon-breathe { from { opacity: 0.6; transform: scale(0.94); } to { opacity: 1; transform: scale(1.06); } }
 .hero-moon-hi { stop-color: #f6f9fc; }
 .hero-moon-lo { stop-color: #c3d4e3; }
+/* A hairline round the disc, which is all that separates a pale moon from a
+   pale noon sky in the light theme. */
+.hero-moon { stroke: color-mix(in srgb, var(--accent) 30%, transparent); stroke-width: 0.8; }
 .hero-mare { fill: #9db1c4; opacity: 0.32; }
 /* The silhouette is always the darkest thing on the screen: ink in the light
    theme, near-black in the dark one, where the ink itself is pale. */

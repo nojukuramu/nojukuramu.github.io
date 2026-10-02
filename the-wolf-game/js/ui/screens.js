@@ -966,14 +966,14 @@
     glow.appendChild(s("stop", { offset: "100%", class: "hero-glow-stop", "stop-opacity": "0" }));
     defs.appendChild(glow);
     svg.appendChild(defs);
-    svg.appendChild(s("circle", { class: "hero-glow", cx: 98, cy: 58, r: 90, fill: "url(#hero-glow)" }));
-    svg.appendChild(s("circle", { class: "hero-moon", cx: 98, cy: 58, r: 56, fill: "url(#hero-moon)" }));
-    [[124, 38, 9], [138, 70, 6], [118, 90, 7], [74, 30, 4.5], [140, 50, 4]].forEach(function (c) {
+    svg.appendChild(s("circle", { class: "hero-glow", cx: 114, cy: 58, r: 92, fill: "url(#hero-glow)" }));
+    svg.appendChild(s("circle", { class: "hero-moon", cx: 114, cy: 58, r: 56, fill: "url(#hero-moon)" }));
+    [[76, 50, 6], [84, 86, 7], [150, 38, 7], [148, 74, 5], [68, 72, 4]].forEach(function (c) {
       svg.appendChild(s("circle", { class: "hero-mare", cx: c[0], cy: c[1], r: c[2] }));
     });
     // The howl, as arcs going out from the muzzle, each a little later.
     [0, 1, 2].forEach(function (k) {
-      var r = 6 + k * 5.5, cx = 57, cy = 18, a0 = 3.4, a1 = 4.35;
+      var r = 5 + k * 4.5, cx = 98, cy = 5, a0 = 3.63, a1 = 4.68;
       svg.appendChild(s("path", {
         class: "hero-howl", style: "animation-delay:" + (k * 0.35) + "s",
         d: "M" + (cx + r * Math.cos(a0)).toFixed(1) + " " + (cy + r * Math.sin(a0)).toFixed(1) +
@@ -982,21 +982,29 @@
     });
     svg.appendChild(s("path", {
       class: "hero-rock",
-      d: "M4 170 C14 152 36 142 64 140 C92 138 124 139 148 143 C170 148 186 158 198 170 Z"
+      d: "M4 170 C14 156 40 150 70 149 C100 148 140 149 164 152 C182 156 192 162 198 170 Z"
     }));
-    var wolf = s("g", { transform: "translate(12 0)" });
-    wolf.appendChild(s("path", {
+    /* Built the way a wolf is: the head thrown back with the jaw open, both
+     * ears laid along it, a ruff at the throat and a mane down the neck, long
+     * straight forelegs with the moon showing between them and the haunch,
+     * and the brush lying out along the rock. The head was laid out on its own
+     * axis and rotated 58 degrees up, which is what makes the muzzle point
+     * at the sky rather than at the viewer. */
+    svg.appendChild(s("path", {
       class: "hero-wolf",
-      d: "M46 18 C54 22 64 28 70 32 C72 31 73 31 74 30 L79 6 L86 24 L90 10 L95 28 " +
-         "C99 32 102 37 104 43 C108 50 110 56 115 60 C117 62 116 66 119 69 " +
-         "C121 72 123 75 124 78 C128 86 130 92 134 98 C140 104 150 110 156 120 " +
-         "C160 127 160 134 156 139 C164 135 174 134 184 138 C176 142 166 143 152 142 L128 142 " +
-         "C124 142 123 138 126 137 C130 135 134 130 135 124 C130 118 120 117 112 119 " +
-         "C108 120 105 125 105 132 L105 142 L90 142 C88 142 88 139 91 138 " +
-         "C93 130 93 120 92 112 C91 104 89 98 86 92 C83 84 79 74 74 64 " +
-         "C70 56 66 48 61 42 L50 28 L60 30 Z"
+      d: "M98.6 5.1 Q100.5 5.3 101.9 6.6 C104 8.8 106.2 11 108.3 13.2 C110.6 15.6 113 18.1 115.3 20.6 " +
+         "Q117 22 119.2 22.9 C121 24.3 122.8 25.6 124.5 26.7 L126.9 28.7 L134.1 19.5 L130.6 29.9 " +
+         "L139.1 24.6 L132.8 39.2 Q131.6 42 131.1 44.9 " +
+         "C132.5 48.5 134 51.5 135 54 L139.5 56.5 L136 58.5 C137 61 137.8 63.5 138.6 66 L143 68.5 L139.6 70.5 " +
+         "C143.5 75 146 80 147.5 86 C149.5 94 151.5 101 153 108 C161 112 167 123 166 134 " +
+         "C173 135 181 137 188 141 L190 139 L192 143.5 L196 146 L193 149 C188 152 178 153 166 152.5 L150 151.5 " +
+         "L112 151.5 C108 151.5 107.5 148 110 147 C116 145 122 142 126 136 C129 128 128 118 124 110 " +
+         "C119 106 112 105 106 106 L105 148 Q105 151.5 102 151.5 L97 151.5 Q94.5 151.5 95.5 148.5 " +
+         "L98 146 L98.5 112 Q97 109 95.5 112 L95 147 Q95 151.5 92 151.5 L86.5 151.5 Q84 151.5 85 148.5 " +
+         "C88 146 89 134 89 118 C89 108 88.5 100 87 96 C86 93 85.5 91.5 85 90 L81.5 91.5 L84 86.5 " +
+         "C84.2 82 84.2 80 84.5 78 C86 70 90 63 95 57 L90 59.5 L97 52.5 L93 54 L100 48.5 L101.6 41 " +
+         "C100.4 36 99 31 98 26.8 C97 23.5 96 20.5 95.3 17.8 L97.6 14 L107.2 24.5 L102.2 14.7 L98.4 7.6 Z"
     }));
-    svg.appendChild(wolf);
     return svg;
   }
 
