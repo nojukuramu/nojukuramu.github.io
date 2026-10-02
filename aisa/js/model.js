@@ -326,6 +326,11 @@ AISA.model = (function () {
     },
     armR: { pre: function (x, y, o) { armWeights("R", x, y, o); }, run: function (st) { arm(st, "R"); } },
     armL: { pre: function (x, y, o) { armWeights("L", x, y, o); }, run: function (st) { arm(st, "L"); } },
+    // the inner half of each sleeve, tucked behind the bodice: it goes where
+    // its arm goes, and is what a raised arm's sleeve is made of past the
+    // drawing's cut
+    sleeveR: { pre: function (x, y, o) { armWeights("R", x, y, o); }, run: function (st) { arm(st, "R"); } },
+    sleeveL: { pre: function (x, y, o) { armWeights("L", x, y, o); }, run: function (st) { arm(st, "L"); } },
     neck: {
       // the top of the neck goes with the chin, so the shadow under it
       // stays under it and the neck stretches as she looks up
@@ -563,7 +568,7 @@ AISA.model = (function () {
   }
 
   // ---- what the renderer asks for -------------------------------------
-  var BASE = ["hairBack", "ponytail", "legR", "legL", "shoeR", "shoeL", "dress", "armR", "armL", "neck", "collar",
+  var BASE = ["hairBack", "ponytail", "legR", "legL", "shoeR", "shoeL", "sleeveR", "sleeveL", "dress", "armR", "armL", "neck", "collar",
               "ear", "face", "blush", "mouth", "ballR", "ballL", "lowerLid", "lidR", "lidL", "browR", "browL", "gloom", "tears",
               "sideR", "sideL", "sweat", "frontHair", "ahoge", "anger"];
 
@@ -700,7 +705,7 @@ AISA.model = (function () {
     params: PARAMS,
     parts: {
       ballR: { cell: 2 }, ballL: { cell: 2 }, lidR: { cell: 1.5 }, lidL: { cell: 1.5 },
-      browR: { cell: 2 }, browL: { cell: 2 }, armR: { cell: 3 }, armL: { cell: 3 },
+      browR: { cell: 2 }, browL: { cell: 2 }, armR: { cell: 3 }, armL: { cell: 3 }, sleeveR: { cell: 3 }, sleeveL: { cell: 3 },
       face: { cell: 4 }, frontHair: { cell: 4 }, ahoge: { cell: 3 }, ponytail: { cell: 4 },
       sideR: { cell: 4 }, sideL: { cell: 4 }, legR: { cell: 4 }, legL: { cell: 4 }
     },

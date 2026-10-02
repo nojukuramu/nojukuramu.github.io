@@ -21,7 +21,7 @@ does what Cubism does, by hand:
 
 1. **Upscale.** The drawing is 224×512. `tools/upscale.py` redraws it 4× with
    Real-ESRGAN's anime model, so the lines stay clean when stretched.
-2. **Cut.** `tools/cut.py` slices the upscale into 23 parts (back hair, ponytail,
+2. **Cut.** `tools/cut.py` slices the upscale into 25 parts (back hair, ponytail,
    face, each eyeball, lash, brow strokes, side locks, bangs, ahoge, arms, legs,
    shoes, dress, collar, neck, ear). The part outlines are hand-drawn polygons in
    `tools/parts_def.py`, and colour decides which part owns each pixel. Output:
@@ -49,9 +49,17 @@ does what Cubism does, by hand:
      A stub of hair outline beside a hand, or a blend of dress and ink that
      passed for skin, is therefore never left on an arm to spike when it moves.
    - A sleeve is a closed cap, shoulder line to cuff to crease: nothing of
-     the chest goes up with the arm. The dress's side seam under each sleeve
+     the chest goes up with the arm. Its inner half, which the drawing hides
+     under the bodice, is a part of its own (`sleeveR`, `sleeveL`): a rounded
+     puff drawn behind the dress that rides with the arm, so a raised arm has
+     a whole sleeve instead of a cap with a flat cut. The dress's side seam under each sleeve
      is redrawn as one clean line (`DRESS_SIL`, `SEAM_L` in `parts_def.py`).
    - The soft shadow the bangs and locks cast on the skin goes with them.
+   - Outlines are redrawn after the cut (`smooth_lines`, `smooth_edge`):
+     each part's ink and its own edge are traced as curves with potrace
+     (`apt install potrace` is not needed; `pip install potracer`), so a
+     long edge is a straight line or a smooth curve rather than pixel steps,
+     and debris smaller than a line is dropped.
    - The upscaler's pale halos are removed wherever a moving part would drag
      them out into view.
 3. **Rig.** Each part is a mesh over its piece of the atlas (`js/rig.js`, WebGL).
@@ -270,7 +278,7 @@ python3 cut.py /tmp/up4.png ../art
 ```
 
 `cut.py` replaces the base layers in `aisa.ora`, keeps everything painted over
-them, and packs the atlas. It needs numpy, opencv-python and Pillow.
+them, and packs the atlas. It needs numpy, opencv-python, Pillow and potracer.
 `upscale.py` also needs torch and the model weights (the link is in its
 header). All of this is build-time only: the page needs nothing but a browser
 with WebGL.

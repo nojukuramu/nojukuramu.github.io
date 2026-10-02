@@ -19,11 +19,11 @@ blend of two, and goes to the first region in priority order whose palette
 has its dominant colour. That is what lets the polygons be drawn by hand
 in source pixels and still split a one-pixel line cleanly.
 
-Build-time only: numpy, opencv-python, Pillow."""
+Build-time only: numpy, opencv-python, Pillow, potracer (pip install potracer)."""
 import json, sys, os
 import numpy as np, cv2
 from PIL import Image
-from parts_def import REGIONS, UNDER, LID_EDGE, DRAW, DRESS_SIL, SEAM_L
+from parts_def import REGIONS, UNDER, LID_EDGE, DRAW, DRESS_SIL, SEAM_L, SEAM_R
 
 S = 4
 U8 = np.array(Image.open(sys.argv[1]).convert('RGB'))
@@ -259,10 +259,24 @@ def outline_pass(parts, reach, far_reach):
     for p in order:
         d = fill[p][ys, xs]; b = d < near; near[b] = d[b]; nowner[b] = p
     lost = owner < 0
-    owner[lost & (near <= far_reach)] = nowner[lost & (near <= far_reach)]
-    assign[ys, xs] = np.where(owner >= 0, owner, assign[ys, xs])
+    take = lost & (near <= far_reach)
+    owner[take] = nowner[take]
+    # An outline is as wide as a line. Dark further from a limb than that is
+    # the shadow in the gap between it and the body, and goes with neither:
+    # on the arm it travels as a black chip along its edge.
+    limbs = [PARTS.index(p) for p in ('armR', 'armL', 'legR', 'legL')]
+    limb = np.isin(nowner, limbs)
+    # (against the background there is no body behind the arm, so its
+    # outline is all its own; it is the gap only where something else is near)
+    other = np.full(len(ys), 1e9, np.float32)
+    for p in order:
+        if p in limbs: continue
+        other = np.minimum(other, fill[p][ys, xs])
+    gap = take & limb & (near > 4.5) & (other <= 10.0)
+    owner[gap] = -2
+    assign[ys, xs] = np.where(owner >= 0, owner, np.where(owner == -2, -1, assign[ys, xs]))
 
-OUTLINED = ['armR', 'armL', 'legR', 'legL', 'shoeR', 'shoeL', 'dress', 'neck']
+OUTLINED = ['armR', 'armL', 'legR', 'legL', 'shoeR', 'shoeL', 'dress', 'neck', 'collar', 'ear']
 outline_pass(OUTLINED, {}, 14.0)
 for name in ('armR', 'armL', 'legR', 'legL', 'shoeR', 'shoeL'):
     i = PARTS.index(name)
@@ -300,6 +314,19 @@ ys_, xs_ = np.nonzero(assign >= 0)
 for k in range(0, len(ys_), 400000):
     dom_all[ys_[k:k + 400000], xs_[k:k + 400000]] = dominant(U[ys_[k:k + 400000], xs_[k:k + 400000]], ALLPAL)
 SKINLIKE = [NP.index(k) for k in ('skin', 'skinsh', 'necksh')]
+
+def smooth_curve(pts, n=8):
+    """A Catmull-Rom curve through the points: the seam is measured at a few
+    places and passes through them smoothly, not in straight runs that kink
+    where the measurements disagree by a pixel."""
+    P = [pts[0]] + list(pts) + [pts[-1]]
+    out = []
+    for i in range(1, len(P) - 2):
+        p0, p1, p2, p3 = (np.array(P[i + k], np.float64) for k in (-1, 0, 1, 2))
+        for u in np.linspace(0, 1, n, endpoint=False):
+            out.append(0.5 * ((2 * p1) + (-p0 + p2) * u + (2*p0 - 5*p1 + 4*p2 - p3) * u*u + (-p0 + 3*p1 - 3*p2 + p3) * u**3))
+    out.append(np.array(pts[-1], np.float64))
+    return [tuple(q) for q in out]
 
 # ---- painting each part -------------------------------------------------
 INK = np.array([10, 6, 8], np.float32)
@@ -514,10 +541,11 @@ for name in DRAW:
         # is replaced by the seam itself: everything outside the line goes,
         # and the line is drawn once, smooth. Below the hand, where the edge
         # is the dress's own, the drawing is kept.
-        out_l = poly(SEAM_L + [(60, SEAM_L[-1][1]), (60, SEAM_L[0][1])])
-        own &= ~out_l
         seam_ink = np.zeros((H, W), np.uint8)
-        cv2.polylines(seam_ink, [np.array([[x * S, y * S] for x, y in SEAM_L], np.int32)], False, 1, thickness=5, lineType=cv2.LINE_AA)
+        for seam, edge_x in ((SEAM_L, 60), (SEAM_R, 175)):
+            own &= ~poly(seam + [(edge_x, seam[-1][1]), (edge_x, seam[0][1])])
+            cv2.polylines(seam_ink, [np.array([[x * S, y * S] for x, y in smooth_curve(seam)], np.int32)],
+                          False, 1, thickness=5, lineType=cv2.LINE_AA)
         seam_ink = seam_ink.astype(bool) & fg
         own |= seam_ink
     # the colours a hidden area continues: the part's own, away from its
@@ -573,6 +601,10 @@ for name in DRAW:
             rows = np.arange(H, dtype=np.float32)[:, None, None]
             k = np.clip((rows - 232 * S) / (14 * S), 0, 1)
             fill = np.where(want[..., None], soft * (1 - k) + base * k, fill)
+    elif name in ('sleeveR', 'sleeveL'):
+        # the sleeve's own colour, flat, as it is drawn; the cap's shading is
+        # too slight to matter on a part that is mostly under the dress
+        fill = np.zeros((H, W, 3), np.float32); fill[:] = PAL['dress']
     elif name in ('legR', 'legL'):
         # the sock carries its stripes down the column, which is right for
         # a sock and wrong for skin: carried down, a thigh turns to bars.
@@ -630,6 +662,242 @@ for name in DRAW:
     alpha[own] = 1.0
     rgb = np.where(halo[..., None], rgb, 0)
     rgba[name] = (rgb, alpha)
+
+# ---- smoother lines ---------------------------------------------------
+# The upscaler draws every line a little unevenly: stepped along a diagonal,
+# swollen here and pinched there, with a speck of ink beside it now and
+# then. Each part's lines are smoothed on their own: a pixel is taken as the
+# colour it lies on plus an amount of ink, only the amount is smoothed
+# (supersampled, then sharpened back to an edge a texel wide, so a line keeps
+# its weight and loses its steps), ink too small to be a line is dropped, and
+# the pixel is put back together. Nothing but the ink moves: colour, shading
+# and the part's own edge are as they were.
+SMOOTH_SKIP = {'lidR', 'lidL', 'browR', 'browL', 'sleeveR', 'sleeveL'}
+
+def prune_stubs(t):
+    """A line has a width and a length. What is attached to one and is both
+    thinner than the line and short - a stub of someone else's outline, a
+    hair of ink - goes; a stroke that is thin but long (a strand) stays."""
+    b = (t > 0.5).astype(np.uint8)
+    thick = cv2.morphologyEx(b, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+    body = cv2.dilate(thick, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)))
+    thin = b & ~body
+    nl, cc, st, _ = cv2.connectedComponentsWithStats(thin, connectivity=8)
+    out = t.copy()
+    # a thin piece counts as a stub only if it grows out of a thick line;
+    # a thin line on its own (a hem, a strand) is a line
+    touch = cv2.dilate(body, np.ones((5, 5), np.uint8)).astype(bool)
+    for j in range(1, nl):
+        if st[j, cv2.CC_STAT_AREA] < STUB and (touch & (cc == j)).any():
+            out[cv2.dilate((cc == j).astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool) & (body == 0)] = 0
+    return out
+
+STUB = 70                                             # texels squared: a strand is longer than this
+
+def trace_ink(t, near, k=4):
+    """The ink amount `t`, redrawn as outlines: traced as curves at k times
+    the atlas's resolution (potrace: straight where it is straight, a
+    smooth curve where it curves, a corner where there is one), and drawn
+    back down with anti-aliasing. Pieces of ink smaller than a speck are
+    dropped by the tracer."""
+    import potrace
+    h, w = t.shape
+    big = cv2.GaussianBlur(cv2.resize(t * near, (w * k, h * k), interpolation=cv2.INTER_CUBIC), (0, 0), BLUR * k)
+    bm = big > 0.5
+    if not bm.any(): return np.zeros_like(t)
+    plist = potrace.Bitmap(~bm).trace(turdsize=SPECK * k * k, turnpolicy=potrace.POTRACE_TURNPOLICY_MINORITY,
+                                     alphamax=1.1, opticurve=True, opttolerance=0.5)
+    out = np.zeros((h * k, w * k), np.uint8)
+    for curve in plist:
+        pts = [curve.start_point]
+        cur = curve.start_point
+        for s in curve.segments:
+            if s.is_corner:
+                pts += [s.c, s.end_point]
+            else:
+                p0, p1, p2, p3 = cur, s.c1, s.c2, s.end_point
+                for u in np.linspace(0, 1, 13)[1:]:
+                    m = 1 - u
+                    pts.append(type(p0)(m*m*m*p0.x + 3*m*m*u*p1.x + 3*m*u*u*p2.x + u*u*u*p3.x,
+                                        m*m*m*p0.y + 3*m*m*u*p1.y + 3*m*u*u*p2.y + u*u*u*p3.y))
+            cur = s.end_point
+        poly = np.array([[p.x, p.y] for p in pts], np.float64)
+        m = np.zeros_like(out)
+        cv2.fillPoly(m, [np.round(poly * 16).astype(np.int32)], 1, lineType=cv2.LINE_AA, shift=4)
+        out ^= m                                      # a hole is a curve inside a curve
+    return cv2.resize(out.astype(np.float32), (w, h), interpolation=cv2.INTER_AREA)
+
+BLUR = 0.7                                            # texels: noise finer than this is not a shape
+SPECK = 12                                            # texels squared: less than this is not a line
+
+def smooth_lines(rgb, a):
+    ys, xs = np.nonzero(a > 0.02)
+    if not len(ys): return rgb
+    pad = 10
+    y0, y1 = max(ys.min() - pad, 0), min(ys.max() + pad + 1, H)
+    x0, x1 = max(xs.min() - pad, 0), min(xs.max() + pad + 1, W)
+    p = rgb[y0:y1, x0:x1].copy(); sa = a[y0:y1, x0:x1]
+    h, w = sa.shape
+    d_ink = np.linalg.norm(p - INK_L, axis=2)
+    pure_fill = (sa > 0.9) & (d_ink > 85)
+    core = (sa > 0.5) & (d_ink < 22)
+    if core.sum() < 30 or not pure_fill.any(): return rgb
+    ink = p[core].mean(0)
+    _, lab = cv2.distanceTransformWithLabels((~pure_fill).astype(np.uint8), cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL)
+    ly, lx = np.nonzero(pure_fill)
+    lut = np.zeros((lab.max() + 1, 3), np.float32); lut[lab[ly, lx]] = p[ly, lx]
+    F = lut[lab]
+    v = F - ink; vv = np.maximum((v * v).sum(2), 1.0)
+    t = np.clip(((F - p) * v).sum(2) / vv, 0, 1)
+    t[sa < 0.5] = 0                                   # the soft rim of the part is not a line
+    # near a line only: far from any ink there is nothing to smooth
+    near = cv2.dilate((t > 0.15).astype(np.uint8), np.ones((9, 9), np.uint8)).astype(bool)
+    if not near.any(): return rgb
+    t = prune_stubs(t)
+    t2 = trace_ink(t, near)
+    t2[sa < 0.5] = np.minimum(t2[sa < 0.5], t[sa < 0.5])      # never ink the soft rim
+    out = F * (1 - t2[..., None]) + ink * t2[..., None]
+    m = near & (sa > 0.02)
+    res = rgb.copy()
+    sub = res[y0:y1, x0:x1]
+    sub[m] = out[m]
+    return res
+
+INK_L = np.array([4, 3, 4], np.float32)
+
+LIMBS = {'armR', 'armL', 'legR', 'legL', 'shoeR', 'shoeL'}
+
+def tidy_part(name, rgb, a):
+    """What the cut leaves at a part's rim that is not part of the drawing:
+    a speck of dark or colour that came loose from the line it belonged to
+    (a line is one piece of ink, a speck is not), and, on a skin part, a
+    notch or a slit where the colour test dropped a few pixels - background
+    shows through those, and they open when the part moves."""
+    ys, xs = np.nonzero(a > 0.02)
+    if not len(ys): return rgb, a
+    y0, y1 = max(ys.min() - 12, 0), min(ys.max() + 13, H)
+    x0, x1 = max(xs.min() - 12, 0), min(xs.max() + 13, W)
+    p = rgb[y0:y1, x0:x1]; sa = a[y0:y1, x0:x1].copy()
+    m = sa > 0.5
+    lm = p @ np.array([0.299, 0.587, 0.114], np.float32)
+    rim = cv2.distanceTransform(m.astype(np.uint8), cv2.DIST_L2, 5) <= 5
+    # loose dark: separate from the line it lies beside, small, at the rim.
+    # Only on a limb or a shoe: there the rim is a lone outline and debris
+    # is easy to tell from it; on the dress's hem a fragment of the line is
+    # a piece of the line, and deleting it opens a notch.
+    dark = m & (lm < 70)
+    nl, cc, st, _ = cv2.connectedComponentsWithStats(dark.astype(np.uint8), connectivity=8)
+    for j in range(1, nl):
+        if name in LIMBS and st[j, cv2.CC_STAT_AREA] < 48 and (rim & (cc == j)).any():
+            sa[cv2.dilate((cc == j).astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool) & (lm < 120)] = 0
+    # loose pieces of the part itself
+    m = sa > 0.5
+    nl, cc, st, _ = cv2.connectedComponentsWithStats(m.astype(np.uint8), connectivity=8)
+    for j in range(1, nl):
+        if st[j, cv2.CC_STAT_AREA] < 60: sa[cc == j] = 0
+    if name in ('legR', 'legL'):
+        # Across the thigh, small fragments of dark are the dress's hem line
+        # that the leg picked up as dashes. Hidden under the dress at rest,
+        # they show as teeth along the hem the moment the skirt moves. The
+        # leg's own side outlines are long and stay.
+        band = np.zeros((H, W), bool); band[336 * S:374 * S] = True
+        bm = band[y0:y1, x0:x1]
+        dk = (sa > 0.5) & (lm < 110) & bm
+        nl, cc, st, _ = cv2.connectedComponentsWithStats(dk.astype(np.uint8), connectivity=8)
+        junk = np.zeros_like(dk)
+        for j in range(1, nl):
+            if st[j, cv2.CC_STAT_AREA] < 400 and st[j, cv2.CC_STAT_HEIGHT] < 40: junk |= cc == j
+        junk = cv2.dilate(junk.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool) & (lm < 150) & (sa > 0.02)
+        if junk.any():
+            skin = (sa > 0.5) & (lm > 170) & ~junk
+            _, lab = cv2.distanceTransformWithLabels((~skin).astype(np.uint8), cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL)
+            sy, sx = np.nonzero(skin)
+            lut = np.zeros((lab.max() + 1, 3), np.float32); lut[lab[sy, sx]] = p[sy, sx]
+            p = p.copy(); p[junk] = lut[lab][junk]
+    if name in ('neck', 'ear'):
+        k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21))
+        closed = cv2.morphologyEx((sa > 0.5).astype(np.uint8), cv2.MORPH_CLOSE, k).astype(bool)
+        add = closed & (sa <= 0.5)
+        if add.any():
+            _, lab = cv2.distanceTransformWithLabels((sa <= 0.5).astype(np.uint8), cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL)
+            # skin only: the nearest colour might be the outline's
+            sy, sx = np.nonzero((sa > 0.5) & (lm > 120))
+            _, lab = cv2.distanceTransformWithLabels((~((sa > 0.5) & (lm > 120))).astype(np.uint8), cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL)
+            lut = np.zeros((lab.max() + 1, 3), np.float32); lut[lab[sy, sx]] = p[sy, sx]
+            p = p.copy(); p[add] = lut[lab][add]; sa[add] = 1.0
+    out = rgb.copy(); out[y0:y1, x0:x1] = p
+    oa = a.copy(); oa[y0:y1, x0:x1] = sa
+    return out, oa
+
+def smooth_edge(rgb, a):
+    """The part's own edge, redrawn the way its lines were: traced as curves
+    and drawn back with anti-aliasing, so a cut that followed pixel steps
+    follows a straight line or a curve instead. Inside the part the alpha is
+    untouched; only a band along the edge changes, and where the edge moves
+    out, the new texels take the colour beside them."""
+    import potrace
+    ys, xs = np.nonzero(a > 0.02)
+    if not len(ys): return rgb, a
+    y0, y1 = max(ys.min() - 6, 0), min(ys.max() + 7, H)
+    x0, x1 = max(xs.min() - 6, 0), min(xs.max() + 7, W)
+    sa = a[y0:y1, x0:x1]; p = rgb[y0:y1, x0:x1]
+    h, w = sa.shape; k = 4
+    b = (sa > 0.5)
+    big = cv2.GaussianBlur(cv2.resize(sa, (w * k, h * k), interpolation=cv2.INTER_CUBIC), (0, 0), BLUR * k) > 0.5
+    plist = potrace.Bitmap(~big).trace(turdsize=SPECK * k * k, turnpolicy=potrace.POTRACE_TURNPOLICY_MINORITY,
+                                       alphamax=1.0, opticurve=True, opttolerance=0.6)
+    out = np.zeros((h * k, w * k), np.uint8)
+    for curve in plist:
+        pts = [curve.start_point]; cur = curve.start_point
+        for s in curve.segments:
+            if s.is_corner:
+                pts += [s.c, s.end_point]
+            else:
+                p0, p1, p2, p3 = cur, s.c1, s.c2, s.end_point
+                for u in np.linspace(0, 1, 13)[1:]:
+                    m = 1 - u
+                    pts.append(type(p0)(m*m*m*p0.x + 3*m*m*u*p1.x + 3*m*u*u*p2.x + u*u*u*p3.x,
+                                        m*m*m*p0.y + 3*m*m*u*p1.y + 3*m*u*u*p2.y + u*u*u*p3.y))
+            cur = s.end_point
+        poly = np.array([[q.x, q.y] for q in pts], np.float64)
+        m = np.zeros_like(out)
+        cv2.fillPoly(m, [np.round(poly * 16).astype(np.int32)], 1, lineType=cv2.LINE_AA, shift=4)
+        out ^= m
+    a2 = cv2.resize(out.astype(np.float32), (w, h), interpolation=cv2.INTER_AREA)
+    # only a band along the edge may change
+    inside = cv2.erode(b.astype(np.uint8), np.ones((9, 9), np.uint8)).astype(bool)
+    outside = ~cv2.dilate(b.astype(np.uint8), np.ones((9, 9), np.uint8)).astype(bool)
+    new_a = np.where(inside, sa, np.where(outside, 0.0, a2)).astype(np.float32)
+    # colour for texels that gained alpha: the nearest texel that has it
+    gain = (new_a > 0.02) & (sa <= 0.5)
+    if gain.any():
+        src = sa > 0.5
+        _, lab = cv2.distanceTransformWithLabels((~src).astype(np.uint8), cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL)
+        sy, sx = np.nonzero(src)
+        lut = np.zeros((lab.max() + 1, 3), np.float32); lut[lab[sy, sx]] = p[sy, sx]
+        p = p.copy(); p[gain] = lut[lab][gain]
+    # The outermost texels of an outlined edge are the line: where ink lies
+    # right inside the rim, a rim texel that is not ink (the fill the nearest
+    # colour put there, or a pale speck of the upscaler's) is made ink, so
+    # the edge is dark all the way out and no light teeth show along it.
+    lm = p @ np.array([0.299, 0.587, 0.114], np.float32)
+    ink_in = (new_a > 0.5) & (lm < 45)
+    rim = cv2.dilate((new_a < 0.5).astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool) & (new_a > 0.02)
+    want = rim & cv2.dilate(ink_in.astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool) & (lm >= 45)
+    if want.any():
+        p = p.copy(); p[want] = INK_L
+    oa = a.copy(); oa[y0:y1, x0:x1] = new_a
+    orgb = rgb.copy(); orgb[y0:y1, x0:x1] = p
+    return orgb, oa
+
+for name in DRAW:
+    if name in SMOOTH_SKIP: continue
+    rgb, al = rgba[name]
+    rgb = smooth_lines(rgb, al)
+    if name not in ('ballR', 'ballL'):
+        rgb, al = tidy_part(name, rgb, al)
+        rgb, al = smooth_edge(rgb, al)
+    rgba[name] = (rgb, al)
 
 # ---- into the layered file, and from it the atlas ----------------------
 import layers

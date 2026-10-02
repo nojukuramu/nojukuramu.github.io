@@ -6,6 +6,19 @@ import math
 def ell(cx, cy, rx, ry, n=36):
     return [(round(cx + rx*math.cos(2*math.pi*i/n), 2), round(cy + ry*math.sin(2*math.pi*i/n), 2)) for i in range(n)]
 
+def closed_smooth(pts, n=6):
+    """A closed Catmull-Rom curve through the points, as a polygon fine
+    enough to read as a curve. A hand-placed polygon has corners at every
+    vertex; a sleeve does not."""
+    N = len(pts); out = []
+    for i in range(N):
+        p0, p1, p2, p3 = (pts[(i + k) % N] for k in (-1, 0, 1, 2))
+        for j in range(n):
+            u = j / n
+            out.append(tuple(round(0.5 * ((2 * p1[d]) + (-p0[d] + p2[d]) * u + (2*p0[d] - 5*p1[d] + 4*p2[d] - p3[d]) * u*u
+                                          + (-p0[d] + 3*p1[d] - 3*p2[d] + p3[d]) * u**3), 2) for d in (0, 1)))
+    return out
+
 HAIR = ['line', 'hair', 'hairsh', 'hairhi']
 
 # (part, polygon, palette). A part may be listed more than once with
@@ -69,17 +82,24 @@ REGIONS = [
  ("legL",      [(121,350),(152,350),(152,412),(121,412)], ['line', 'white', 'stripe', 'skin', 'skinsh']),
  ("ponytail",  [(0,118),(64,118),(67.5,139),(63,147),(58,154),(54,162),(53,190),(52,210),(48,232),(44,258),(0,258)], HAIR + ['hairdk', 'tie']),
  ("hairBack",  [(0,118),(224,118),(224,330),(0,330)], HAIR + ['hairdk']),
+ # The inner half of each sleeve exists only so that a raised arm has one:
+ # nothing of it is drawn, so it owns no pixels and these are placeholders
+ # in the corner of the canvas. It is painted whole (UNDER, below).
+ ("sleeveR",   [(0,0),(1,0),(1,1),(0,1)], ['dress']),
+ ("sleeveL",   [(0,0),(1,0),(1,1),(0,1)], ['dress']),
 ]
 
-# The bodice and skirt's own outline, down each side, read off the drawing
-# where the dress meets the background below the hands and carried up
-# under the sleeves in a straight line to the armholes. The dress is
-# clipped to it (cut.py): whatever of an arm's or a lock's outline lay
-# beside it is not the dress's, and would stay on it, ragged, when the
-# arm went up. It is also the seam painted in where an arm uncovers it.
-DRESS_SIL = [(100,247),(146,247),(146,262),(146.2,283),(148.5,300),(152.5,314),(158,328),(164.5,348),(165.5,350),(162,350.5),(156,354),(150,357),(144,358.2),(132,358.8),(120,359.5),(108,360),(96,358.5),(90,357),(84,354.8),(78,352),(74.5,350.5),(75.5,346),(81,328),(86,314),(92,301),(97.5,292),(99,283),(100,262)]
-
-SEAM_L = [(100,262),(99,283),(97.5,292),(92,301),(86,314),(81,328),(78.3,337)]   # the stretch of that side an arm covers
+# Where an arm covers the dress the seam runs just inside the arm's own
+# outline, so at rest it is exactly under a line that is already there and
+# adds nothing; below the hand it is the dress's own outline.
+SEAM_L = [(100,258),(100.5,264),(101.2,270),(100,276),(98.5,282),(97.8,288),(97.2,292),(92,301),(86,314),(81,328),(78.3,337)]
+SEAM_R = [(143.8,262),(146.4,266),(148,270),(148.7,274),(148.2,278),(146.4,282),(146.4,286),(146.4,290),(147,294),(148.4,298),(150,302),(151.4,306),(153,310),(154.7,314),(156.2,318),(157.7,322),(159,326),(160.4,331),(162,337)]
+# The dress's own outline: those seams, the hem between them, and the top
+# under the collar. The dress is clipped to it (cut.py): whatever of an
+# arm's or a lock's outline lay beside it is not the dress's, and would stay
+# on it, ragged, when the arm went up. It is also what is painted in where an
+# arm uncovers it.
+DRESS_SIL = [(100,247)] + SEAM_L + [(75.5,346),(74.5,350.5),(78,352),(84,354.8),(90,357),(96,358.5),(108,360),(120,359.5),(132,358.8),(144,358.2),(150,357),(156,354),(162,350.5),(165.5,350),(164.5,348)] + SEAM_R[::-1] + [(145.8,247)]
 
 # Hidden areas a part has to be painted under, so that moving whatever
 # covers it shows more of the part instead of a hole. Filled with the
@@ -114,6 +134,14 @@ UNDER = [
  ("hairBack", [(144,240),(170,240),(172,286),(165,294),(158,290),(151,297),(146,290)], True),
  # thighs up under the skirt to the hips, so a swinging leg has a leg
  # above the sock rather than a cut edge
+ # The sleeves, in the part of them the drawing hides. Each is a sleeve's
+ # inner half tucked behind the bodice - at rest wholly under the dress, the
+ # collar and its own cap - and carried by the arm, so that a raised arm
+ # comes out of the armhole as a sleeve with a body, not a cap with a flat
+ # cut, or a ribbon. Its edge towards the cap runs under the cap, where its
+ # outline cannot show.
+ ("sleeveR",  closed_smooth([(96,250.6),(101,249.8),(106.6,251),(111,255),(113.2,261),(113.4,268),(111.4,275.4),(107.4,282),(102.4,287.6),(98,290.4),(95.8,285),(95.4,268)]), True),
+ ("sleeveL",  closed_smooth([(147.4,251.4),(142.4,250.2),(136.6,251.4),(132,255.4),(129.8,261.4),(129.6,268.4),(131.6,275.6),(135.6,281.6),(140.6,286.2),(145,288.6),(147.4,284),(147.8,268)]), True),
  ("legR",     [(90,326),(111,326),(112,362),(88.5,362)], True),
  ("legL",     [(125,326),(146,326),(147.5,362),(124,362)], True),
  # and the sock on down into the shoe, so a leg swinging a shoe out of
@@ -133,5 +161,5 @@ LID_EDGE = {
  "lidL": [(137.6,197.8),(143,197.8),(150,195.6),(158,194.6),(166.6,193.8)],
 }
 
-DRAW = ["hairBack", "ponytail", "legR", "legL", "shoeR", "shoeL", "dress", "armR", "armL", "neck", "collar", "ear",
+DRAW = ["hairBack", "ponytail", "legR", "legL", "shoeR", "shoeL", "sleeveR", "sleeveL", "dress", "armR", "armL", "neck", "collar", "ear",
         "face", "ballR", "ballL", "lidR", "lidL", "browR", "browL", "sideR", "sideL", "frontHair", "ahoge"]
