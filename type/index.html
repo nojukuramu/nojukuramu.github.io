@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Type — a typing trainer that never repeats</title>
 <meta name="description" content="Type sentences, terminal sessions, source code and random keyboard characters. Every challenge is built on the spot, and there is nothing to click: you just type.">
-<meta name="theme-color" content="#0d1117">
-<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#f4efe4">
+<meta name="color-scheme" content="light">
 <link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch.png">
@@ -15,9 +15,9 @@
 <meta name="apple-mobile-web-app-title" content="Type">
 <link rel="stylesheet" href="css/type.css">
 <!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
-<script>window.TY_VERSION = "1";</script>
+<script>window.TY_VERSION = "2";</script>
 </head>
-<body>
+<body data-screen="solo">
 
 <header id="top">
   <a class="brand" href="../" aria-label="nojukuramu — home">
@@ -39,9 +39,15 @@
     <button data-len="medium">Medium</button>
     <button data-len="long">Long</button>
   </div>
+
+  <button id="btnVersus" class="versus" aria-label="Race other people">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V4M5 5h11l-2 3.5 2 3.5H5"/></svg>
+    <span>Race</span>
+  </button>
 </header>
 
 <main id="stage" data-kind="text" data-state="idle">
+  <div id="lanes" hidden aria-label="Race progress"></div>
   <div id="hud" aria-live="off">
     <div class="stat"><b id="liveWpm">0</b><span>wpm</span></div>
     <div class="stat"><b id="liveAcc">100</b><span>% acc</span></div>
@@ -99,8 +105,77 @@
     </div>
   </div>
 
+  <div id="count" hidden aria-live="assertive"></div>
+
+  <div id="raceResult" hidden>
+    <h2 id="rrTitle">Results</h2>
+    <table><tbody id="rrBody"></tbody></table>
+    <p id="rrNote"></p>
+    <div class="actions">
+      <button id="rrBack" class="primary">Back to the room</button>
+      <button id="rrLeave">Leave</button>
+    </div>
+  </div>
+
   <p id="focusHint" hidden>Click here, or press any key, to carry on typing</p>
 </main>
+
+<section id="mp">
+  <div id="mp-home">
+    <div class="mp-top">
+      <h1>Race</h1>
+      <label class="name">Your name <input id="mpName" maxlength="16" autocomplete="off" spellcheck="false"></label>
+      <button class="info" data-info="versus" aria-label="What a race shares"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></button>
+      <button id="mpBack" class="ghost">Back to solo</button>
+    </div>
+    <p id="mpError" class="err" hidden></p>
+    <div class="cards">
+      <article class="card">
+        <h2>Private room</h2>
+        <p>A code for your friends.</p>
+        <button id="mpCreate" class="primary">Create a room</button>
+        <form id="mpJoinForm"><input id="mpCode" maxlength="6" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="Room code"><button id="mpJoin" type="submit">Join</button></form>
+      </article>
+      <article class="card">
+        <h2>Public rooms</h2>
+        <p id="mpListNote">Looking for rooms...</p>
+        <ul id="mpList"></ul>
+        <button id="mpHostPublic">Host a public room</button>
+      </article>
+      <article class="card">
+        <h2>Quick match</h2>
+        <p id="mpQuickNote">We find a room, or start one for the next person.</p>
+        <button id="mpQuick" class="primary">Find a match</button>
+      </article>
+    </div>
+  </div>
+
+  <div id="mp-room" hidden>
+    <div class="room-head">
+      <div><span class="tag" id="roomKind">Private</span><h1 id="roomTitle">Room</h1></div>
+      <div class="codebox"><span>code</span><b id="roomCode">------</b><button id="roomCopy" class="ghost">Copy link</button></div>
+    </div>
+    <div class="room-body">
+      <ul id="roster"></ul>
+      <div id="roomSet">
+        <h2>The race</h2>
+        <div class="chips" id="setCats" role="group" aria-label="Category">
+          <button data-set-cat="all">Mixed</button><button data-set-cat="text">Text</button><button data-set-cat="terminal">Terminal</button><button data-set-cat="code">Code</button><button data-set-cat="keys">Keys</button>
+        </div>
+        <div class="chips" id="setLens" role="group" aria-label="Length">
+          <button data-set-len="short">Short</button><button data-set-len="medium">Medium</button><button data-set-len="long">Long</button>
+        </div>
+        <p id="roomSummary"></p>
+      </div>
+    </div>
+    <p id="roomNote" class="note"></p>
+    <div class="actions">
+      <button id="roomStart" class="primary" hidden>Start the race</button>
+      <button id="roomReady" hidden>I am ready</button>
+      <button id="roomLeave">Leave room</button>
+    </div>
+  </div>
+</section>
 
 <!-- The one place keystrokes go. It is kept focused for you, so nobody has to click it. -->
 <textarea id="cap" aria-label="Type here" autofocus autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" rows="1"></textarea>

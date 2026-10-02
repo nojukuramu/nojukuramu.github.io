@@ -29,7 +29,7 @@ const TOPICS = {
       "<p>" + k("Esc") + " a new challenge · " + k("Tab") + " the same challenge again · " + k("Enter") + " the next one, once you have finished.</p>" +
       "<p>" + k("Alt") + " + " + k("1") + " to " + k("5") + " switch category. Backspace works as you would expect; " +
       "mistakes stay on screen in red until you fix them, and the challenge ends when the whole thing is right.</p>" +
-      "<p>Pasting is switched off, on purpose.</p>"
+      "<p>Pasting is switched off, on purpose. In a race, none of the shortcuts apply: it is the same challenge for everyone.</p>"
   },
   categories: {
     title: "Categories",
@@ -46,6 +46,17 @@ const TOPICS = {
     body:
       "<p><b>Short</b> is a sentence, a single command, a small snippet. <b>Medium</b> is a few sentences or a four-to-six step session. " +
       "<b>Long</b> is a paragraph, two sessions back to back, or several snippets.</p>"
+  },
+  versus: {
+    title: "Racing",
+    body:
+      "<p>A race is the same challenge for everyone, typed at the same moment. Pick a way in:</p>" +
+      "<p><b>Private room</b> gives you a code to send to friends. <b>Public rooms</b> lists rooms that hosts have opened to anyone. " +
+      "<b>Quick match</b> walks you into an open room, or starts one and waits for the next person; the race begins a few seconds after a second player arrives.</p>" +
+      "<p><b>What is shared:</b> your name, how far along you are, your speed, and your finishing time. Never the text you type, " +
+      "and nothing at all unless you open this screen. Leaving a room stops it at once.</p>" +
+      "<p>There is no game server. Players connect straight to each other, and a free public service only introduces them. " +
+      "The host acts as referee, and a time faster than thirty characters a second is not ranked.</p>"
   },
   scoring: {
     title: "Scoring",

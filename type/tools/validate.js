@@ -70,7 +70,7 @@ const allJs = jsFiles.map(read).join("\n");
   }
 
   section("Static: every module parses");
-  for (const rel of jsFiles.concat(["sw.js", "tools/validate.js", "tools/e2e.js"])) {
+  for (const rel of jsFiles.concat(["sw.js", "tools/validate.js", "tools/e2e.js", "tools/mp-e2e.js", "tools/broker.js"])) {
     try {
       const module = rel.startsWith("js/");
       execFileSync(process.execPath, (module ? ["--experimental-default-type=module"] : []).concat(["--check", path.join(ROOT, rel)]), { stdio: "pipe" });
@@ -112,7 +112,7 @@ const allJs = jsFiles.map(read).join("\n");
       const rel = queue.shift();
       if (seen.has(rel)) continue;
       seen.add(rel);
-      for (const m of read(rel).matchAll(/from\s+"(\.\/[^"]+)"/g)) queue.push("js/" + m[1].slice(2));
+      for (const m of read(rel).matchAll(/(?:from\s+|import\s+)"(\.\/[^"]+)"/g)) queue.push("js/" + m[1].slice(2));
     }
     const notCached = [...seen].filter((f) => shell.indexOf(f) < 0);
     check("every module main.js imports (" + seen.size + ") is in the shell", notCached.length === 0, notCached.join(", "));
@@ -145,7 +145,9 @@ const allJs = jsFiles.map(read).join("\n");
   const eng = await imp("js/engine.js");
   const { LANG, LANG_IDS } = await imp("js/gen-code.js");
   const { classify } = await imp("js/highlight.js");
-  const { CONVO_CHANCE, CONVO_COUNT } = await imp("js/convo.js");
+  const convo = await imp("js/convo.js");
+  const { CONVO_CHANCE, CONVO_COUNT } = convo;
+  const race = await imp("js/race.js");
   const { SHELF } = await imp("js/gen-text.js");
 
   section("Generators: same seed, same challenge");
@@ -268,18 +270,78 @@ const allJs = jsFiles.map(read).join("\n");
     for (let i = 0; i < 3000; i++) if (generate("text", "medium", "n" + i).kind === "convo") normal++;
     check("3000 ordinary text challenges contain at most 2 conversations (" + normal + ")", normal <= 2);
     let good = true, why = "";
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < 300; i++) {
       const ch = generate("text", "medium", "cv" + i, { forceConvo: true });
       const mine = ch.turns.filter((t) => t.me);
+      const others = ch.turns.filter((t) => !t.me);
       if (ch.kind !== "convo") { good = false; why = "kind"; }
       else if (ch.turns[0].me) { good = false; why = "starts with the player"; }
-      else if (mine.length < 2) { good = false; why = "fewer than two player lines"; }
-      else if (ch.turns.some((t) => !t.text || /[‹›]/.test(t.text) || /[^\x20-\x7e]/.test(t.text))) { good = false; why = "bad text"; }
+      else if (mine.length < 2) { good = false; why = "fewer than two player lines (" + ch.tag + ")"; }
+      else if (!others.length) { good = false; why = "nobody else in the chat"; }
+      else if (ch.turns.some((t) => !t.text || /[\u2039\u203A]/.test(t.text) || /[^\x20-\x7e]/.test(t.text))) { good = false; why = "bad text"; }
+      else if (ch.turns.some((t) => t.sys && t.who) || ch.turns.some((t) => !t.sys && !t.me && !t.who)) { good = false; why = "a system line with a speaker, or a speaker with no name"; }
+      else if (!ch.title || /[\u2039\u203A]/.test(ch.title)) { good = false; why = "no title"; }
       else if (ch.text !== mine.map((t) => t.text).join("\n")) { good = false; why = "target is not the player's lines"; }
-      else if (new Set(ch.turns.filter((t) => !t.me).map((t) => t.who)).size < 2) { good = false; why = "only one other person"; }
     }
-    check("every forced conversation has others speaking first, 2+ player lines and 2+ other people (" + CONVO_COUNT + " scripts)", good, why);
+    check("every forced conversation is well-formed: others or a system line first, 2+ player lines, a title, keyboard-only text (" + CONVO_COUNT + " scripts)", good, why);
+    const by = {};
+    for (const sc of convo.scripts()) by[sc.tag] = (by[sc.tag] || 0) + 1;
+    check("there are breakups where you explain (" + by.explain + "), breakups where you are left (" + by.left + "), long sweet messages (" + by.sweet + "), people who never reply (" + by.ghost + "), and funny ones (" + by.funny + ")",
+      by.explain >= 3 && by.left >= 3 && by.sweet >= 4 && by.ghost >= 3 && by.funny >= 6, JSON.stringify(by));
+    let longSweet = true, ghostHasSeen = true, leftHears = true, explainLong = true;
+    for (let i = 0; i < 60; i++) {
+      const sw = generate("text", "medium", "sw" + i, { forceConvo: "sweet" });
+      if (!sw.turns.some((t) => t.me && t.text.length >= 150)) longSweet = false;
+      const gh = generate("text", "medium", "gh" + i, { forceConvo: "ghost" });
+      if (!gh.turns.some((t) => t.sys && /Seen|Delivered|Typing/.test(t.text))) ghostHasSeen = false;
+      if (gh.turns.filter((t) => !t.me && !t.sys).length > gh.turns.length / 2) ghostHasSeen = false;
+      const lf = generate("text", "medium", "lf" + i, { forceConvo: "left" });
+      if (lf.turns.filter((t) => !t.me).length < 4) leftHears = false;
+      const ex = generate("text", "medium", "ex" + i, { forceConvo: "explain" });
+      if (ex.turns.filter((t) => t.me && t.text.length >= 90).length < 3) explainLong = false;
+    }
+    check("sweet chats have a long message from you (150+ characters)", longSweet);
+    check("the ones who never reply are mostly you talking, with Seen / Delivered / Typing lines", ghostHasSeen);
+    check("when you are left, the other person has plenty to say", leftHears);
+    check("when you explain, your lines are real explanations (3+ of 90+ characters)", explainLong);
+    check("the kind can be asked for (?convo=left)", /params\.get\("convo"\)/.test(read("js/main.js")));
     check("?convo wires up to forceConvo in the page", /params\.has\("convo"\)/.test(read("js/main.js")) && /forceConvo/.test(read("js/main.js")));
+  }
+
+  section("Racing: the rules");
+  {
+    check("settings from a stranger are clamped", (() => { const s = race.cleanSettings({ cat: "nope", len: 9, max: 999, priv: 1 }); return s.cat === "all" && s.len === "medium" && s.max === race.MAX_PLAYERS && s.priv === true && s.auto === false; })());
+    check("a listing needs a six-character code and keeps the rest tidy", race.cleanListing({ code: "ab" }) === null && (() => { const l = race.cleanListing({ code: "abc123", host: "<b>Me</b>", n: 99, s: { cat: "code" }, phase: "x" }); return l.code === "ABC123" && l.n === race.MAX_PLAYERS && l.phase === "lobby" && !/[<>]/.test(l.host); })());
+    check("names are trimmed to 16 characters with no markup or control characters", race.cleanName("  <i>A very very long name indeed</i>\n") .length <= 16 && !/[<>\n]/.test(race.cleanName("a<b>\nc")));
+    check("a random name is two words and fits", (() => { for (let i = 0; i < 50; i++) { const n = race.randomName(); if (!/^[A-Z][a-z]+ [A-Z][a-z]+$/.test(n) || n.length > 16) return false; } return true; })());
+    const open = (code, over) => Object.assign({ code, s: race.cleanSettings({}), host: "H", n: 1, phase: "lobby", v: "2" }, over);
+    check("quick match picks a quick-match room first, then the fullest", (() => {
+      const rooms = [open("AAAAAA", { n: 3 }), open("BBBBBB", { n: 1, s: race.cleanSettings({ auto: true }) }), open("CCCCCC", { n: 2, s: race.cleanSettings({ auto: true }) })];
+      return race.quickPick(rooms, "2").code === "CCCCCC";
+    })());
+    check("quick match skips private, full, running, other-version and refused rooms", (() => {
+      const rooms = [open("PPPPPP", { s: race.cleanSettings({ priv: true }) }), open("FFFFFF", { n: 6 }), open("RRRRRR", { phase: "playing" }), open("VVVVVV", { v: "1" }), open("SSSSSS")];
+      return race.quickPick(rooms, "2", ["SSSSSS"]) === null && race.quickPick(rooms, "2").code === "SSSSSS";
+    })());
+    check("when two people host at once, the larger code gives way to the smaller", race.yieldTo("MMMMMM", [open("AAAAAA", { s: race.cleanSettings({ auto: true }) })], "2").code === "AAAAAA" && race.yieldTo("AAAAAA", [open("MMMMMM", { s: race.cleanSettings({ auto: true }) })], "2") === null);
+    check("finishers are ranked by time, then the unfinished by how far they got", (() => { const r = race.rank([{ id: 1, ms: 0, n: 5 }, { id: 2, ms: 9000 }, { id: 3, ms: 7000 }, { id: 4, ms: 0, n: 40 }]); return r.map((x) => x.id).join() === "3,2,4,1"; })());
+    check("a finishing time faster than 30 characters a second is not believed", race.cleanFinish({ ms: 500, w: 100, acc: 100 }, 200).ok === false && race.cleanFinish({ ms: 12000, w: 40, acc: 97 }, 200).ok === true);
+    check("progress cannot exceed the challenge", race.cleanProgress({ n: 9999, w: 9999 }, 120).n === 120 && race.cleanProgress({ n: -4 }, 120).n === 0);
+    check("a race hands every browser the same challenge from the same seed", JSON.stringify(generate("code", "short", "race-1", { noConvo: true })) === JSON.stringify(generate("code", "short", "race-1", { noConvo: true })));
+    check("a race never turns into a conversation", (() => { for (let i = 0; i < 400; i++) if (generate("text", "medium", "nc" + i, { noConvo: true, forceConvo: true }).kind === "convo") return false; return true; })());
+  }
+
+  section("Racing: the transport is the one the other apps carry");
+  {
+    const hacksPeer = fs.readFileSync(path.join(ROOT, "..", "hacks", "js", "peer.js"), "utf8");
+    const mine = read("js/peer.js");
+    const lift = (t) => t.slice(t.indexOf(" * There is no backend here.")).replace(/HKN/g, "TYN").replace(/hkxc-/g, "tyxc-").replace(/hkx-/g, "tyx-").replace(/HK_BROKERS/g, "TY_BROKERS").replace(/HK_ICE/g, "TY_ICE").replace(/\[hk\]/g, "[ty]").replace(/"hk_"/g, "\"ty_\"").replace(/createDataChannel\("hk"/g, "createDataChannel(\"ty\"").replace(/label: "hk"/g, "label: \"ty\"").replace(/browser: "hk"/g, "browser: \"ty\"");
+    check("peer.js is Hacks' peer.js with the namespace changed and nothing else", lift(hacksPeer) === mine.slice(mine.indexOf(" * There is no backend here.")));
+    check("peer.js and lobby.js say where they were lifted from", /Lifted from Hacks/.test(mine) && /Lifted from Hacks/.test(read("js/lobby.js")));
+    const hb = fs.readFileSync(path.join(ROOT, "..", "hacks", "tools", "broker.js"), "utf8"), tb = read("tools/broker.js");
+    check("the test broker is Hacks' test broker", hb.slice(hb.indexOf('"use strict"')) === tb.slice(tb.indexOf('"use strict"')));
+    check("the room code cannot collide with the directory's (it carries a 0, codes never do)", /code: "PUBL01"/.test(read("js/lobby.js")));
+    check("a public service is only used when the race screen is opened", !/lobby|peer/.test(read("js/main.js").replace(/mp\./g, "")) || /import \* as mp/.test(read("js/main.js")));
   }
 
   section("The typing arithmetic");

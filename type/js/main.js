@@ -14,15 +14,17 @@ import * as info from "./info.js";
 import * as store from "./store.js";
 import { generate, CATEGORIES, LENGTHS } from "./gen.js";
 import { freshSeed, hash } from "./rng.js";
-import { compare, makeLedger, record, wpm, accuracy, consistency } from "./engine.js";
+import { compare, makeLedger, record, wpm, accuracy, consistency, firstError } from "./engine.js";
+import * as mp from "./mp.js";
 import { classify } from "./highlight.js";
 import { LANG } from "./gen-code.js";
 
 const $ = (id) => document.getElementById(id);
 const cap = $("cap"), stage = $("stage");
 const params = new URLSearchParams(location.search);
-// ?seed=abc123 replays a challenge, ?convo shows the rare conversation, ?lang=rust picks a language
-const URL_SEED = params.get("seed"), FORCE_CONVO = params.has("convo"), FORCE_LANG = params.get("lang");
+// ?seed=abc123 replays a challenge, ?convo shows the rare conversation (?convo=left, explain, sweet, ghost, funny, casual
+// picks the kind), ?lang=rust picks a language
+const URL_SEED = params.get("seed"), FORCE_CONVO = params.has("convo") ? (params.get("convo") || true) : false, FORCE_LANG = params.get("lang");
 
 const S = {
   cat: CATEGORIES.indexOf(store.prefs.category) >= 0 ? store.prefs.category : "all",
@@ -30,7 +32,8 @@ const S = {
   ch: null, target: "", typed: "", ledger: makeLedger(), state: "idle",
   t0: 0, tEnd: 0, idleMs: 0, waitFrom: 0, doneAt: 0, fixedMs: null,
   last: [], chars: [], hook: null, correct: 0, samples: [], lastSecond: 0,
-  turn: 0, typedTotal: 0, timers: []
+  turn: 0, typedTotal: 0, timers: [],
+  race: false            // a race hands the challenge over; mp.js owns the clock's start and the results
 };
 
 function mk(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -157,6 +160,10 @@ function playReplies(first) {
     if (S.turn >= turns.length) { endWait(); onChatEnd(); return; }
     const t = turns[S.turn];
     if (t.me) { endWait(); offerTurn(t); return; }
+    if (t.sys) {
+      const note = mk("div", "sys", t.text); $("chatBody").appendChild(note); note.scrollIntoView({ block: "nearest" });
+      S.turn++; later(run, 550); return;
+    }
     const dots = mk("div", "msg them typing"); dots.appendChild(mk("span", "who", t.who)); dots.appendChild(mk("p", null, "...")); 
     const wait = first && S.turn === 0 ? 0 : 450 + Math.min(900, t.text.length * 14);
     if (wait) { $("chatBody").appendChild(dots); dots.scrollIntoView({ block: "nearest" }); }
@@ -178,7 +185,7 @@ function onChatEnd() {
 
 function startConvo(ch) {
   clear($("chatBody"));
-  $("chatTitle").textContent = ch.turns.filter((t) => !t.me).map((t) => t.who).filter((v, i, a) => a.indexOf(v) === i).concat(["you"]).join(", ");
+  $("chatTitle").textContent = ch.title;
   clear($("chatInput"));
   S.turn = 0; S.typedTotal = 0; S.chars = []; S.target = ""; S.typed = "";
   playReplies(true);
@@ -188,14 +195,16 @@ function startConvo(ch) {
 
 const VIEWS = { text: "v-text", terminal: "v-terminal", code: "v-code", keys: "v-keys", convo: "v-convo" };
 
-function load(ch) {
+function load(ch, opts) {
   stopTimers();
-  S.ch = ch; S.typed = ""; S.ledger = makeLedger(); S.state = "idle"; S.t0 = 0; S.tEnd = 0; S.idleMs = 0; S.fixedMs = null;
+  S.race = !!(opts && opts.race);
+  S.ch = ch; S.typed = ""; S.ledger = makeLedger(); S.state = S.race ? "locked" : "idle"; S.t0 = 0; S.tEnd = 0; S.idleMs = 0; S.fixedMs = null;
   S.samples = []; S.lastSecond = 0; S.last = []; S.correct = 0; cap.value = "";
   S.target = ch.text;
   for (const k of Object.keys(VIEWS)) $(VIEWS[k]).hidden = k !== ch.kind;
   stage.dataset.kind = ch.kind; stage.dataset.state = "idle";
   $("result").hidden = true;
+  if (S.race) { $("raceResult").hidden = true; }
   let built;
   if (ch.kind === "terminal") built = buildTerminal(ch);
   else if (ch.kind === "code") built = buildCode(ch);
@@ -220,7 +229,7 @@ function label(ch) {
 
 function fresh() {
   let ch = null;
-  const opts = { forceConvo: FORCE_CONVO && S.cat !== "keys", lang: FORCE_LANG };
+  const opts = { forceConvo: S.cat === "keys" ? false : FORCE_CONVO, lang: FORCE_LANG };
   for (let i = 0; i < 10; i++) {
     const seed = (i === 0 && URL_SEED && !S.usedUrlSeed) ? URL_SEED : freshSeed();
     ch = generate(S.cat, S.len, seed, opts);
@@ -264,6 +273,11 @@ function paint() {
   const total = S.ch.kind === "convo" ? S.ch.text.replace(/\n/g, "").length : S.target.length;
   const done = (S.ch.kind === "convo" ? S.typedTotal : 0) + n;
   $("prog").style.width = Math.min(100, (done / Math.max(1, total)) * 100) + "%";
+  if (S.race && S.state === "typing") {
+    // progress is the run of right characters from the start: a wrong key holds you in place
+    const fe = firstError(S.target, S.typed);
+    mp.progress(fe < 0 ? n : fe, wpm(S.correct, elapsed()));
+  }
 }
 
 function elapsed() { if (S.fixedMs != null) return S.fixedMs; return S.t0 ? Math.max(0, (S.state === "done" ? S.tEnd : performance.now()) - S.t0 - S.idleMs - (S.state === "waiting" ? performance.now() - S.waitFrom : 0)) : 0; }
@@ -308,6 +322,11 @@ function finish() {
   S.tEnd = performance.now(); S.state = "done"; S.doneAt = S.tEnd;
   stage.dataset.state = "done";
   paint();
+  if (S.race) {
+    const ms = Math.max(1, elapsed());
+    mp.finished({ ms, wpm: wpm(S.ch.text.length, ms), acc: accuracy(S.ledger) });
+    return;
+  }
   showResult();
 }
 
@@ -357,16 +376,25 @@ cap.addEventListener("input", onInput);
 cap.addEventListener("paste", (e) => e.preventDefault());
 cap.addEventListener("drop", (e) => e.preventDefault());
 cap.addEventListener("focus", () => { $("focusHint").hidden = true; });
-cap.addEventListener("blur", () => { if (!info.isOpen()) setTimeout(() => { if (document.activeElement !== cap && !info.isOpen() && S.state !== "done") $("focusHint").hidden = false; }, 120); });
-window.addEventListener("focus", () => { if (!info.isOpen()) focusCap(); });
-document.addEventListener("click", () => { if (!info.isOpen()) focusCap(); });
+cap.addEventListener("blur", () => { if (!info.isOpen()) setTimeout(() => { if (document.activeElement !== cap && !info.isOpen() && S.state !== "done" && typingScreen()) $("focusHint").hidden = false; }, 120); });
+// the capture box only owns the keyboard on the typing screens; the race lobby has real inputs of its own
+const typingScreen = () => document.body.dataset.screen !== "mp";
+window.addEventListener("focus", () => { if (!info.isOpen() && typingScreen()) focusCap(); });
+document.addEventListener("click", (e) => { if (!info.isOpen() && typingScreen() && !(e.target.closest && e.target.closest("input"))) focusCap(); });
 $("focusHint").addEventListener("click", focusCap);
 
 const NEWLINE_KINDS = { terminal: 1, code: 1 };
 
 document.addEventListener("keydown", (e) => {
-  if (info.isOpen()) return;
+  if (info.isOpen() || document.body.dataset.screen === "mp") return;
   const k = e.key;
+  if (S.race) {
+    // in a race nothing restarts, skips or switches: the challenge is the same one for everybody
+    if (k === "Tab" || k === "Escape" || (e.altKey && /^[1-5]$/.test(k))) { e.preventDefault(); return; }
+    if (k === "Enter" && (S.state === "done" || !NEWLINE_KINDS[S.ch.kind])) { e.preventDefault(); return; }
+    if (document.activeElement !== cap && !e.ctrlKey && !e.metaKey && k.length === 1) focusCap();
+    return;
+  }
   if (k === "Escape") { e.preventDefault(); newChallenge(); return; }
   if (k === "Tab") { e.preventDefault(); restart(); return; }
   if (e.altKey && /^[1-5]$/.test(k)) { e.preventDefault(); setCat(CATEGORIES[+k - 1]); return; }
@@ -398,6 +426,14 @@ $("btnRetry").addEventListener("click", restart);
 
 info.init();
 syncControls();
+mp.init({
+  loadRace: (ch) => load(ch, { race: true }),
+  // the clock starts at the signal for everybody, not at each person's first key
+  unlock: (t0) => { if (S.race && S.state === "locked") { S.state = "typing"; S.t0 = t0; stage.dataset.state = "typing"; focusCap(); } },
+  finishRace: () => { if (S.race && S.state !== "done") { S.state = "done"; S.tEnd = performance.now(); stage.dataset.state = "done"; } },
+  stopRaceUI: () => { S.race = false; },
+  toSolo: () => { S.race = false; newChallenge(); focusCap(); }
+});
 setInterval(tick, 150);
 newChallenge();
 
@@ -409,7 +445,7 @@ $("btnCheckUpdate").addEventListener("click", async () => {
 });
 
 // reloading mid-challenge throws the challenge away, so the update flow asks first
-const busy = () => S.state === "typing" && S.typed.length > 0;
+const busy = () => (S.state === "typing" && S.typed.length > 0) || mp.inRoom() || mp.racing();
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").then((reg) => update.init(reg, busy)).catch(() => update.init(null, busy));
 } else update.init(null, busy);

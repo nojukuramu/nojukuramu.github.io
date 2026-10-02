@@ -212,7 +212,12 @@ server.listen(0, async () => {
         const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         check(cat + " has no sideways scroll at 390px", over <= 0, "overflow " + over);
       }
-      if (shotsDir) await page.screenshot({ path: path.join(shotsDir, "phone.png") });
+      await page.click("#btnVersus");
+      const lobby = await page.evaluate(() => ({ over: document.documentElement.scrollWidth - document.documentElement.clientWidth, screen: document.body.dataset.screen, cards: document.querySelectorAll("#mp .card").length }));
+      check("the race lobby fits a phone with its three ways in", lobby.screen === "mp" && lobby.cards === 3 && lobby.over <= 0, JSON.stringify(lobby));
+      if (shotsDir) await page.screenshot({ path: path.join(shotsDir, "phone.png"), fullPage: true });
+      await page.click("#mpBack");
+      check("Back to solo returns to a typing board", await page.evaluate(() => document.body.dataset.screen === "solo" && !document.getElementById("stage").hidden));
       await page.context().close();
     }
 

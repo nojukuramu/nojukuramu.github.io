@@ -30,7 +30,8 @@ export function generate(category, length, seed, opts) {
   const rng = makeRng(seed + "|" + cat + "|" + len);
   const kind = cat === "all" ? rng.pick(MIXED) : cat;
   let ch;
-  if (kind === "text") ch = (o.forceConvo || rng.chance(CONVO_CHANCE)) ? genConvo(rng) : genText(rng, len);
+  // a race hands everyone the same seed, and a chat has a cast that answers on its own clock: never in a race
+  if (kind === "text") ch = !o.noConvo && (o.forceConvo || rng.chance(CONVO_CHANCE)) ? genConvo(rng, typeof o.forceConvo === "string" ? o.forceConvo : null) : genText(rng, len);
   else if (kind === "terminal") ch = genTerminal(rng, len);
   else if (kind === "code") ch = genCode(rng, len, o.lang);
   else ch = genKeys(rng, len);
