@@ -1,8 +1,8 @@
 /* ============================================================
    nojukuramu — the page itself
-   Wires the sky, the projects, the sound and the search palette to each
-   other. Everything here is optional: if any one module fails to load the
-   page is still a readable list of projects on a dark background.
+   Wires the wheel, the contact sheet, the film, the sound and the search
+   palette to each other. Everything here is optional: if any one module
+   fails to load, the page is still a readable list of projects on black.
    ============================================================ */
 (function (global) {
   "use strict";
@@ -11,7 +11,7 @@
   var reduced = global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var $ = function (s) { return document.querySelector(s); };
 
-  /* Ask the browser to keep this origin's storage (the sound and location
+  /* Ask the browser to keep this origin's storage (the sound and film
      choices) out of eviction. A heuristic grant, not a promise, so a denial
      is logged rather than silently assumed away. */
   if (navigator.storage && navigator.storage.persist) {
@@ -25,168 +25,41 @@
   var yr = $("#year");
   if (yr) yr.textContent = new Date().getFullYear();
 
-  /* ---------- the sky, and the curtain in front of it ----------
-     The splash owns the first two seconds: it measures the device with a
-     short burst of real rendering, writes the logo while the main thread is
-     quiet, and only then lets the scene start. Without the splash module the
-     scene simply starts at once. */
-  var sky = NJ.sky;
-  if (sky) sky.mount($("#sky"));
-
-  if (NJ.splash) {
-    NJ.splash.run({
-      probe: function () { return sky ? sky.probe() : Promise.resolve(null); },
-      reveal: function () { if (sky) sky.start(); }
-    });
-  } else if (sky) {
-    sky.start();
-  }
-
-  function scrollProgress() {
-    var max = Math.max(1, document.body.scrollHeight - global.innerHeight);
-    return Math.min(1, Math.max(0, global.scrollY / max));
-  }
-
-  var header = $(".site-header");
-  function onScroll() {
-    if (sky) sky.setScroll(scrollProgress());
-    header.classList.toggle("stuck", global.scrollY > 8);
-    if (sky && !sky.dialled()) dialRange.value = Math.round(sky.auto() * 1000);
-  }
-  global.addEventListener("scroll", onScroll, { passive: true });
-  global.addEventListener("resize", onScroll);
-
-  if (sky && !reduced) {
-    global.addEventListener("pointermove", function (e) {
-      sky.pointer((e.clientX / global.innerWidth - 0.5) * 2, (e.clientY / global.innerHeight - 0.5) * 2);
-    }, { passive: true });
-  }
-
-  /* Click the sky itself and something happens. */
-  document.addEventListener("click", function (e) {
-    if (!sky) return;
-    if (e.target.closest("a,button,input,label,.slide,.palette,.sky-bar")) return;
-    sky.poke(e.clientX, e.clientY);
-  });
-
-  /* ---------- the dial ---------- */
-  var dialRange = $("#dial-range");
-  var dialTime = $("#dial-time");
-  var dialPhase = $("#dial-phase");
-  var bar = $("#sky-bar");
-  var lastLabel = -1;
-
-  var PHASES = [[0.20, "golden hour"], [0.40, "sunset"], [0.60, "dusk"], [0.80, "twilight"], [1.01, "night"]];
-
-  function label() {
-    if (!sky) return;
-    var v = sky.t();
-    var mins = Math.round((17 * 60 + 40) + v * 245);       /* 17:40 → 21:45 */
-    var q = Math.round(mins / 5) * 5;
-    if (q !== lastLabel) {
-      lastLabel = q;
-      dialTime.textContent = String((q / 60) | 0).padStart(2, "0") + ":" + String(q % 60).padStart(2, "0");
-      for (var i = 0; i < PHASES.length; i++) {
-        if (v < PHASES[i][0]) { dialPhase.textContent = PHASES[i][1]; break; }
-      }
-    }
-    if (NJ.ambience && NJ.ambience.on) {
-      var w = sky.weather();
-      NJ.ambience.setScene({ t: v, wind: w.wind, rain: w.rain, storm: w.storm });
-    }
-    requestAnimationFrame(label);
-  }
-  requestAnimationFrame(label);
-
-  dialRange.addEventListener("input", function () {
-    if (sky) sky.setDial(+dialRange.value / 1000);
-    bar.classList.remove("auto");
-  });
-  $("#dial-reset").addEventListener("click", function () {
-    if (!sky) return;
-    sky.setDial(null);
-    bar.classList.add("auto");
-    dialRange.value = Math.round(sky.auto() * 1000);
-  });
+  var P = NJ.projects ? NJ.projects.projects : [];
 
   /* ---------- sound ---------- */
   var soundBtn = $("#sound-toggle");
-  if (NJ.ambience && NJ.ambience.available) {
+  if (NJ.sound && NJ.sound.available && soundBtn) {
     soundBtn.hidden = false;
-    soundBtn.addEventListener("click", function () { NJ.ambience.toggle(); });
-    NJ.ambience.onchange(function (on) {
+    soundBtn.addEventListener("click", function () { NJ.sound.toggle(); });
+    NJ.sound.onchange(function (on) {
       soundBtn.classList.toggle("on", on);
+      soundBtn.classList.remove("hint");
       soundBtn.setAttribute("aria-pressed", on ? "true" : "false");
-      soundBtn.title = on ? "Silence the evening" : "Listen to the evening";
+      soundBtn.setAttribute("aria-label", on ? "Turn off the camera sounds" : "Turn on the camera sounds");
     });
-    if (sky) sky.onlightning(function () { NJ.ambience.thunder(); });
     /* A remembered "on" still waits for a click — browsers will not start
        audio any other way, and a page that talks the moment it loads is
        rude even when it is allowed. */
-    if (NJ.ambience.remembered()) soundBtn.classList.add("hint");
+    if (NJ.sound.remembered()) soundBtn.classList.add("hint");
   }
 
-  /* ---------- the real sky ---------- */
-  var wxChip = $("#wx-chip");
-  var wxText = $("#wx-text");
-  var locBtn = $("#locate");
-
-  function showWeather(s) {
-    if (!s) {
-      wxChip.hidden = true;
-      locBtn.hidden = false;
-      return;
-    }
-    if (sky) {
-      sky.setWeather(s);
-      if (s.dayT != null && !sky.dialled()) {
-        sky.setBase(s.dayT);
-        dialRange.value = Math.round(sky.auto() * 1000);
-      }
-      if (s.moon) sky.setMoonPhase(s.moon.phase);
-    }
-    var bits = [s.text];
-    if (s.temp != null) bits.push(Math.round(s.temp) + "°");
-    if (s.moon && sky && sky.t() > 0.5) bits.push(s.moon.name.toLowerCase());
-    wxText.textContent = bits.join(" · ");
-    wxChip.hidden = false;
-    wxChip.title = "Your sky, from Open-Meteo — " + s.place + ", read at " +
-                   s.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    locBtn.hidden = true;
-  }
-
-  if (NJ.weather) {
-    NJ.weather.onchange(showWeather);
-    NJ.weather.load().catch(function () {});
-
-    locBtn.addEventListener("click", function () {
-      locBtn.classList.add("busy");
-      locBtn.disabled = true;
-      NJ.weather.request()
-        .catch(function (err) {
-          locBtn.classList.remove("busy");
-          locBtn.disabled = false;
-          locBtn.title = (err && err.code === 1)
-            ? "Location was declined — the sky will keep running off the scroll"
-            : "Could not reach the forecast just now";
-          locBtn.classList.add("failed");
-          setTimeout(function () { locBtn.classList.remove("failed"); }, 4000);
-        });
+  /* ---------- rewinding the roll ----------
+     Back to the top at a speed worth watching: on the way it passes back
+     through the wheel, and the dial spins every frame past in reverse. */
+  var rewind = $("#rewind");
+  if (rewind) {
+    rewind.addEventListener("click", function (e) {
+      if (!NJ.glide) return;
+      e.preventDefault();
+      var ms = reduced ? 0 : 2600;
+      if (NJ.sound && ms) NJ.sound.whirr(ms);
+      NJ.glide(0, ms, function (arrived) {
+        if (NJ.sound) NJ.sound.whirr(0);
+        if (arrived && e.detail === 0) { var b = $(".brand"); if (b) b.focus({ preventScroll: true }); }
+      });
     });
-
-    wxChip.addEventListener("click", function () {
-      NJ.weather.forget();
-      if (sky) { sky.setWeather(null); sky.setBase(0); }
-    });
-  } else {
-    locBtn.hidden = true;
   }
-
-  /* ---------- projects ---------- */
-  if (NJ.projects) NJ.projects.mount($("#carousel"));
-
-  /* Reveals, the ribbons, the counters and the rest of the page's own
-     movement live in motion.js, which runs on its own. */
 
   /* ---------- search palette ---------- */
   var palette = $("#palette");
@@ -202,67 +75,59 @@
   }
   var I = {
     open: icon('<path d="M5 12h13M13 6.5l5.5 5.5L13 17.5"/>'),
-    sun: icon('<circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>'),
-    moon: icon('<path d="M20.5 14.2A8.6 8.6 0 0 1 9.8 3.5a8.6 8.6 0 1 0 10.7 10.7z"/>'),
-    rain: icon('<path d="M6 14.5A4.5 4.5 0 0 1 7 5.6a5.2 5.2 0 0 1 9.8.9A3.8 3.8 0 0 1 18 14"/><path d="M8 17l-1 3M12 17l-1 3M16 17l-1 3"/>'),
-    bolt: icon('<path d="M6 14.5A4.5 4.5 0 0 1 7 5.6a5.2 5.2 0 0 1 9.8.9A3.8 3.8 0 0 1 18 14"/><path d="M13 12l-3 5h3l-1 4"/>'),
-    pin: icon('<path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/>'),
+    dial: icon('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/><path d="M12 3.5v3"/>'),
+    sheet: icon('<rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9 4v16M15 4v16"/>'),
+    film: icon('<rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 8.5h17M3.5 15.5h17M7 5v3.5M12 5v3.5M17 5v3.5M7 15.5V19M12 15.5V19M17 15.5V19"/>'),
     ear: icon('<path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18 6.5a7.6 7.6 0 0 1 0 11"/>'),
     code: icon('<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>'),
-    replay: icon('<path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.6"/><path d="M4 4v4.6h4.6"/><path d="M10.5 9.2v5.6l4.4-2.8z"/>'),
-    dice: icon('<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="9" cy="9" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.3" fill="currentColor" stroke="none"/>'),
-    grid: icon('<rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/>'),
-    ring: icon('<rect x="8" y="4.5" width="8" height="15" rx="1.8"/><path d="M4.5 7.5v9M19.5 7.5v9"/>')
+    replay: icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5l3.2 6.6M20.2 9.7l-7.3 1M17.6 18.6l-4.3-6M9.2 20.1l1.9-7.1M3.6 13.6l6.5-2.8M6.6 5.4l3.9 6.2"/>'),
+    rewind: icon('<circle cx="12" cy="13" r="7.5"/><circle cx="12" cy="13" r="2"/><path d="M12 5.5V3M12 3h5.5a1.5 1.5 0 0 1 0 3H16"/>'),
+    dice: icon('<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="9" cy="9" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.3" fill="currentColor" stroke="none"/>')
   };
-  function showWork(mode) {
-    closePalette();
-    if (NJ.projects && NJ.projects.setView) NJ.projects.setView(mode);
-    document.getElementById("work").scrollIntoView({ behavior: reduced ? "auto" : "smooth" });
+
+  function to(y) { closePalette(); if (NJ.glide) NJ.glide(y); else global.scrollTo(0, y); }
+  function toEl(id) {
+    var t = document.getElementById(id);
+    if (t) to(t.getBoundingClientRect().top + global.scrollY);
   }
 
-  function skyTo(v) {
-    if (sky) sky.setDial(v);
-    bar.classList.remove("auto");
-    dialRange.value = Math.round(v * 1000);
-    closePalette();
-  }
-  function pretend(code, cloud, wind) {
-    if (!NJ.weather) return;
-    NJ.weather.pretend({ code: code, cloud: cloud, wind: wind, precip: code >= 60 ? 3 : 0 });
-    closePalette();
-  }
-
-  var COMMANDS = (NJ.projects ? NJ.projects.projects : []).map(function (p, i) {
+  var COMMANDS = P.map(function (p, i) {
     return {
-      icon: I.open, label: p.name, sub: "project", keywords: p.tags.join(" ") + " " + p.badge + " " + p.kind,
+      icon: I.open, label: p.name, sub: "open", keywords: p.tags.join(" ") + " " + p.badge + " " + p.kind,
       run: function () { global.location.href = p.href; }
     };
-  }).concat([
-    { icon: I.dice, label: "Surprise me", sub: "project", keywords: "random shuffle any",
-      run: function () { closePalette(); var n = NJ.projects.projects.length; document.getElementById("work").scrollIntoView({ behavior: reduced ? "auto" : "smooth" }); NJ.projects.goToIndex((Math.random() * n) | 0, true); } },
-    { icon: I.grid, label: "Show every project at once", sub: "projects", keywords: "grid all overview list everything",
-      run: function () { showWork("grid"); } },
-    { icon: I.ring, label: "Show the projects as a ring", sub: "projects", keywords: "carousel ring coverflow one at a time",
-      run: function () { showWork("ring"); } },
-    { icon: I.pin, label: "Use my real sky", sub: "weather", keywords: "location gps weather forecast now",
-      run: function () { closePalette(); locBtn.click(); } },
-    { icon: I.replay, label: "Replay the intro", sub: "logo", keywords: "splash loading logo intro again sound animation",
-      run: function () { closePalette(); if (NJ.splash && NJ.splash.replay) NJ.splash.replay(); } },
-    { icon: I.ear, label: "Listen to the evening", sub: "sound", keywords: "audio ambient crickets birds wind mute",
-      run: function () { closePalette(); if (NJ.ambience) NJ.ambience.toggle(); } },
-    { icon: I.sun, label: "Bring back the sun", sub: "sky", keywords: "day golden hour light morning", run: function () { skyTo(0); } },
-    { icon: I.moon, label: "Make it night", sub: "sky", keywords: "dark stars night moon", run: function () { skyTo(1); } },
-    { icon: I.rain, label: "Pretend it is raining", sub: "sky", keywords: "rain wet shower weather demo", run: function () { pretend(63, 0.9, 22); } },
-    { icon: I.bolt, label: "Pretend there is a storm", sub: "sky", keywords: "thunder lightning storm demo", run: function () { pretend(95, 1, 42); } },
-    { icon: I.sun, label: "Pretend the sky is clear", sub: "sky", keywords: "clear clean fine demo", run: function () { pretend(0, 0.08, 7); } },
+  }).concat(P.map(function (p, i) {
+    return {
+      icon: I.dial, label: "Turn the wheel to " + p.name, sub: "wheel", keywords: "dial lens show " + p.badge, quiet: true,
+      run: function () { closePalette(); if (NJ.wheel) NJ.wheel.goTo(i); }
+    };
+  })).concat([
+    { icon: I.dice, label: "Surprise me", sub: "wheel", keywords: "random shuffle any",
+      run: function () { closePalette(); if (NJ.wheel) NJ.wheel.goTo((Math.random() * P.length) | 0); } },
+    { icon: I.sheet, label: "Show every project at once", sub: "contact sheet", keywords: "grid all overview list everything roll",
+      run: function () { toEl("roll"); } },
+    { icon: I.replay, label: "Replay the intro", sub: "shutter", keywords: "splash loading logo intro again iris shutter",
+      run: function () { closePalette(); if (NJ.intro) NJ.intro.replay(); } },
+    { icon: I.ear, label: "Camera sounds on or off", sub: "sound", keywords: "audio shutter click mute sound",
+      run: function () { closePalette(); if (NJ.sound) NJ.sound.toggle(); } },
+    { icon: I.rewind, label: "Rewind to the top", sub: "roll", keywords: "top start beginning back",
+      run: function () { closePalette(); if (rewind) rewind.click(); else to(0); } }
+  ]).concat((NJ.film ? NJ.film.films : []).map(function (f) {
+    return {
+      icon: I.film, label: "Film: " + f.name, sub: "simulation", keywords: "film simulation look colour color grade filter " + f.id,
+      run: function () { closePalette(); NJ.film.set(f.id); }
+    };
+  })).concat([
     { icon: I.code, label: "Source on GitHub", sub: "repository", keywords: "code repo git",
       run: function () { global.open("https://github.com/nojukuramu/nojukuramu.github.io", "_blank", "noopener"); } }
   ]);
 
   function renderPalette(q) {
     q = (q || "").trim().toLowerCase();
+    /* Turning the wheel to each project would double the list nobody has
+       typed into yet; those wait for a search. */
     var items = COMMANDS.filter(function (c) {
-      if (!q) return true;
+      if (!q) return !c.quiet;
       return (c.label + " " + c.sub + " " + (c.keywords || "")).toLowerCase().indexOf(q) !== -1;
     });
     curItems = items; activeIdx = 0;
@@ -282,11 +147,18 @@
     nodes.forEach(function (li, i) { li.classList.toggle("active", i === activeIdx); });
     if (nodes[activeIdx]) nodes[activeIdx].scrollIntoView({ block: "nearest" });
   }
+  var opener = null;
   function openPalette() {
+    opener = document.activeElement;
     palette.hidden = false; pInput.value = ""; renderPalette("");
     setTimeout(function () { pInput.focus(); }, 0);
   }
-  function closePalette() { palette.hidden = true; }
+  function closePalette() {
+    if (palette.hidden) return;
+    palette.hidden = true;
+    if (opener && opener.focus && document.contains(opener)) opener.focus({ preventScroll: true });
+    opener = null;
+  }
 
   $("#open-palette").addEventListener("click", openPalette);
   pInput.addEventListener("input", function () { renderPalette(pInput.value); });
@@ -304,6 +176,4 @@
       if (palette.hidden) openPalette(); else closePalette();
     } else if (e.key === "Escape" && !palette.hidden) { closePalette(); }
   });
-
-  onScroll();
 })(window);

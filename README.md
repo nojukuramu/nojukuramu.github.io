@@ -3,133 +3,113 @@
 Personal GitHub Pages site. Each sub-folder is a self-contained static project that can be
 visited directly at `https://nojukuramu.github.io/<folder>/`.
 
-The root (`index.html`) is the landing page that ties the projects together. It sits on a drawn
-sunset: one canvas, no libraries, where a single number — how far through the evening we are —
-paints the sky, the sun and the rays it throws while it is low, tonight's real moon phase, the
-clouds, four mountain ridges and the lake under them, and after dark the Milky Way, a meteor now
-and then, and the lights of a far shore coming on one by one. Scrolling runs that number forward,
-so the top of the page is golden hour and the bottom is a starry night; the dial in the corner can
-take it over instead.
+The root (`index.html`) is the landing page that ties the projects together, and it is dressed as
+a camera: a black body with a fine grain to it, machined chrome where the hand goes, numerals
+engraved rather than printed, and one red mark — the index a dial turns against. Colour belongs to
+the projects; everything else is black, white and metal. Scrolling it is less like scrolling a page
+than like operating the thing: the page opens behind a shut iris, the hero lifts away while a lens
+rises into its place, and from there every detent of the scroll turns a chrome dial round the lens
+by one project — the iris swings shut, the next project is behind it, the iris swings open.
 
 Its styles and scripts live in [`static/home/`](static/home/):
 
 | File | What it is |
 |------|------------|
-| [`js/sky.js`](static/home/js/sky.js) | the scene — sky, sun, moon, cloud, birds, ridges, lake, rain, snow, fog, lightning |
-| [`js/weather.js`](static/home/js/weather.js) | [Open-Meteo](https://open-meteo.com/) and the moon, so the drawn sky can follow the real one |
-| [`js/ambience.js`](static/home/js/ambience.js) | wind, crickets, birds, rain and thunder, and the logo's cue, synthesised — there are no audio files |
-| [`js/projects.js`](static/home/js/projects.js) | the ring of cards and the grid it folds into, and the small drawn scene on every card |
-| [`js/motion.js`](static/home/js/motion.js) | everything else that moves: headings rising a word at a time, the ribbons, the counters, the mark at the bottom |
-| [`js/splash.js`](static/home/js/splash.js) | the logo writing itself and flying into the header, one timeline with its sound, and the moment the device is measured |
-| [`js/home.js`](static/home/js/home.js) | the glue: scroll, dial, sound, search palette |
+| [`js/projects.js`](static/home/js/projects.js) | the list every part of the page is drawn from, and a small drawn scene for each project |
+| [`js/iris.js`](static/home/js/iris.js) | the aperture: nine blades as geometry, used full screen by the intro and behind the lens's glass |
+| [`js/wheel.js`](static/home/js/wheel.js) | the hero and the shutter wheel — one pinned scene driven by the scroll |
+| [`js/sheet.js`](static/home/js/sheet.js) | the contact sheet: every project at once, developing as it comes into view |
+| [`js/intro.js`](static/home/js/intro.js) | the shutter opening on the page |
+| [`js/motion.js`](static/home/js/motion.js) | everything else that moves, and `glide`, the one way the page scrolls itself |
+| [`js/film.js`](static/home/js/film.js) | film simulations: one filter over everything that is a picture |
+| [`js/sound.js`](static/home/js/sound.js) | detents, the shutter, focus beeps and the rewind motor, synthesised — there are no audio files |
+| [`js/home.js`](static/home/js/home.js) | the glue: sound, rewind, search palette |
 | [`tools/validate.js`](static/home/tools/validate.js) | `node static/home/tools/validate.js` — the checks to run before committing |
+| [`tools/e2e.js`](static/home/tools/e2e.js) | `node static/home/tools/e2e.js` — the page used in a real browser |
 
 Adding a project means adding one object to the `PROJECTS` array in
-[`static/home/js/projects.js`](static/home/js/projects.js) — the carousel, the filters, the
-ribbons, the counters and the search palette are all driven from it. A card's `motif` names one of
-the drawing functions at the top of that file. The heading counts the projects in words and is
-corrected from the list at run time, but the number is also written into the HTML for anyone
-without scripts; the validator refuses to let the two disagree, and checks that the folder exists
-and is in `sitemap.xml`.
+[`static/home/js/projects.js`](static/home/js/projects.js) — the dial's engravings, the frames of
+the contact sheet, the filters, the strips of film, the counters and the search palette are all
+driven from it. A project's `motif` names one of the drawing functions at the top of that file. The
+headings that count the projects are corrected from the list at run time, but the number is also
+written into the HTML for anyone without scripts; the validator refuses to let the two disagree,
+and checks that the folder exists and is in `sitemap.xml`.
 
-**On the ring.** The projects are a ring of cards laid out by hand rather than by scroll-snap: one
-float says where the ring is, every card's transform is a function of its distance from it, and a
-spring pulls that float to the card it is heading for. That is what lets the side cards sit on a
-curve, the ring loop, and a flick carry momentum. It takes a mouse drag, a touch swipe (vertical
-swipes still scroll the page), a sideways trackpad swipe, the arrow keys, and Tab — focusing a card
-turns the ring to it. A card at the side comes to the middle when clicked; only the one in the
-spotlight opens.
+**On the wheel.** The hero and the projects are one `position: sticky` stage inside a section as
+tall as the scroll it takes: one screen to rise out of the hero, three-fifths of a screen per
+project, a little at the end. One number does all of it — `pos`, where the dial is, in projects.
+The dial's angle is a function of it, the iris is shut at every half and open at every whole, and
+the project on show is whichever whole it is nearest. The scroll becomes `pos` through a curve with
+a flat stretch either side of every whole number, so a frame holds still for a while before the
+next one starts to come round. Between the scroll and the drawing sits the spring the old ring of
+cards used, a touch under-damped: a mouse wheel moves the page in jumps, and the spring is what
+turns those into a dial being turned and lets it land on a detent with a small clunk. Left to rest
+between two frames, the page glides to the nearer one; nothing else is snapped. It also turns with
+the arrow keys, the two step buttons, a click on an engraving, or — with a mouse — by taking hold
+of the dial and turning it. Touch is left alone: on a phone the lens is most of the screen, and
+taking the scroll away from it would trap the thumb.
 
-While it is on screen and nobody is touching it, it tours itself, a card every six and a half
-seconds, the lit dot filling as each stop runs out. Hovering or focusing pauses it; dragging,
-clicking or pressing anything on it stops it for good, and the play button is the only way back.
-It never tours under `prefers-reduced-motion`.
+The screen height the scene is measured in is held steady while a phone's toolbar slides in and
+out, and only re-measured on a change of width or a large change of height, so the scene never
+jumps under the reader's thumb.
 
-The grid button folds the same fourteen cards into a grid with the transforms taken off — where
-the browser has View Transitions each card flies to its place, and elsewhere it simply swaps. The
-choice is remembered. With the evening's sound on, each card that comes into the spotlight rings
-its own note of the logo's pentatonic, so turning the ring plays a tune.
+**On the lens.** It is CSS and one canvas. The rings are discs of conic gradient — a conic gradient
+is what turned metal looks like under one light — and the shading layers never turn: only the
+engravings on top of them do, the way light stays where it is while a real ring goes round under
+it. The engravings are SVG text on arcs. Behind the glass is a canvas drawing the project's own
+scene, the same drawing its frame on the contact sheet holds still, and over it the iris and the
+violet and green a coated lens throws back.
 
-**On the weather.** Nothing is sent anywhere until the visitor asks. The location pin in the
-corner is the only thing that prompts; coordinates are rounded to two decimals (~1 km) before they
-leave the page, the answer is cached in `localStorage` for twenty minutes, and clicking the
-reading forgets all of it. A visit that never touches the pin makes no network request at all, and
-every failure is silent — the sky just keeps running off the scroll. The moon phase is computed
-locally from the date rather than fetched, and is accurate to within half a day.
+**On the iris.** It is drawn as geometry, not as nine images turned about a pin. The opening is a
+regular polygon; continue each of its sides past the corner until it meets the rim, and those rays
+cut the ring outside the polygon into nine identical pieces — the blades. So one blade is computed
+a frame and the other eight are `<use>`s of it, and a gradient laid across the first follows each
+copy round. At an opening of zero the polygon is a point and the blades are nine slices meeting in
+the middle. The viewfinder's readout along the foot of the scene reads its aperture back in third
+stops, so it says F22 as the shutter closes, and its shutter speed is really the scroll's.
+
+**On the contact sheet.** The whole roll at once, for anyone who would rather scan than turn. The
+frames arrive as negatives and develop as they come into view: a white layer in `difference` over
+the picture is its negative, an orange one in `multiply` is the film base, and fading the two out
+is the print coming up in the tray. Only one frame is ever animated — the one under the pointer,
+or on a screen with nothing to hover, the one nearest the middle.
+
+**On the film.** The chip in the header winds through six simulations, each one CSS filter applied
+to everything that is a picture — the scene behind the lens, the frames, the marks that carry a
+project's colour — and never to the chrome or the type. They are named for what they do rather
+than after anybody's film stock. The choice is remembered in this browser only.
 
 **On the sound.** Off until asked, remembered afterwards, and it still waits for a click on every
-visit, because a page that talks the moment it loads is rude even where browsers allow it.
+visit, because a page that talks the moment it loads is rude even where browsers allow it. With it
+on, the dial ticks four times a step as it turns, the shutter goes as each frame comes up, two
+short beeps answer the click that turned it on, and rewinding the roll runs a motor.
 
 **On the logo.** A 1:1 rounded square, black, with "noju" in Poppins SemiBold centred in it. No
 webfont is involved: the four glyphs are committed as SVG outlines, and one geometry — the same
-`viewBox`, plate and transform — is used by the header, the footer, the favicon and the splash,
-so the mark cannot drift between them. The word is centred by the transform rather than by
-padding, which is why it lands identically at 30 px and at 512.
+`viewBox`, plate and transform — is used by the header, the footer, the favicon and the 404 page,
+and is copied from the header by the intro and by the mark that writes itself at the end of the
+roll. The validator checks every copy against the others.
 
-**On the splash.** It draws that same square. An ember waits at the corner while the device is
-measured; then a spark runs the outline of the square, a pen of light writes the word inside it
-letter by letter, shedding embers as it goes, the gold floods in with a shine crossing the letters
-and a ring of light leaving them, and the mark flies up into its place in the header as the curtain
-lifts — landing exactly on the header's own logo, which is the same geometry.
+**On the intro.** The page opens the way a lens does: behind nine blades wider than the screen's
+diagonal, with the mark on them, and after a breath the shutter goes and the blades swing open on
+the hero. The motion is computed each frame from the clock, a click or a key hurries it to the
+opening, and "Replay the intro" in the search palette runs it again. If `intro.js` never loads, a
+CSS animation clears the black on its own a few seconds in; once it has loaded it keeps the same
+promise with a timer of its own. Under `prefers-reduced-motion` there is no intro, the wheel
+switches frames without the iris, and everything that would have moved is simply there.
 
-Every beat has a sound, synthesised like everything else here: a low swell and a rim tone — a wet
-finger round a glass — while the spark runs the square, and a tick as it closes; a nib on paper
-for each stroke and a bell the frame each letter lands (four notes up a major pentatonic, so there
-is no wrong interval); an open fifth as the gold floods, with a shimmer that sweeps upward exactly
-as long as the shine takes to cross; and air moving as the mark flies, panned towards the header,
-with a soft tock when it lands.
+**On other browsers.** `tools/e2e.js` checks the layout for horizontal overflow at eleven widths
+from 320 px up, top to bottom, with `main`'s clip taken off so nothing is masked, and runs the page
+with reduced motion and with scripts off. Three notes for anyone editing this:
 
-The picture and the sound are one plan, not two things started together. The drawing is computed
-every frame from the clock rather than left to CSS transitions, so a stalled frame is dropped,
-never late. The sound books each beat on the audio clock for the moment it will be *heard* —
-`getOutputTimestamp()` pairs the two clocks at the speaker, so output latency is included, and on
-Bluetooth headphones that is a fifth of a second — and the drawing waits exactly that long before
-its first frame. The nib's loudness and brightness follow the pen's own speed curve, the same curve
-that moves the pen and throws its embers, so the loudest scratch is the fastest stroke. Measured in
-the browser, each bell is booked within a tenth of a millisecond of its letter's landing, and the
-letter completes on the next frame, never before. The cue peaks around -19 dBFS on the same meter
-that puts the previous one at -16: a cue, not a fanfare.
-
-Two things it will not do. It never plays if the visitor has muted the site — that is their
-choice, and it is checked before anything else. And on a cold load browsers refuse to start audio
-without a gesture, so most first visits are silent: nothing is faked, and nothing is queued to
-startle anyone later. But the drawing keeps asking, and a click or a key part-way through brings
-the sound in at the beat the picture has reached — beats already past are skipped, not played
-late. "Replay the intro" in the search palette runs the whole thing again from a click, so it
-always has its sound. Clicking the curtain or pressing Escape, Enter or Space skips it, and lets go
-of whatever the sound had booked. Under `prefers-reduced-motion` there is no write to sync to, so
-the logo is simply there and there is no cue at all.
-
-The order it does things in matters. A scene repainting behind the black would starve the one
-thing anybody can see. So the sequence is: measure first with a short burst of the real rendering
-(`NJ.sky.probe()`, capped at eighteen frames or 600 ms) while only compositor animations move —
-the waiting ember and the hairline under the mark, which is that measurement and not a fake
-progress bar — let the verdict pick how much drawing this device can afford, write the logo while
-the main thread is quiet, and start the scene as the curtain lifts. The flight is a Web Animation,
-on the compositor, so the scene starting under it cannot make it stutter.
-
-If `splash.js` never loads, a CSS animation clears the overlay on its own a few seconds in — a
-broken script can never leave a black page. Once it has loaded it stands that animation down and
-keeps the same promise with a timer of its own.
-
-The same goes for everything that starts hidden. The hero's words wait under a class only
-`splash.js` sets, and rise when it lifts the curtain (or after six seconds regardless). Every other
-reveal hangs off `.motion`, which `motion.js` sets only once it is running and able to reveal
-things again. A page where neither loads is simply all there.
-
-**On other browsers.** The layout is checked for horizontal overflow at fourteen widths from
-320 px up, with `overflow-x` neutralised so nothing is masked, and again with every modern
-feature forced back to its fallback: no `svh`, no `overflow: clip`, no `backdrop-filter`, no
-canvas `roundRect`, no Permissions API, no `StereoPannerNode`. That last pass is what an older
-WebKit or Gecko actually gets, and the page survives all of it at once. Two notes for anyone
-editing this:
-
-- `body` must not carry a background. Once `html` has one, `body`'s stops propagating to the root
-  and becomes an ordinary block background — and block backgrounds paint *above* negative
-  z-index children, which buries the sky canvas completely.
-- Don't put `vector-effect: non-scaling-stroke` on the splash glyphs. It puts the dash pattern in
-  screen space while `getTotalLength()` reports user units, so the dash cycles exactly one period
-  and the letters only ever look finished.
+- Nothing may set `overflow` on `html` or `body`. Body's overflow is handed to the viewport, where
+  `clip` becomes `hidden` and the page stops scrolling at all; it is clipped on `main` instead, and
+  with `clip`, not `hidden`, because `hidden` would make `main` a scroller and unpin the stage.
+- A class the scripts put on `<html>` must never also be an element's class. The intro's overlay and
+  the root's "intro is running" flag once shared one, and the whole document became a fixed,
+  clipped, fading box — without an error. The validator checks this too.
+- An SVG element turned by CSS turns about its view box's origin with `transform-origin: 0 0`, not
+  `50% 50%`: the reference box starts at the origin, wherever the `viewBox` puts it.
 
 
 ## Working here

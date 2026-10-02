@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>nojukuramu — hand-made browser things</title>
-  <meta name="description" content="A small workshop of finished, hand-built browser projects — a spell-drawing RPG, a notebook with a real alarm clock, a karaoke room over WebRTC, and more. Plain HTML, CSS and JS, on a sky that follows your own weather." />
-  <meta name="theme-color" content="#000000" />
+  <meta name="description" content="A small workshop of finished, hand-built browser projects — a spell-drawing RPG, a notebook with a real alarm clock, a karaoke room over WebRTC, and more — turned past you one frame at a time on a camera's shutter wheel. Plain HTML, CSS and JS." />
+  <meta name="theme-color" content="#09090a" />
   <meta name="color-scheme" content="dark" />
 
   <meta property="og:title" content="nojukuramu — hand-made browser things" />
@@ -18,40 +18,29 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <!-- The face is not render-blocking. The splash is drawn from outlines and
-       needs no webfont, so a slow or unreachable fonts.googleapis.com must
-       never hold up first paint - it only ever costs a reflow later. -->
-  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Fira+Sans+Condensed:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+  <!-- The faces are not render-blocking. The intro is drawn from outlines
+       and needs no webfont, so a slow or unreachable fonts.googleapis.com
+       must never hold up first paint - it only ever costs a reflow later. -->
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,500&family=JetBrains+Mono:wght@400;500&display=swap"
         onload="this.onload=null;this.rel='stylesheet'" />
-  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Sans+Condensed:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&display=swap" /></noscript>
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,500&family=JetBrains+Mono:wght@400;500&display=swap" /></noscript>
   <link rel="stylesheet" href="static/home/css/home.css" />
-  <link rel="preconnect" href="https://api.open-meteo.com" />
+  <!-- Before first paint, so the pinned scenes are laid out for a page
+       that will drive them. Without scripts the page is a plain column. -->
+  <script>document.documentElement.classList.add("js");</script>
 </head>
 
 <body>
-  <!-- Splash: the logo writes itself while the scene behind it is measured,
-       then flies up into the header. The curtain is its own layer so it can
-       lift while the mark is still in the air. -->
-  <div class="splash" id="splash" role="status" aria-label="Loading">
-    <div class="splash-curtain" aria-hidden="true"></div>
-    <div class="splash-inner">
-      <div class="splash-stage">
-        <svg class="splash-mark" viewBox="0 0 512 512" aria-hidden="true">
-          <rect class="splash-plate" x="6" y="6" width="500" height="500" rx="112"/>
-          <g class="splash-ink" transform="translate(59.6 301.6) scale(0.8777)"><path d="M119.4 -65.0V0.0H91.4V-61.2Q91.4 -74.4 84.8 -81.5Q78.2 -88.6 66.8 -88.6Q55.2 -88.6 48.5 -81.5Q41.8 -74.4 41.8 -61.2V0.0H13.8V-110.8H41.8V-97.0Q47.4 -104.2 56.1 -108.3Q64.8 -112.4 75.2 -112.4Q95.0 -112.4 107.2 -99.9Q119.4 -87.4 119.4 -65.0Z"/><path d="M139.0 -55.4Q139.0 -72.4 146.5 -85.4Q154.0 -98.4 167.0 -105.5Q180.0 -112.6 196.0 -112.6Q212.0 -112.6 225.0 -105.5Q238.0 -98.4 245.5 -85.4Q253.0 -72.4 253.0 -55.4Q253.0 -38.4 245.3 -25.4Q237.6 -12.4 224.5 -5.3Q211.4 1.8 195.2 1.8Q179.2 1.8 166.4 -5.3Q153.6 -12.4 146.3 -25.4Q139.0 -38.4 139.0 -55.4ZM224.2 -55.4Q224.2 -71.2 215.9 -79.7Q207.6 -88.2 195.6 -88.2Q183.6 -88.2 175.5 -79.7Q167.4 -71.2 167.4 -55.4Q167.4 -39.6 175.3 -31.1Q183.2 -22.6 195.2 -22.6Q202.8 -22.6 209.5 -26.3Q216.2 -30.0 220.2 -37.4Q224.2 -44.8 224.2 -55.4Z"/><path d="M270.4 -140.4Q270.4 -147.4 275.3 -152.1Q280.2 -156.8 287.8 -156.8Q295.2 -156.8 300.0 -152.1Q304.8 -147.4 304.8 -140.4Q304.8 -133.4 300.0 -128.7Q295.2 -124.0 287.8 -124.0Q280.2 -124.0 275.3 -128.7Q270.4 -133.4 270.4 -140.4ZM301.6 18.2Q301.6 36.6 292.5 44.7Q283.4 52.8 266.4 52.8H254.0V29.0H262.0Q268.4 29.0 271.0 26.5Q273.6 24.0 273.6 18.4V-110.8H301.6Z"/><path d="M433.8 -110.8V0.0H405.6V-14.0Q400.2 -6.8 391.5 -2.7Q382.8 1.4 372.6 1.4Q359.6 1.4 349.6 -4.1Q339.6 -9.6 333.9 -20.3Q328.2 -31.0 328.2 -45.8V-110.8H356.2V-49.8Q356.2 -36.6 362.8 -29.5Q369.4 -22.4 380.8 -22.4Q392.4 -22.4 399.0 -29.5Q405.6 -36.6 405.6 -49.8V-110.8Z"/></g>
-        </svg>
-        <canvas class="splash-fx" aria-hidden="true"></canvas>
-        <i class="splash-ember" aria-hidden="true"></i>
-      </div>
-      <div class="splash-gauge" aria-hidden="true"><i id="splash-gauge-fill"></i></div>
-    </div>
+  <!-- The intro: a shutter, shut, opening on the page. The blades are
+       built by iris.js; until they are, the black is this element's own. -->
+  <div class="intro" id="intro" role="status" aria-label="Loading">
+    <svg class="intro-iris" id="intro-iris" aria-hidden="true"></svg>
+    <div class="intro-mark" id="intro-mark" aria-hidden="true"></div>
   </div>
 
-  <a class="skip-link" href="#work">Skip to projects</a>
-
-  <canvas id="sky" aria-hidden="true"></canvas>
-  <div id="grain" aria-hidden="true"></div>
-  <!-- how far through the evening the page is -->
+  <a class="skip-link" href="#roll">Skip to every project</a>
+  <div class="grain" aria-hidden="true"></div>
+  <!-- how much of the roll has gone past -->
   <div class="progress" aria-hidden="true"><i id="progress-fill"></i></div>
 
   <header class="site-header" id="top">
@@ -61,135 +50,165 @@
         <span class="brand-name">nojukuramu</span>
       </a>
       <nav class="site-nav" aria-label="Primary">
-        <a href="#work" data-spy="work">Projects</a>
+        <a href="#wheel" data-spy="wheel" data-glide="first">Projects</a>
+        <a href="#roll" data-spy="roll">Contact sheet</a>
         <a href="#about" data-spy="about">About</a>
         <a href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">Source</a>
       </nav>
       <div class="header-actions">
-        <button class="ghost-btn" id="open-palette" aria-label="Search projects and commands" title="Search — press /">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="width:14px;height:14px"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-          <span class="cmd-hint-text">Search</span> <kbd>/</kbd>
+        <button class="film-chip" id="film-btn" type="button" title="Film simulation — click to change">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 8.5h17M3.5 15.5h17M7 5v3.5M12 5v3.5M17 5v3.5M7 15.5V19M12 15.5V19M17 15.5V19"/></svg>
+          <span class="film-chip-name" id="film-name">Standard</span>
+        </button>
+        <button class="icon-btn" id="sound-toggle" type="button" hidden aria-pressed="false" aria-label="Turn on the camera sounds" title="Camera sounds">
+          <svg class="i-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
+          <svg class="i-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18 6.5a7.6 7.6 0 0 1 0 11"/></svg>
+        </button>
+        <button class="icon-btn search-btn" id="open-palette" type="button" aria-label="Search projects and commands" title="Search — press /">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <kbd>/</kbd>
         </button>
       </div>
     </div>
   </header>
 
   <main>
-    <!-- Hero -->
-    <section class="hero" id="hero">
-      <div class="wrap hero-inner" data-hero>
-        <p class="eyebrow rise" style="--d:0">A workshop, not a portfolio</p>
-        <h1 class="hero-title">
-          <span class="line"><span class="w" style="--i:0"><span>Small,</span></span> <span class="w" style="--i:1"><span>finished</span></span> <span class="w" style="--i:2"><span>things</span></span></span>
-          <span class="line"><span class="w" style="--i:3"><span>that</span></span> <span class="w" style="--i:4"><span>live</span></span> <span class="w" style="--i:5"><span>in</span></span> <span class="w" style="--i:6"><span>your</span></span> <span class="w" style="--i:7"><span><em>browser</em>.</span></span></span>
-        </h1>
-        <p class="hero-sub rise" style="--d:1">
-          Spells you draw instead of pick. A notebook that actually wakes you up. A karaoke room
-          your friends join by scanning a code. Each one opens in a tab and just works — no sign-up,
-          no server of mine, no build step.
-        </p>
-        <div class="hero-cta rise" style="--d:2">
-          <a class="btn btn-primary" href="#work" data-magnetic>Browse the projects <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v13M6.5 12.5L12 18l5.5-5.5"/></svg></a>
-          <a class="btn btn-ghost" href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener" data-magnetic>Read the source</a>
+    <!-- The hero and the shutter wheel are one pinned scene. The lens rises
+         out of the hero, the iris opens on the first project, and from
+         there every detent of the scroll turns the dial one frame: the iris
+         shuts, the next project is behind it, the iris opens. -->
+    <section class="wheel" id="wheel" aria-label="The projects, one frame at a time">
+      <div class="stage" id="stage">
+        <div class="stage-light" aria-hidden="true"></div>
+
+        <div class="hero" id="hero">
+          <p class="eyebrow"><i class="dot" aria-hidden="true"></i>A workshop, not a portfolio</p>
+          <h1 class="hero-title">
+            <span class="line chrome"><span class="w" style="--i:0"><span>Small,</span></span> <span class="w" style="--i:1"><span>finished</span></span> <span class="w" style="--i:2"><span>things</span></span></span>
+            <span class="line soft"><span class="w" style="--i:3"><span>that</span></span> <span class="w" style="--i:4"><span>live</span></span> <span class="w" style="--i:5"><span>in</span></span> <span class="w" style="--i:6"><span>your</span></span> <span class="w" style="--i:7"><span>browser.</span></span></span>
+          </h1>
+          <p class="hero-sub rise" style="--d:1">
+            Spells you draw instead of pick. A notebook that actually wakes you up. A karaoke room your
+            friends join by scanning a code. Each one opens in a tab and just works — no sign-up, no
+            server of mine, no build step.
+          </p>
+          <div class="hero-cta rise" style="--d:2">
+            <a class="shutter-btn" href="#wheel" data-glide="first">
+              <span class="shutter-cap" aria-hidden="true"><i></i></span>
+              <span>Turn the wheel</span>
+            </a>
+            <a class="btn btn-ghost" href="#roll">See them all at once</a>
+          </div>
         </div>
-        <div class="hero-meta rise" style="--d:3">
-          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>Plain HTML, CSS &amp; JS</span>
-          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Local-first, nothing tracked</span>
-          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg>Built for phones too</span>
+
+        <div class="lens" id="lens" aria-hidden="true">
+          <div class="lens-knurl"><i class="lens-ridges" id="lens-ridges"></i></div>
+          <div class="lens-dial"><svg class="lens-marks" id="lens-marks" viewBox="-500 -500 1000 1000"></svg></div>
+          <div class="lens-bezel"><svg class="lens-engraving" id="lens-engraving" viewBox="-500 -500 1000 1000"></svg></div>
+          <div class="lens-glass">
+            <canvas class="lens-photo photo" id="lens-photo"></canvas>
+            <svg class="lens-iris" id="lens-iris"></svg>
+            <i class="lens-flash" id="lens-flash"></i>
+            <i class="lens-coat"></i>
+          </div>
+          <i class="lens-index"></i>
         </div>
+
+        <div class="info" id="info">
+          <p class="info-meta"><span class="info-no">No. <b id="info-no">01</b> / <span id="info-total">15</span></span><span class="info-kind" id="info-kind">Games</span></p>
+          <h2 class="info-name" id="info-name">Magic Circles</h2>
+          <p class="info-badge" id="info-badge">RPG</p>
+          <p class="info-desc" id="info-desc">A magic-based RPG where spells are drawn, not picked from a menu.</p>
+          <ul class="info-hi" id="info-hi"></ul>
+          <div class="info-tags" id="info-tags"></div>
+          <div class="info-actions">
+            <a class="btn btn-primary" id="info-open" href="magic_circles/"><span>Open <span id="info-open-name">Magic Circles</span></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6.5l5.5 5.5L13 17.5"/></svg></a>
+            <span class="stepper">
+              <button class="icon-btn" id="wheel-prev" type="button" aria-label="Previous project" title="Previous — left arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+              <button class="icon-btn" id="wheel-next" type="button" aria-label="Next project" title="Next — right arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+            </span>
+          </div>
+        </div>
+
+        <!-- The viewfinder's readout. Decorative: everything it says is
+             also said in words somewhere a reader can reach. -->
+        <div class="hud" id="hud" aria-hidden="true">
+          <i class="hud-c tl"></i><i class="hud-c tr"></i><i class="hud-c bl"></i><i class="hud-c br"></i>
+          <div class="hud-top">
+            <span class="hud-mode">P</span>
+            <span id="hud-film">STANDARD</span>
+            <span class="hud-batt"><svg viewBox="0 0 26 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x=".6" y=".6" width="22" height="10.8" rx="2"/><path d="M24.4 4v4"/><rect x="3" y="3" width="4.4" height="6" fill="currentColor" stroke="none"/><rect x="9" y="3" width="4.4" height="6" fill="currentColor" stroke="none"/><rect x="15" y="3" width="4.4" height="6" fill="currentColor" stroke="none"/></svg></span>
+          </div>
+          <div class="hud-bottom">
+            <span id="hud-s">1/125</span>
+            <span id="hud-f">F2</span>
+            <span class="hud-ev"><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i></span>
+            <span>ISO 200</span>
+            <span class="hud-frame" id="hud-frame">01</span>
+          </div>
+        </div>
+
       </div>
-      <div class="scroll-cue" aria-hidden="true"><i></i>Scroll — the sun goes down</div>
     </section>
 
-    <!-- Every project, going past. Decorative: the carousel below is the
-         real list, so this stays out of the tab order and the reader. -->
-    <div class="ribbons" aria-hidden="true">
-      <div class="ribbon ribbon-a"><div class="ribbon-track" data-ribbon="names"></div></div>
-      <div class="ribbon ribbon-b"><div class="ribbon-track" data-ribbon="tags"></div></div>
+    <!-- Every project, going past on two strips of film. Decorative: the
+         contact sheet below is the real list. -->
+    <div class="leader" id="leader" aria-hidden="true">
+      <div class="strip strip-a"><div class="strip-track" data-strip="names"></div></div>
+      <div class="strip strip-b"><div class="strip-track" data-strip="tags"></div></div>
     </div>
 
-    <!-- Projects -->
-    <section class="section" id="work">
+    <section class="section roll" id="roll">
       <div class="wrap">
         <div class="section-head">
-          <p class="section-label reveal">Projects</p>
-          <h2 class="split"><span data-projects-word>Fifteen</span> things I made and actually finished.</h2>
-          <p class="section-sub reveal" style="--d:1">Every card draws what the thing does. Drag, swipe, or use the arrow keys.</p>
+          <p class="kicker reveal"><i class="dot" aria-hidden="true"></i>The contact sheet</p>
+          <h2 class="split"><span data-projects-word>Fifteen</span> frames, side by side.</h2>
+          <p class="section-sub reveal" style="--d:1">The whole roll at once. Every frame opens its project.</p>
         </div>
-      </div>
-
-      <div class="carousel" id="carousel" role="region" aria-roledescription="carousel" aria-label="Projects">
-        <div class="carousel-glow" aria-hidden="true"></div>
-        <div class="wrap carousel-bar">
-          <div class="filters" data-filters role="group" aria-label="Filter projects"></div>
-          <div class="view-toggle" data-views role="group" aria-label="Layout">
-            <button class="vt-btn on" data-view="ring" aria-pressed="true" aria-label="Show as a ring" title="Ring">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="4.5" width="8" height="15" rx="1.8"/><path d="M4.5 7.5v9M19.5 7.5v9"/></svg>
-            </button>
-            <button class="vt-btn" data-view="grid" aria-pressed="false" aria-label="Show them all at once" title="Grid">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/></svg>
-            </button>
-          </div>
-        </div>
-        <div class="stage-wrap">
-          <div class="stage" data-stage><!-- cards drawn by projects.js --></div>
-        </div>
-        <div class="carousel-controls">
-          <button class="car-btn" data-prev aria-label="Previous project">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
-          </button>
-          <div class="car-dots" data-dots></div>
-          <span class="car-count" data-count><b>01</b> / 15</span>
-          <button class="car-btn" data-next aria-label="Next project">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
-          </button>
-          <span class="ctl-sep" aria-hidden="true"></span>
-          <button class="car-btn" data-play aria-pressed="true" aria-label="Pause the tour" title="Pause the tour">
-            <svg class="i-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="5.5" width="3.4" height="13" rx="1"/><rect x="13.6" y="5.5" width="3.4" height="13" rx="1"/></svg>
-            <svg class="i-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8.5 5.8v12.4a.8.8 0 0 0 1.2.7l9.6-6.2a.8.8 0 0 0 0-1.4L9.7 5.1a.8.8 0 0 0-1.2.7z"/></svg>
-          </button>
-          <button class="car-btn" data-shuffle aria-label="Show me a random project" title="Surprise me">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="9" cy="9" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="9" r="1.4" fill="currentColor" stroke="none"/></svg>
-          </button>
-        </div>
+        <div class="filters reveal" id="filters" role="group" aria-label="Filter projects"></div>
+        <ol class="sheet" id="sheet"></ol>
       </div>
     </section>
 
-    <!-- About -->
-    <section class="section" id="about">
+    <section class="section about" id="about">
       <div class="wrap">
-        <div class="stats">
-          <div class="stat reveal" style="--d:0"><b data-count-to="projects">15</b><span>finished projects</span></div>
-          <div class="stat reveal" style="--d:1"><b data-count-from="9">0</b><span>build steps</span></div>
-          <div class="stat reveal" style="--d:2"><b data-count-from="12">0</b><span>trackers</span></div>
-          <div class="stat reveal" style="--d:3"><b data-count-from="6">0</b><span>accounts to make</span></div>
+        <p class="kicker reveal"><i class="dot" aria-hidden="true"></i>About</p>
+        <p class="statement" id="statement">I'm <strong>nojukuramu</strong>. I build small tools, then leave them running — the kind you open and immediately use, rather than clone and configure. Everything here is written by hand in plain HTML, CSS and JavaScript, and whatever you make inside it stays in your own browser.</p>
+
+        <div class="dials">
+          <div class="dial-stat reveal" style="--d:0"><span class="mini-dial" data-dial-from="0" data-dial-to="projects"></span><b data-count-to="projects">15</b><span>finished projects</span></div>
+          <div class="dial-stat reveal" style="--d:1"><span class="mini-dial" data-dial-from="9" data-dial-to="0"></span><b data-count-from="9">0</b><span>build steps</span></div>
+          <div class="dial-stat reveal" style="--d:2"><span class="mini-dial" data-dial-from="12" data-dial-to="0"></span><b data-count-from="12">0</b><span>trackers</span></div>
+          <div class="dial-stat reveal" style="--d:3"><span class="mini-dial" data-dial-from="6" data-dial-to="0"></span><b data-count-from="6">0</b><span>accounts to make</span></div>
         </div>
-        <div class="about-grid">
-          <div class="about-body">
-            <p class="section-label reveal">About</p>
-            <h2 class="about-title split">I build small tools, then leave them running.</h2>
-            <p class="reveal" style="--d:1">I'm <strong>nojukuramu</strong>. This is where I keep the experiments that made it all the way to done — the kind you can open and immediately use, rather than clone and configure.</p>
-            <p class="reveal" style="--d:2">Everything is written by hand in plain HTML, CSS and JavaScript. There's no bundler, no framework, no analytics script. Whatever you make inside these apps — notes, cities, spells, high scores — is stored in your own browser and never leaves the device.</p>
-            <p class="reveal" style="--d:3">The sky behind this page is the same idea: one canvas, no libraries, and a forecast only if you ask for one. <a class="inline" href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">The repository is on GitHub</a>.</p>
-          </div>
-          <ul class="principles reveal" data-spot>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg><div><strong>No build step</strong><span>View source and you're reading the same thing the browser is.</span></div></li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><div><strong>Local-first</strong><span>Your data lives in localStorage or IndexedDB. There is no account to make.</span></div></li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg><div><strong>Offline where it counts</strong><span>The PWAs cache their shell and keep working with no connection.</span></div></li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg><div><strong>Keyboard and touch</strong><span>Designed for a phone held one-handed and a laptop with no mouse.</span></div></li>
-          </ul>
+
+        <div class="specs">
+          <h3 class="specs-title split">Specifications</h3>
+          <dl class="spec-list">
+            <div class="spec reveal"><dt>Projects</dt><dd><span data-projects-num>15</span> finished — games, tools, and things to do with other people</dd></div>
+            <div class="spec reveal"><dt>Written in</dt><dd>HTML, CSS and JavaScript, by hand</dd></div>
+            <div class="spec reveal"><dt>Build step</dt><dd>None. View source and you are reading what the browser reads</dd></div>
+            <div class="spec reveal"><dt>Your data</dt><dd>On your device, in localStorage and IndexedDB</dd></div>
+            <div class="spec reveal"><dt>Accounts</dt><dd>None to make</dd></div>
+            <div class="spec reveal"><dt>Tracking</dt><dd>None. No analytics, no cookies, no pixels</dd></div>
+            <div class="spec reveal"><dt>Offline</dt><dd>The installable ones cache their shell and keep working</dd></div>
+            <div class="spec reveal"><dt>Input</dt><dd>Keyboard, mouse and touch — a phone held one-handed counts</dd></div>
+            <div class="spec reveal"><dt>Hosting</dt><dd>GitHub Pages</dd></div>
+          </dl>
         </div>
       </div>
     </section>
 
-    <!-- The end of the evening. The mark writes itself once more, the way
-         the splash wrote it, and the way back up is the way back to the sun. -->
-    <section class="finale" id="goodnight">
+    <!-- The end of the roll. The mark writes itself, and the way back up
+         is the wheel turning backwards. -->
+    <section class="finale" id="end">
       <div class="wrap finale-inner">
         <svg class="finale-mark" viewBox="0 0 512 512" aria-hidden="true"><rect class="finale-plate" x="6" y="6" width="500" height="500" rx="112"/><g class="finale-ink" transform="translate(59.6 301.6) scale(0.8777)"></g></svg>
-        <h2 class="finale-title split">That's the evening.</h2>
-        <p class="finale-sub reveal" style="--d:1">Thanks for staying until the stars came out.</p>
-        <div class="reveal" style="--d:2"><a class="btn btn-ghost" href="#top" data-magnetic><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18h16M7.5 18a4.5 4.5 0 0 1 9 0M12 4v5M9.5 6.5L12 4l2.5 2.5M4.8 11.6l1.3.8M19.2 11.6l-1.3.8"/></svg>Bring the sun back</a></div>
+        <h2 class="finale-title split">That's the whole roll.</h2>
+        <p class="finale-sub reveal" style="--d:1">Every frame developed. Thanks for looking through.</p>
+        <div class="reveal" style="--d:2">
+          <a class="btn btn-ghost" href="#top" id="rewind"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="7.5"/><circle cx="12" cy="13" r="2"/><path d="M12 5.5V3M12 3h5.5a1.5 1.5 0 0 1 0 3H16"/></svg>Rewind to the top</a>
+        </div>
       </div>
     </section>
   </main>
@@ -199,35 +218,18 @@
       <div class="footer-row">
         <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 512 512"><rect class="mark-plate" x="6" y="6" width="500" height="500" rx="112"/><g class="mark-word" transform="translate(59.6 301.6) scale(0.8777)"><path d="M119.4 -65.0V0.0H91.4V-61.2Q91.4 -74.4 84.8 -81.5Q78.2 -88.6 66.8 -88.6Q55.2 -88.6 48.5 -81.5Q41.8 -74.4 41.8 -61.2V0.0H13.8V-110.8H41.8V-97.0Q47.4 -104.2 56.1 -108.3Q64.8 -112.4 75.2 -112.4Q95.0 -112.4 107.2 -99.9Q119.4 -87.4 119.4 -65.0Z"/><path d="M139.0 -55.4Q139.0 -72.4 146.5 -85.4Q154.0 -98.4 167.0 -105.5Q180.0 -112.6 196.0 -112.6Q212.0 -112.6 225.0 -105.5Q238.0 -98.4 245.5 -85.4Q253.0 -72.4 253.0 -55.4Q253.0 -38.4 245.3 -25.4Q237.6 -12.4 224.5 -5.3Q211.4 1.8 195.2 1.8Q179.2 1.8 166.4 -5.3Q153.6 -12.4 146.3 -25.4Q139.0 -38.4 139.0 -55.4ZM224.2 -55.4Q224.2 -71.2 215.9 -79.7Q207.6 -88.2 195.6 -88.2Q183.6 -88.2 175.5 -79.7Q167.4 -71.2 167.4 -55.4Q167.4 -39.6 175.3 -31.1Q183.2 -22.6 195.2 -22.6Q202.8 -22.6 209.5 -26.3Q216.2 -30.0 220.2 -37.4Q224.2 -44.8 224.2 -55.4Z"/><path d="M270.4 -140.4Q270.4 -147.4 275.3 -152.1Q280.2 -156.8 287.8 -156.8Q295.2 -156.8 300.0 -152.1Q304.8 -147.4 304.8 -140.4Q304.8 -133.4 300.0 -128.7Q295.2 -124.0 287.8 -124.0Q280.2 -124.0 275.3 -128.7Q270.4 -133.4 270.4 -140.4ZM301.6 18.2Q301.6 36.6 292.5 44.7Q283.4 52.8 266.4 52.8H254.0V29.0H262.0Q268.4 29.0 271.0 26.5Q273.6 24.0 273.6 18.4V-110.8H301.6Z"/><path d="M433.8 -110.8V0.0H405.6V-14.0Q400.2 -6.8 391.5 -2.7Q382.8 1.4 372.6 1.4Q359.6 1.4 349.6 -4.1Q339.6 -9.6 333.9 -20.3Q328.2 -31.0 328.2 -45.8V-110.8H356.2V-49.8Q356.2 -36.6 362.8 -29.5Q369.4 -22.4 380.8 -22.4Q392.4 -22.4 399.0 -29.5Q405.6 -36.6 405.6 -49.8V-110.8Z"/></g></svg></span><span class="brand-name">nojukuramu</span></a>
         <div class="footer-links">
-          <a href="#work">Projects</a>
+          <a href="#wheel" data-glide="first">Projects</a>
+          <a href="#roll">Contact sheet</a>
           <a href="#about">About</a>
           <a href="https://github.com/nojukuramu/nojukuramu.github.io" rel="noopener">GitHub</a>
         </div>
       </div>
       <p class="footer-fine">
         © <span id="year"></span> nojukuramu · Built by hand, hosted on GitHub Pages.
-        The sky is one canvas and no libraries; the sound is synthesised, not sampled.
-        Weather by <a class="inline" href="https://open-meteo.com/" rel="noopener">Open-Meteo</a>, only once you ask for it.
+        The lens is CSS and one canvas; the shutter is synthesised, not sampled, and silent until you ask.
       </p>
     </div>
   </footer>
-
-  <!-- The sky bar: what time the scene thinks it is, and who is deciding -->
-  <div class="sky-bar auto" id="sky-bar">
-    <button class="bar-btn" id="locate" aria-label="Use my real sky" title="Use my real sky — weather from where you are">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
-    </button>
-    <button class="wx-chip" id="wx-chip" hidden title="Your sky"><span id="wx-text"></span></button>
-    <span class="bar-sep" aria-hidden="true"></span>
-    <div class="dial-read"><b id="dial-time">17:40</b> <span id="dial-phase">golden hour</span></div>
-    <input type="range" id="dial-range" min="0" max="1000" value="0" aria-label="Scrub the time of day" />
-    <button class="bar-btn" id="dial-reset" data-reset aria-label="Give the sky back to the scroll" title="Back to the scroll">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
-    </button>
-    <button class="bar-btn" id="sound-toggle" hidden aria-pressed="false" aria-label="Listen to the evening" title="Listen to the evening">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18 6.5a7.6 7.6 0 0 1 0 11"/></svg>
-    </button>
-  </div>
 
   <!-- Command palette -->
   <div class="palette-backdrop" id="palette" hidden>
@@ -238,12 +240,14 @@
     </div>
   </div>
 
-  <script defer src="static/home/js/splash.js"></script>
-  <script defer src="static/home/js/sky.js"></script>
-  <script defer src="static/home/js/weather.js"></script>
-  <script defer src="static/home/js/ambience.js"></script>
   <script defer src="static/home/js/projects.js"></script>
+  <script defer src="static/home/js/iris.js"></script>
+  <script defer src="static/home/js/film.js"></script>
+  <script defer src="static/home/js/sound.js"></script>
   <script defer src="static/home/js/motion.js"></script>
+  <script defer src="static/home/js/intro.js"></script>
+  <script defer src="static/home/js/wheel.js"></script>
+  <script defer src="static/home/js/sheet.js"></script>
   <script defer src="static/home/js/home.js"></script>
 </body>
 </html>
