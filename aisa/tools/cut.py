@@ -23,7 +23,7 @@ Build-time only: numpy, opencv-python, Pillow."""
 import json, sys, os
 import numpy as np, cv2
 from PIL import Image
-from parts_def import REGIONS, UNDER, LID_EDGE, DRAW
+from parts_def import REGIONS, UNDER, LID_EDGE, DRAW, DRESS_SIL, SEAM_L
 
 S = 4
 U8 = np.array(Image.open(sys.argv[1]).convert('RGB'))
@@ -223,6 +223,59 @@ for name, (ecx, ecy) in EYE_C.items():
     r = np.hypot(ys - cy, xs - cx)
     halo = r > last[k] + 2
     assign[ys[halo], xs[halo]] = PARTS.index('face')
+# Outlines, by what they touch. A hand-drawn polygon reaches ink only
+# roughly: it takes a stub of the hair's outline beside a hand, and misses
+# half of a line it only half covers. So for the pieces that move on their
+# own, an outline pixel goes to the part whose fill it touches (within
+# about a line's width of it), and to the one in front where it touches two:
+# the line between an arm and the dress is the arm's. An outline that
+# touches nothing of the part that held it is somebody else's stub, and
+# goes to whatever it does touch.
+_pv = np.array([PAL[k] for k in PAL if k != 'bg'], np.float32)
+_dmin = np.full((H, W), 1e9, np.float32)
+for _c in _pv:
+    _dmin = np.minimum(_dmin, np.abs(U - _c).max(2))
+pure = _dmin < 14
+
+def outline_pass(parts, reach, far_reach):
+    pidx = [PARTS.index(p) for p in parts]
+    held = np.isin(assign, pidx) | (assign < 0)
+    # fill is a pixel that is one of the drawing's flat colours; everything
+    # else - ink, and every anti-aliased blend of ink with a colour - is
+    # outline, and is owned by what it touches. A blend of dress and ink
+    # that the colour test called skin is how a hand ended up with a spike.
+    ink = fg & held & (isdark | (assign < 0) | ~pure)
+    fill = {}
+    for p in range(len(PARTS)):
+        if PARTS[p] in ('ballR', 'ballL', 'lidR', 'lidL', 'browR', 'browL', 'mouth'): continue
+        f = (assign == p) & ~isdark & pure
+        if f.any(): fill[p] = cv2.distanceTransform((~f).astype(np.uint8), cv2.DIST_L2, 5)
+    order = sorted(fill, key=lambda p: DRAW.index(PARTS[p]) if PARTS[p] in DRAW else -1)
+    ys, xs = np.nonzero(ink)
+    owner = np.full(len(ys), -1, np.int16)
+    for p in order:                                   # back to front: the last to claim wins
+        owner[fill[p][ys, xs] <= reach.get(PARTS[p], 4.5)] = p
+    near = np.full(len(ys), 1e9, np.float32); nowner = np.full(len(ys), -1, np.int16)
+    for p in order:
+        d = fill[p][ys, xs]; b = d < near; near[b] = d[b]; nowner[b] = p
+    lost = owner < 0
+    owner[lost & (near <= far_reach)] = nowner[lost & (near <= far_reach)]
+    assign[ys, xs] = np.where(owner >= 0, owner, assign[ys, xs])
+
+OUTLINED = ['armR', 'armL', 'legR', 'legL', 'shoeR', 'shoeL', 'dress', 'neck']
+outline_pass(OUTLINED, {}, 14.0)
+for name in ('armR', 'armL', 'legR', 'legL', 'shoeR', 'shoeL'):
+    i = PARTS.index(name)
+    m = (assign == i).astype(np.uint8)
+    nl, cc, st, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+    if nl <= 2: continue
+    keep = 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))
+    for j in range(1, nl):
+        if j == keep: continue
+        reg = cc == j
+        ring = cv2.dilate(reg.astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool) & ~reg
+        nb = assign[ring]; nb = nb[(nb >= 0) & (nb != i)]
+        if len(nb): assign[reg] = np.bincount(nb).argmax()
 if DEBUG:
     np.save(os.path.join(DEBUG, 'assign.npy'), assign)
 
@@ -297,11 +350,24 @@ def smooth_fill(src_mask, want):
     m = src_mask.astype(np.float32)
     out = np.zeros((H, W, 3), np.float32)
     first = True
+    # the wide radii are smooth by construction, so they are worked out at a
+    # quarter of the size and scaled back up: the same fill, in a fraction
+    # of the time
+    q = (W // 4, H // 4)
+    mq = cv2.resize(m, q, interpolation=cv2.INTER_AREA)
+    Uq = [cv2.resize(U[..., ch] * m, q, interpolation=cv2.INTER_AREA) for ch in range(3)]
     for sigma in (256, 96, 32, 12, 5):
-        den = cv2.GaussianBlur(m, (0, 0), sigma)
         est = np.zeros((H, W, 3), np.float32)
-        for ch in range(3):
-            est[..., ch] = cv2.GaussianBlur(U[..., ch] * m, (0, 0), sigma) / np.maximum(den, 1e-6)
+        if sigma >= 32:
+            denq = cv2.GaussianBlur(mq, (0, 0), sigma / 4)
+            den = cv2.resize(denq, (W, H), interpolation=cv2.INTER_LINEAR)
+            for ch in range(3):
+                nq = cv2.GaussianBlur(Uq[ch], (0, 0), sigma / 4)
+                est[..., ch] = cv2.resize(nq / np.maximum(denq, 1e-6), (W, H), interpolation=cv2.INTER_LINEAR)
+        else:
+            den = cv2.GaussianBlur(m, (0, 0), sigma)
+            for ch in range(3):
+                est[..., ch] = cv2.GaussianBlur(U[..., ch] * m, (0, 0), sigma) / np.maximum(den, 1e-6)
         if first:
             out = est; first = False
         else:
@@ -373,6 +439,8 @@ for name in DRAW:
     if ol_mask.any():
         ext &= ~(cv2.dilate(ol_mask.astype(np.uint8), np.ones((41, 41), np.uint8)).astype(bool) & ~ol_mask)
     region = own | ext
+    if name == 'dress':
+        region &= poly(DRESS_SIL, 2.5) | own
     outline = np.zeros((H, W), bool)
     rim = cv2.distanceTransform(fg.astype(np.uint8), cv2.DIST_L2, 5) < 1.1 * S
     for pn, pts, ol in UNDER:
@@ -406,6 +474,9 @@ for name in DRAW:
         # an arm or the neck beside it, and is painted over as the part
         own = own & ~(np.isin(dom_all, SKINLIKE) &
                       cv2.dilate(infront.astype(np.uint8), np.ones((13, 13), np.uint8)).astype(bool))
+    seam_ink = None
+    if name == 'dress':
+        own = own & poly(DRESS_SIL, 1.8)
     if name == 'dress':
         # Beside each forearm the bodice keeps the arm's outline, its soft
         # edge and a dark sliver of background from the gap between them.
@@ -434,6 +505,21 @@ for name in DRAW:
         hug = cv2.dilate(arms.astype(np.uint8), np.ones((9, 9), np.uint8)).astype(bool)
         if name == 'hairBack':
             own = own & ~(hug & (lum < 176))
+            # and what is left of it beside the arm that is not a flat hair
+            # colour - the pale half of the same blend - goes the same way
+            own = own & ~(hug & ~pure)
+    if name == 'dress':
+        # Down the side the arm covers, the dress's edge as drawn is the
+        # arm's outline, the gap's shadow and a few stray pixels of both. It
+        # is replaced by the seam itself: everything outside the line goes,
+        # and the line is drawn once, smooth. Below the hand, where the edge
+        # is the dress's own, the drawing is kept.
+        out_l = poly(SEAM_L + [(60, SEAM_L[-1][1]), (60, SEAM_L[0][1])])
+        own &= ~out_l
+        seam_ink = np.zeros((H, W), np.uint8)
+        cv2.polylines(seam_ink, [np.array([[x * S, y * S] for x, y in SEAM_L], np.int32)], False, 1, thickness=5, lineType=cv2.LINE_AA)
+        seam_ink = seam_ink.astype(bool) & fg
+        own |= seam_ink
     # the colours a hidden area continues: the part's own, away from its
     # anti-aliased edges and never its line work
     clean = cv2.erode(own.astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool)
@@ -476,14 +562,34 @@ for name in DRAW:
             num = cv2.GaussianBlur(fill[..., ch] * wm, (0, 0), sigmaX=5, sigmaY=2)
             fill[..., ch] = np.where(want, num / np.maximum(den, 1e-3), fill[..., ch])
         if name == 'hairBack':
-            crown = np.zeros((H, W), bool); crown[:244 * S] = True
-            soft = smooth_fill(src_h & (lum < 225), want & crown)
-            fill[crown] = soft[crown]
+            # Under the crown the hair is a soft continuation of its own
+            # shadow; below the shoulders it is the drawing's flat shadow
+            # colour, as it is wherever it can be seen, and the two are
+            # blended over a few pixels so no seam shows between them.
+            soft = smooth_fill(src_h & (lum < 225), want)
+            low = own & (dom_all == NP.index('hairsh'))
+            low[:250 * S] = False; low[300 * S:] = False
+            base = np.median(U[low], axis=0) if low.sum() > 200 else np.array(PAL['hairsh'], np.float32)
+            rows = np.arange(H, dtype=np.float32)[:, None, None]
+            k = np.clip((rows - 232 * S) / (14 * S), 0, 1)
+            fill = np.where(want[..., None], soft * (1 - k) + base * k, fill)
     elif name in ('legR', 'legL'):
-        fill = strand_fill(clean, want)
+        # the sock carries its stripes down the column, which is right for
+        # a sock and wrong for skin: carried down, a thigh turns to bars.
+        # Above the top of the sock the fill is a smooth skin continuation.
+        sk = clean & (U[..., 0] - U[..., 2] > 12) & (lum > 150)
+        if sk.any():
+            top_sock = int(np.nonzero(sk.any(1))[0].max())
+            thigh = want.copy(); thigh[top_sock + 1:] = False
+            fill = strand_fill(clean, want)
+            fill[thigh] = smooth_fill(sk, thigh)[thigh]
+        else:
+            fill = strand_fill(clean, want)
     else:
         fill = nearest_fill(clean, want)
     rgb = np.where(own[..., None], U, fill)
+    if seam_ink is not None:
+        rgb[seam_ink] = INK
     if name == 'face':
         # the repainted ring blends into the skin round it over a pixel or
         # so, instead of stopping at a hard edge that shows the moment a
@@ -512,7 +618,7 @@ for name in DRAW:
     # and only where the painted-in area actually ends: an underlay's edge
     # that runs on into more of the same part (the hair behind an arm
     # meeting the hair behind the neck) is not an edge at all
-    edge = region & cv2.dilate((~region).astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))).astype(bool)
+    edge = region & cv2.dilate((~region).astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))).astype(bool)
     rgb[outline & fillonly & far & edge] = INK
     if name == 'face':
         FACE_BG = (rgb @ np.array([0.299, 0.587, 0.114], np.float32)).astype(np.float32)

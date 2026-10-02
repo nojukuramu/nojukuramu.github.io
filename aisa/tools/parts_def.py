@@ -25,8 +25,11 @@ REGIONS = [
  ("ballL",     ell(148.2, 205.6, 7.6, 12.3), None),
  # the white of the eye in each outer corner, between the iris, the end
  # of the lash and the lock beside it: it is the eye's, and closes with it
- ("ballR",     [(110,195.4),(116,197),(122.8,197.6),(122.8,201.6),(115,203),(110,199)], ['white', 'eyehi', 'line', 'eyeline', 'red2']),
- ("ballL",     [(153,193.6),(160,193.4),(164.8,193.2),(164.8,201),(157,203),(153,198)], ['white', 'eyehi', 'line', 'eyeline', 'red2']),
+ # (skin is in the list on purpose: the eye's cream and the cheek's cream are
+ # a few levels apart, and a colour test between them splits the corner into
+ # specks, which come apart when the eye and the face move differently)
+ ("ballR",     [(110,195.4),(116,197),(122.8,197.6),(122.8,201.6),(115,203),(110,199)], ['white', 'eyehi', 'skin', 'line', 'eyeline', 'red2']),
+ ("ballL",     [(153,193.6),(160,193.4),(164.8,193.2),(164.8,201),(157,203),(153,198)], ['white', 'eyehi', 'skin', 'line', 'eyeline', 'red2']),
  ("ballR",     ell(103.6, 206.2, 10.9, 14.6), ['eyeline', 'red', 'red2', 'eyehi', 'line', 'white']),
  ("ballL",     ell(148.2, 205.6, 9.6, 14.3), ['eyeline', 'red', 'red2', 'eyehi', 'line', 'white']),
  ("mouth",     [(127,231),(134,231),(134,235.6),(127,235.6)], ['mouth', 'line']),
@@ -40,7 +43,11 @@ REGIONS = [
  ("face",      [(84,150),(170,150),(170,200),(168,229),(158,233),(154,234.6),(150,236.3),(146,237.8),(142,238.8),(138,240.0),(134,240.8),(130,241.5),(126,242.0),(122,242.0),(118,241.8),(114,241.3),(110,240.6),(106,240.1),(102,239.3),(98,238.6),(94,237.6),(90,236.6),(86,235.0),(84,233)], ['line', 'skin', 'skinsh', 'white']),
  ("collar",    [(97,247),(110,241),(123,250),(130,243),(139,249),(131,260),(123,253),(114,261)], ['line', 'white', 'whitesh']),
  ("neck",      [(104,236),(140,236),(140,252),(104,252)], ['line', 'necksh', 'skin', 'skinsh']),
- ("armR",      [(84,256),(92,250),(99,249),(101,256),(102.5,266),(101.5,280),(99,290),(92,291),(80,287),(75.5,281),(75,274),(77,266)], ['line', 'dress', 'white', 'whitesh', 'skin', 'skinsh']),
+ # the sleeve is a closed cap: the shoulder line from the collar to the cuff,
+ # the cuff, and the crease down the inside. Nothing past the crease is its
+ # - that is the bodice, which stays put when the arm goes up - and nothing
+ # above the shoulder line, where the hair's strands run into the collar
+ ("armR",      [(84,258),(92,251.2),(99,249.6),(100.2,256.5),(101.2,266.5),(100.2,276),(98.3,284.5),(97.5,290),(92,291),(80,287),(75.5,281),(75,274),(77,266)], ['line', 'dress', 'white', 'whitesh', 'skin', 'skinsh']),
  # the forearm runs a couple of pixels from the dress's outline on one side
  # and the hair's on the other: the polygon follows the arm's own outline,
  # or the arm walks off with a stretch of dress or a few strands
@@ -48,7 +55,9 @@ REGIONS = [
  # the sleeve starts at the armhole: the shoulder line above it is the
  # bodice's, and stays with the dress when the arm goes up rather than
  # stretching after it
- ("armL",      [(141.5,257),(147,256),(150,260),(155,268),(158,276),(156,282),(150,287),(145,288),(145,283),(145.2,276),(141,263)], ['line', 'dress', 'white', 'whitesh', 'skin', 'skinsh']),
+ # her left sleeve is a crescent between the shoulder line and the crease; it
+ # starts at the armhole, because the shoulder line before it is the bodice's
+ ("armL",      [(143.4,253.2),(145.5,256),(148.5,262),(152,267.5),(155,272),(156.5,275.5),(158,277.5),(156,281.5),(150,286.5),(145.5,287.5),(146,282),(148.6,277),(148,270.5),(146,265),(143.6,260.2),(141.6,256.4)], ['line', 'dress', 'white', 'whitesh', 'skin', 'skinsh']),
  ("armL",      [(146,286),(158,286),(160.4,290),(161.5,295),(163.2,301),(166.2,310),(170.4,319),(174.2,328),(174.3,332),(172,335.5),(167,339),(160,345),(156.5,336),(154,325),(151.5,312),(149,300),(147,292)], ['line', 'skin', 'skinsh', 'white']),
  # the bodice stops at the sleeves: beside them is hair, whose outline
  # would otherwise go with the dress and be left floating when an arm
@@ -62,6 +71,16 @@ REGIONS = [
  ("hairBack",  [(0,118),(224,118),(224,330),(0,330)], HAIR + ['hairdk']),
 ]
 
+# The bodice and skirt's own outline, down each side, read off the drawing
+# where the dress meets the background below the hands and carried up
+# under the sleeves in a straight line to the armholes. The dress is
+# clipped to it (cut.py): whatever of an arm's or a lock's outline lay
+# beside it is not the dress's, and would stay on it, ragged, when the
+# arm went up. It is also the seam painted in where an arm uncovers it.
+DRESS_SIL = [(100,247),(146,247),(146,262),(146.2,283),(148.5,300),(152.5,314),(158,328),(164.5,348),(165.5,350),(162,350.5),(156,354),(150,357),(144,358.2),(132,358.8),(120,359.5),(108,360),(96,358.5),(90,357),(84,354.8),(78,352),(74.5,350.5),(75.5,346),(81,328),(86,314),(92,301),(97.5,292),(99,283),(100,262)]
+
+SEAM_L = [(100,262),(99,283),(97.5,292),(92,301),(86,314),(81,328),(78.3,337)]   # the stretch of that side an arm covers
+
 # Hidden areas a part has to be painted under, so that moving whatever
 # covers it shows more of the part instead of a hole. Filled with the
 # nearest of the part's own colours; `outline` draws the edge that becomes
@@ -71,6 +90,14 @@ UNDER = [
  # no further, or a turn uncovers skin beyond the silhouette
  ("face",     [(86,150),(160,150),(166,172),(168,200),(166,222),(160,230),(150,235),(130,236.6),(110,236),(92,231),(86,215),(84,180)], False),
  ("hairBack", [(56,130),(100,124),(150,126),(175,140),(185,165),(190,200),(188,240),(170,250),(150,246),(100,246),(70,246),(55,230),(50,180)], False),
+ # the head's own edge under the ponytail: when the tail swings out, the hair
+ # it was hiding ends in an outline of its own instead of a bare cut
+ ("hairBack", [(63,139),(58,147),(53,155),(50,162),(49.5,190),(48.5,210),(45,232),(42.5,246),(50,246),(54.5,232),(56,210),(57,190),(58,162),(62,152),(67,141)], True),
+ # the long hair is one mass behind her, crown to tips: the part between the
+ # two locks is behind the neck and the dress and is never seen at rest, but
+ # a turned head or a lifted arm uncovers the joins, and a join left open
+ # is a hole
+ ("hairBack", [(96,236),(150,236),(150,300),(96,300)], False),
  ("ponytail", [(48,128),(68,128),(70,160),(57,205),(47,165)], False),
  ("sideR",    [(74,138),(106,138),(104,153),(76,153)], False),
  ("sideL",    [(148,138),(178,138),(182,152),(150,153)], False),
@@ -79,7 +106,7 @@ UNDER = [
  ("neck",     [(110.5,222),(133.5,222),(134,236),(135,252),(109,252),(110,236)], True),
  # the bodice under the sleeves ends at the armhole seams and runs down
  # the side seams to the hem - which is what shows when an arm goes up
- ("dress",    [(100,247),(146,247),(145.5,262),(146,283),(165.5,350),(120,358),(74,350),(102.5,283),(101.5,262)], True),
+ ("dress",    DRESS_SIL, True),
  # the long hair carries on behind each arm
  # behind her right arm the hair runs on under the dress (which hides
  # it), so the only edge that can show is the tips
@@ -89,6 +116,10 @@ UNDER = [
  # above the sock rather than a cut edge
  ("legR",     [(90,326),(111,326),(112,362),(88.5,362)], True),
  ("legL",     [(125,326),(146,326),(147.5,362),(124,362)], True),
+ # and the sock on down into the shoe, so a leg swinging a shoe out of
+ # place shows sock rather than the ragged end of the cut
+ ("legR",     [(87,396),(113,396),(113,412),(87,412)], False),
+ ("legL",     [(122,396),(150,396),(150,412),(122,412)], False),
  ("ballR",    ell(103.6, 206.2, 10.0, 13.9), True),
  ("ballL",    ell(148.2, 205.6, 8.6, 13.5), True),
  ("ear",      [(62,197),(70,196),(76,200),(77.5,212),(76,224),(70,229),(63,227)], True),

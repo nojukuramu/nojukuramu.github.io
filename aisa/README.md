@@ -32,14 +32,25 @@ does what Cubism does, by hand:
    - Long hair is carried down its own strands.
    - Skin is a smooth continuation of the skin around it.
    - The neck is a column that shows a throat when she looks up.
-   - The thighs continue up under the skirt.
+   - The thighs continue up under the skirt in smooth skin, and the socks on
+     down into the shoes.
    - The bodice continues under the sleeves.
-   - The back hair continues behind each arm and under the bangs, with an
-     outline wherever it becomes a silhouette.
+   - The back hair is one mass from crown to tips, behind the neck and the
+     dress as well, in the drawing's flat shadow colour: a turned head or a
+     lifted arm uncovers hair, never a join or a hole. It has an outline
+     wherever it becomes a silhouette, including under the ponytail.
 
    Lines are kept whole:
    - A line between two parts, and its anti-aliased edge, belongs to the part
      in front, so it moves as one piece instead of splitting down the middle.
+   - For the limbs, the dress and the neck, fill is only a pixel that is one
+     of the drawing's flat colours; ink and every blend of ink with a colour
+     belongs to the part it touches, the one in front where it touches two.
+     A stub of hair outline beside a hand, or a blend of dress and ink that
+     passed for skin, is therefore never left on an arm to spike when it moves.
+   - A sleeve is a closed cap, shoulder line to cuff to crease: nothing of
+     the chest goes up with the arm. The dress's side seam under each sleeve
+     is redrawn as one clean line (`DRESS_SIL`, `SEAM_L` in `parts_def.py`).
    - The soft shadow the bangs and locks cast on the skin goes with them.
    - The upscaler's pale halos are removed wherever a moving part would drag
      them out into view.
