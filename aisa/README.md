@@ -49,10 +49,13 @@ does what Cubism does, by hand:
      A stub of hair outline beside a hand, or a blend of dress and ink that
      passed for skin, is therefore never left on an arm to spike when it moves.
    - A sleeve is a closed cap, shoulder line to cuff to crease: nothing of
-     the chest goes up with the arm. Its inner half, which the drawing hides
-     under the bodice, is a part of its own (`sleeveR`, `sleeveL`): a rounded
-     puff drawn behind the dress that rides with the arm, so a raised arm has
-     a whole sleeve instead of a cap with a flat cut. The dress's side seam under each sleeve
+     the chest goes up with the arm. What the drawing hides under the bodice
+     is a part of its own (`sleeveR`, `sleeveL`): on her right a small gusset
+     of armpit fabric, whose edge by the crease follows the arm and whose edge
+     under the bodice stays with the torso, so the mesh stretches as the arm
+     rises; on her left, whose sleeve is drawn three-quarter on as a thin
+     crescent, the body of the tube as well. Both are a shade darker than the
+     outside and hidden at rest. The dress's side seam under each sleeve
      is redrawn as one clean line (`DRESS_SIL`, `SEAM_L` in `parts_def.py`).
    - The soft shadow the bangs and locks cast on the skin goes with them.
    - Outlines are redrawn after the cut (`smooth_lines`, `smooth_edge`):

@@ -432,7 +432,10 @@ AISA.model = (function () {
   /* A smiling eye is closed from below by the cheek (eyeClip, below). Cut
      off with nothing there, the iris looks sliced; so the cheek's edge is
      drawn, as a fine lower lid, fading in as the smile does. */
-  function lidLine(e) { return smooth(0.12, 0.55, e.s * (1 - e.t)); }
+  // The smile's lower lid is drawn once its arc has reached the iris. Earlier
+  // it is only a few pixels of line, under an eye that has not been touched:
+  // a grey dash, not a lid.
+  function lidLine(e) { return smooth(0.3, 0.6, e.s * (1 - e.t)); }
   var LID_TMP = { R: Object.create(EYE.R), L: Object.create(EYE.L) };
   function drawLowerLids(g, v) {
     ["R", "L"].forEach(function (k) {
@@ -443,7 +446,7 @@ AISA.model = (function () {
       var y0 = lowerEdge(e, e.c[0]), dy = (y0 - e.c[1]) / e.ry;
       var hx = e.rx * Math.sqrt(Math.max(0, 1 - dy * dy)) + 0.8;
       g.globalAlpha = a;
-      g.strokeStyle = "#3b1a1d"; g.lineWidth = 0.6; g.lineCap = "round";
+      g.strokeStyle = "#3b1a1d"; g.lineWidth = 0.8; g.lineCap = "round";
       g.beginPath();
       for (var i = 0; i <= 12; i++) {
         var x = e.c[0] - hx + 2 * hx * i / 12, y = lowerEdge(e, x) + 0.15;
@@ -646,7 +649,8 @@ AISA.model = (function () {
      deformers, and a lower edge that a smile pushes up. */
   function lowerEdge(e, x) {
     var u = clamp((x - e.lc) / e.hw, -1.2, 1.2);
-    return e.bottom + 4 + (-12 + 4 * u * u) * e.s * (1 - e.t);
+    // a crescent: well up in the middle, back down at the corners
+    return e.bottom + 4 + (-12 + 9 * u * u) * e.s * (1 - e.t);
   }
   function eyeClip(st, e, c) {
     var top = c.top, bot = c.bot;
