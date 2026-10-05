@@ -15,7 +15,7 @@ import * as THREE from "three";
 import { S, on } from "./state.js";
 import { BI } from "./skeleton.js";
 import { owns, renderPos } from "./game.js";
-import { gunOf } from "./weapons.js";
+import { GUNS, gunOf } from "./weapons.js";
 import { LUNGE } from "./movement.js";
 import { humanCopy, gunCopy, paint, hasHuman, onModels } from "./models.js";
 import { makeRig, poseRig, rigPoint } from "./rig.js";
@@ -30,6 +30,38 @@ export function initFigures(sc) {
   // the models arrive after the first match may have started: rebuild everyone as a body
   onModels(() => { for (const id of [...figs.keys()]) dropFigure(id); });
   on("hit", (a, b) => { const f = b && figs.get(b.id); if (f) f.flash = 0.16; });
+  on("fired", (a) => { const f = figs.get(a.id); if (f) f.muzzleT = 0.06; });
+}
+/* A flash at the muzzle of whatever somebody is holding, the frame they fire. */
+const flashTex = (() => {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d");
+  const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, "rgba(255,250,230,1)"); r.addColorStop(0.3, "rgba(255,200,110,0.85)"); r.addColorStop(1, "rgba(255,140,40,0)");
+  g.fillStyle = r; g.beginPath();
+  for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2, rr = i % 2 ? 13 : 32; g.lineTo(32 + Math.cos(a) * rr, 32 + Math.sin(a) * rr); }
+  g.fill();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const flashMat = new THREE.SpriteMaterial({ map: flashTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+function muzzleFlash(f, dt) {
+  const H = f.held;
+  if (!f.flashSprite) { f.flashSprite = new THREE.Sprite(flashMat); f.flashSprite.visible = false; }
+  f.muzzleT = Math.max(0, (f.muzzleT || 0) - dt);
+  const on = f.muzzleT > 0 && H && H.obj && !!GUNS[H.key];
+  if (on && f.flashSprite.parent !== H.obj) H.obj.add(f.flashSprite);
+  f.flashSprite.visible = !!on;
+  if (on) { f.flashSprite.position.copy(H.t.muzzle); f.flashSprite.scale.setScalar(0.32 + Math.random() * 0.18); f.flashSprite.material.rotation = Math.random() * 6.28; }
+}
+const mzTmp = new THREE.Vector3();
+/** Where somebody's muzzle is in the world, if their body is drawn with a gun in its hand. */
+export function muzzleOf(id, out) {
+  const f = figs.get(id);
+  if (!f || f.kind !== "human" || !f.g.visible || !f.held.obj || !GUNS[f.held.key]) return null;
+  f.held.obj.updateWorldMatrix(true, false);
+  return out.copy(f.held.t.muzzle).applyMatrix4(f.held.obj.matrixWorld);
 }
 /** Shadows on or off; and on the low tier, bodies lit the cheap way (rebuilt, since the material changes). */
 export function figureQuality(on, low) {
@@ -127,7 +159,7 @@ function poseHuman(f, a) {
   // a standing body's legs are a few centimetres shorter than the game's: let it settle onto its feet
   const lf = rigPoint(f.rig, "LeftFoot"), rf = rigPoint(f.rig, "RightFoot");
   const drop = Math.max(0, Math.min(lf.y - T.lFoot.y, rf.y - T.rFoot.y));
-  f.g.children[0].position.y = -Math.min(0.06, drop);
+  f.g.children[0].position.y = a.body.y - Math.min(0.06, drop);
 }
 
 /* ---------------------------------------------------------------
@@ -270,6 +302,7 @@ export function syncFigures(alpha, dt) {
         f.g.children[0].rotation.x = Math.PI / 2 * 0.92 * k * k;
         f.g.children[0].position.y = a.body.y - Math.max(0, f.dieT - 1.0) * 0.6;
       }
+      muzzleFlash(f, dt);
       f.flash = Math.max(0, f.flash - dt);
       f.mat.emissive.setRGB(1, 0.25, 0.2);
       f.mat.emissiveIntensity = f.flash > 0 ? f.flash * 7 : 0;

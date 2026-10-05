@@ -21,7 +21,7 @@ export const ACTIONS = [
   { id: "fire",     label: "Fire",             def: ["Mouse0", ""] },
   { id: "ads",      label: "Aim down sights",  def: ["Mouse2", ""] },
   { id: "reload",   label: "Reload",           def: ["KeyR", ""] },
-  { id: "lunge",    label: "Lunge (hold)",     def: ["KeyF", "Mouse3"] },
+  { id: "lunge",    label: "Lunge",            def: ["KeyF", "Mouse3"] },
   { id: "melee",    label: "Quick melee",      def: ["KeyV", ""] },
   { id: "slot1",    label: "Primary",          def: ["Digit1", ""] },
   { id: "slot2",    label: "Secondary",        def: ["Digit2", ""] },
@@ -56,13 +56,42 @@ export function codeName(code) {
 export const validCode = (c) => typeof c === "string" && c.length > 0 && c.length < 24 && /^[A-Za-z0-9]+$/.test(c) && c !== "Escape";
 
 /* ---------------------------------------------------------------
+   Hold, toggle or mixed
+   --------------------------------------------------------------- */
+/*
+ * The actions whose button can work more than one way. Keys and touch each
+ * have their own choice (Settings), since a thumb that has to stay on Aim
+ * cannot also steer:
+ *   hold    on while the button is down
+ *   toggle  each press turns it on, or off
+ *   mixed   a quick tap toggles; a press held longer than MIXED_HOLD is a
+ *           hold, and lets go when you do
+ * Sprint may also be always on.
+ */
+export const MODAL = [
+  { id: "ads",    label: "Aim" },
+  { id: "crouch", label: "Crouch / slide" },
+  { id: "sprint", label: "Sprint", always: true },
+  { id: "lunge",  label: "Lunge" },
+  { id: "score",  label: "Scoreboard" }
+];
+export const MODAL_IDS = MODAL.map((m) => m.id);
+export const MODES = ["hold", "toggle", "mixed"];
+export const MIXED_HOLD = 0.25;
+export const KEY_MODES = { ads: "hold", crouch: "hold", sprint: "hold", lunge: "hold", score: "hold" };
+export const TOUCH_MODES = { ads: "toggle", crouch: "hold", sprint: "toggle", lunge: "hold", score: "hold" };
+export const validMode = (id, m) => MODES.includes(m) || (m === "always" && !!MODAL.find((x) => x.id === id && x.always));
+
+/* ---------------------------------------------------------------
    Touch: buttons, where they start, and what they do
    --------------------------------------------------------------- */
 /*
  * x, y are the centre as a fraction of the screen; s is the diameter in CSS
  * pixels. Two starting layouts, because a thumb reaches different places on
  * a phone held sideways and one held upright. Every button stays on screen
- * at all times; the layout editor only moves, resizes and fades them.
+ * at all times; the layout editor only moves, resizes and fades them, and
+ * never lets one cover another (touch.js), so none can be lost under its
+ * neighbour.
  */
 export const TOUCH = [
   { id: "stick",  action: "move",   icon: "move",    label: "Move" },
@@ -71,11 +100,11 @@ export const TOUCH = [
   { id: "jump",   action: "jump",   icon: "jump",    label: "Jump" },
   { id: "crouch", action: "crouch", icon: "crouch",  label: "Crouch / slide" },
   { id: "ads",    action: "ads",    icon: "scope",   label: "Aim" },
-  { id: "lunge",  action: "lunge",  icon: "lunge",   label: "Lunge (hold)", look: true },
+  { id: "lunge",  action: "lunge",  icon: "lunge",   label: "Lunge", look: true },
   { id: "reload", action: "reload", icon: "reload",  label: "Reload" },
   { id: "swap",   action: "next",   icon: "swap",    label: "Next weapon" },
   { id: "melee",  action: "melee",  icon: "blade",   label: "Quick melee" },
-  { id: "sprint", action: "sprint", icon: "sprint",  label: "Sprint (toggle)" },
+  { id: "sprint", action: "sprint", icon: "sprint",  label: "Sprint" },
   { id: "hacks",  action: "hacks",  icon: "code",    label: "Hacks" },
   { id: "score",  action: "score",  icon: "list",    label: "Scoreboard" },
   { id: "menu",   action: "menu",   icon: "pause",   label: "Menu" }
@@ -95,24 +124,24 @@ export const TOUCH_LAYOUTS = {
     swap:   { x: 0.66, y: 0.88, s: 52 },
     melee:  { x: 0.7, y: 0.52, s: 46 },
     sprint: { x: 0.26, y: 0.88, s: 50 },
-    hacks:  { x: 0.9, y: 0.1, s: 44 },
-    score:  { x: 0.83, y: 0.1, s: 40 },
-    menu:   { x: 0.96, y: 0.1, s: 40 }
+    hacks:  { x: 0.895, y: 0.1, s: 44 },
+    score:  { x: 0.82, y: 0.1, s: 40 },
+    menu:   { x: 0.965, y: 0.1, s: 40 }
   },
   portrait: {
     stick:  { x: 0.24, y: 0.82, s: 140 },
     fire:   { x: 0.78, y: 0.7, s: 80 },
     fire2:  { x: 0.12, y: 0.58, s: 56 },
     jump:   { x: 0.88, y: 0.86, s: 66 },
-    crouch: { x: 0.66, y: 0.9, s: 56 },
+    crouch: { x: 0.68, y: 0.9, s: 56 },
     ads:    { x: 0.9, y: 0.6, s: 52 },
     lunge:  { x: 0.62, y: 0.78, s: 56 },
     reload: { x: 0.9, y: 0.5, s: 46 },
-    swap:   { x: 0.52, y: 0.9, s: 48 },
+    swap:   { x: 0.53, y: 0.9, s: 48 },
     melee:  { x: 0.75, y: 0.56, s: 44 },
-    sprint: { x: 0.42, y: 0.92, s: 46 },
-    hacks:  { x: 0.84, y: 0.06, s: 42 },
-    score:  { x: 0.74, y: 0.06, s: 38 },
-    menu:   { x: 0.94, y: 0.06, s: 38 }
+    sprint: { x: 0.405, y: 0.93, s: 46 },
+    hacks:  { x: 0.8, y: 0.06, s: 42 },
+    score:  { x: 0.67, y: 0.06, s: 38 },
+    menu:   { x: 0.93, y: 0.06, s: 38 }
   }
 };

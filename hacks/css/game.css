@@ -74,6 +74,10 @@ input[type=color] { width: 44px; height: 30px; border: 1px solid var(--line); bo
 .tog { display: flex; align-items: center; gap: 10px; margin: 10px 0; cursor: pointer; }
 .tog input { width: 18px; height: 18px; accent-color: var(--accent); }
 .tog.small { margin: 6px 0; font-size: 13px; }
+.modes { display: grid; gap: 6px; }
+.mode { display: grid; grid-template-columns: minmax(90px, 30%) 1fr; gap: 10px; align-items: center; font-size: 14px; }
+.mode .seg { padding: 2px; }
+.mode .seg button { padding: 5px 6px; min-width: 0; }
 .stackbtns { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
 .trow { display: flex; gap: 8px; }
 .trow > * { flex: 1; }
@@ -192,12 +196,24 @@ table.board tr.me td { color: var(--accent); }
 #fps { position: absolute; left: calc(16px + var(--safe-l)); top: calc(40px + var(--safe-t)); font-size: 12px; color: var(--muted); }
 #dmgdir { position: absolute; left: 50%; top: 50%; }
 #dmgdir .arc { position: absolute; left: 0; top: 0; width: 120px; height: 120px; border-radius: 50%; border: 4px solid transparent; border-top-color: rgba(255,70,90,0.85); }
+#killNote { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; font: 700 14px var(--sans); color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8); white-space: nowrap; animation: killIn .18s ease-out; }
+#killNote .ico { color: var(--bad); }
+#killNote .streak { color: var(--warn); }
+#killNote.fade { opacity: 0; transition: opacity .4s; }
+@keyframes killIn { from { transform: translateX(-50%) scale(1.25); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+#hitmark.kill i { background: var(--bad); width: 14px; }
 #centerMsg { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); background: rgba(8,12,17,0.75); padding: 8px 16px; border-radius: 10px; font-weight: 600; }
 #toast { position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%); background: rgba(8,12,17,0.85); padding: 8px 14px; border-radius: 10px; }
 #hurtFlash { position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(255,40,60,0.55)); }
-#scope { position: fixed; inset: 0; pointer-events: none; z-index: 4; background: radial-gradient(circle at center, transparent 0 33vmin, #000 33.3vmin); }
-#scope::before, #scope::after { content: ""; position: absolute; background: #000; }
-#scope::before { left: 0; right: 0; top: 50%; height: 1px; } #scope::after { top: 0; bottom: 0; left: 50%; width: 1px; }
+/* the scope: a lens with a faint tint and a darkening edge, black beyond it, and the reticle centred on the
+   same box as the crosshair (fixed, inset 0) so its centre is where the shot goes */
+#scope { position: fixed; inset: 0; pointer-events: none; z-index: 4; background: radial-gradient(circle at center, rgba(110,160,220,0.07) 0 26vmin, rgba(0,0,0,0.35) 32.4vmin, #000 33.2vmin); }
+#scope .reticle { position: absolute; left: 50%; top: 50%; width: 66.4vmin; height: 66.4vmin; transform: translate(-50%, -50%); overflow: visible; }
+#scope .rim { fill: none; stroke: #000; stroke-width: 3; }
+#scope .post { stroke: #050607; stroke-width: 3.2; fill: none; }
+#scope .fine { stroke: #050607; stroke-width: 0.5; fill: none; }
+#scope .mil circle { fill: #050607; }
+#scope .dot { fill: #ff3b4e; }
 #scoreboard { position: fixed; inset: 0; z-index: 15; display: grid; place-items: center; pointer-events: none; }
 #scoreboard .panel { width: min(560px, 92vw); background: rgba(10,14,20,0.9); }
 /* on a phone the bottom corners belong to thumbs: the readouts move up, smaller */
@@ -226,9 +242,13 @@ body.touchOn #hudTop .pill { font-size: 12px; padding: 4px 10px; }
 body.touchEditing .tbtn { border-style: dashed; }
 body.touchEditing .tbtn.sel { border-color: var(--warn); border-style: solid; box-shadow: 0 0 0 3px rgba(255,210,74,0.3); }
 body.touchEditing #hud { display: none; }
-#touchEdit { position: fixed; left: 0; right: 0; top: 0; z-index: 30; padding: calc(8px + var(--safe-t)) 12px 8px; }
-#touchEdit .bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; background: rgba(12,18,26,0.95); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; font-size: 13px; max-width: 760px; margin: 0 auto; }
-.te-size { display: flex; align-items: center; gap: 6px; } .te-size input { width: 110px; }
+/* the editor's bar is only as big as itself (it once spanned the whole top of the screen and swallowed
+   the touches meant for the buttons under it); touch.js puts it wherever it covers no button */
+#touchEdit { position: fixed; left: 0; top: 0; z-index: 30; width: min(330px, calc(100vw - 16px)); }
+#touchEdit .bar { display: flex; flex-direction: column; gap: 6px; background: rgba(12,18,26,0.95); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
+.te-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#teSel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.te-size { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; } .te-size input { flex: 1; min-width: 0; }
 
 /* ---------- the hacks panel ---------- */
 #hackPanel { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; background: rgba(8,11,15,0.94); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l); user-select: text; -webkit-user-select: text; touch-action: auto; }
@@ -346,6 +366,7 @@ dl.api dt code { color: var(--accent2); word-break: break-word; } dl.api dd { ma
   .hp-console { height: 20vh; }
   .bind { grid-template-columns: 1fr 88px 88px; font-size: 13px; }
   .apiitem { grid-template-columns: 1fr; gap: 2px; }
+  .mode { grid-template-columns: 1fr; gap: 3px; margin-bottom: 4px; }
   .learn { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
   .lnav { border-right: 0; border-bottom: 1px solid var(--line); padding: 8px 10px; overflow: hidden; }
   .lprog { display: none; }

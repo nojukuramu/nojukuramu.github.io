@@ -94,6 +94,7 @@ function frame(now) {
     render.frame(alpha, dt);
     hackapi.drawOverlay();
     hud.update(dt);
+    touch.sync();
     hackapi.afterFrame(dt);
   } else {
     render.idle(now / 1000, dt);
@@ -107,7 +108,7 @@ requestAnimationFrame(frame);
 on("tracer", (a, o, h, gun) => {
   // your own tracer starts at your gun's muzzle as your screen shows it, anybody else's at their hand
   const mine = a === S.me && !(S.hackView && S.hackView.thirdPerson);
-  render.tracer([a.bones[30], a.bones[31], a.bones[32]], [h.x, h.y, h.z], h.actor ? 0xff9a7a : 0xffd98a, mine);
+  render.tracer([a.bones[30], a.bones[31], a.bones[32]], [h.x, h.y, h.z], h.actor ? 0xff9a7a : 0xffd98a, mine, a.id);
   if (h.actor) render.burst(h.x, h.y, h.z, 6, 0xff5f5f, 3);
   else if (h.world) render.burst(h.x, h.y, h.z, 4, 0xffd070, 3);
 });

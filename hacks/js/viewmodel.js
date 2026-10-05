@@ -294,3 +294,11 @@ export function muzzleWorld(camera, out) {
   mz.z = d;
   return out.copy(mz).unproject(camera);
 }
+
+/** Where the held gun's sight is on screen, in -1..1 (0, 0 is the centre), for tools/e2e.js. */
+export function sightOnScreen() {
+  if (!current || !current.sight || !holder.visible) return null;
+  holder.updateMatrixWorld(true);
+  const p = mz.copy(current.sight).applyMatrix4(current.obj.matrixWorld).project(vCam);
+  return { x: p.x, y: p.y };
+}

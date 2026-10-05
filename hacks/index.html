@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Hacks">
 <link rel="stylesheet" href="css/game.css">
 <!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
-<script>window.HK_VERSION = "1";</script>
+<script>window.HK_VERSION = "2";</script>
 <script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
 </head>
 <body class="atTitle">
@@ -47,22 +47,27 @@
   <div id="fps" class="mono" hidden></div>
   <div id="dmgdir" aria-hidden="true"></div>
   <div id="centerMsg" hidden></div>
+  <div id="killNote" hidden></div>
   <div id="toast" hidden></div>
 </div>
 <div id="hurtFlash" aria-hidden="true"></div>
-<div id="scope" hidden aria-hidden="true"></div>
+<div id="scope" hidden aria-hidden="true">
+  <svg viewBox="-100 -100 200 200" class="reticle">
+    <circle r="99" class="rim"/>
+    <path class="post" d="M-99 0H-34M34 0H99M0 34V99"/>
+    <path class="fine" d="M-34 0H34M0 -99V34"/>
+    <g class="mil"><circle cx="-24" r="1.3"/><circle cx="-12" r="1.3"/><circle cx="12" r="1.3"/><circle cx="24" r="1.3"/><circle cy="12" r="1.3"/><circle cy="24" r="1.3"/></g>
+    <circle r="1.1" class="dot"/>
+  </svg>
+</div>
 <div id="scoreboard" hidden></div>
 
 <!-- ============ touch controls (built by touch.js) ============ -->
 <div id="touch" hidden></div>
 <div id="touchEdit" hidden>
   <div class="bar">
-    <b>Move buttons</b>
-    <span class="muted" id="teSel">Drag a button. Tap one to size it.</span>
-    <label class="te-size">Size <input type="range" id="teSize" min="32" max="220" step="2"></label>
-    <label class="te-size">Fade <input type="range" id="teAlpha" min="0.25" max="1" step="0.05"></label>
-    <button id="teReset" class="btn ghost small">Reset</button>
-    <button id="teDone" class="btn primary small">Done</button>
+    <div class="te-row"><b>Move</b><span class="muted" id="teSel">Drag a button. Tap one to size it.</span><span class="spacer"></span><button id="teReset" class="btn ghost small">Reset</button><button id="teDone" class="btn primary small">Done</button></div>
+    <div class="te-row"><label class="te-size">Size <input type="range" id="teSize" min="32" max="220" step="2"></label><label class="te-size">Fade <input type="range" id="teAlpha" min="0.25" max="1" step="0.05"></label></div>
   </div>
 </div>
 
@@ -125,8 +130,7 @@
       <div class="setrow"><label for="stAds">Aiming sensitivity <b id="stAdsN" class="num"></b></label><input type="range" id="stAds" min="0.2" max="2" step="0.05"></div>
       <div class="setrow"><label for="stFov">Field of view <b id="stFovN" class="num"></b></label><input type="range" id="stFov" min="70" max="120" step="1"></div>
       <label class="tog"><input type="checkbox" id="stInvert"><span>Invert looking up and down</span></label>
-      <div class="field"><label>Sprint</label><div id="stSprint" class="seg"><button data-v="hold">Hold</button><button data-v="toggle">Toggle</button><button data-v="auto">Always</button></div></div>
-      <div class="field"><label>Crouch</label><div id="stCrouch" class="seg"><button data-v="hold">Hold</button><button data-v="toggle">Toggle</button></div></div>
+      <div class="field"><label>Keys: hold or toggle <button class="info" data-info="modes" aria-label="Hold, toggle and mixed"><i data-icon="info"></i></button></label><div id="stKeyModes" class="modes" data-src="keyModes"></div></div>
       <label class="tog"><input type="checkbox" id="stPauseEdit"><span>Pause solo games while the hacks panel is open</span></label>
     </div>
     <div class="tabpane" data-pane="keys" hidden>
@@ -138,6 +142,7 @@
       <button id="btnEditTouch" class="btn wide"><i data-icon="move"></i>Move buttons</button>
       <div class="setrow"><label for="stTouchLook">Look sensitivity <b id="stTouchLookN" class="num"></b></label><input type="range" id="stTouchLook" min="0.2" max="3" step="0.05"></div>
       <label class="tog"><input type="checkbox" id="stTouchSprint"><span>Push the stick to the edge to sprint</span></label>
+      <div class="field"><label>Buttons: hold or toggle <button class="info" data-info="modes" aria-label="Hold, toggle and mixed"><i data-icon="info"></i></button></label><div id="stTouchModes" class="modes" data-src="touchModes"></div></div>
     </div>
     <div class="tabpane" data-pane="video" hidden>
       <div class="field"><label>Graphics</label><div id="stQuality" class="seg"><button data-v="auto">Auto</button><button data-v="low">Low</button><button data-v="medium">Medium</button><button data-v="high">High</button></div></div>

@@ -34,7 +34,7 @@ import { LUNGE } from "./movement.js";
 import { save } from "./save.js";
 import { clamp, damp } from "./util.js";
 import { loadModels } from "./models.js";
-import { initFigures, syncFigures, hideFigures, figureQuality } from "./figures.js";
+import { initFigures, syncFigures, hideFigures, figureQuality, muzzleOf } from "./figures.js";
 import { vScene, vCam, updateViewmodel, vmVisible, vmScoped, muzzleWorld } from "./viewmodel.js";
 export { vmFire, vmSwing } from "./viewmodel.js";
 
@@ -326,10 +326,12 @@ const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffd98a, transparent: tr
 for (let i = 0; i < 40; i++) { const m = new THREE.Mesh(cyl, tracerMat.clone()); m.visible = false; m.matrixAutoUpdate = false; m.frustumCulled = false; scene.add(m); TRACERS.push({ m, t: 0 }); }
 let tracerI = 0;
 const muzzleTmp = new THREE.Vector3();
-/** A tracer from `from` to `to`. Your own start at your gun's muzzle, as it is on your screen. */
-export function tracer(from, to, color, mine) {
+/** A tracer from `from` to `to`. Yours start at your gun's muzzle as your screen shows it; anybody else's at theirs. */
+export function tracer(from, to, color, mine, who) {
   const T = TRACERS[tracerI++ % TRACERS.length];
-  if (mine && muzzleWorld(camera, muzzleTmp)) vB.copy(muzzleTmp); else vB.set(from[0], from[1], from[2]);
+  if (mine && muzzleWorld(camera, muzzleTmp)) vB.copy(muzzleTmp);
+  else if (!mine && who != null && muzzleOf(who, muzzleTmp)) vB.copy(muzzleTmp);
+  else vB.set(from[0], from[1], from[2]);
   segment(T.m, vB, vC.set(to[0], to[1], to[2]), 0.01);
   T.m.material.color.setHex(color || 0xffd98a);
   T.m.visible = true; T.t = 0.08;

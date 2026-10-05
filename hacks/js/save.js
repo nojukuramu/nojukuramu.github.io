@@ -9,7 +9,7 @@
  * localStorage is editable by anyone with devtools and a bad bind or a
  * layout with a button off-screen would otherwise survive every reload. */
 
-import { ACTION_IDS, defaultBinds, validCode, TOUCH_IDS, TOUCH_LAYOUTS } from "./controls.js";
+import { ACTION_IDS, defaultBinds, validCode, TOUCH_IDS, TOUCH_LAYOUTS, MODAL_IDS, KEY_MODES, TOUCH_MODES, validMode } from "./controls.js";
 import { cleanLoadout, DEFAULT_LOADOUT } from "./weapons.js";
 import { starterHacks } from "./hackdocs.js";
 
@@ -19,8 +19,8 @@ export const MAX_CODE = 100000;
 
 export const DEFAULT_SETTINGS = {
   sens: 1.6, invertY: false, fov: 95, adsSens: 0.8,
-  sprintMode: "hold",        // hold | toggle | auto
-  crouchMode: "hold",        // hold | toggle
+  keyModes: KEY_MODES,       // per action: hold | toggle | mixed (sprint: or always) — controls.js MODAL
+  touchModes: TOUCH_MODES,   // the same, for the touch buttons
   quality: "auto",           // auto | low | medium | high
   master: 0.8, sfx: 0.9,
   showSpeed: true, showFps: false,
@@ -39,7 +39,7 @@ function fresh() {
   return {
     v: 1,
     name: "",
-    settings: Object.assign({}, DEFAULT_SETTINGS),
+    settings: Object.assign({}, DEFAULT_SETTINGS, { keyModes: Object.assign({}, KEY_MODES), touchModes: Object.assign({}, TOUCH_MODES) }),
     binds: defaultBinds(),
     touch: freshTouch(),
     loadout: Object.assign({}, DEFAULT_LOADOUT),
@@ -72,8 +72,16 @@ function clean(raw) {
   S.sfx = clampN(s.sfx, 0, 1, S.sfx);
   S.touchLook = clampN(s.touchLook, 0.2, 3, S.touchLook);
   for (const k of ["invertY", "showSpeed", "showFps", "pauseEditing", "touchAutoSprint"]) if (typeof s[k] === "boolean") S[k] = s[k];
-  if (["hold", "toggle", "auto"].includes(s.sprintMode)) S.sprintMode = s.sprintMode;
-  if (["hold", "toggle"].includes(s.crouchMode)) S.crouchMode = s.crouchMode;
+  const km = Object.assign({}, s.keyModes && typeof s.keyModes === "object" ? s.keyModes : null);
+  const tm = Object.assign({}, s.touchModes && typeof s.touchModes === "object" ? s.touchModes : null);
+  // before every button had its own mode there were two settings, sprint and crouch, shared by keys and touch
+  if (km.sprint === undefined && ["hold", "toggle", "auto"].includes(s.sprintMode)) km.sprint = s.sprintMode === "auto" ? "always" : s.sprintMode;
+  if (tm.sprint === undefined && s.sprintMode === "auto") tm.sprint = "always";
+  if (["hold", "toggle"].includes(s.crouchMode)) { if (km.crouch === undefined) km.crouch = s.crouchMode; if (tm.crouch === undefined) tm.crouch = s.crouchMode; }
+  for (const id of MODAL_IDS) {
+    if (validMode(id, km[id])) S.keyModes[id] = km[id];
+    if (validMode(id, tm[id])) S.touchModes[id] = tm[id];
+  }
   if (["auto", "low", "medium", "high"].includes(s.quality)) S.quality = s.quality;
   if (typeof s.crosshair === "string" && /^#[0-9a-f]{6}$/i.test(s.crosshair)) S.crosshair = s.crosshair;
 

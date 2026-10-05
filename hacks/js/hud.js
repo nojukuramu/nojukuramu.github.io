@@ -15,7 +15,10 @@ import { $, escHtml } from "./util.js";
 import { worldToScreen, view } from "./render.js";
 import { isEnemy } from "./game.js";
 
-let hitT = 0, hitHead = false, hurtT = 0, toastT = 0, fpsAcc = 0, fpsN = 0, fpsShow = 0;
+let hitT = 0, hitHead = false, hitKill = false, hurtT = 0, toastT = 0, fpsAcc = 0, fpsN = 0, fpsShow = 0;
+/* Your kills: one line under the crosshair, and a word when they come close together or keep coming. */
+let noteT = 0, lastKillAt = -99, quick = 0, run = 0;
+const QUICK = ["", "", "Double kill", "Triple kill", "Multi kill"];
 const dmgArcs = [];
 let lastHud = {};
 
@@ -104,6 +107,11 @@ export function update(dt) {
   const hm = $("hitmark");
   hm.style.opacity = hitT > 0 ? Math.min(1, hitT * 6) : 0;
   hm.classList.toggle("head", hitHead);
+  hm.classList.toggle("kill", hitKill && hitT > 0);
+  noteT = Math.max(0, noteT - dt);
+  const kn = $("killNote");
+  kn.classList.toggle("fade", noteT < 0.4);
+  if (noteT <= 0) kn.hidden = true;
   hurtT = Math.max(0, hurtT - dt);
   $("hurtFlash").style.opacity = (hurtT * 1.6).toFixed(2);
   // damage direction
@@ -148,6 +156,21 @@ function tags() {
   });
 }
 
+function killNote(k) {
+  const now = S.time || 0;
+  quick = now - lastKillAt < 4 ? quick + 1 : 1;
+  lastKillAt = now;
+  run++;
+  const word = QUICK[Math.min(quick, QUICK.length - 1)] || (run === 5 ? "Five in a row" : run === 10 ? "Ten in a row" : "");
+  const el = $("killNote");
+  el.innerHTML = "<span>" + escHtml(k.victim.name) + " down</span>" + (k.head ? icon("head") : "") + (word ? '<span class="streak">' + word + "</span>" : "");
+  el.hidden = false;
+  el.classList.remove("fade");
+  el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
+  noteT = 1.8;
+  hitT = 0.4; hitKill = true;
+}
+
 export function toast(text, ms) {
   const t = $("toast");
   t.textContent = text; t.hidden = false;
@@ -177,7 +200,7 @@ function scoreboard() { const el = $("scoreboard"); const h = boardHtml(); if (e
    Listening
    --------------------------------------------------------------- */
 export function init() {
-  on("hit", (a, b, dmg, info) => { if (a === S.me) { hitT = 0.28; hitHead = info && info.part === "head"; } });
+  on("hit", (a, b, dmg, info) => { if (a === S.me) { hitT = 0.28; hitHead = info && info.part === "head"; hitKill = false; } });
   on("hurt", (b, dmg, by) => {
     if (b !== S.me) return;
     hurtT = Math.min(0.5, hurtT + dmg / 120);
@@ -200,11 +223,12 @@ export function init() {
     feed.prepend(row);
     while (feed.childElementCount > 5) feed.lastChild.remove();
     setTimeout(() => row.remove(), 6000);
-    if (k.victim === S.me) S.spectate = k.killer && k.killer !== S.me ? k.killer : null;
+    if (k.victim === S.me) { S.spectate = k.killer && k.killer !== S.me ? k.killer : null; run = 0; quick = 0; }
+    if (k.killer === S.me && k.victim && k.victim !== S.me) killNote(k);
   });
   on("scoreboard", (v) => { const el = $("scoreboard"); el.hidden = !v || !S.match; if (v) scoreboard(); });
   on("spawn", (a) => { if (a === S.me) { S.spectate = null; for (const d of dmgArcs) d.el.remove(); dmgArcs.length = 0; } });
   on("toast", (t) => toast(t));
   on("quit", () => { lastHud = {}; });
-  on("matchStart", () => { lastHud = {}; $("killfeed").innerHTML = ""; });
+  on("matchStart", () => { lastHud = {}; $("killfeed").innerHTML = ""; run = 0; quick = 0; lastKillAt = -99; noteT = 0; $("killNote").hidden = true; });
 }

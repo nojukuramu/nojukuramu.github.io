@@ -45,6 +45,19 @@ runs the same movement at all four and compares.
 Recoil lifts your view and stays lifted. Moving spreads your shots, jumping more; aiming down
 sights tightens them. Health comes back after a few seconds out of the fight.
 
+Aiming puts the gun's own sights in the middle of the screen, exactly where the shot goes, on any
+screen shape: every model's sight line is level, and the aimed pose puts it on the gun camera's
+axis (`js/viewmodel.js`). The Talon looks through a scope instead.
+
+## Models
+
+The guns, the blades and the players are public-domain (CC0) models by Quaternius, from
+OpenGameArt, converted to GLB for this game — see [`assets/models/CREDITS.md`](assets/models/CREDITS.md).
+Every player is the same body, posed each frame from the seventeen bones the hitboxes use
+(`js/rig.js`), so a head you can see is a head you can hit; their shirt and the band of light
+across their eyes are their colour. Until the models have loaded, or if they never do, the old
+box-built mannequins and guns stand in.
+
 ## Hacks
 
 Hacks run in a Web Worker (`js/hackworker.js`), so a hack has no access to the page, the game's
@@ -86,9 +99,15 @@ Every keyboard and mouse action is rebindable (Settings, Keys), two keys per act
 the mouse wheel — bind jump to the wheel and each notch is a fresh press, the way Source players
 hop by hand. Escape always opens the menu.
 
+Aim, crouch, sprint, lunge and the scoreboard can each **hold**, **toggle** or be **mixed** — a
+quick tap toggles, a longer press holds — and sprint can be always on. Keys and touch are set
+separately (Settings, Controls and Touch), so a phone can toggle what a keyboard holds.
+
 On a phone every button is always on screen. **Move buttons** (Settings, Touch) lets you drag
-each one anywhere, size it and fade it, with a separate layout for sideways and upright. Fire
-and Lunge can be dragged while held to aim as you shoot; a touch anywhere else looks around.
+each one anywhere, size it and fade it, with a separate layout for sideways and upright. No
+button can be dropped on another or under the editor's bar — it slides to the nearest free place
+— so none is ever lost where it cannot be picked up again. Fire and Lunge can be dragged while
+held to aim as you shoot; a touch anywhere else looks around.
 
 ## Files
 
@@ -103,7 +122,9 @@ and Lunge can be dragged while held to aim as you shoot; a touch anywhere else l
 | [`js/weapons.js`](js/weapons.js) | the guns, the blades, and what a trigger pull does |
 | [`js/game.js`](js/game.js) | a match: actors, ticks, shots, damage, deaths, scoring |
 | [`js/bots.js`](js/bots.js) | bot brains, producing the same commands a player does |
-| [`js/render.js`](js/render.js) | the arena, mannequins on the bones, your gun, tracers, the camera |
+| [`js/render.js`](js/render.js) | the arena, the sky and the light, tracers and bullet holes, the camera; the canvas measured, never assumed |
+| [`js/models.js`](js/models.js), [`js/rig.js`](js/rig.js) | the CC0 models, loaded in the background; the body posed on the game's bones |
+| [`js/figures.js`](js/figures.js), [`js/viewmodel.js`](js/viewmodel.js) | everybody else's body and gun; your own arms and gun, sights on the screen's centre |
 | [`js/input.js`](js/input.js), [`js/touch.js`](js/touch.js), [`js/controls.js`](js/controls.js) | keys and mouse, the touch controls and their editor, the table of actions and layouts |
 | [`js/hud.js`](js/hud.js), [`js/menus.js`](js/menus.js), [`js/audio.js`](js/audio.js) | what is drawn over the game, every screen, synthesised sound |
 | [`js/hackworker.js`](js/hackworker.js), [`js/hackapi.js`](js/hackapi.js) | where hacks run; what they are shown and what they may do |
