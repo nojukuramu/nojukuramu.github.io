@@ -105,14 +105,14 @@ requestAnimationFrame(frame);
    Effects that only listen
    --------------------------------------------------------------- */
 on("tracer", (a, o, h, gun) => {
-  // your own tracer starts at your gun, not your eye
-  const from = a === S.me ? [o[0] + Math.cos(S.view.yaw) * 0.12, o[1] - 0.12, o[2] - Math.sin(S.view.yaw) * 0.12] : [a.bones[30], a.bones[31], a.bones[32]];
-  render.tracer(from, [h.x, h.y, h.z], h.actor ? 0xff9a7a : 0xffd98a);
+  // your own tracer starts at your gun's muzzle as your screen shows it, anybody else's at their hand
+  const mine = a === S.me && !(S.hackView && S.hackView.thirdPerson);
+  render.tracer([a.bones[30], a.bones[31], a.bones[32]], [h.x, h.y, h.z], h.actor ? 0xff9a7a : 0xffd98a, mine);
   if (h.actor) render.burst(h.x, h.y, h.z, 6, 0xff5f5f, 3);
   else if (h.world) render.burst(h.x, h.y, h.z, 4, 0xffd070, 3);
 });
 on("impact", (p, h) => render.burst(h.x, h.y, h.z, h.actor ? 10 : 6, h.actor ? 0xff5f5f : 0xffe0a0, 4));
-on("fired", (a, e) => { if (a === S.me) render.vmFire(a, e); });
+on("fired", (a, e) => { if (a === S.me) render.vmFire(e); });
 on("arms", (a, e) => { if (a === S.me && e.type === "swing") render.vmSwing(); });
 on("move", (a, ev) => {
   if (a !== S.me) return;

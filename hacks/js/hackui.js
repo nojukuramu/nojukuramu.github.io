@@ -9,7 +9,7 @@
 import { S, on } from "./state.js";
 import { save, newId, MAX_HACKS, cleanHack } from "./save.js";
 import * as hackapi from "./hackapi.js";
-import { createEditor } from "./editor.js";
+import { createEditor, highlight } from "./editor.js";
 import { LESSONS, API, ABOUT_API } from "./hackdocs.js";
 import { HACK_RULES } from "./modes.js";
 import { icon, hydrateIcons } from "./icons.js";
@@ -139,19 +139,73 @@ function renderLog() {
 /* ---------------------------------------------------------------
    Learn and API
    --------------------------------------------------------------- */
+/* Learn is one lesson at a time beside the list of all of them — the old page stacked fourteen
+ * lessons and their code into one scroll, which nobody can find their place in. The lesson you
+ * were on is remembered for as long as the page is open; a fresh visit starts at the first one
+ * you have not opened yet. */
+let lessonId = null;
+const splitTitle = (t) => { const m = /^(\d+) · (.*)$/.exec(t); return m ? [m[1], m[2]] : ["", t]; };
 function renderLearn() {
-  $("hpLearn").innerHTML = '<h2>Learn to code by writing hacks</h2><p class="muted">Each lesson is a working hack and the idea behind it. Open one, read it, run it, then change it.</p>' +
-    LESSONS.map((L) => '<article class="lesson' + (save.data.lessons.includes(L.id) ? " done" : "") + '"><h3>' + escHtml(L.title) + '</h3><p class="learns">' + escHtml(L.learn) + "</p>" + L.body +
-      '<pre class="code">' + escHtml(L.code) + '</pre><button class="btn primary small" data-lesson="' + L.id + '">' + icon("code") + "Open as a new hack</button></article>").join("");
+  const done = save.data.lessons;
+  if (!LESSONS.some((L) => L.id === lessonId)) lessonId = (LESSONS.find((L) => !done.includes(L.id)) || LESSONS[0]).id;
+  const i = LESSONS.findIndex((L) => L.id === lessonId), L = LESSONS[i];
+  const nDone = LESSONS.filter((x) => done.includes(x.id)).length;
+  const nav = LESSONS.map((x) => {
+    const [n, t] = splitTitle(x.title);
+    const cls = (x.id === lessonId ? " on" : "") + (done.includes(x.id) ? " done" : "");
+    return '<button class="lrow' + cls + '" data-goto="' + x.id + '"' + (x.id === lessonId ? ' aria-current="true"' : "") + '><b class="lnum">' + (done.includes(x.id) ? icon("check") : n) + '</b><span class="lt">' + escHtml(t) + "</span></button>";
+  }).join("");
+  const [num, title] = splitTitle(L.title);
+  const prev = LESSONS[i - 1], next = LESSONS[i + 1];
+  const pager = (x, dir) => x ? '<button class="btn ghost small" data-goto="' + x.id + '">' + (dir < 0 ? icon("prev") : "") + '<span>' + escHtml(splitTitle(x.title)[1]) + "</span>" + (dir > 0 ? icon("next") : "") + "</button>" : "<span></span>";
+  $("hpLearn").innerHTML =
+    '<div class="learn">' +
+      '<nav class="lnav" aria-label="Lessons"><p class="lprog"><b>' + nDone + "</b> of " + LESSONS.length + ' opened<i style="--p:' + (nDone / LESSONS.length).toFixed(3) + '"></i></p><div class="lrows">' + nav + "</div></nav>" +
+      '<div class="lscroll"><article class="lesson">' +
+        '<p class="lkick">Lesson ' + num + " of " + LESSONS.length + " · " + escHtml(L.learn) + "</p>" +
+        "<h2>" + escHtml(title) + "</h2>" +
+        '<div class="lbody">' + L.body + "</div>" +
+        '<div class="lcode"><div class="lcode-head"><span class="mono">' + escHtml(L.id) + '.js</span><button class="linkbtn" data-copy="' + L.id + '">' + icon("copy") + "Copy</button></div>" +
+          '<pre class="code">' + highlight(L.code) + "</pre></div>" +
+        '<div class="lact"><button class="btn primary" data-lesson="' + L.id + '">' + icon("play") + "Open and run it</button></div>" +
+        '<div class="lpager">' + pager(prev, -1) + pager(next, 1) + "</div>" +
+      "</article></div>" +
+    "</div>";
+  const on = $("hpLearn").querySelector(".lrow.on");
+  if (on && on.scrollIntoView) on.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
+function gotoLesson(id) {
+  lessonId = id;
+  renderLearn();
+  const pane = document.querySelector('#hackPanel [data-hpane="learn"]');
+  if (pane) pane.scrollTop = 0;
+  const art = $("hpLearn").querySelector(".lscroll");
+  if (art) art.scrollTop = 0;
+}
+/* The API is long, so it can be filtered: a word narrows every section to the lines that mention it. */
 function renderApi() {
-  $("hpApi").innerHTML = "<h2>What a hack can use</h2>" + ABOUT_API + API.map((sec) => "<h3>" + escHtml(sec.name) + '</h3><dl class="api">' +
-    sec.items.map(([k, v]) => "<dt><code>" + escHtml(k) + "</code></dt><dd>" + escHtml(v) + "</dd>").join("") + "</dl>").join("");
+  $("hpApi").innerHTML = '<div class="apidoc"><h2>What a hack can use</h2>' + ABOUT_API +
+    '<label class="apifind">' + icon("search") + '<input id="hpApiFind" class="txt" type="search" placeholder="Filter, e.g. bones, aim, draw" autocomplete="off" spellcheck="false" aria-label="Filter the API"></label>' +
+    API.map((sec) => '<section class="apisec"><h3>' + escHtml(sec.name) + '</h3><dl class="api">' +
+      sec.items.map(([k, v]) => '<div class="apiitem"><dt><code>' + escHtml(k) + "</code></dt><dd>" + escHtml(v) + "</dd></div>").join("") + "</dl></section>").join("") +
+    '<p class="muted apinone" hidden>Nothing matches that.</p></div>';
+}
+function filterApi(q) {
+  q = q.trim().toLowerCase();
+  let any = false;
+  document.querySelectorAll("#hpApi .apisec").forEach((sec) => {
+    let n = 0;
+    sec.querySelectorAll(".apiitem").forEach((it) => { const hit = !q || it.textContent.toLowerCase().includes(q); it.hidden = !hit; if (hit) n++; });
+    sec.hidden = !n; if (n) any = true;
+  });
+  const none = document.querySelector("#hpApi .apinone");
+  if (none) none.hidden = any;
 }
 function tab(name) {
   document.querySelectorAll("#hpTabs button").forEach((b) => b.classList.toggle("on", b.dataset.htab === name));
   document.querySelectorAll("#hackPanel [data-hpane]").forEach((p) => { p.hidden = p.dataset.hpane !== name; });
   $("hpList").hidden = name !== "code";
+  if (name === "learn") renderLearn();
 }
 
 /* ---------------------------------------------------------------
@@ -253,6 +307,14 @@ export function init() {
     renderUi();
   });
   $("hpLearn").addEventListener("click", (e) => {
+    const go = e.target.closest("[data-goto]");
+    if (go) { gotoLesson(go.dataset.goto); return; }
+    const cp = e.target.closest("[data-copy]");
+    if (cp) {
+      const L = LESSONS.find((x) => x.id === cp.dataset.copy);
+      try { navigator.clipboard.writeText(L.code).then(() => { cp.lastChild.textContent = "Copied"; setTimeout(() => { cp.lastChild.textContent = "Copy"; }, 1400); }, () => {}); } catch (err) { /* no clipboard here */ }
+      return;
+    }
     const b = e.target.closest("[data-lesson]");
     if (!b) return;
     const L = LESSONS.find((x) => x.id === b.dataset.lesson);
@@ -260,6 +322,7 @@ export function init() {
     tab("code");
     add(L.title.replace(/^\d+ · /, ""), L.code, true);
   });
+  $("hpApi").addEventListener("input", (e) => { if (e.target.id === "hpApiFind") filterApi(e.target.value); });
   on("hacksChanged", () => {
     if (!open) return;
     renderList(); renderButtons(); renderUi(); renderRules();

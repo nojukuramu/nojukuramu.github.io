@@ -12,7 +12,7 @@ import { LUNGE, lungeFactor, lookDir } from "./movement.js";
 import { MODES, TEAMS } from "./modes.js";
 import { icon } from "./icons.js";
 import { $, escHtml } from "./util.js";
-import { worldToScreen } from "./render.js";
+import { worldToScreen, view } from "./render.js";
 import { isEnemy } from "./game.js";
 
 let hitT = 0, hitHead = false, hurtT = 0, toastT = 0, fpsAcc = 0, fpsN = 0, fpsShow = 0;
@@ -79,13 +79,14 @@ export function update(dt) {
   }
   // crosshair: gap from spread
   const spread = g ? spreadOf(A, a.body) : 0.8;
-  const px = Math.tan(spread * Math.PI / 180) / Math.tan((S.cam.fov || 70) * Math.PI / 360) * window.innerHeight / 2;
+  const px = Math.tan(spread * Math.PI / 180) / Math.tan((S.cam.fov || 70) * Math.PI / 360) * view.h / 2;
   const gap = Math.max(3, Math.min(60, px));
   const ch = $("crosshair");
   ch.style.setProperty("--gap", gap.toFixed(1) + "px");
   ch.style.setProperty("--cc", save.settings.crosshair);
   const scoped = g && g.id === "talon" && A.ads > 0.9;
-  ch.classList.toggle("hide", (g && A.ads > 0.6 && g.hold !== "pistol") || !a.alive);
+  // aimed, the gun's own sights are the crosshair: they sit on the screen's centre (viewmodel.js)
+  ch.classList.toggle("hide", (g && A.ads > 0.5) || !a.alive);
   $("scope").hidden = !scoped;
   // lunge
   const body = a.body;

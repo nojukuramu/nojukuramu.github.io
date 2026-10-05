@@ -132,10 +132,14 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     check("the HUD is up", await p.isVisible("#hud") && await soft(until(p, () => /FFA/.test(document.getElementById("modeName").textContent), null, 5000)));
     check("the starter hack runs and draws", await soft(until(p, () => { const h = window.HK_DEBUG.hackapi; return h.running() === 1; }, null, 15000)));
     await p.waitForTimeout(600);
+    // software WebGL can be a few frames a second here, and a slow frame pays out at most a quarter
+    // of a second of ticks: hold W until the walk shows, rather than for a fixed time
     const x0 = await p.evaluate(() => [window.HK_DEBUG.S.me.body.x, window.HK_DEBUG.S.me.body.z]);
-    await p.keyboard.down("KeyW"); await p.waitForTimeout(700); await p.keyboard.up("KeyW");
+    await p.keyboard.down("KeyW");
+    const walkedW = await soft(until(p, (x0) => Math.hypot(window.HK_DEBUG.S.me.body.x - x0[0], window.HK_DEBUG.S.me.body.z - x0[1]) > 1, x0, 6000));
+    await p.keyboard.up("KeyW");
     const x1 = await p.evaluate(() => [window.HK_DEBUG.S.me.body.x, window.HK_DEBUG.S.me.body.z]);
-    check("W walks you forward", Math.hypot(x1[0] - x0[0], x1[1] - x0[1]) > 1, JSON.stringify([x0, x1]));
+    check("W walks you forward", walkedW, JSON.stringify([x0, x1]));
     // software WebGL can be a few frames a second here; game time still runs in real time, so wait on the outcome
     await until(p, () => window.HK_DEBUG.S.me.body.onGround, null, 5000);
     const y0 = await p.evaluate(() => window.HK_DEBUG.S.me.body.y);
@@ -167,8 +171,13 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     check("solo play pauses while it is open", await p.evaluate(() => window.HK_DEBUG.S.paused));
     check("the starter hack's code is in the editor", /Hello, hacker/.test(await p.inputValue("#editor textarea")));
     await p.click('#hpTabs [data-htab="learn"]');
-    const lessons = await p.$$("#hpLearn [data-lesson]");
+    const lessons = await p.$$("#hpLearn .lrow[data-goto]");
     check("the Learn tab lists the lessons", lessons.length >= 12, lessons.length);
+    // the lesson pane once fell into the hack list's 210-pixel column; it must have the panel's width
+    const learnW = await p.evaluate(() => document.querySelector('#hackPanel [data-hpane="learn"]').getBoundingClientRect().width);
+    check("the Learn tab uses the panel's whole width", learnW > 1000, Math.round(learnW));
+    await p.click('#hpLearn .lrow[data-goto="boxes"]');
+    check("picking a lesson shows that lesson", /Boxes through walls/.test(await p.textContent("#hpLearn .lesson h2")));
     await p.click('#hpLearn [data-lesson="boxes"]');
     await until(p, () => window.HK_DEBUG.hackapi.running() === 2, null, 10000);
     check("a lesson opens as a new hack, running", /screen\.toScreen/.test(await p.inputValue("#editor textarea")));
@@ -190,7 +199,8 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     const errLine = await p.textContent("#editor .ed-gutter .err");
     const codeLines = (await p.inputValue("#editor textarea")).split("\n");
     check("a syntax error is marked on its own line", codeLines[+errLine - 1] && codeLines[+errLine - 1].includes("broken"), errLine);
-    check("and explained in the console", /SyntaxError/.test(await p.textContent("#hpLog")));
+    // the console redraws on a timer, so give it a moment
+    check("and explained in the console", await soft(until(p, () => /SyntaxError/.test(document.getElementById("hpLog").textContent), null, 4000)));
     await p.click("#hpClose");
     await p.keyboard.press("KeyH");
     await until(p, () => !document.getElementById("hackPanel").hidden);
