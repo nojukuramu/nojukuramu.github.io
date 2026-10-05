@@ -36,6 +36,11 @@
      voted away by whoever rides past, and forgotten on their own after a
      lifetime that depends on what they are. A hub that hands over passes
      them on; nothing is kept once the area empties.
+   * **Introductions, for the proximity mic** — the hub carries the handful of
+     messages two nearby riders need to open a direct link to each other, and
+     then has nothing more to do with it. It never carries the voice: that
+     goes phone to phone, and only between riders who say they are a few
+     dozen metres apart (see proxmic.js).
 
    Where the "area" comes from, with no server
    -------------------------------------------
@@ -90,7 +95,8 @@ RC.pubs = (function () {
     SHOUT: "shout",        // area: one short line over the sender's head
     BEEP: "beep",          // area: one rider's horn, addressed to one other
     REPORT: "rep+",        // -> hub: something on the road, right here
-    VOTE: "rep?"           // -> hub: still there / not there
+    VOTE: "rep?",          // -> hub: still there / not there
+    MIC: "mic"             // area: an introduction between two nearby mics
   };
 
   // The world, divided. One degree is roughly 110 km of latitude — big enough
@@ -132,6 +138,18 @@ RC.pubs = (function () {
   var REPORT_MIN_GAP_MS = 20000; // one rider, one pin per twenty seconds
   var REPORT_NEAR_M = 1500;      // a pin goes where the reporter is, or nowhere
   var REPORT_SAME_M = 150;       // same kind this close: a confirmation instead
+
+  // Introductions for the proximity mic. The hub passes them between two
+  // riders who both have the mic on and who are, by their own last fixes,
+  // close to each other — so nobody in a 110 km cell can open a voice link to
+  // somebody across town without at least putting their marker next to them.
+  // The slack over the mic's own range covers presence that is a few seconds
+  // old on both sides. Everything else about it is rationed like a shout.
+  var MIC_KINDS = { offer: 1, answer: 1, cand: 1, bye: 1 };
+  var MIC_NEAR_M = 400;
+  var MIC_MAX_CHARS = 16000;     // an offer with its candidates; never a payload
+  var MIC_WINDOW_MS = 10000;
+  var MIC_PER_WINDOW = 60;       // per rider: a few links' worth of candidates
 
   // What a marker on somebody else's map may look like. A closed list, so a
   // stranger chooses among our glyphs rather than supplying one.
@@ -278,6 +296,7 @@ RC.pubs = (function () {
       if (!p.fix || now() - p.fix.at > STALE_MS) continue;
       people.push({
         id: p.id, name: p.name, room: p.room || null, av: p.av || null,
+        mic: p.mic ? 1 : 0,
         lat: p.fix.lat, lon: p.fix.lon,
         speedKmh: p.fix.speedKmh, courseDeg: p.fix.courseDeg
       });
@@ -332,6 +351,7 @@ RC.pubs = (function () {
         id: id, name: name, fix: fix,
         room: raw.room ? RC.net.normalizeCode(raw.room) : null,
         av: cleanAvatar(raw.av),
+        mic: !!raw.mic,
         color: colorFor(id)
       });
     }
@@ -435,6 +455,7 @@ RC.pubs = (function () {
     p.name = cleanName(m.name) || p.name;
     p.room = m.room ? RC.net.normalizeCode(m.room) : null;
     p.av = cleanAvatar(m.av) || p.av || null;
+    p.mic = !!m.mic;
     if (fix) p.fix = fix;
   }
 
@@ -538,6 +559,35 @@ RC.pubs = (function () {
     publishWorld();
   }
 
+  /* An introduction from one mic to another. Addressed like a beep, and
+     attributed the same way: the "from" on the far side is the id the hub has
+     on file for the link it arrived on, so nobody can open a voice link
+     wearing somebody else's marker. The hub does not read the payload — it is
+     a description of a connection, and none of the hub's business — but it
+     does refuse one that is not plausibly that, and one between two riders
+     who are not near each other. */
+  function hubMic(p, m) {
+    var k = String(m.k || "");
+    if (!MIC_KINDS[k]) return false;
+    var target = st.people[cleanId(m.to)];
+    if (!target || target.id === p.id) return false;
+    // A goodbye is always let through: hanging up must never need permission.
+    if (k !== "bye") {
+      if (!p.mic || !target.mic || !p.fix || !target.fix) return false;
+      if (RC.haversine(p.fix, target.fix) > MIC_NEAR_M) return false;
+    }
+    var size;
+    try { size = JSON.stringify(m.d == null ? null : m.d).length; } catch (e) { return false; }
+    if (size > MIC_MAX_CHARS) return false;
+    var t = now();
+    if (!p.micWin || t - p.micWin.at > MIC_WINDOW_MS) p.micWin = { at: t, n: 0 };
+    if (++p.micWin.n > MIC_PER_WINDOW) return false;
+    var out = { t: MSG.MIC, from: p.id, name: p.name, k: k, d: m.d == null ? null : m.d };
+    if (target.conn === "self") applyMic(out);
+    else sendToConn(target.conn, out);
+    return true;
+  }
+
   /* ---------------- the area's own talk, arriving ---------------- */
 
   function applyShout(m, mine) {
@@ -565,6 +615,15 @@ RC.pubs = (function () {
     if (st.beepHeard[id] && t - st.beepHeard[id] < BEEP_HEAR_GAP_MS) return;
     st.beepHeard[id] = t;
     fire("Beep", { id: id, name: cleanName(m.name) || "Someone", color: colorFor(id) });
+  }
+
+  function applyMic(m) {
+    if (!st) return;
+    var id = cleanId(m.from);
+    if (!id || id === st.meId || isBlocked(id)) return;
+    var k = String(m.k || "");
+    if (!MIC_KINDS[k]) return;
+    fire("Mic", { from: id, name: cleanName(m.name) || "Someone", k: k, d: m.d == null ? null : m.d });
   }
 
   function dropByConn(connId) {
@@ -614,6 +673,7 @@ RC.pubs = (function () {
         if (m.t === MSG.WORLD) applyWorld(m, false);
         else if (m.t === MSG.SHOUT) applyShout(m, false);
         else if (m.t === MSG.BEEP) applyBeep(m);
+        else if (m.t === MSG.MIC) applyMic(m);
       },
       closed: function () {
         // The join keeps retrying on its own; what matters here is that the
@@ -697,6 +757,7 @@ RC.pubs = (function () {
     if (m.t === MSG.BEEP) { if (who) hubBeep(who, m.to); return; }
     if (m.t === MSG.REPORT) { if (who) hubReport(who, m); return; }
     if (m.t === MSG.VOTE) { if (who) hubVote(who, m); return; }
+    if (m.t === MSG.MIC) { if (who) hubMic(who, m); return; }
     if (m.t === MSG.ROOM_OPEN) {
       var code = RC.net.normalizeCode(m.code);
       if (!isRoomCode(code)) return;
@@ -731,6 +792,7 @@ RC.pubs = (function () {
       id: st.meId,
       name: st.myName,
       av: st.av,
+      mic: !!st.mic,
       room: room ? room.code : null,
       first: !!first
     };
@@ -1030,6 +1092,7 @@ RC.pubs = (function () {
             roomList: [],
             myFix: fix,
             av: cleanAvatar(RC.store.get("pubsAv", null)) || null,
+            mic: false,
             shouts: [],
             reports: {},
             reportList: [],
@@ -1381,6 +1444,42 @@ RC.pubs = (function () {
     /** How long a kind of pin lives, in minutes — for the sheet's one line. */
     reportLife: function (kind) { return REPORT_LIFE_MIN[kind] || 0; },
 
+    /* ---- the proximity mic's side of the area ---- */
+
+    /** Say whether this phone's proximity mic is on. Goes out with the next
+        presence packet, which is how nearby mics find each other — and is the
+        only thing about the mic the area is ever told. */
+    setMic: function (on) {
+      if (!st) return false;
+      on = !!on;
+      if (st.mic === on) return true;
+      st.mic = on;
+      if (st.role === "host" || st.role === "guest") sendHi(false);
+      changed();
+      return true;
+    },
+
+    micOn: function () { return !!(st && st.mic); },
+
+    /** Hand an introduction to the hub for one nearby rider. False when there
+        is no hub to hand it to, or the hub (being this phone) refused it. */
+    micSignal: function (to, k, d) {
+      if (!st || (st.role !== "host" && st.role !== "guest")) return false;
+      to = cleanId(to);
+      if (!to || to === st.meId || !MIC_KINDS[k]) return false;
+      var msg = { t: MSG.MIC, to: to, k: k, d: d == null ? null : d };
+      if (st.role === "host") {
+        var me = st.people[st.meId];
+        return me ? hubMic(me, msg) : false;
+      }
+      // A guest's link queues while it is between attempts; a stale offer that
+      // goes out late is answered against a connection id nobody holds any more.
+      st.net.send(msg);
+      return true;
+    },
+
+    isBlocked: function (id) { return isBlocked(id); },
+
     /* ---- the block list ---- */
 
     block: function (id) {
@@ -1425,7 +1524,8 @@ RC.pubs = (function () {
     onNotice: null,
     onShout: null,
     onBeep: null,
-    onReport: null
+    onReport: null,
+    onMic: null
   };
 
   return api;

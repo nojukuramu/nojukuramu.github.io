@@ -174,10 +174,11 @@
   /** Tell the receiver we would rather hear a glitch than a late word. Both of
       these are hints and both are optional; a browser that has neither keeps
       its own adaptive buffer, which is merely the status quo. */
-  function tuneReceiver(recv) {
+  function tuneReceiver(recv, ms) {
     if (!recv) return;
-    try { recv.jitterBufferTarget = audioJitterMs; } catch (e) { /* not supported */ }
-    try { recv.playoutDelayHint = audioJitterMs / 1000; } catch (e) { /* not supported */ }
+    if (ms == null) ms = audioJitterMs;
+    try { recv.jitterBufferTarget = ms; } catch (e) { /* not supported */ }
+    try { recv.playoutDelayHint = ms / 1000; } catch (e) { /* not supported */ }
   }
 
   /** Say whether this device is the end of the line for the audio it receives
@@ -513,6 +514,11 @@
     var pingSeq = 0;
     var probes = {};       // probe id -> resolve
 
+    // A link can say for itself whether it is an ear or a relay. The room-wide
+    // setting is for a room; the proximity mic's links are always the end of
+    // the line, even on a phone that is also mixing a ride.
+    var jitterMs = opts.jitterMs == null ? null : opts.jitterMs;
+
     self.id = opts.connectionId;
     self.remote = opts.remote;
     self.pc = pc;
@@ -645,7 +651,7 @@
     if (opts.initiator) {
       try {
         audioTx = pc.addTransceiver("audio", { direction: "sendrecv" });
-        tuneReceiver(audioTx.receiver);
+        tuneReceiver(audioTx.receiver, jitterMs);
       } catch (e) {
         audioTx = null;
       }
@@ -663,7 +669,7 @@
                    (t.sender && t.sender.track && t.sender.track.kind);
         if (kind === "audio") {
           audioTx = t;
-          tuneReceiver(t.receiver);
+          tuneReceiver(t.receiver, jitterMs);
           return t;
         }
       }
@@ -1340,6 +1346,13 @@
     normalizeCode: normalizeCode,
     peerIdFor: peerIdFor,
     BROKERS: BROKERS,
+
+    /* One link with the signalling left to the caller. host() and join() are
+       this plus a broker; the PUBs proximity mic is this plus the area hub,
+       which already knows who is next to whom and attributes every message by
+       the connection it came in on — a better introducer for two strangers
+       forty metres apart than a public broker keyed by ids anyone can claim. */
+    link: Link,
 
     /* Exposed for the harness. Rewriting somebody else's SDP is the one thing
        in here that is pure text and can go wrong silently; the link itself is

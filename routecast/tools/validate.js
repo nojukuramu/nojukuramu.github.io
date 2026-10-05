@@ -585,6 +585,9 @@ section("Static: theme tokens");
     // element's place in a staggered entrance, written inline by whatever
     // builds the list (hud.js, recap.js, the quick destinations).
     if (t === "--rc-dock-h" || t === "--acc" || t === "--i") return false;
+    // --lvl is how loud a rider in earshot is, 0 to 1, written inline on the
+    // proximity mic's level bar by pubsui.js.
+    if (t === "--lvl") return false;
     return !declared[t];
   });
   check("every var(--token) is defined", undef.length === 0, undef.join(", "));
@@ -1672,6 +1675,81 @@ section("Behaviour: the area talks, and nobody talks for anybody else");
     }
   };
 
+  /* The proximity mic's links, faked at the one seam that matters: what a
+     link would carry. Two ends share a connection id; accepting the answer
+     opens both, a message sent on one arrives on the other, and destroying
+     one closes the other the way a dropped data channel would. Promises are
+     replaced by thenables that run at once, so the whole handshake happens
+     inside the test's own clock. */
+  function sync(v) {
+    return { then: function (ok) { return sync(ok ? ok(v) : v); }, "catch": function () { return sync(v); } };
+  }
+  var wires = {};
+  function fakeLink(opts) {
+    var handlers = {};
+    var l = {
+      cid: opts.connectionId, live: false, dead: false,
+      on: function (n, fn) { (handlers[n] = handlers[n] || []).push(fn); },
+      emit: function (n, x) { (handlers[n] || []).slice().forEach(function (fn) { fn(x); }); },
+      createOffer: function () { return sync({ type: "offer", sdp: "v=0 offer" }); },
+      acceptOffer: function () { return sync({ type: "answer", sdp: "v=0 answer" }); },
+      acceptAnswer: function () {
+        var w = wires[l.cid];
+        fakeTimeout(function () {
+          if (!w.a || !w.b || w.a.dead || w.b.dead) return;
+          w.a.live = w.b.live = true;
+          w.a.emit("open");
+          w.b.emit("open");
+        });
+        return sync();
+      },
+      signalingState: function () { return l.live ? "stable" : "have-local-offer"; },
+      addCandidate: function () {},
+      isOpen: function () { return l.live && !l.dead; },
+      send: function (m) {
+        if (!l.isOpen()) return false;
+        var w = wires[l.cid], other = w.a === l ? w.b : w.a;
+        if (other && other.isOpen()) other.emit("message", copy(m));
+        return true;
+      },
+      destroy: function () {
+        if (l.dead) return;
+        l.dead = true;
+        l.live = false;
+        l.emit("close", "bye");
+        var w = wires[l.cid], other = w.a === l ? w.b : w.a;
+        if (other) fakeTimeout(function () { other.destroy(); });
+      }
+    };
+    var w = wires[l.cid] = wires[l.cid] || {};
+    if (opts.initiator) w.a = l; else w.b = l;
+    return l;
+  }
+  bus.link = fakeLink;
+
+  /* A voice engine that only writes down what it was asked: who is plugged
+     in, and how loud. */
+  function fakeVoice() {
+    return {
+      supported: function () { return true; },
+      create: function () {
+        var peers = {};
+        var e = {
+          peers: peers, sending: false,
+          start: function () { return true; }, warm: function () { return true; },
+          setMuted: function () {}, stop: function () { Object.keys(peers).forEach(function (k) { delete peers[k]; }); },
+          prime: function () { return sync(true); },
+          setTransmit: function (v) { e.sending = !!v; return sync(true); },
+          addPeer: function (id, link, level) { if (peers[id]) return false; peers[id] = { link: link, level: level }; return true; },
+          removePeer: function (id) { delete peers[id]; return true; },
+          setPeerVolume: function (id, v) { if (peers[id]) peers[id].level = v; return true; },
+          linkOf: function (id) { return peers[id] ? peers[id].link : null; }
+        };
+        return e;
+      }
+    };
+  }
+
   function phone(name, lat, lon) {
     var ctx = sandbox();
     ctx.setTimeout = fakeTimeout;
@@ -1683,10 +1761,15 @@ section("Behaviour: the area talks, and nobody talks for anybody else");
     };
     var RC = ctx.RC;
     RC.net = bus;
-    var said = { shouts: [], beeps: [], reports: [] };
+    RC.voice = fakeVoice();
+    vm.runInContext(read("static/js/proxmic.js"), ctx, { filename: "proxmic.js" });
+    var said = { shouts: [], beeps: [], reports: [], mic: [] };
     RC.pubs.onShout = function (l) { said.shouts.push(l); };
     RC.pubs.onBeep = function (b) { said.beeps.push(b); };
     RC.pubs.onReport = function (r) { said.reports.push(r); };
+    // The mic's own handler stays in place; the test listens in front of it.
+    var micHandler = RC.pubs.onMic;
+    RC.pubs.onMic = function (m) { said.mic.push(m); if (micHandler) micHandler(m); };
     RC.pubs.start(name);
     return { RC: RC, said: said };
   }
@@ -1765,6 +1848,103 @@ section("Behaviour: the area talks, and nobody talks for anybody else");
   check("a second link cannot take over a rider's marker", anaNow && anaNow.name === "Ana",
         anaNow ? anaNow.name : "gone");
 
+  /* ---- the proximity mic ----
+     Two more phones: Dee, fifteen metres from the hub, and Cy, two kilometres
+     up the road in the same area. Ana is sixty metres from the hub and about
+     forty-five from Dee; Ben is a few hundred metres from everybody. */
+  var dee = phone("Dee", 14.6001, 121.0001);
+  var cy = phone("Cy", 14.62, 121.00);
+  flush();
+  [hub, ana, dee, cy].forEach(function (ph) { ph.RC.proxmic.start(); });
+  flush();
+  hub.RC.pubs._tick();
+  var anaSeen = dee.RC.pubs.world().filter(function (p) { return p.id === ana.RC.pubs.myId(); })[0];
+  var benSeen = dee.RC.pubs.world().filter(function (p) { return p.id === ben.RC.pubs.myId(); })[0];
+  check("the area is told whose mic is on", anaSeen && anaSeen.mic === true && benSeen && benSeen.mic === false);
+
+  // The hub's rules for an introduction, knocked on directly.
+  function heard(ph, from, c) {
+    return ph.said.mic.filter(function (m) { return m.from === from && m.d && m.d.c === c; });
+  }
+  var anaId = ana.RC.pubs.myId();
+  ana.RC.pubs.micSignal(dee.RC.pubs.myId(), "cand", { c: "probe1", list: [] });
+  var got = heard(dee, anaId, "probe1");
+  check("an introduction between two nearby mics is carried", got.length === 1);
+  check("and attributed to the link it came from", got[0] && got[0].name === "Ana");
+  ana.RC.pubs.micSignal(ben.RC.pubs.myId(), "cand", { c: "probe2", list: [] });
+  check("a rider whose mic is off cannot be introduced to", heard(ben, anaId, "probe2").length === 0);
+  ana.RC.pubs.micSignal(cy.RC.pubs.myId(), "cand", { c: "probe3", list: [] });
+  check("nor one two kilometres away", heard(cy, anaId, "probe3").length === 0);
+  check("a kind of message the mic does not use is refused at the door",
+        ana.RC.pubs.micSignal(dee.RC.pubs.myId(), "voice", { c: "probe4" }) === false);
+  ana.RC.pubs.micSignal(dee.RC.pubs.myId(), "cand", { c: "probe5", list: [new Array(20000).join("x")] });
+  check("an introduction the size of a payload is not carried", heard(dee, anaId, "probe5").length === 0);
+
+  // The mesh itself. Each phone decides from the same area packet.
+  [hub, ana, dee, cy, ben].forEach(function (ph) { ph.RC.proxmic.refresh(); });
+  flush();
+  [hub, ana, dee, cy, ben].forEach(function (ph) { ph.RC.proxmic.refresh(); });
+  flush();
+  function linked(a, b) {
+    var s1 = a.RC.proxmic.peerState(b.RC.pubs.myId()), s2 = b.RC.proxmic.peerState(a.RC.pubs.myId());
+    return !!(s1 && s2 && s1.state === "open" && s2.state === "open");
+  }
+  check("riders within reach are linked, both ways", linked(hub, dee) && linked(hub, ana) && linked(ana, dee));
+  check("a rider with the mic off is linked to nobody", ben.RC.proxmic.snapshot().near.length === 0 &&
+        !hub.RC.proxmic.peerState(ben.RC.pubs.myId()));
+  check("a rider two kilometres off is linked to nobody", cy.RC.proxmic.snapshot().near.length === 0);
+  var pairs = 0;
+  Object.keys(wires).forEach(function (k) { if (wires[k].a && wires[k].b && wires[k].a.isOpen()) pairs++; });
+  check("one link per pair, never two", pairs === 3, pairs + " open links");
+
+  var hd = hub.RC.proxmic.peerState(dee.RC.pubs.myId());
+  var ha = hub.RC.proxmic.peerState(anaId);
+  var da = dee.RC.proxmic.peerState(anaId);
+  check("fifteen metres is most of the way up", hd && hd.level > 0.7 && hd.level < 0.85, hd && hd.level.toFixed(2));
+  check("forty-five metres is a murmur", da && da.level > 0 && da.level < 0.15, da && da.level.toFixed(2));
+  check("sixty metres is linked but silent", ha && ha.level === 0);
+  check("the voice engine is set to the same level",
+        Math.abs(hub.RC.proxmic.snapshot().near.filter(function (n) { return n.id === dee.RC.pubs.myId(); })[0].level - hd.level) < 1e-9);
+  check("and only the audible count as in earshot", hub.RC.proxmic.snapshot().audible === 1);
+
+  // Talking lights a name up on the far side, but only where it can be heard.
+  dee.RC.proxmic.talk(true);
+  check("a press reaches the riders in earshot", hub.RC.proxmic.peerState(dee.RC.pubs.myId()).talking === true);
+  ana.RC.proxmic.talk(true);
+  check("a rider out of earshot is not shown as talking",
+        hub.RC.proxmic.peerState(anaId).talking === false && dee.RC.proxmic.peerState(anaId).talking === true);
+  dee.RC.proxmic.talk(false);
+  ana.RC.proxmic.talk(false);
+  check("letting go is heard too", hub.RC.proxmic.peerState(dee.RC.pubs.myId()).talking === false);
+
+  // Last, because it spends Ana's allowance at the hub for the next ten seconds.
+  for (var fl = 0; fl < 80; fl++) ana.RC.pubs.micSignal(dee.RC.pubs.myId(), "cand", { c: "flood", list: [] });
+  var flooded = heard(dee, anaId, "flood").length;
+  check("one rider cannot flood the hub with them", flooded > 0 && flooded <= 60, flooded + " carried");
+
+  // Ignore takes the voice with the marker, and it stays gone.
+  hub.RC.pubs.block(dee.RC.pubs.myId());
+  hub.RC.proxmic.refresh();
+  flush();
+  check("ignoring a rider hangs up on them", !hub.RC.proxmic.peerState(dee.RC.pubs.myId()) &&
+        !dee.RC.proxmic.peerState(hub.RC.pubs.myId()));
+  [hub, dee].forEach(function (ph) { ph.RC.proxmic.refresh(); });
+  flush();
+  check("and nobody dials them again", !hub.RC.proxmic.peerState(dee.RC.pubs.myId()));
+  hub.RC.pubs.unblockAll();
+
+  // Switching off says goodbye and stops being dialled.
+  ana.RC.proxmic.stop();
+  flush();
+  hub.RC.pubs._tick();
+  [hub, dee].forEach(function (ph) { ph.RC.proxmic.refresh(); });
+  flush();
+  check("switching off hangs up on everybody", !hub.RC.proxmic.peerState(anaId) && !dee.RC.proxmic.peerState(anaId));
+  check("and the area hears it switch off",
+        !dee.RC.pubs.world().filter(function (p) { return p.id === anaId; })[0].mic);
+  [hub, dee, cy].forEach(function (ph) { ph.RC.proxmic.stop(); });
+  dee.RC.pubs.stop(); cy.RC.pubs.stop();
+
   // Ignoring somebody takes their words and pins with them.
   ana.RC.pubs.report("flood");
   ben.RC.pubs.block(ana.RC.pubs.myId());
@@ -1772,6 +1952,48 @@ section("Behaviour: the area talks, and nobody talks for anybody else");
   check("and so do their lines", ben.RC.pubs.shouts().every(function (l) { return l.from !== ana.RC.pubs.myId(); }));
 
   hub.RC.pubs.stop(); ana.RC.pubs.stop(); ben.RC.pubs.stop();
+})();
+
+section("Behaviour: how loud the rider next to you is");
+(function () {
+  var ctx = sandbox();
+  vm.runInContext(read("static/js/proxmic.js"), ctx, { filename: "proxmic.js" });
+  var RC = ctx.RC;
+  var v = RC.proxmic._volume;
+  check("full volume at arm's length", v(0) === 1 && v(RC.proxmic.FULL_M) === 1);
+  check("silent at the edge, and beyond it", v(RC.proxmic.RANGE_M) === 0 && v(80) === 0 && v(5000) === 0);
+  var mono = true;
+  for (var d = 0; d < 60; d += 0.5) if (v(d + 0.5) > v(d)) mono = false;
+  check("never louder further away", mono);
+  check("about half way, half as loud", Math.abs(v(27.5) - 0.5) < 0.01, v(27.5).toFixed(3));
+  check("no distance is no voice, not a full one", v(null) === 0 && v(NaN) === 0 && v(-3) === 0);
+
+  // Who a phone would like to be linked to, from the area packet.
+  var me = { lat: 14.6, lon: 121.0 };
+  function at(id, dLat, mic) { return { id: id, name: id, mic: mic, fix: { lat: 14.6 + dLat, lon: 121.0 } }; }
+  var world = [
+    at("far", 0.0012, true),        // ~133 m
+    at("near", 0.0002, true),       // ~22 m
+    at("deaf", 0.0001, false),      // ~11 m, mic off
+    at("mid", 0.0007, true),        // ~78 m
+    at("ignored", 0.0001, true)
+  ];
+  var want = RC.proxmic._want(me, world, function (id) { return id === "ignored"; }, 10);
+  check("only mics that are on, inside the dialling radius, not ignored",
+        want.map(function (w) { return w.id; }).join(",") === "near,mid", want.map(function (w) { return w.id; }).join(","));
+  check("nearest first, up to the cap", RC.proxmic._want(me, world, null, 1).map(function (w) { return w.id; }).join(",") === "ignored");
+
+  var dials = RC.proxmic._dials;
+  check("exactly one of a pair dials", dials("abc", "abd") !== dials("abd", "abc") && !dials("x", "x"));
+
+  var c = RC.proxmic._clean;
+  check("an offer that is not a description is refused",
+        !c.sdp({ type: "offer", sdp: "hello" }, "offer") && !c.sdp({ type: "answer", sdp: "v=0" }, "offer") &&
+        !!c.sdp({ type: "offer", sdp: "v=0\r\n" }, "offer"));
+  check("candidates are capped and shaped", c.cands(new Array(50).fill({ candidate: "candidate:1", sdpMid: "0", sdpMLineIndex: 0 })).length === 30 &&
+        c.cands([{ candidate: 5 }, null, { candidate: new Array(700).join("x") }]).length === 0);
+  check("a position off the globe is nobody's", !c.pos({ lat: 91, lon: 0 }) && !c.pos({ lat: "x", lon: 1 }) &&
+        !!c.pos({ lat: 14.6, lon: 121 }));
 })();
 
 /* A context for the modules the main sandbox does not load: the forecast

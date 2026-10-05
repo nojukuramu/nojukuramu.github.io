@@ -24,6 +24,9 @@
    * One round button by the map controls that opens the six report buttons
      and a line of chat without opening anything else. Big targets, one tap,
      because it is used at a red light with gloves on.
+   * The proximity mic — a hold-to-talk button beside that one, a ring on the
+     badge of every rider in earshot, and a pulse on whoever is talking, so
+     "who said that" is answered by looking where you would look anyway.
 
    The Pubs pane is for everything that needs reading: the area, the talk so
    far, the pins as a list, the people as a list, the rooms. Four sub-tabs,
@@ -91,6 +94,7 @@ RC.pubsui = (function () {
   var unreadShouts = 0;
   var audio = null;
   var askingId = null;          // the pin whose card is asking "still there?"
+  var micHold = false;          // a thumb on the proximity mic's button
 
   function el(id) { return RC.el(id); }
   function on(id, ev, fn) { var n = el(id); if (n) n.addEventListener(ev, fn); }
@@ -204,10 +208,13 @@ RC.pubsui = (function () {
           : "";
         var arrow = p.fix.courseDeg == null ? ""
           : '<span class="rc-pub-arrow" style="transform: rotate(' + Math.round(p.fix.courseDeg) + 'deg)"></span>';
+        var mic = RC.proxmic.peerState(p.id);
         var cls = "rc-pub" +
           (beeping[p.id] > t ? " is-beeping" : "") +
           (RC.who.isOpen("pub:" + p.id) ? " is-picked" : "") +
-          (p.room ? " is-in-room" : "");
+          (p.room ? " is-in-room" : "") +
+          (mic && mic.state === "open" && mic.level > 0 ? " is-near" : "") +
+          (mic && mic.talking ? " is-talking" : "");
         items.push({
           key: p.id, at: [p.fix.lat, p.fix.lon], pane: PANE,
           html: '<span class="' + cls + '" style="--pub: ' + p.color + '">' + arrow +
@@ -364,6 +371,8 @@ RC.pubsui = (function () {
     if (me) sub.push(RC.fmtDist(RC.haversine(me, p.fix), units()) + " away");
     sub.push(p.fix.speedKmh != null && p.fix.speedKmh > 3 ? RC.fmtSpeed(p.fix.speedKmh, units()) : "stopped");
     if (p.room) sub.push("in " + roomName(p.room));
+    var mic = RC.proxmic.peerState(p.id);
+    if (mic && mic.state === "open" && mic.level > 0) sub.push(mic.talking ? "talking" : "in earshot");
     var acts = [{
       label: "Beep", icon: "horn", kind: "primary", keep: true,
       run: function () { beepAt(p.id, p.name); }
@@ -375,6 +384,8 @@ RC.pubsui = (function () {
       label: "Ignore", icon: "eye-off", kind: "danger",
       run: function () {
         RC.pubs.block(p.id);
+        // The voice goes with the marker, now rather than on the next tick.
+        RC.proxmic.refresh();
         bridge.toast("You will not see or hear " + p.name + " again.", "ok");
         renderAll();
       }
@@ -580,6 +591,92 @@ RC.pubsui = (function () {
     badge.hidden = !live;
     badge.textContent = live ? String(unreadShouts || n) : "";
     badge.setAttribute("data-kind", unreadShouts ? "chat" : "count");
+  }
+
+  /* ---------------------------------------------------------
+     The proximity mic
+
+     The map button is always drawn (it is cheap, and it is the thing in use);
+     the block in the Chat tab only when somebody can see it.
+     --------------------------------------------------------- */
+  function renderMicButton(snap) {
+    var btn = el("pubs-ptt");
+    if (!btn) return;
+    var live = snap.on && RC.pubs.isOn();
+    btn.hidden = !live;
+    if (!live) return;
+    var state = micHold ? "talking" : snap.open ? "open" : snap.near.some(function (n) { return n.talking; }) ? "hearing" : "idle";
+    btn.setAttribute("data-state", state);
+    btn.setAttribute("aria-pressed", snap.talking ? "true" : "false");
+    var n = snap.audible;
+    var label = snap.open
+      ? "Open mic — riders near you hear you"
+      : "Hold to talk to riders near you";
+    btn.title = label + (n ? " (" + n + " in earshot)" : " (nobody in earshot)");
+    btn.setAttribute("aria-label", btn.title);
+    var badge = el("pubs-ptt-n");
+    if (badge) {
+      badge.hidden = !n;
+      badge.textContent = n ? String(n) : "";
+    }
+  }
+
+  function renderMic() {
+    var snap = RC.proxmic.snapshot();
+    renderMicButton(snap);
+    if (!panelShowsPubs()) return;
+
+    var can = RC.proxmic.supported();
+    var sw = el("pubs-mic-on");
+    if (sw) { sw.checked = snap.on; sw.disabled = !can && !snap.on; }
+    show("pubs-mic-live", snap.on);
+    var o = el("pubs-mic-open"); if (o) o.checked = snap.open;
+    var m = el("pubs-mic-mute"); if (m) m.checked = snap.muted;
+
+    var talking = snap.near.filter(function (x) { return x.talking; });
+    var state = !snap.on ? { key: "off", text: "Off" }
+      : snap.talking ? { key: "live", text: snap.open ? "Mic open" : "You are talking" }
+      : talking.length ? { key: "live", text: talking[0].name + " is talking" }
+      : snap.audible ? { key: "host", text: snap.audible + " in earshot" }
+      : { key: "waiting", text: "Listening" };
+    var pill = el("pubs-mic-state");
+    if (pill) pill.setAttribute("data-state", state.key);
+    text("pubs-mic-state-text", state.text);
+
+    // One line, and only when it says something the switch does not.
+    var note = !can ? "This browser cannot do live voice."
+      : snap.on && !snap.open ? "Hold the mic button by the map controls."
+      : "";
+    text("pubs-mic-note", note);
+    show("pubs-mic-note", !!note);
+
+    var box = el("pubs-mic-people");
+    if (!box || !snap.on) return;
+    if (!snap.near.length) {
+      box.innerHTML = '<p class="rc-chat-sys">Nobody near with it on.</p>';
+      return;
+    }
+    var html = "";
+    for (var i = 0; i < snap.near.length; i++) {
+      var n = snap.near[i];
+      var who = personById(n.id) || { id: n.id, name: n.name, color: "", av: null };
+      var sub = [];
+      if (n.dist != null) sub.push(RC.fmtDist(n.dist, units()) + " away");
+      sub.push(n.state !== "open" ? "connecting…" : n.level > 0 ? Math.round(n.level * 100) + "% volume" : "out of earshot");
+      html += '<div class="rc-mate-row is-tappable" data-pub-id="' + esc(n.id) + '" role="button" tabindex="0" ' +
+        'aria-label="' + esc(who.name) + ' — show on the map">' +
+        '<span class="rc-pub-chip' + (n.talking ? " is-talking" : "") + '" style="--pub:' + (who.color || "var(--rc-pubs)") + '">' +
+          faceHtml(who) + "</span>" +
+        '<span class="rc-mate-meta">' +
+          '<span class="rc-mate-rowname">' + esc(who.name) + "</span>" +
+          '<span class="rc-mate-sub">' + esc(sub.join(" · ")) + "</span>" +
+        "</span>" +
+        (n.talking
+          ? '<span class="rc-mate-tag is-talking">talking</span>'
+          : '<span class="rc-mic-level" style="--lvl:' + (n.state === "open" ? n.level.toFixed(2) : 0) + '" aria-hidden="true"><i></i></span>') +
+        "</div>";
+    }
+    box.innerHTML = html;
   }
 
   /* ---------------------------------------------------------
@@ -872,6 +969,7 @@ RC.pubsui = (function () {
   function renderAll() {
     renderBadge();
     renderSubBadges();
+    renderMic();
     drawWorld();
     checkAhead();
     refreshCard();
@@ -887,6 +985,7 @@ RC.pubsui = (function () {
   function renderPane() {
     renderBadge();
     renderSubBadges();
+    renderMic();
     renderArea();
     renderRoom();
     renderBlocked();
@@ -951,6 +1050,10 @@ RC.pubsui = (function () {
   }
 
   function stopPubs() {
+    // The mic first, while it can still say goodbye to the riders it is linked
+    // to, and so the area hears it switch off before it hears you go.
+    RC.proxmic.stop();
+    micHold = false;
     RC.pubs.stop();
     bubbles = {};
     beeping = {};
@@ -1036,6 +1139,71 @@ RC.pubsui = (function () {
     });
   }
 
+  /* Switching the mic on is a tap, which is the one moment a browser will
+     both show a permission prompt and let a page start making sound — so the
+     microphone is asked for here, not on the first press of the button. */
+  function setMicOn(want) {
+    primeAudio();
+    if (!want) {
+      RC.proxmic.stop();
+      micHold = false;
+      renderMic();
+      return;
+    }
+    RC.proxmic.start().then(function () {
+      bridge.toast("Proximity mic on — riders within " + RC.proxmic.RANGE_M + " m hear you when you talk.", "pubs");
+      renderMic();
+      drawPeople();
+    }, function (err) {
+      var sw = el("pubs-mic-on");
+      if (sw) sw.checked = false;
+      bridge.setStatus(err && err.message ? err.message : "Could not start the proximity mic.", "error");
+      bridge.flashStatus(4000);
+      renderMic();
+    });
+  }
+
+  /* Push to talk, the same shape as the ride's button: pointer events so a
+     thumb, a mouse and a stylus all behave, and every way a press can end —
+     lifted, cancelled, dragged off, the window losing focus — lets go of the
+     microphone. A stuck open mic to a stranger is the failure worth guarding
+     against twice. */
+  function bindMicPtt() {
+    var btn = el("pubs-ptt");
+    if (!btn) return;
+    function down(e) {
+      if (micHold || !RC.proxmic.isOn()) return;
+      micHold = true;
+      btn.setAttribute("data-state", "talking");
+      try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+      RC.proxmic.talk(true).then(function (ok) {
+        if (!ok) micHold = false;
+        renderMic();
+      });
+    }
+    function up() {
+      if (!micHold) return;
+      micHold = false;
+      RC.proxmic.talk(false);
+      renderMic();
+    }
+    btn.addEventListener("pointerdown", down);
+    btn.addEventListener("pointerup", up);
+    btn.addEventListener("pointercancel", up);
+    btn.addEventListener("pointerleave", up);
+    btn.addEventListener("keydown", function (e) {
+      if (e.key !== " " && e.key !== "Enter") return;
+      e.preventDefault();
+      if (!e.repeat) down({ pointerId: null });
+    });
+    btn.addEventListener("keyup", function (e) {
+      if (e.key === " " || e.key === "Enter") up();
+    });
+    btn.addEventListener("blur", up);
+    window.addEventListener("blur", up);
+    btn.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  }
+
   function onClickIn(selector, attr, fn) {
     document.addEventListener("click", function (e) {
       var b = e.target.closest ? e.target.closest(selector) : null;
@@ -1113,6 +1281,17 @@ RC.pubsui = (function () {
       if (e.key === "Escape" && sheet && !sheet.hidden) closeSheet();
     });
 
+    on("pubs-mic-on", "change", function () { setMicOn(this.checked); });
+    on("pubs-mic-open", "change", function () {
+      var box = this;
+      RC.proxmic.setOpenMic(box.checked).then(function (ok) {
+        if (!ok) box.checked = false;
+        renderMic();
+      });
+    });
+    on("pubs-mic-mute", "change", function () { RC.proxmic.setMuted(this.checked); });
+    bindMicPtt();
+
     on("pubs-bubbles", "change", function () { setView("bubbles", this.checked); });
     on("pubs-pins", "change", function () { setView("pins", this.checked); });
     on("pubs-alerts", "change", function () { setView("alerts", this.checked); });
@@ -1143,13 +1322,16 @@ RC.pubsui = (function () {
       openPerson(id);
     }
     onClickIn("#pubs-people [data-pub-id]", "data-pub-id", pickPerson);
-    var peopleBox = el("pubs-people");
-    if (peopleBox) peopleBox.addEventListener("keydown", function (e) {
-      if (e.key !== "Enter" && e.key !== " ") return;
-      var row = e.target.closest ? e.target.closest("[data-pub-id]") : null;
-      if (!row || e.target !== row) return;
-      e.preventDefault();
-      pickPerson(row.getAttribute("data-pub-id"));
+    onClickIn("#pubs-mic-people [data-pub-id]", "data-pub-id", pickPerson);
+    ["pubs-people", "pubs-mic-people"].forEach(function (id) {
+      var box = el(id);
+      if (box) box.addEventListener("keydown", function (e) {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        var row = e.target.closest ? e.target.closest("[data-pub-id]") : null;
+        if (!row || e.target !== row) return;
+        e.preventDefault();
+        pickPerson(row.getAttribute("data-pub-id"));
+      });
     });
     var roomsBox = el("pubs-rooms");
     if (roomsBox) roomsBox.addEventListener("click", function (e) {
@@ -1193,6 +1375,14 @@ RC.pubsui = (function () {
       // Standing still, the card is a chance to beep back. Riding, it would
       // be a card over the dashboard nobody asked for.
       if (!riding() && !RC.who.isOpen()) openPerson(bp.id, { ttl: 9000 });
+    };
+    RC.proxmic.onChange = function () {
+      renderMic();
+      drawPeople();
+      refreshCard();
+    };
+    RC.proxmic.onNotice = function (n) {
+      bridge.toast(n.text, n.kind === "warn" ? "alert" : "pubs");
     };
     RC.pubs.onReport = function () {
       renderSubBadges();

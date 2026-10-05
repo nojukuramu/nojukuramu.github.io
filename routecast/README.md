@@ -18,8 +18,10 @@ It runs phone to phone, with no server holding anybody's position.
 Or open the door entirely: **PUBs** is the public road. Turn it on and every rider nearby
 who has also turned it on is on your map, and you are on theirs. Say something and it
 floats over your marker on their map; beep somebody; pin a crash, a flood or a checkpoint
-where you are, and everyone riding towards it is told. Open a **PUB room** and anyone can
-walk in and talk. Same phone-to-phone transport, no accounts, nothing stored.
+where you are, and everyone riding towards it is told. Switch on the **proximity mic** and
+you can talk to every rider within fifty metres who has it on, each voice as loud as its
+rider is close. Open a **PUB room** and anyone can walk in and talk. Same phone-to-phone
+transport, no accounts, nothing stored.
 
 Live at <https://nojukuramu.github.io/routecast/>.
 
@@ -97,9 +99,12 @@ Live at <https://nojukuramu.github.io/routecast/>.
   report** (traffic, crash, hazard, flood, closed, checkpoint) is a pin where you are that
   fades on its own, is confirmed or voted away by whoever rides past, and is spoken to
   anyone riding towards it. One round button by the map controls does all three without
-  opening the planner. Anyone can also open a **PUB room**: a chat room
-  with the door wedged open, published to the area so it is walked into rather than
-  invited to. Off by default, one tap to go dark, and a local ignore list that drops
+  opening the planner. The **proximity mic** puts a voice to the riders right around you:
+  everyone within 50 m with it on is connected, phone to phone, and each one is as loud as
+  they are close — full at arm's length, half at twenty-five metres, gone at fifty. Hold the
+  mic button beside the round one to talk, or leave it open. Anyone can also open a **PUB
+  room**: a chat room with the door wedged open, published to the area so it is walked into
+  rather than invited to. Off by default, one tap to go dark, and a local ignore list that drops
   somebody where their messages *arrive* rather than filtering them out of a list. There
   is still no server: the area code is derived from where you are, and the first phone in
   an area holds it for everybody until it leaves (see below).
@@ -651,6 +656,56 @@ that get misread aloud. PUB codes start with one of those on purpose (`0` for an
 for a room), so a PUB can never land on somebody's private ride and a ride can never be
 mistaken for a PUB.
 
+### The proximity mic
+
+A fuel stop, a car park, a jam that has not moved for ten minutes: the conversation you would
+have through a visor if visors let you. Switch it on in the Pubs tab (Chat, at the top) and
+every rider within **fifty metres** who has also switched it on can hear you, and you them.
+Each voice is as loud as its rider is close — full within five metres, linear in amplitude
+from there to nothing at fifty, so somebody walking off fades out rather than being cut off.
+
+- **Talking** is the mic button beside the round PUBs button: hold it and they hear you,
+  let go and they do not. **Open mic** leaves it open, and Opus DTX makes a quiet open mic
+  cost a link almost nothing. **Mute nearby voices** is one-way, like the ride's.
+- **On the map**, a rider in earshot has a dotted ring round their badge, and the ring goes
+  solid and breathes while they talk. The button carries how many are in earshot.
+- **The microphone** is asked for when the switch goes on — a tap, which is the one moment a
+  browser will show the prompt without it landing in the middle of a sentence — and opened
+  only by the button or Open mic. It is let go a minute and a half after the last use.
+
+**The voice goes phone to phone, not through the hub.** The area already has a relay that
+hears everybody, and routing voice through it would have been the short path — the ride
+mixes at its host — and wrong three times over: the hub is a stranger who may be a hundred
+kilometres away and would be decoding everybody's voice; two riders three metres apart would
+be talking via wherever that phone is; and one phone would be mixing a whole region. So the
+hub does the one thing it is good at. It knows who is near whom, and it attributes every
+message by the link it arrived on, so it **introduces** the two phones — an offer, an answer
+and a handful of candidates, carried like a beep — and then has nothing more to do with it.
+The voice runs over a link of the pair's own, built by the same `peer.js` every other
+connection here uses, with the audio slot negotiated up front so pressing talk is a local
+`replaceTrack()`. The hub refuses an introduction between two riders who are not both on the
+mic and within 400 m of each other by their own last fixes, one the size of a payload, and
+more than sixty from one rider in ten seconds.
+
+**Who connects to whom is decided by both ends without asking each other.** Each phone reads
+the same area packet — the riders with the mic on, nearest first, up to ten — and of every
+pair, the one whose id sorts first dials and the other answers. That comes out the same on
+both phones, so a pair can never end up with two links.
+
+**Connecting is early; the volume is now.** The area packet is a few seconds old when it
+arrives, and at sixty kilometres an hour a few seconds is the whole range. So links open at
+a hundred metres, silent, and close at a hundred and fifty after eight seconds of being that
+far — and once a link is up the two phones send each other their position directly, once a
+second, and the volume is worked out from that. The connection answers "might we be talking
+soon"; the volume answers "how far apart are we right now".
+
+**What it shares.** The area is told one bit: that your mic is on. A rider you are linked to
+gets your position to about a metre instead of the area's eleven, because the level needs it
+and they are already within shouting distance. Nobody else gets anything. The engine is its
+own (`RC.voice.create()`), not the ride's: a ride host's mixer never sees any of this, and
+nothing said at a fuel stop reaches a ride. Ignore hangs up on a rider at once and they are
+never dialled again; going dark hangs up on everybody before the area hears you go.
+
 ### What it refuses
 
 Everything off the wire is a stranger's claim. Names and messages are stripped of control
@@ -843,6 +898,19 @@ publishes an update.
 - **A PUB is only as populated as your area.** There is no directory and no server: you
   see the riders who happen to be in your ~110 km cell with PUBs on at that moment. On a
   quiet road that is nobody, and the pane says so rather than pretending.
+- **Near is a claim.** The proximity mic connects riders whose positions say they are close,
+  and a position is whatever a phone reports — the same as a marker on the map is. Somebody
+  who fakes being next to you can talk to you and hear what you say into the button, exactly
+  as they could appear next to you on the map. Push-to-talk is the default for that reason,
+  and Ignore ends it.
+- **Two phones on speaker, next to each other, feed back.** Each phone's echo canceller knows
+  what its own speaker played, not what the phone beside it is playing. Headphones or a
+  helmet set fix it; so does the push-to-talk button. Under five metres you are at full
+  volume, which is also where you can mostly hear each other anyway.
+- **Ten voices at a time.** Each one is a peer connection and a decoder on a phone; past ten
+  within reach, the nearest ten are the ones you hear.
+- **The proximity mic needs a current hub to meet.** Links already up survive the hub
+  leaving or the area changing under you; a new one waits until the area has a hub again.
 - **A PUB area is held by a phone.** When the hub rides away, the area goes quiet for a
   few seconds until somebody else notices and picks it up. That is the honest cost of
   having no server, and it resolves itself.
@@ -984,8 +1052,10 @@ routecast/
     groupui.js              RC.groupui  — the room on screen: the Ride tab, the layers, the
                                           cards, and the rail of riders above the speedometer
     pubs.js                 RC.pubs     — the public road: area hubs, presence, PUB rooms
+    proxmic.js              RC.proxmic  — the proximity mic: who is near, links introduced by the
+                                          hub, voice phone to phone, volume by distance
     pubsui.js               RC.pubsui   — PUBs on screen: the Pubs tab, badges, bubbles, pins,
-                                          the road sheet and the alerts ahead
+                                          the road sheet, the alerts ahead and the mic
     who.js                  RC.who      — one card for anything tapped on the map
     nav.js                  RC.nav      — live navigation: route projection, live ETA, wake lock,
                                           reroute and forecast-refresh gating, ride recording
@@ -1011,6 +1081,8 @@ routecast/
   tools/map3d-e2e.js        the tilted map in a real browser: the camera, the gestures,
                             the mirror, and putting it all away again
   tools/voice-latency.js    three browsers, one room, a stopwatch on the voice path
+  tools/proxmic-e2e.js      four browsers on one road: who is connected, who is heard,
+                            and how loud
   tools/broker.js           a local stand-in for the public broker; not shipped
   tools/stun.js             a STUN server, ~150 lines, with a dead mode and a slow one
   tools/turn.js             a TURN server that actually relays, for the relay-only case
@@ -1165,6 +1237,29 @@ up to it asks whether it is still there — and answering counts for everyone; a
 by the rider it was for; and going dark takes the badges, the pins and the round button with
 it. It needs Playwright; everything else in `tools/` needs nothing at all.
 
+The proximity mic is checked twice. `validate.js` runs its arithmetic — full at five metres,
+silent at fifty, never louder further away, half as loud half way — and then the mesh itself
+on the in-process area, with the links faked at the one seam that matters: two nearby mics
+are introduced and the introduction carries the sender's own name, a rider with the mic off
+or two kilometres away cannot be introduced to, a kind the mic does not use is refused, a
+payload-sized one is not carried and one rider cannot flood the hub; then every rider within
+reach is linked both ways, one link per pair, the one sixty metres off is linked and silent,
+fifteen metres is most of the way up, a press lights a name only where it can be heard,
+Ignore hangs up and stays hung up, and switching off says goodbye and tells the area.
+
+```
+node tools/proxmic-e2e.js
+```
+
+This is the rest: four Chromium contexts on a scripted GPS, the hub's introductions over the
+local broker, real peer connections and real Opus, and a tone for every microphone with an
+analyser on every inbound track. Riders ten and forty metres away are connected and the one
+three hundred metres off is not; they are played at the levels their distances say, the same
+both ways; nothing arrives while nobody presses, the tone arrives while somebody does and the
+right badge breathes; open mic is heard without a press; muting turns everyone to nothing; a
+rider who rides off is let go and found again when they come back; going dark hangs up on
+everybody; and on a phone the block fits and the button is on the screen and uncovered.
+
 ```
 node tools/voice-latency.js
 ```
@@ -1196,4 +1291,6 @@ exactly what has been kept and throws all of it away in one tap.
 A group ride is the one thing here that shares anything, and it shares it with the people
 in the room and nobody else: positions, chat and voice go straight to the other phones
 over WebRTC. Nothing is stored anywhere central, nothing outlives the room, and the only
-thing kept on your own device is the name you last used.
+thing kept on your own device is the name you last used. PUBs and its proximity mic are the
+opt-in exceptions described above: the area gets a blunted position, and a voice only ever
+goes to the phones within earshot of it.
