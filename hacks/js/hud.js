@@ -230,5 +230,12 @@ export function init() {
   on("spawn", (a) => { if (a === S.me) { S.spectate = null; for (const d of dmgArcs) d.el.remove(); dmgArcs.length = 0; } });
   on("toast", (t) => toast(t));
   on("quit", () => { lastHud = {}; });
+  // the touch layout editor shows the readouts as they will be; outside a match, with stand-in values
+  on("touchEditing", () => {
+    if (S.match && S.me) return;
+    const fill = { modeName: "FFA", scoreLine: "You 0 · best 0 · to 25", clock: "10:00", hpN: "100", speedN: "0.0", ammoN: "28", ammoMag: "/ 28", gunName: "Kestrel AR" };
+    for (const id in fill) if (!$(id).textContent) $(id).textContent = fill[id];
+    lastHud = {};
+  });
   on("matchStart", () => { lastHud = {}; $("killfeed").innerHTML = ""; run = 0; quick = 0; lastKillAt = -99; noteT = 0; $("killNote").hidden = true; });
 }

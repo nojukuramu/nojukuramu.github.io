@@ -135,7 +135,7 @@ function renderSettings() {
   const num = (id, v, d) => { $(id).value = v; $(id + "N").textContent = (+v).toFixed(d); };
   num("stSens", s.sens, 1); num("stAds", s.adsSens, 2); num("stFov", s.fov, 0);
   num("stMaster", s.master, 2); num("stSfx", s.sfx, 2); num("stTouchLook", s.touchLook, 2);
-  $("stInvert").checked = s.invertY; $("stPauseEdit").checked = s.pauseEditing;
+  $("stInvert").checked = s.invertY; $("stPauseEdit").checked = s.pauseEditing; $("stFovFx").checked = s.fovFx;
   $("stSpeed").checked = s.showSpeed; $("stFps").checked = s.showFps; $("stTouchSprint").checked = s.touchAutoSprint;
   $("stCross").value = s.crosshair;
   seg($("stQuality"), s.quality);
@@ -250,7 +250,7 @@ export function init() {
   range("stSens", "sens", 1); range("stAds", "adsSens", 2); range("stFov", "fov", 0); range("stTouchLook", "touchLook", 2);
   range("stMaster", "master", 2, audio.applyVolumes); range("stSfx", "sfx", 2, audio.applyVolumes);
   const tog = (id, key) => $(id).addEventListener("change", (e) => { save.settings[key] = e.target.checked; save.commit(); });
-  tog("stInvert", "invertY"); tog("stPauseEdit", "pauseEditing"); tog("stSpeed", "showSpeed"); tog("stFps", "showFps"); tog("stTouchSprint", "touchAutoSprint");
+  tog("stInvert", "invertY"); tog("stFovFx", "fovFx"); tog("stPauseEdit", "pauseEditing"); tog("stSpeed", "showSpeed"); tog("stFps", "showFps"); tog("stTouchSprint", "touchAutoSprint");
   $("stCross").addEventListener("input", (e) => { save.settings.crosshair = e.target.value; save.commit(); });
   const segSet = (id, key, after) => $(id).addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; save.settings[key] = b.dataset.v; save.commit(); seg($(id), b.dataset.v); if (after) after(b.dataset.v); });
   segSet("stQuality", "quality", (q) => render.setQuality(q));

@@ -149,7 +149,7 @@ const LEFT_DOWN = new THREE.Vector3(-0.32, -0.6, 0.0);
 /* ---------------------------------------------------------------
    Every frame
    --------------------------------------------------------------- */
-const V = { bob: 0, kick: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, flashT: 0, swing: 0, swapT: 0, key: "", sprint: 0, air: 0 };
+const V = { bob: 0, kick: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, flashT: 0, swing: 0, swapT: 0, key: "", sprint: 0, air: 0, slide: 0 };
 export function vmFire(e) {
   const id = GUNS[e.gun] && GUNS[e.gun].id;
   V.kick = Math.min(1, V.kick + (id === "talon" || id === "brick" || id === "mauler" ? 1 : 0.45));
@@ -233,6 +233,9 @@ export function updateViewmodel(dt, aspect, zoom) {
     const k = Math.sin(Math.min(1, 1 - A.reloadT / g.reload) * Math.PI);
     y -= 0.08 * k; rz += 0.55 * k; rx += 0.25 * k;
   }
+  // sliding, the gun drops and leans in
+  V.slide = damp(V.slide, body.sliding ? 1 : 0, 10, dt);
+  if (V.slide > 0.001) { x -= 0.025 * V.slide * hip; y -= 0.04 * V.slide * hip; rz += 0.32 * V.slide * hip; }
   if (V.sprint > 0) { x += 0.03 * V.sprint; y -= 0.05 * V.sprint; rz += 0.45 * V.sprint; rx -= 0.15 * V.sprint; ry += 0.35 * V.sprint; }
   if (!g) {
     // blades: held up; a swing sweeps across; a charge draws back; a lunge thrusts

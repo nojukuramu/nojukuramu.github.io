@@ -241,7 +241,9 @@ body.touchOn #hudTop .pill { font-size: 12px; padding: 4px 10px; }
 .tbtn.stick .knob { width: 42%; height: 42%; border-radius: 50%; background: rgba(255,255,255,0.35); border: 1.5px solid rgba(255,255,255,0.5); }
 body.touchEditing .tbtn { border-style: dashed; }
 body.touchEditing .tbtn.sel { border-color: var(--warn); border-style: solid; box-shadow: 0 0 0 3px rgba(255,210,74,0.3); }
-body.touchEditing #hud { display: none; }
+/* editing, the readouts that cannot move show faintly, so buttons are placed around them (touch.js keeps them clear) */
+body.touchEditing #hud, body.touchEditing #hud[hidden] { display: block !important; opacity: 0.45; }
+body.touchEditing #hud > :not(#hudTop):not(#hudBL):not(#hudBR), body.touchEditing #netLine { display: none !important; }
 /* the editor's bar is only as big as itself (it once spanned the whole top of the screen and swallowed
    the touches meant for the buttons under it); touch.js puts it wherever it covers no button */
 #touchEdit { position: fixed; left: 0; top: 0; z-index: 30; width: min(330px, calc(100vw - 16px)); }

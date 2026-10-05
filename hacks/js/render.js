@@ -30,7 +30,7 @@ import { KINDS } from "./map.js";
 import { world, renderPos } from "./game.js";
 import { gunOf } from "./weapons.js";
 import { ray, newTrace } from "./brush.js";
-import { LUNGE } from "./movement.js";
+import { LUNGE, PM } from "./movement.js";
 import { save } from "./save.js";
 import { clamp, damp } from "./util.js";
 import { loadModels } from "./models.js";
@@ -436,7 +436,7 @@ function updateRounds() {
 /* ---------------------------------------------------------------
    The camera
    --------------------------------------------------------------- */
-const cam = { punch: 0, dip: 0, fovAdd: 0 };
+const cam = { punch: 0, dip: 0, fovAdd: 0, slide: 0, slideKick: 0 };
 export function landDip(v) { cam.dip = Math.min(0.25, cam.dip + v * 0.02); }
 export function punch(p) { cam.punch += p; }
 /** A horizontal field of view, as Source measures it, for this screen's shape. */
@@ -469,7 +469,12 @@ function placeCamera(alpha, dt) {
   const A = a.arms, g = gunOf(A);
   const zoom = g ? 1 + (g.adsZoom - 1) * A.ads : 1;
   cam.fovAdd = damp(cam.fovAdd, (a.body.sprinting ? 4 : 0) + clamp((hs - 8) * 0.7, 0, 12) + (a.body.lunge === LUNGE.DASH ? 6 : 0), 5, dt);
-  camera.fov = vfov((base + cam.fovAdd * (1 - A.ads)) / zoom);
+  // a slide widens the view by how fast it is going: quickly in, slowly back out, with a kick as it starts
+  const slideWant = b.sliding ? clamp(3 + (hs - PM.slideStart) * 1.2, 3, 16) : 0;
+  cam.slide = damp(cam.slide, slideWant, slideWant > cam.slide ? 10 : 3, dt);
+  cam.slideKick = Math.max(0, cam.slideKick - dt * 3);
+  const widen = save.settings.fovFx ? Math.min(24, cam.fovAdd + cam.slide + cam.slideKick * 5) : 0;
+  camera.fov = vfov((base + widen * (1 - A.ads)) / zoom);
   camera.updateProjectionMatrix();
   S.cam.x = camera.position.x; S.cam.y = camera.position.y; S.cam.z = camera.position.z;
   S.cam.yaw = yaw; S.cam.pitch = pitch; S.cam.fov = camera.fov;
@@ -509,6 +514,7 @@ function boot() {
   environments();
   loadModels();
   on("tracer", (a, o, h) => { if (h.world && h.nx !== undefined) { hole(h.x, h.y, h.z, h.nx, h.ny, h.nz); puff(h.x + h.nx * 0.05, h.y + h.ny * 0.05, h.z + h.nz * 0.05, 0xb9b2a6, 0.35, 0.45); } else if (h.actor) puff(h.x, h.y, h.z, 0xb3202a, 0.3, 0.35); });
+  on("move", (a, ev) => { if (a === S.me && ev === "slide") cam.slideKick = 1; });
   on("impact", (p, h) => { if (h.world && h.nx !== undefined) hole(h.x, h.y, h.z, h.nx, h.ny, h.nz); puff(h.x, h.y, h.z, h.actor ? 0xb3202a : 0xb9b2a6, 0.6, 0.6); });
 }
 export function frame(alpha, dt) {

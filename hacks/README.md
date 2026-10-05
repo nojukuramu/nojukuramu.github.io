@@ -23,7 +23,7 @@ ground. None of the techniques are coded; they are what that code does when play
 | Bunny hop | Friction only runs on a tick that starts on the ground. Jump the tick you land (a fresh press — holding jump never hops) and you keep all your speed. One tick of grace either side. |
 | Air strafe | In the air, hold A or D (not W) and turn the same way. Acceleration is capped along the direction you ask for, so asking almost at right angles to your velocity gains speed every tick. |
 | Surf | The purple ridges are steeper than 45°, so they are not ground: you slide along them with no friction. |
-| Sprint, slide | Crouch at a sprint to slide, with a boost on a cooldown. Downhill, gravity along the slope speeds a slide up. Jump out of it to keep the speed. |
+| Sprint, slide | Crouch at a sprint to slide, with a boost on a cooldown; a slide while it recharges, or out of a landing, still gets a smaller push (never past 12 m/s, and tapping crouch builds nothing). The view widens with the slide's speed. Downhill, gravity along the slope speeds a slide up. Jump out of it to keep the speed. |
 | Wall climb | Jump into a wall and hold jump and forward. Over the top, you mantle. |
 | Wall jump | Tap jump beside a wall. Your speed along the wall is kept; the same wall twice in a row does not count. The red shafts are made for it. |
 | Lunge | Hold the lunge key on any surface — floor, wall, ceiling — and you stick to it and charge. Release to launch where you look; the more squarely you face away from the surface, the harder. A tap is a quick swing. |
@@ -105,8 +105,9 @@ separately (Settings, Controls and Touch), so a phone can toggle what a keyboard
 
 On a phone every button is always on screen. **Move buttons** (Settings, Touch) lets you drag
 each one anywhere, size it and fade it, with a separate layout for sideways and upright. No
-button can be dropped on another or under the editor's bar — it slides to the nearest free place
-— so none is ever lost where it cannot be picked up again. Fire and Lunge can be dragged while
+button can be dropped on another, under the editor's bar or on the readouts that cannot move
+(score, health, ammo — shown faintly while you edit): it slides to the nearest free place, so
+none is ever lost where it cannot be picked up again. Fire and Lunge can be dragged while
 held to aim as you shoot; a touch anywhere else looks around.
 
 ## Files

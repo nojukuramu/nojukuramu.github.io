@@ -205,6 +205,18 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     await key("keydown"); await p.waitForTimeout(450); const m3 = await crouchOn(); await key("keyup"); const m4 = await crouchOn();
     check("a mixed key: a tap toggles, a long press holds", m1 && !m2 && m3 && !m4, JSON.stringify([m1, m2, m3, m4]));
     await p.evaluate(() => { window.HK_DEBUG.save.settings.keyModes.crouch = "hold"; });
+    // a slide widens the view by its speed; the setting turns it off
+    const fovAt = (sliding, speed, fx) => p.evaluate(async ([sliding, speed, fx]) => {
+      const { S, save } = window.HK_DEBUG;
+      S.paused = true; save.settings.fovFx = fx;
+      const b = S.me.body; b.sliding = sliding; b.sprinting = false; b.vx = 0; b.vz = -speed; b.onGround = true;
+      for (let i = 0; i < 40; i++) await new Promise((r) => requestAnimationFrame(r));
+      const f = S.cam.fov;
+      b.sliding = false; b.vz = 0; save.settings.fovFx = true; S.paused = false;
+      return f;
+    }, [sliding, speed, fx]);
+    const fovs = [await fovAt(false, 0, true), await fovAt(true, 7, true), await fovAt(true, 13, true), await fovAt(true, 13, false)];
+    check("a slide widens the view, more the faster it goes, unless that is switched off", fovs[1] > fovs[0] + 1 && fovs[2] > fovs[1] + 1 && Math.abs(fovs[3] - fovs[0]) < 0.5, fovs.map((f) => f.toFixed(1)).join(", "));
     await shot(p, "02-match");
     const bots0 = await p.evaluate(() => window.HK_DEBUG.S.actors.filter((a) => a.kind === "bot").map((a) => [a.body.x, a.body.z]));
     await fastForward(p, 3);
@@ -344,16 +356,19 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
       // every button, as circles, and the editor's bar: nothing may cover anything, or it cannot be picked up again
       const overlaps = () => q.evaluate(() => {
         const c = [...document.querySelectorAll(".tbtn")].map((e) => { const r = e.getBoundingClientRect(); return { id: e.dataset.id, x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.width / 2 }; });
-        const b = document.querySelector("#touchEdit .bar").getBoundingClientRect();
+        // the editor's bar, and the readouts that cannot move (shown faintly while editing)
+        const fixed = ["#touchEdit .bar", "#hudTop .pill", "#hudBL", "#hudBR"].map((q) => [q, document.querySelector(q).getBoundingClientRect()]).filter(([, r]) => r.width && r.height);
         const bad = [];
         for (let i = 0; i < c.length; i++) {
           for (let j = i + 1; j < c.length; j++) if (Math.hypot(c[i].x - c[j].x, c[i].y - c[j].y) < c[i].r + c[j].r - 0.5) bad.push(c[i].id + "/" + c[j].id);
-          const nx = Math.max(b.left, Math.min(c[i].x, b.right)), ny = Math.max(b.top, Math.min(c[i].y, b.bottom));
-          if (Math.hypot(c[i].x - nx, c[i].y - ny) < c[i].r - 0.5) bad.push(c[i].id + "/bar");
+          for (const [q, b] of fixed) {
+            const nx = Math.max(b.left, Math.min(c[i].x, b.right)), ny = Math.max(b.top, Math.min(c[i].y, b.bottom));
+            if (Math.hypot(c[i].x - nx, c[i].y - ny) < c[i].r - 0.5) bad.push(c[i].id + "/" + q);
+          }
         }
-        return bad;
+        return fixed.length < 4 ? ["the readouts are not shown while editing"] : bad;
       });
-      check("the editor's bar covers no button, and no button covers another", (await overlaps()).length === 0, JSON.stringify(await overlaps()));
+      check("in the editor, no button covers another, the editor's bar or a readout", (await overlaps()).length === 0, JSON.stringify(await overlaps()));
       const drag = (id, dx, dy, to) => q.evaluate(([id, dx, dy, to]) => {
         const t = document.querySelector('.tbtn[data-id="' + id + '"]'), r = t.getBoundingClientRect();
         const x = r.left + r.width / 2, y = r.top + r.height / 2;

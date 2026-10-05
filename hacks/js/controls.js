@@ -140,8 +140,8 @@ export const TOUCH_LAYOUTS = {
     swap:   { x: 0.53, y: 0.9, s: 48 },
     melee:  { x: 0.75, y: 0.56, s: 44 },
     sprint: { x: 0.405, y: 0.93, s: 46 },
-    hacks:  { x: 0.8, y: 0.06, s: 42 },
-    score:  { x: 0.67, y: 0.06, s: 38 },
-    menu:   { x: 0.93, y: 0.06, s: 38 }
+    hacks:  { x: 0.8, y: 0.075, s: 42 },
+    score:  { x: 0.67, y: 0.075, s: 38 },
+    menu:   { x: 0.93, y: 0.075, s: 38 }
   }
 };

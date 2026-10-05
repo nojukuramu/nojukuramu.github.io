@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS = {
   quality: "auto",           // auto | low | medium | high
   master: 0.8, sfx: 0.9,
   showSpeed: true, showFps: false,
+  fovFx: true,               // the view widens at speed and in a slide
   crosshair: "#ffffff",
   pauseEditing: true,        // solo play pauses while the hacks panel is open
   touchLook: 1.0,
@@ -71,7 +72,7 @@ function clean(raw) {
   S.master = clampN(s.master, 0, 1, S.master);
   S.sfx = clampN(s.sfx, 0, 1, S.sfx);
   S.touchLook = clampN(s.touchLook, 0.2, 3, S.touchLook);
-  for (const k of ["invertY", "showSpeed", "showFps", "pauseEditing", "touchAutoSprint"]) if (typeof s[k] === "boolean") S[k] = s[k];
+  for (const k of ["invertY", "showSpeed", "showFps", "pauseEditing", "touchAutoSprint", "fovFx"]) if (typeof s[k] === "boolean") S[k] = s[k];
   const km = Object.assign({}, s.keyModes && typeof s.keyModes === "object" ? s.keyModes : null);
   const tm = Object.assign({}, s.touchModes && typeof s.touchModes === "object" ? s.touchModes : null);
   // before every button had its own mode there were two settings, sprint and crouch, shared by keys and touch

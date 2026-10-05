@@ -68,6 +68,9 @@ export const PM = {
   slideBoost: 2.0,
   slideBoostCap: 10,
   slideCooldown: 1.8,
+  slideNudge: 1.0,        // every other slide still gets a push, so a slide always feels like one
+  slideNudgeCap: 12,      // but never past this, and not more often than slideNudgeCooldown: tapping crouch builds nothing
+  slideNudgeCooldown: 0.6,
   slideFriction: 0.35,    // proportional, per second: on the flat a boosted slide lasts about two seconds
   slideDrag: 1.0,         // m/s² on top, so a slide on the flat ends; on a slope of ~13° it holds ~9 m/s
   slideEnd: 3.2,
@@ -93,7 +96,7 @@ export function newBody(x, y, z, yaw) {
     yaw: yaw || 0, pitch: 0,
     onGround: false, gnx: 0, gny: 1, gnz: 0, groundKind: "", groundTicks: -1,
     crouched: false, eye: PM.eyeStand, sprinting: false,
-    sliding: false, slideCd: 0,
+    sliding: false, slideCd: 0, slideNudgeCd: 0,
     climbing: false, climbBudget: PM.climbTime,
     wallCd: 0, lastWall: null,
     jumpHeld: false, jumpBuf: 0, crouchHeld: false,
@@ -294,10 +297,15 @@ function startSlide(p, boost) {
   const s = hspeed(p);
   if (s < PM.slideStart) return false;
   p.sliding = true;
-  if (boost && p.slideCd <= 0 && s < PM.slideBoostCap) {
-    const k = (s + PM.slideBoost) / s;
+  // the full boost on a fresh crouch, once per cooldown; otherwise — on its cooldown, or a slide out of a
+  // landing — a smaller push, so no slide starts dead
+  let add = 0;
+  if (boost && p.slideCd <= 0 && s < PM.slideBoostCap) { add = PM.slideBoost; p.slideCd = PM.slideCooldown; }
+  else if (p.slideNudgeCd <= 0 && s < PM.slideNudgeCap) add = Math.min(PM.slideNudge, PM.slideNudgeCap - s);
+  if (add > 0) {
+    const k = (s + add) / s;
     p.vx *= k; p.vz *= k;
-    p.slideCd = PM.slideCooldown;
+    p.slideNudgeCd = PM.slideNudgeCooldown;
   }
   p.ev.push("slide");
   return true;
@@ -490,6 +498,7 @@ export function pmove(W, p, cmd, dt, o) {
   const crouchEdge = crouch && !p.crouchHeld;
   p.crouchHeld = crouch;
   p.slideCd = Math.max(0, p.slideCd - dt);
+  p.slideNudgeCd = Math.max(0, (p.slideNudgeCd || 0) - dt);
   p.wallCd = Math.max(0, p.wallCd - dt);
   p.lungeCd = Math.max(0, p.lungeCd - dt);
   const g = PM.gravity * p.gravityScale;

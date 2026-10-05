@@ -133,8 +133,11 @@ function moveStick(e, el) {
  * cannot see the edge of is one you can no longer pick up and move. A drop on
  * top of something slides to the nearest free place (and a drag that cannot
  * find one stays where it last fitted); a size that would not fit is refused.
- * The bar puts itself wherever it covers nothing, top first. Overlaps a
- * layout already had are pulled apart when the editor opens.
+ * The readouts that cannot be moved — the score line, health and speed, ammo —
+ * are shown faintly while you edit and are kept clear the same way, so no
+ * button ever sits on your health. The bar puts itself wherever it covers
+ * nothing, top first. Overlaps a layout already had are pulled apart when the
+ * editor opens.
  */
 const GAP = 4;
 let drag = null;
@@ -144,8 +147,13 @@ function circleOf(id) {
   return { x: clamp(q.x * w, q.s / 2, w - q.s / 2), y: clamp(q.y * h, q.s / 2, h - q.s / 2), r: q.s / 2 };
 }
 const barEl = () => document.querySelector("#touchEdit .bar");
-function barRect() { const el = barEl(); if (!editing || !el) return null; const r = el.getBoundingClientRect(); return r.width ? r : null; }
-/** How far a circle at (x, y) of radius r pushes into the bar's rectangle (0: clear of it). */
+const FIXED = ["#hudTop .pill", "#hudBL", "#hudBR"];
+const rectOf = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return r.width && r.height ? r : null; };
+/** The HUD readouts no button may cover. */
+const hudRects = () => FIXED.map((q) => rectOf(document.querySelector(q))).filter(Boolean);
+/** Everything a button must keep clear of while editing: the bar, and the readouts. */
+const fixedRects = () => (editing ? [rectOf(barEl())].concat(hudRects()).filter(Boolean) : []);
+/** How far a circle at (x, y) of radius r pushes into a rectangle (0: clear of it). */
 function intoRect(x, y, r, b) {
   const cx = clamp(x, b.left, b.right), cy = clamp(y, b.top, b.bottom);
   const d = Math.hypot(x - cx, y - cy);
@@ -153,7 +161,7 @@ function intoRect(x, y, r, b) {
   return Math.max(0, r + GAP - d);
 }
 /** The nearest place to (x, y) where button `id`, radius r, touches nothing; null if pushing could not find one. */
-function freeSpot(id, x, y, r, bar) {
+function freeSpot(id, x, y, r, rects) {
   const w = W(), h = H();
   const x0 = Math.max(r, w * 0.03), x1 = Math.min(w - r, w * 0.97), y0 = Math.max(r, h * 0.03), y1 = Math.min(h - r, h * 0.97);
   x = clamp(x, x0, x1); y = clamp(y, y0, y1);
@@ -169,9 +177,10 @@ function freeSpot(id, x, y, r, bar) {
       if (d < 0.01) { dx = w / 2 - o.x || 1; dy = h / 2 - o.y; d = Math.hypot(dx, dy); }
       x += dx / d * (need - d + 0.5); y += dy / d * (need - d + 0.5);
     }
-    if (bar && intoRect(x, y, r, bar) > 0) {
+    for (const bar of rects || []) {
+      if (intoRect(x, y, r, bar) === 0) continue;
       hit = true;
-      // out through whichever side of the bar is nearest
+      // out through whichever side of the rectangle is nearest
       const outs = [[bar.left - r - GAP - 0.5, y], [bar.right + r + GAP + 0.5, y], [x, bar.top - r - GAP - 0.5], [x, bar.bottom + r + GAP + 0.5]]
         .map(([px, py]) => [clamp(px, x0, x1), clamp(py, y0, y1)])
         .filter(([px, py]) => intoRect(px, py, r, bar) === 0);
@@ -189,6 +198,7 @@ function placeBar() {
   if (!editing || !el) return;
   const w = W(), h = H(), bw = el.offsetWidth, bh = el.offsetHeight;
   const xs = [(w - bw) / 2, 8, w - bw - 8];
+  const hud = hudRects();
   let best = null;
   for (let k = 0; k <= 12 && !(best && best.cost === 0); k++) {
     const y = 8 + k * Math.max(0, h - bh - 16) / 12;
@@ -196,6 +206,8 @@ function placeBar() {
       const b = { left: x, right: x + bw, top: y, bottom: y + bh };
       let cost = 0;
       for (const t of TOUCH) { const c = circleOf(t.id); cost += intoRect(c.x, c.y, c.r, b); }
+      // covering a readout is not as bad as covering a button, but still worse than covering nothing
+      for (const q of hud) cost += Math.max(0, Math.min(b.right, q.right) - Math.max(b.left, q.left)) * Math.max(0, Math.min(b.bottom, q.bottom) - Math.max(b.top, q.top)) / 400;
       if (!best || cost < best.cost) best = { x, y, cost };
       if (cost === 0) break;
     }
@@ -205,7 +217,7 @@ function placeBar() {
 }
 /** Pull apart whatever a layout already had overlapping. */
 function separate() {
-  const bar = barRect();
+  const bar = fixedRects();
   for (let pass = 0; pass < 3; pass++) for (const t of TOUCH) {
     const c = circleOf(t.id);
     const p = freeSpot(t.id, c.x, c.y, c.r, bar);
@@ -221,7 +233,7 @@ function startDrag(e, id) {
 function dragMove(e) {
   if (!drag || e.pointerId !== drag.pid) return;
   const r = layout()[drag.id].s / 2;
-  const p = freeSpot(drag.id, e.clientX - drag.ox, e.clientY - drag.oy, r, barRect());
+  const p = freeSpot(drag.id, e.clientX - drag.ox, e.clientY - drag.oy, r, fixedRects());
   if (p) { setCentre(drag.id, p); place(); }
 }
 function endDrag() { if (drag) { drag = null; save.commit(); } }
@@ -230,7 +242,7 @@ function resize(v) {
   const q = layout()[selected], was = q.s;
   q.s = v;
   const c = circleOf(selected);
-  const p = freeSpot(selected, c.x, c.y, v / 2, barRect());
+  const p = freeSpot(selected, c.x, c.y, v / 2, fixedRects());
   if (p) setCentre(selected, p); else q.s = was;
   document.getElementById("teSize").value = q.s;
   place();
@@ -247,7 +259,7 @@ export function edit(on) {
   editing = !!on;
   document.body.classList.toggle("touchEditing", editing);
   document.getElementById("touchEdit").hidden = !editing;
-  if (editing) { build(); show(true); select(selected || "fire"); placeBar(); separate(); }
+  if (editing) { emit("touchEditing"); build(); show(true); select(selected || "fire"); placeBar(); separate(); }
   else { show(S.mode === "play"); save.commit(); emit("touchEditDone"); }
 }
 export const isEditing = () => editing;
