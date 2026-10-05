@@ -3407,6 +3407,8 @@ code { font-family: var(--mono); font-size: .92em; }
 :root[data-power="save"] .rc-who,
 :root[data-power="save"] .rc-pubsheet,
 :root[data-power="save"] .rc-pubsfab,
+:root[data-power="save"] .rc-pubptt,
+:root[data-power="save"] .rc-pub.is-talking .rc-pub-face::before,
 :root[data-power="save"] .rc-rep,
 :root[data-power="save"] .rc-bubble > span { animation: none !important; }
 :root[data-power="save"] .rc-rider-marker,
@@ -3798,6 +3800,77 @@ code { font-family: var(--mono); font-size: .92em; }
 .rc-pubsfab:hover { background: var(--rc-pubs); filter: brightness(1.08); }
 .rc-pubsfab[aria-expanded="true"] { box-shadow: 0 0 0 3px var(--glass-strong), 0 0 0 5px var(--rc-pubs); }
 .rc-pubsfab:not([hidden]) { animation: rc-pop .4s var(--ease) backwards; }
+
+/* ---------- the proximity mic ----------
+   The ride's talk button is indigo, the planned line's colour; this one is
+   the public road's. Two mic buttons can be on the screen at once, and which
+   one reaches the ride and which one reaches the stranger at the next pump
+   has to be told apart without reading a tooltip. Open mic fills it, the
+   way an open channel should look different from a closed one at a glance. */
+.rc-pubptt { position: relative; color: var(--rc-pubs); border-color: var(--rc-pubs); }
+.rc-pubptt[data-state="open"] { color: #FFFFFF; background: var(--rc-pubs); }
+.rc-pubptt[data-state="open"]:hover { background: var(--rc-pubs); filter: brightness(1.08); }
+.rc-pubptt:not([hidden]) { animation: rc-pop .4s var(--ease) backwards; }
+.rc-pubptt-n {
+  position: absolute;
+  right: -5px; top: -5px;
+  min-width: 16px; height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--rc-pubs);
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+}
+.rc-pubptt[data-state="open"] .rc-pubptt-n { background: var(--glass-strong); color: var(--rc-pubs); }
+.rc-pubptt-n[hidden] { display: none; }
+
+/* In earshot: a dotted ring around the badge, at the distance a voice would
+   carry. Talking: the ring goes solid and breathes, so the answer to "who
+   said that" is on the map where the rider already is. */
+.rc-pub.is-near .rc-pub-face::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px dotted var(--pub, var(--rc-pubs));
+  opacity: .75;
+  pointer-events: none;
+}
+.rc-pub.is-talking .rc-pub-face::before {
+  border-style: solid;
+  opacity: 1;
+  animation: rc-talk .9s ease-in-out infinite alternate;
+}
+@keyframes rc-talk { from { transform: scale(1); opacity: .95; } to { transform: scale(1.2); opacity: .35; } }
+.rc-pub-chip.is-talking { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--pub, var(--rc-pubs)); }
+.rc-mate-tag.is-talking { color: var(--rc-clear); background: var(--rc-clear-soft); }
+
+/* How loud a nearby rider is, as a bar rather than a number: it moves every
+   second and a moving number is a thing to read. */
+.rc-mic-level {
+  flex: none;
+  width: 34px; height: 6px;
+  border-radius: 999px;
+  background: var(--rc-pubs-soft);
+  overflow: hidden;
+}
+.rc-mic-level > i {
+  display: block;
+  height: 100%;
+  width: calc(var(--lvl, 0) * 100%);
+  background: var(--rc-pubs);
+  border-radius: inherit;
+  transition: width .3s var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-pub.is-talking .rc-pub-face::before { animation: none; }
+  .rc-mic-level > i { transition: none; }
+}
 
 .rc-group-toast[data-kind="pubs"] { border-color: var(--rc-pubs); }
 .rc-group-toast[data-kind="alert"] { border-color: var(--rc-caution); color: var(--rc-caution); }

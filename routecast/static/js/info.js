@@ -181,6 +181,24 @@ RC.info = (function () {
         "to do something about it. Nothing is kept once the area is empty.</p>"
     },
 
+    "pubs-mic": {
+      title: "The proximity mic",
+      body:
+        "<p>Switch it on and you can talk to every rider within <b>50 metres</b> who has it on " +
+        "too — a fuel stop, a car park, a jam that has stopped moving. Each voice is as loud as " +
+        "its rider is close: full at arm's length, half at about twenty-five metres, gone at " +
+        "fifty.</p>" +
+        "<p>They hear you while you <b>hold the mic button</b> by the map controls, or all the " +
+        "time with <b>Open mic</b>. A ring on a rider's badge means they are in earshot; a pulse " +
+        "means they are talking.</p>" +
+        "<p>The voice goes <b>straight between the two phones</b>. The area's hub only introduces " +
+        "them, and never carries a word. The area is told your mic is on, nothing else; a rider " +
+        "you are connected to gets your position to about a metre, so the volume is right.</p>" +
+        "<p>Near is a claim, like every position on the public road — the same as a marker is. " +
+        "Ignore somebody and they are hung up on and never connected again. Headphones stop two " +
+        "phones next to each other feeding back.</p>"
+    },
+
     "pubs-ignore": {
       title: "Ignoring somebody",
       body:

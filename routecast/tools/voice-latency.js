@@ -342,15 +342,19 @@ async function runCase(name, browser, base, brokerPort, ice, opts) {
   const code = "LAT" + String(Math.floor(Math.random() * 900) + 100);
 
   try {
+    // The Ride tab asks start-or-join first: a host's own code is folded away
+    // under the start form, and a joiner's code field is behind "Join".
     await host.click("#group-btn");
     await host.fill("#group-name", "Lead");
-    await host.fill("#group-code", code);
+    await host.click("#group-own-code-fold summary");
+    await host.fill("#group-own-code", code);
     await host.click("#group-host-btn");
     await host.waitForFunction(() => window.RC.group.isActive(), null, { timeout: 20000 });
 
     const joinAt = Date.now();
     for (const [p, who] of [[g1, "One"], [g2, "Two"]]) {
       await p.click("#group-btn");
+      await p.click("#group-mode-join");
       await p.fill("#group-name", who);
       await p.fill("#group-code", code);
       await p.click("#group-join-btn");
