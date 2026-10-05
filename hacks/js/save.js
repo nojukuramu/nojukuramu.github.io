@@ -28,7 +28,8 @@ export const DEFAULT_SETTINGS = {
   crosshair: "#ffffff",
   pauseEditing: true,        // solo play pauses while the hacks panel is open
   touchLook: 1.0,
-  touchAutoSprint: true
+  touchAutoSprint: true,
+  forceLandscape: false      // phones: lock or turn the game sideways (orient.js)
 };
 
 const isNum = (v) => typeof v === "number" && isFinite(v);
@@ -72,7 +73,7 @@ function clean(raw) {
   S.master = clampN(s.master, 0, 1, S.master);
   S.sfx = clampN(s.sfx, 0, 1, S.sfx);
   S.touchLook = clampN(s.touchLook, 0.2, 3, S.touchLook);
-  for (const k of ["invertY", "showSpeed", "showFps", "pauseEditing", "touchAutoSprint", "fovFx"]) if (typeof s[k] === "boolean") S[k] = s[k];
+  for (const k of ["invertY", "showSpeed", "showFps", "pauseEditing", "touchAutoSprint", "fovFx", "forceLandscape"]) if (typeof s[k] === "boolean") S[k] = s[k];
   const km = Object.assign({}, s.keyModes && typeof s.keyModes === "object" ? s.keyModes : null);
   const tm = Object.assign({}, s.touchModes && typeof s.touchModes === "object" ? s.touchModes : null);
   // before every button had its own mode there were two settings, sprint and crouch, shared by keys and touch

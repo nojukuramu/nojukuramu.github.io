@@ -20,6 +20,8 @@
 <script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
 </head>
 <body class="atTitle">
+<!-- Everything but the hacks panel: orient.js turns this a quarter turn when a phone is held upright with Force landscape on -->
+<div id="app">
 <canvas id="gl"></canvas>
 <canvas id="overlay" aria-hidden="true"></canvas>
 <div id="tags" aria-hidden="true"></div>
@@ -142,6 +144,7 @@
       <p class="muted small">Every button stays on screen. Move them where your thumbs are. <button class="info" data-info="touch" aria-label="About touch controls"><i data-icon="info"></i></button></p>
       <button id="btnEditTouch" class="btn wide"><i data-icon="move"></i>Move buttons</button>
       <div class="setrow"><label for="stTouchLook">Look sensitivity <b id="stTouchLookN" class="num"></b></label><input type="range" id="stTouchLook" min="0.2" max="3" step="0.05"></div>
+      <label class="tog"><input type="checkbox" id="stForceLand"><span>Force landscape</span><button class="info" data-info="landscape" aria-label="About Force landscape"><i data-icon="info"></i></button></label>
       <label class="tog"><input type="checkbox" id="stTouchSprint"><span>Push the stick to the edge to sprint</span></label>
       <div class="field"><label>Buttons: hold or toggle <button class="info" data-info="modes" aria-label="Hold, toggle and mixed"><i data-icon="info"></i></button></label><div id="stTouchModes" class="modes" data-src="touchModes"></div></div>
     </div>
@@ -256,6 +259,22 @@
 
 </div>
 
+<!-- ============ info sheet, update bar ============ -->
+
+<div id="info-scrim" hidden></div>
+<div id="info-sheet" role="dialog" aria-modal="true" aria-labelledby="info-title" hidden>
+  <div class="sheet-head"><h2 id="info-title"></h2><button id="info-close" class="iconBtn" aria-label="Close"><i data-icon="close"></i></button></div>
+  <div id="info-body"></div>
+</div>
+
+<div id="update-bar" hidden>
+  <span>A new version of Hacks is ready.</span>
+  <button id="update-go" class="btn primary small">Reload</button>
+  <button id="update-later" class="iconBtn" aria-label="Later"><i data-icon="close"></i></button>
+</div>
+
+</div>
+
 <!-- ============ the hacks panel ============ -->
 <div id="hackPanel" hidden>
   <header class="hp-head">
@@ -296,20 +315,8 @@
   <input type="file" id="hpFile" accept=".js,.txt,text/javascript,text/plain" hidden>
 </div>
 
-<!-- ============ key capture, info sheet, update bar ============ -->
+<!-- ============ key capture ============ -->
 <div id="bindCapture" hidden><div class="panel"><b id="bindWhat"></b><p>Press a key or a mouse button, or scroll.</p><small class="muted">Escape cancels · Backspace clears</small></div></div>
-
-<div id="info-scrim" hidden></div>
-<div id="info-sheet" role="dialog" aria-modal="true" aria-labelledby="info-title" hidden>
-  <div class="sheet-head"><h2 id="info-title"></h2><button id="info-close" class="iconBtn" aria-label="Close"><i data-icon="close"></i></button></div>
-  <div id="info-body"></div>
-</div>
-
-<div id="update-bar" hidden>
-  <span>A new version of Hacks is ready.</span>
-  <button id="update-go" class="btn primary small">Reload</button>
-  <button id="update-later" class="iconBtn" aria-label="Later"><i data-icon="close"></i></button>
-</div>
 
 <noscript><p class="noscript">Hacks needs JavaScript. That is rather the point.</p></noscript>
 <script type="module" src="js/main.js"></script>

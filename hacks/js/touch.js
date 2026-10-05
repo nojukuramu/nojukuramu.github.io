@@ -21,9 +21,13 @@ import { TOUCH } from "./controls.js";
 import { icon } from "./icons.js";
 import { touchState, touchPress, touchRelease, look, latched } from "./input.js";
 import { clamp } from "./util.js";
+import { appSize, toApp, appRect } from "./orient.js";
 
+/* Every position here is in the game's own frame (orient.js): the screen's, or the screen's turned a
+   quarter turn under Force landscape. Fingers come in through toApp(), sizes from appSize(). */
 const root = () => document.getElementById("touch");
-const orient = () => (window.innerWidth >= window.innerHeight ? "landscape" : "portrait");
+const orient = () => { const s = appSize(); return s.w >= s.h ? "landscape" : "portrait"; };
+const fingerAt = (e) => toApp(e.clientX, e.clientY);
 const els = new Map();
 const active = new Map();          // pointerId -> { kind, id, x, y, ... }
 let editing = false, selected = null;
@@ -49,7 +53,7 @@ export function build() {
   place();
 }
 export function place() {
-  const L = layout(), w = window.innerWidth, h = window.innerHeight;
+  const L = layout(), { w, h } = appSize();
   for (const [id, el] of els) {
     const q = L[id];
     el.style.width = el.style.height = q.s + "px";
@@ -70,10 +74,11 @@ function down(e) {
   e.preventDefault();
   const id = tgt ? tgt.dataset.id : null;
   if (editing) { if (id) startDrag(e, id); return; }
-  if (!id) { active.set(e.pointerId, { kind: "look", x: e.clientX, y: e.clientY }); return; }
+  const f = fingerAt(e);
+  if (!id) { active.set(e.pointerId, { kind: "look", x: f.x, y: f.y }); return; }
   const t = def(id);
   if (id === "stick") { active.set(e.pointerId, { kind: "stick", id }); moveStick(e, tgt); return; }
-  active.set(e.pointerId, { kind: "btn", id, x: e.clientX, y: e.clientY, look: !!t.look });
+  active.set(e.pointerId, { kind: "btn", id, x: f.x, y: f.y, look: !!t.look });
   tgt.classList.add("on");
   touchState.held.add(t.action);
   touchPress(t.action);
@@ -85,9 +90,9 @@ function move(e) {
   e.preventDefault();
   if (p.kind === "stick") { moveStick(e, els.get("stick")); return; }
   if (p.kind === "look" || p.look) {
-    const k = save.settings.touchLook * 3.2;
-    look((e.clientX - p.x) * k, (e.clientY - p.y) * k, 1);
-    p.x = e.clientX; p.y = e.clientY;
+    const k = save.settings.touchLook * 3.2, f = fingerAt(e);
+    look((f.x - p.x) * k, (f.y - p.y) * k, 1);
+    p.x = f.x; p.y = f.y;
   }
 }
 function up(e) {
@@ -115,9 +120,9 @@ export function sync() {
   for (const t of TOUCH) { const el = els.get(t.id); if (el) el.classList.toggle("latched", latched(t.action)); }
 }
 function moveStick(e, el) {
-  const r = el.getBoundingClientRect();
+  const r = appRect(el.getBoundingClientRect()), f = fingerAt(e);
   const cx = r.left + r.width / 2, cy = r.top + r.height / 2, rad = r.width / 2;
-  let dx = (e.clientX - cx) / rad, dy = (e.clientY - cy) / rad;
+  let dx = (f.x - cx) / rad, dy = (f.y - cy) / rad;
   const l = Math.hypot(dx, dy);
   if (l > 1) { dx /= l; dy /= l; }
   touchState.side = dx; touchState.fwd = -dy;
@@ -141,14 +146,14 @@ function moveStick(e, el) {
  */
 const GAP = 4;
 let drag = null;
-const W = () => window.innerWidth, H = () => window.innerHeight;
+const W = () => appSize().w, H = () => appSize().h;
 function circleOf(id) {
   const q = layout()[id], w = W(), h = H();
   return { x: clamp(q.x * w, q.s / 2, w - q.s / 2), y: clamp(q.y * h, q.s / 2, h - q.s / 2), r: q.s / 2 };
 }
 const barEl = () => document.querySelector("#touchEdit .bar");
 const FIXED = ["#hudTop .pill", "#hudBL", "#hudBR"];
-const rectOf = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return r.width && r.height ? r : null; };
+const rectOf = (el) => { if (!el) return null; const r = appRect(el.getBoundingClientRect()); return r.width && r.height ? r : null; };
 /** The HUD readouts no button may cover. */
 const hudRects = () => FIXED.map((q) => rectOf(document.querySelector(q))).filter(Boolean);
 /** Everything a button must keep clear of while editing: the bar, and the readouts. */
@@ -228,12 +233,14 @@ function separate() {
 function startDrag(e, id) {
   select(id);
   const c = circleOf(id);
-  drag = { id, pid: e.pointerId, ox: e.clientX - c.x, oy: e.clientY - c.y };
+  const f = fingerAt(e);
+  drag = { id, pid: e.pointerId, ox: f.x - c.x, oy: f.y - c.y };
 }
 function dragMove(e) {
   if (!drag || e.pointerId !== drag.pid) return;
   const r = layout()[drag.id].s / 2;
-  const p = freeSpot(drag.id, e.clientX - drag.ox, e.clientY - drag.oy, r, fixedRects());
+  const f = fingerAt(e);
+  const p = freeSpot(drag.id, f.x - drag.ox, f.y - drag.oy, r, fixedRects());
   if (p) { setCentre(drag.id, p); place(); }
 }
 function endDrag() { if (drag) { drag = null; save.commit(); } }
@@ -286,5 +293,7 @@ export function init() {
   document.getElementById("teReset").addEventListener("click", () => { save.resetTouch(orient()); place(); placeBar(); separate(); if (selected) select(selected); });
   document.getElementById("teDone").addEventListener("click", () => edit(false));
   on("matchStart", () => show(true));
+  // turned or straightened: the other layout, and the buttons put where it says
+  on("turned", () => { if (!els.size) return; place(); if (editing) { placeBar(); separate(); } });
   on("quit", () => show(false));
 }

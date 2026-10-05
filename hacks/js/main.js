@@ -33,9 +33,11 @@ import * as audio from "./audio.js";
 import * as net from "./net.js";
 import * as mpui from "./mpui.js";
 import * as lobby from "./lobby.js";
+import * as orient from "./orient.js";
 
 if (!cleanName(save.data.name)) { save.data.name = "Player " + Math.floor(100 + Math.random() * 900); save.commit(); }
 
+orient.init();
 render.setQuality(save.settings.quality);
 addEventListener("resize", render.resize);
 info.init();
@@ -51,6 +53,7 @@ game.setLocalCmd(() => hackapi.patch(input.buildCmd()));
    Starting and leaving a match
    --------------------------------------------------------------- */
 function enterMatch() {
+  orient.lock();            // a solo start is a tap, so the real lock may be granted; otherwise the game turns
   menus.leaveTitle();
   hud.show(true);
   touch.show(true);

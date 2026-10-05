@@ -79,6 +79,15 @@ const TOPICS = {
       "Sideways and upright each keep their own layout. Buttons can never be hidden, and never land on top of one another " +
       "or under the editor's own bar: a button dropped on another slides to the nearest free place.</p>"
   },
+  landscape: {
+    title: "Force landscape",
+    body:
+      "<p>Plays sideways however you hold the phone.</p>" +
+      "<p>Where the browser allows it — Android, or the game installed to your home screen — the screen is locked sideways " +
+      "(it may go fullscreen to do it). Where it does not, like Safari on iPhone, or while your phone's own rotation lock is on, " +
+      "the game is drawn sideways instead: hold the phone with its top to your left.</p>" +
+      "<p>The hacks panel always stays upright, so you can type with your keyboard the right way up.</p>"
+  },
   modes: {
     title: "Hold, toggle or mixed",
     body:

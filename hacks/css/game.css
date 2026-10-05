@@ -32,6 +32,14 @@ code, kbd { font-family: var(--mono); font-size: 0.92em; }
 kbd { background: #1f2a37; border: 1px solid #33455a; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; white-space: nowrap; }
 .ico { width: 1.15em; height: 1.15em; vertical-align: -0.2em; flex: none; }
 
+/* Force landscape on a phone held upright (orient.js): the whole game but the hacks panel takes a quarter
+   turn. A transformed box is what position: fixed children measure from, so every full-screen layer inside
+   simply fills the turned box. --tw and --th are the window's height and width, set from JavaScript, since
+   100vh is not the visible height on a phone. */
+body.turned #app { position: fixed; left: 0; top: 0; width: var(--tw); height: var(--th); transform-origin: 0 0; transform: translateX(var(--th)) rotate(90deg); overflow: hidden; }
+/* a turned list scrolls along the screen's other axis */
+body.turned #menus, body.turned #info-sheet, body.turned .binds { touch-action: pan-x pan-y; }
+
 /* The canvases fill exactly the box the HUD fills (fixed, inset 0), never 100vw x 100vh: on a phone
    100vh is the height with the address bar hidden, so a 100vh canvas hangs below the visible screen
    and its centre — where the shots go — sits under the crosshair instead of on it. */
@@ -72,6 +80,7 @@ input[type=color] { width: 44px; height: 30px; border: 1px solid var(--line); bo
 .setrow.small { margin: 8px 0; }
 .num { color: var(--text); font-family: var(--mono); font-weight: 600; }
 .tog { display: flex; align-items: center; gap: 10px; margin: 10px 0; cursor: pointer; }
+.tog .info { margin-left: -4px; }
 .tog input { width: 18px; height: 18px; accent-color: var(--accent); }
 .tog.small { margin: 6px 0; font-size: 13px; }
 .modes { display: grid; gap: 6px; }

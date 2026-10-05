@@ -32,6 +32,7 @@ var SHELL = [
   "./js/rig.js",
   "./js/figures.js",
   "./js/viewmodel.js",
+  "./js/orient.js",
   "./js/input.js",
   "./js/touch.js",
   "./js/hud.js",

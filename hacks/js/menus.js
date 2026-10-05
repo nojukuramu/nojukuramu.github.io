@@ -19,6 +19,7 @@ import * as info from "./info.js";
 import * as audio from "./audio.js";
 import * as render from "./render.js";
 import * as update from "./update.js";
+import * as orient from "./orient.js";
 import { boardHtml } from "./hud.js";
 
 const stack = [];
@@ -136,7 +137,7 @@ function renderSettings() {
   num("stSens", s.sens, 1); num("stAds", s.adsSens, 2); num("stFov", s.fov, 0);
   num("stMaster", s.master, 2); num("stSfx", s.sfx, 2); num("stTouchLook", s.touchLook, 2);
   $("stInvert").checked = s.invertY; $("stPauseEdit").checked = s.pauseEditing; $("stFovFx").checked = s.fovFx;
-  $("stSpeed").checked = s.showSpeed; $("stFps").checked = s.showFps; $("stTouchSprint").checked = s.touchAutoSprint;
+  $("stSpeed").checked = s.showSpeed; $("stFps").checked = s.showFps; $("stTouchSprint").checked = s.touchAutoSprint; $("stForceLand").checked = s.forceLandscape;
   $("stCross").value = s.crosshair;
   seg($("stQuality"), s.quality);
   renderModes($("stKeyModes")); renderModes($("stTouchModes"));
@@ -250,6 +251,8 @@ export function init() {
   range("stSens", "sens", 1); range("stAds", "adsSens", 2); range("stFov", "fov", 0); range("stTouchLook", "touchLook", 2);
   range("stMaster", "master", 2, audio.applyVolumes); range("stSfx", "sfx", 2, audio.applyVolumes);
   const tog = (id, key) => $(id).addEventListener("change", (e) => { save.settings[key] = e.target.checked; save.commit(); });
+  // asked from the tap itself: browsers grant fullscreen and the orientation lock only to one
+  $("stForceLand").addEventListener("change", (e) => { save.settings.forceLandscape = e.target.checked; save.commit(); if (e.target.checked) orient.lock(); else orient.unlock(); });
   tog("stInvert", "invertY"); tog("stFovFx", "fovFx"); tog("stPauseEdit", "pauseEditing"); tog("stSpeed", "showSpeed"); tog("stFps", "showFps"); tog("stTouchSprint", "touchAutoSprint");
   $("stCross").addEventListener("input", (e) => { save.settings.crosshair = e.target.value; save.commit(); });
   const segSet = (id, key, after) => $(id).addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; save.settings[key] = b.dataset.v; save.commit(); seg($(id), b.dataset.v); if (after) after(b.dataset.v); });

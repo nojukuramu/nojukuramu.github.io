@@ -55,17 +55,17 @@ function serve() {
     srv.listen(0, "127.0.0.1", () => resolve(srv));
   });
 }
-async function open(browser, base, opts) {
+async function open(browser, base, opts, settings) {
   const ctx = await browser.newContext(Object.assign({ viewport: { width: 1280, height: 720 }, serviceWorkers: "block" }, opts || {}));
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   page.on("dialog", (d) => d.accept());
-  await page.addInitScript(() => {
+  await page.addInitScript((extra) => {
     localStorage.setItem("hacks:debug", "1");
-    if (!localStorage.getItem("hacks:v1")) localStorage.setItem("hacks:v1", JSON.stringify({ settings: { quality: "low", master: 0, sfx: 0 } }));
-  });
+    if (!localStorage.getItem("hacks:v1")) localStorage.setItem("hacks:v1", JSON.stringify({ settings: Object.assign({ quality: "low", master: 0, sfx: 0 }, extra) }));
+  }, settings || {});
   await page.goto(base + "/index.html");
   await page.waitForFunction(() => window.HK_DEBUG && window.HK_DEBUG.S.mode === "title", null, { timeout: 60000 });
   return { ctx, page, errors };
@@ -388,6 +388,42 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
       check("Done goes back to the game's menu", await soft(until(q, () => !document.getElementById("scr-pause").hidden && !document.body.classList.contains("touchEditing"), null, 4000)));
       check("no errors on the phone", M.errors.length === 0, M.errors.slice(0, 4).join(" | "));
       await M.ctx.close();
+    }
+    {
+      console.log("\nA phone held upright, with Force landscape on");
+      const R = await open(browser, base, { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 }, { forceLandscape: true }); pages.push(R);
+      const q = R.page;
+      check("where the screen cannot be locked, the game is turned", await q.evaluate(() => document.body.classList.contains("turned")));
+      await q.tap("#btnPlay"); await q.tap("#btnPlayGo");
+      await until(q, () => window.HK_DEBUG.S.mode === "play" && document.body.classList.contains("touchOn"));
+      const pic = await q.evaluate(() => { const c = document.getElementById("gl"); return [c.clientWidth, c.clientHeight, document.querySelector('.tbtn[data-id="stick"]').offsetWidth]; });
+      check("it draws a landscape picture, with the sideways layout", pic[0] === 844 && pic[1] === 390 && pic[2] === 150, JSON.stringify(pic));
+      await alignment(q, "a phone forced sideways");
+      const rects = await q.$$eval(".tbtn", (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.id, r.left, r.top, r.right, r.bottom]; }));
+      check("every button is on the screen", rects.length === 14 && rects.every((r) => r[1] >= -0.5 && r[2] >= -0.5 && r[3] <= 390.5 && r[4] <= 844.5), JSON.stringify(rects.filter((r) => r[3] > 390.5 || r[4] > 844.5)));
+      await q.waitForTimeout(300);
+      const y0 = await q.evaluate(() => window.HK_DEBUG.S.me.body.y);
+      await q.evaluate(() => {
+        const t = document.querySelector('.tbtn[data-id="jump"]'), r = t.getBoundingClientRect();
+        t.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 7, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, pointerType: "touch" }));
+      });
+      const hopped = await soft(until(q, (y) => window.HK_DEBUG.S.me.body.y > y + 0.3, y0, 3000));
+      await q.evaluate(() => dispatchEvent(new PointerEvent("pointerup", { pointerId: 7, pointerType: "touch" })));
+      check("the jump button still jumps", hopped);
+      // the game's "up" is the phone's right-hand edge: pushing the stick that way is forward
+      const st = await q.evaluate(async () => {
+        const I = await import("./js/input.js");
+        const t = document.querySelector(".tbtn.stick"), r = t.getBoundingClientRect();
+        const x = r.left + r.width / 2, y = r.top + r.height / 2;
+        t.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 8, clientX: x, clientY: y, pointerType: "touch" }));
+        dispatchEvent(new PointerEvent("pointermove", { pointerId: 8, clientX: x + r.width / 2, clientY: y, pointerType: "touch" }));
+        const out = { fwd: I.touchState.fwd, side: I.touchState.side };
+        dispatchEvent(new PointerEvent("pointerup", { pointerId: 8, pointerType: "touch" }));
+        return out;
+      });
+      check("pushing the stick towards the game's top walks forward", st.fwd > 0.9 && Math.abs(st.side) < 0.1, JSON.stringify(st));
+      check("no errors on the turned phone", R.errors.length === 0, R.errors.slice(0, 4).join(" | "));
+      await R.ctx.close();
     }
   } catch (e) {
     failures++;

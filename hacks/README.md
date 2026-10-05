@@ -103,6 +103,12 @@ Aim, crouch, sprint, lunge and the scoreboard can each **hold**, **toggle** or b
 quick tap toggles, a longer press holds — and sprint can be always on. Keys and touch are set
 separately (Settings, Controls and Touch), so a phone can toggle what a keyboard holds.
 
+**Force landscape** (Settings, Touch) plays sideways however the phone is held. Where the browser
+allows it — Android, or the game installed to the home screen — the screen is locked sideways
+(going fullscreen if it must; the lock is lifted from ARCO's `shell.js`). Where it does not, as on
+iPhone Safari or with the phone's own rotation lock on, the game itself is drawn turned a quarter
+turn and the touch controls follow (`js/orient.js`); the hacks panel stays upright for typing.
+
 On a phone every button is always on screen. **Move buttons** (Settings, Touch) lets you drag
 each one anywhere, size it and fade it, with a separate layout for sideways and upright. No
 button can be dropped on another, under the editor's bar or on the readouts that cannot move
@@ -133,6 +139,7 @@ held to aim as you shoot; a touch anywhere else looks around.
 | [`js/modes.js`](js/modes.js), [`js/net.js`](js/net.js), [`js/mpui.js`](js/mpui.js) | match rules and hack rules; a match kept in step across a room; the multiplayer screens |
 | [`js/peer.js`](js/peer.js), [`js/lobby.js`](js/lobby.js) | the WebRTC transport (KaraokeNatin's) and the server list and rooms (Magic Sandbox's) |
 | [`js/info.js`](js/info.js), [`js/update.js`](js/update.js) | the (i) sheet and the update prompt, lifted from Magic Sandbox |
+| [`js/orient.js`](js/orient.js) | Force landscape: the real lock (ARCO's) where there is one, the game turned where there is not |
 | [`js/save.js`](js/save.js) | the one localStorage record, re-checked on the way in |
 
 ## Checks
