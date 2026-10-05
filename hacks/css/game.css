@@ -32,8 +32,19 @@ code, kbd { font-family: var(--mono); font-size: 0.92em; }
 kbd { background: #1f2a37; border: 1px solid #33455a; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; white-space: nowrap; }
 .ico { width: 1.15em; height: 1.15em; vertical-align: -0.2em; flex: none; }
 
-#gl { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
-#overlay { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 3; }
+/* Force landscape on a phone held upright (orient.js): the whole game but the hacks panel takes a quarter
+   turn. A transformed box is what position: fixed children measure from, so every full-screen layer inside
+   simply fills the turned box. --tw and --th are the window's height and width, set from JavaScript, since
+   100vh is not the visible height on a phone. */
+body.turned #app { position: fixed; left: 0; top: 0; width: var(--tw); height: var(--th); transform-origin: 0 0; transform: translateX(var(--th)) rotate(90deg); overflow: hidden; }
+/* a turned list scrolls along the screen's other axis */
+body.turned #menus, body.turned #info-sheet, body.turned .binds { touch-action: pan-x pan-y; }
+
+/* The canvases fill exactly the box the HUD fills (fixed, inset 0), never 100vw x 100vh: on a phone
+   100vh is the height with the address bar hidden, so a 100vh canvas hangs below the visible screen
+   and its centre — where the shots go — sits under the crosshair instead of on it. */
+#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#overlay { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
 #tags { position: fixed; inset: 0; pointer-events: none; z-index: 4; }
 .ntag { position: absolute; left: 0; top: 0; font: 600 12px var(--sans); color: #bfefff; text-shadow: 0 1px 2px #000; white-space: nowrap; }
 
@@ -69,8 +80,13 @@ input[type=color] { width: 44px; height: 30px; border: 1px solid var(--line); bo
 .setrow.small { margin: 8px 0; }
 .num { color: var(--text); font-family: var(--mono); font-weight: 600; }
 .tog { display: flex; align-items: center; gap: 10px; margin: 10px 0; cursor: pointer; }
+.tog .info { margin-left: -4px; }
 .tog input { width: 18px; height: 18px; accent-color: var(--accent); }
 .tog.small { margin: 6px 0; font-size: 13px; }
+.modes { display: grid; gap: 6px; }
+.mode { display: grid; grid-template-columns: minmax(90px, 30%) 1fr; gap: 10px; align-items: center; font-size: 14px; }
+.mode .seg { padding: 2px; }
+.mode .seg button { padding: 5px 6px; min-width: 0; }
 .stackbtns { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
 .trow { display: flex; gap: 8px; }
 .trow > * { flex: 1; }
@@ -189,12 +205,24 @@ table.board tr.me td { color: var(--accent); }
 #fps { position: absolute; left: calc(16px + var(--safe-l)); top: calc(40px + var(--safe-t)); font-size: 12px; color: var(--muted); }
 #dmgdir { position: absolute; left: 50%; top: 50%; }
 #dmgdir .arc { position: absolute; left: 0; top: 0; width: 120px; height: 120px; border-radius: 50%; border: 4px solid transparent; border-top-color: rgba(255,70,90,0.85); }
+#killNote { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; font: 700 14px var(--sans); color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8); white-space: nowrap; animation: killIn .18s ease-out; }
+#killNote .ico { color: var(--bad); }
+#killNote .streak { color: var(--warn); }
+#killNote.fade { opacity: 0; transition: opacity .4s; }
+@keyframes killIn { from { transform: translateX(-50%) scale(1.25); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+#hitmark.kill i { background: var(--bad); width: 14px; }
 #centerMsg { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); background: rgba(8,12,17,0.75); padding: 8px 16px; border-radius: 10px; font-weight: 600; }
 #toast { position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%); background: rgba(8,12,17,0.85); padding: 8px 14px; border-radius: 10px; }
 #hurtFlash { position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(255,40,60,0.55)); }
-#scope { position: fixed; inset: 0; pointer-events: none; z-index: 4; background: radial-gradient(circle at center, transparent 0 33vmin, #000 33.3vmin); }
-#scope::before, #scope::after { content: ""; position: absolute; background: #000; }
-#scope::before { left: 0; right: 0; top: 50%; height: 1px; } #scope::after { top: 0; bottom: 0; left: 50%; width: 1px; }
+/* the scope: a lens with a faint tint and a darkening edge, black beyond it, and the reticle centred on the
+   same box as the crosshair (fixed, inset 0) so its centre is where the shot goes */
+#scope { position: fixed; inset: 0; pointer-events: none; z-index: 4; background: radial-gradient(circle at center, rgba(110,160,220,0.07) 0 26vmin, rgba(0,0,0,0.35) 32.4vmin, #000 33.2vmin); }
+#scope .reticle { position: absolute; left: 50%; top: 50%; width: 66.4vmin; height: 66.4vmin; transform: translate(-50%, -50%); overflow: visible; }
+#scope .rim { fill: none; stroke: #000; stroke-width: 3; }
+#scope .post { stroke: #050607; stroke-width: 3.2; fill: none; }
+#scope .fine { stroke: #050607; stroke-width: 0.5; fill: none; }
+#scope .mil circle { fill: #050607; }
+#scope .dot { fill: #ff3b4e; }
 #scoreboard { position: fixed; inset: 0; z-index: 15; display: grid; place-items: center; pointer-events: none; }
 #scoreboard .panel { width: min(560px, 92vw); background: rgba(10,14,20,0.9); }
 /* on a phone the bottom corners belong to thumbs: the readouts move up, smaller */
@@ -222,10 +250,16 @@ body.touchOn #hudTop .pill { font-size: 12px; padding: 4px 10px; }
 .tbtn.stick .knob { width: 42%; height: 42%; border-radius: 50%; background: rgba(255,255,255,0.35); border: 1.5px solid rgba(255,255,255,0.5); }
 body.touchEditing .tbtn { border-style: dashed; }
 body.touchEditing .tbtn.sel { border-color: var(--warn); border-style: solid; box-shadow: 0 0 0 3px rgba(255,210,74,0.3); }
-body.touchEditing #hud { display: none; }
-#touchEdit { position: fixed; left: 0; right: 0; top: 0; z-index: 30; padding: calc(8px + var(--safe-t)) 12px 8px; }
-#touchEdit .bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; background: rgba(12,18,26,0.95); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; font-size: 13px; max-width: 760px; margin: 0 auto; }
-.te-size { display: flex; align-items: center; gap: 6px; } .te-size input { width: 110px; }
+/* editing, the readouts that cannot move show faintly, so buttons are placed around them (touch.js keeps them clear) */
+body.touchEditing #hud, body.touchEditing #hud[hidden] { display: block !important; opacity: 0.45; }
+body.touchEditing #hud > :not(#hudTop):not(#hudBL):not(#hudBR), body.touchEditing #netLine { display: none !important; }
+/* the editor's bar is only as big as itself (it once spanned the whole top of the screen and swallowed
+   the touches meant for the buttons under it); touch.js puts it wherever it covers no button */
+#touchEdit { position: fixed; left: 0; top: 0; z-index: 30; width: min(330px, calc(100vw - 16px)); }
+#touchEdit .bar { display: flex; flex-direction: column; gap: 6px; background: rgba(12,18,26,0.95); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
+.te-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#teSel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.te-size { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; } .te-size input { flex: 1; min-width: 0; }
 
 /* ---------- the hacks panel ---------- */
 #hackPanel { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; background: rgba(8,11,15,0.94); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l); user-select: text; -webkit-user-select: text; touch-action: auto; }
@@ -264,15 +298,52 @@ body.touchEditing #hud { display: none; }
 #hpLog { flex: 1; overflow: auto; padding: 6px 10px; font-size: 12.5px; }
 .ll { white-space: pre-wrap; word-break: break-word; padding: 1px 0; color: #cfe0ef; }
 .ll.error { color: var(--bad); } .ll.warn { color: var(--warn); } .ll.info { color: var(--accent); }
-.hp-main.doc { overflow: auto; padding: 16px 22px 40px; max-width: 900px; }
-.hp-main.doc h2 { margin: 4px 0 6px; }
-.lesson { border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin: 14px 0; background: #0d141c; }
-.lesson.done { border-color: rgba(111,220,122,0.35); }
-.lesson h3 { margin: 0; }
-.lesson .learns { margin: 2px 0 8px; color: var(--accent2); font: 600 12px var(--mono); }
-pre.code { background: #070b10; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow: auto; font: 12.5px/1.5 var(--mono); color: #cfe0ef; max-height: 280px; }
-dl.api { display: grid; grid-template-columns: minmax(200px, 38%) 1fr; gap: 6px 16px; margin: 6px 0 18px; }
-dl.api dt code { color: var(--accent2); word-break: break-word; } dl.api dd { margin: 0; color: #c7d4e2; font-size: 14px; }
+/* Learn and API take the whole body: the hack list's column is empty while they are up. */
+.hp-main.doc { grid-column: 1 / -1; grid-row: 1 / -1; overflow: auto; padding: 0; }
+.hp-main.doc h2 { margin: 2px 0 8px; font-size: 22px; line-height: 1.25; }
+#hpLearn { height: 100%; }
+.hp-main[data-hpane="learn"] { overflow: hidden; }
+.learn { display: grid; grid-template-columns: 250px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100%; }
+.lnav { border-right: 1px solid var(--line); padding: 14px 10px; overflow: auto; min-height: 0; }
+.lscroll { overflow: auto; min-height: 0; }
+.lprog { margin: 0 6px 10px; font-size: 12px; color: var(--muted); }
+.lprog b { color: var(--accent2); font-family: var(--mono); }
+.lprog i { display: block; height: 4px; margin-top: 6px; border-radius: 2px; background: linear-gradient(90deg, var(--accent2) calc(var(--p) * 100%), #1b2633 0); }
+.lrows { display: flex; flex-direction: column; gap: 2px; }
+.lrow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 7px 8px; border: 0; border-radius: 8px; background: none; color: #c7d4e2; cursor: pointer; font-size: 14px; }
+.lrow:hover { background: #121b25; }
+.lrow.on { background: #162230; color: var(--text); box-shadow: inset 0 0 0 1px #2a3d52; }
+.lrow .lnum { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #1b2633; font: 600 12px var(--mono); color: var(--muted); }
+.lrow.on .lnum { background: var(--accent); color: #041018; }
+.lrow.done .lnum { background: rgba(111,220,122,0.16); color: var(--accent2); }
+.lrow.done .lnum .ico { width: 14px; height: 14px; }
+.lrow .lt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lesson { padding: 18px 26px 40px; max-width: 820px; width: 100%; }
+.lkick { margin: 0 0 2px; color: var(--accent2); font: 600 12px var(--mono); letter-spacing: .02em; }
+.lbody { color: #c7d4e2; line-height: 1.6; }
+.lbody p { margin: 0 0 12px; }
+.lbody code, .apidoc p code { background: #121b25; border: 1px solid #1f2b38; border-radius: 4px; padding: 0 4px; color: #e7eef6; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.lcode { margin: 16px 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #070b10; }
+.lcode-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--line); background: #0b1118; font-size: 12px; color: var(--muted); }
+.lcode-head .linkbtn { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; font-size: 12px; }
+.lcode pre.code { margin: 0; border: 0; border-radius: 0; max-height: none; white-space: pre; tab-size: 2; }
+.lact { display: flex; gap: 8px; flex-wrap: wrap; }
+.lpager { display: flex; justify-content: space-between; gap: 8px; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); }
+.lpager .btn { max-width: 48%; min-width: 0; }
+.lpager .btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+pre.code { background: #070b10; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow: auto; font: 12.5px/1.55 var(--mono); color: #cfe0ef; }
+pre.code .c { color: #5d7086; font-style: italic; } pre.code .s { color: #a5e07a; } pre.code .n { color: #ffb46b; } pre.code .k { color: #ff7ab8; }
+pre.code .g { color: #39c6e8; font-weight: 600; } pre.code .f { color: #ffd98a; } pre.code .p { color: #b9c9ff; } pre.code .b { color: #8a9ab0; } pre.code .o { color: #c38bff; }
+.apidoc { max-width: 900px; padding: 18px 26px 40px; }
+.apidoc > p { color: #c7d4e2; line-height: 1.6; }
+.apifind { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; padding: 8px 0; background: rgba(8,11,15,0.96); color: var(--muted); }
+.apifind .txt { flex: 1; }
+.apisec h3 { margin: 18px 0 6px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+dl.api { display: grid; gap: 0; margin: 0 0 8px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.apiitem { display: grid; grid-template-columns: minmax(180px, 36%) 1fr; gap: 6px 16px; padding: 8px 12px; border-top: 1px solid #16202b; }
+.apiitem:first-child { border-top: 0; }
+.apiitem:nth-child(even) { background: #0c131b; }
+dl.api dt code { color: var(--accent2); word-break: break-word; } dl.api dd { margin: 0; color: #c7d4e2; font-size: 14px; line-height: 1.5; }
 
 /* the editor: a transparent textarea over a coloured <pre> */
 .ed { --lh: 19px; --pad: 10px; flex: 1; min-height: 160px; display: flex; border: 1px solid var(--line); border-radius: 10px; background: #070b10; overflow: hidden; font: 13.5px/var(--lh) var(--mono); }
@@ -305,7 +376,29 @@ dl.api dt code { color: var(--accent2); word-break: break-word; } dl.api dd { ma
   #hpNew { width: auto; margin: 0; flex: none; }
   .hp-console { height: 20vh; }
   .bind { grid-template-columns: 1fr 88px 88px; font-size: 13px; }
-  dl.api { grid-template-columns: 1fr; }
+  .apiitem { grid-template-columns: 1fr; gap: 2px; }
+  .mode { grid-template-columns: 1fr; gap: 3px; margin-bottom: 4px; }
+  .learn { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .lnav { border-right: 0; border-bottom: 1px solid var(--line); padding: 8px 10px; overflow: hidden; }
+  .lprog { display: none; }
+  .lrows { flex-direction: row; overflow-x: auto; gap: 4px; scrollbar-width: none; }
+  .lrow { flex: none; width: auto; padding: 5px 10px 5px 5px; font-size: 13px; }
+  .lrow:not(.on) .lt { display: none; }
+  .lrow:not(.on) { padding-right: 5px; }
+  .lesson, .apidoc { padding: 14px 14px 32px; }
+  .hp-main.doc h2 { font-size: 19px; }
   .hpbox .bar { width: 90px; }
   .teams { grid-template-columns: 1fr; }
+}
+/* a phone on its side: little height, so the panel's chrome gets out of the way */
+@media (max-height: 500px) and (min-width: 721px) {
+  .hp-head { padding: 6px 12px; }
+  .hp-body { grid-template-columns: 170px 1fr; }
+  .learn { grid-template-columns: 200px minmax(0, 1fr); }
+  .lnav { padding: 8px 6px; }
+  .lprog { margin-bottom: 6px; }
+  .lrow { padding: 4px 6px; font-size: 13px; }
+  .lrow .lnum { width: 20px; height: 20px; font-size: 11px; }
+  .lesson, .apidoc { padding: 12px 18px 28px; }
+  .hp-console { height: 30vh; min-height: 80px; }
 }

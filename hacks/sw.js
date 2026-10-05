@@ -6,7 +6,7 @@
    answers "skip-waiting" when the page asks, and CACHE carries the same
    number as window.HK_VERSION in index.html — tools/validate.js refuses to
    let the two drift. Bumping it is what publishes an update. */
-var CACHE = "hacks-v1";
+var CACHE = "hacks-v2";
 var SHELL = [
   "./",
   "./index.html",
@@ -28,6 +28,11 @@ var SHELL = [
   "./js/game.js",
   "./js/bots.js",
   "./js/render.js",
+  "./js/models.js",
+  "./js/rig.js",
+  "./js/figures.js",
+  "./js/viewmodel.js",
+  "./js/orient.js",
   "./js/input.js",
   "./js/touch.js",
   "./js/hud.js",
@@ -46,6 +51,19 @@ var SHELL = [
   "./js/net.js",
   "./js/mpui.js",
   "./vendor/build/three.module.min.js",
+  "./vendor/jsm/loaders/GLTFLoader.js",
+  "./vendor/jsm/utils/BufferGeometryUtils.js",
+  "./vendor/jsm/utils/SkeletonUtils.js",
+  "./vendor/jsm/environments/RoomEnvironment.js",
+  "./assets/models/kestrel.glb",
+  "./assets/models/hornet.glb",
+  "./assets/models/wasp.glb",
+  "./assets/models/brick.glb",
+  "./assets/models/mauler.glb",
+  "./assets/models/talon.glb",
+  "./assets/models/katana.glb",
+  "./assets/models/lancer.glb",
+  "./assets/models/human.glb",
   "./assets/icons/icon.svg",
   "./assets/icons/icon-192.png",
   "./assets/icons/icon-512.png",

@@ -8,7 +8,7 @@
 
 import { S, on, emit } from "./state.js";
 import { save } from "./save.js";
-import { ACTIONS, codeName } from "./controls.js";
+import { ACTIONS, MODAL, codeName } from "./controls.js";
 import { GUNS, GUN_IDS, MELEE, MELEE_IDS } from "./weapons.js";
 import { MODES, DIFFS, DIFF_IDS } from "./modes.js";
 import { hydrateIcons } from "./icons.js";
@@ -19,6 +19,7 @@ import * as info from "./info.js";
 import * as audio from "./audio.js";
 import * as render from "./render.js";
 import * as update from "./update.js";
+import * as orient from "./orient.js";
 import { boardHtml } from "./hud.js";
 
 const stack = [];
@@ -135,11 +136,19 @@ function renderSettings() {
   const num = (id, v, d) => { $(id).value = v; $(id + "N").textContent = (+v).toFixed(d); };
   num("stSens", s.sens, 1); num("stAds", s.adsSens, 2); num("stFov", s.fov, 0);
   num("stMaster", s.master, 2); num("stSfx", s.sfx, 2); num("stTouchLook", s.touchLook, 2);
-  $("stInvert").checked = s.invertY; $("stPauseEdit").checked = s.pauseEditing;
-  $("stSpeed").checked = s.showSpeed; $("stFps").checked = s.showFps; $("stTouchSprint").checked = s.touchAutoSprint;
+  $("stInvert").checked = s.invertY; $("stPauseEdit").checked = s.pauseEditing; $("stFovFx").checked = s.fovFx;
+  $("stSpeed").checked = s.showSpeed; $("stFps").checked = s.showFps; $("stTouchSprint").checked = s.touchAutoSprint; $("stForceLand").checked = s.forceLandscape;
   $("stCross").value = s.crosshair;
-  seg($("stSprint"), s.sprintMode); seg($("stCrouch"), s.crouchMode); seg($("stQuality"), s.quality);
+  seg($("stQuality"), s.quality);
+  renderModes($("stKeyModes")); renderModes($("stTouchModes"));
   renderBinds();
+}
+/* One row per action that can hold or toggle; keys and touch each have their own (controls.js MODAL). */
+function renderModes(box) {
+  const m = save.settings[box.dataset.src];
+  box.innerHTML = MODAL.map((a) => '<div class="mode"><span>' + escHtml(a.label) + '</span><div class="seg" data-act="' + a.id + '">' +
+    ["hold", "toggle", "mixed"].concat(a.always ? ["always"] : []).map((v) => '<button data-v="' + v + '" class="' + (m[a.id] === v ? "on" : "") + '">' + v[0].toUpperCase() + v.slice(1) + "</button>").join("") +
+    "</div></div>").join("");
 }
 function renderBinds() {
   const b = save.data.binds;
@@ -242,10 +251,19 @@ export function init() {
   range("stSens", "sens", 1); range("stAds", "adsSens", 2); range("stFov", "fov", 0); range("stTouchLook", "touchLook", 2);
   range("stMaster", "master", 2, audio.applyVolumes); range("stSfx", "sfx", 2, audio.applyVolumes);
   const tog = (id, key) => $(id).addEventListener("change", (e) => { save.settings[key] = e.target.checked; save.commit(); });
-  tog("stInvert", "invertY"); tog("stPauseEdit", "pauseEditing"); tog("stSpeed", "showSpeed"); tog("stFps", "showFps"); tog("stTouchSprint", "touchAutoSprint");
+  // asked from the tap itself: browsers grant fullscreen and the orientation lock only to one
+  $("stForceLand").addEventListener("change", (e) => { save.settings.forceLandscape = e.target.checked; save.commit(); if (e.target.checked) orient.lock(); else orient.unlock(); });
+  tog("stInvert", "invertY"); tog("stFovFx", "fovFx"); tog("stPauseEdit", "pauseEditing"); tog("stSpeed", "showSpeed"); tog("stFps", "showFps"); tog("stTouchSprint", "touchAutoSprint");
   $("stCross").addEventListener("input", (e) => { save.settings.crosshair = e.target.value; save.commit(); });
   const segSet = (id, key, after) => $(id).addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; save.settings[key] = b.dataset.v; save.commit(); seg($(id), b.dataset.v); if (after) after(b.dataset.v); });
-  segSet("stSprint", "sprintMode"); segSet("stCrouch", "crouchMode"); segSet("stQuality", "quality", (q) => render.setQuality(q));
+  segSet("stQuality", "quality", (q) => render.setQuality(q));
+  for (const id of ["stKeyModes", "stTouchModes"]) $(id).addEventListener("click", (e) => {
+    const b = e.target.closest("button"), row = b && b.closest("[data-act]");
+    if (!row) return;
+    save.settings[$(id).dataset.src][row.dataset.act] = b.dataset.v;
+    save.commit();
+    seg(row, b.dataset.v);
+  });
   $("bindList").addEventListener("click", (e) => { const b = e.target.closest(".key"); if (b) rebind(b.dataset.act, +b.dataset.i); });
   click("btnResetKeys", () => { if (confirm("Put every key back the way it started?")) { save.resetBinds(); renderBinds(); } });
   click("btnEditTouch", () => { closeAll(); touch.edit(true); });

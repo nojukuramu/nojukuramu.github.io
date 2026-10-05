@@ -73,9 +73,31 @@ const TOPICS = {
     title: "Touch controls",
     body:
       "<p>The stick moves you; push it to the edge to sprint. Drag anywhere that is not a button to look.</p>" +
-      "<p>Fire and Lunge can be dragged while held, so you can aim as you shoot. Aim is a toggle.</p>" +
+      "<p>Fire and Lunge can be dragged while held, so you can aim as you shoot. Aim starts as a toggle; " +
+      "every button that can hold or toggle has its own choice below.</p>" +
       "<p><b>Move buttons</b> lets you drag every button where your thumbs are, size it and fade it. " +
-      "Sideways and upright each keep their own layout. Buttons can never be hidden — there is always one for everything.</p>"
+      "Sideways and upright each keep their own layout. Buttons can never be hidden, and never land on top of one another " +
+      "or under the editor's own bar: a button dropped on another slides to the nearest free place.</p>"
+  },
+  landscape: {
+    title: "Force landscape",
+    body:
+      "<p>Plays sideways however you hold the phone.</p>" +
+      "<p>Where the browser allows it — Android, or the game installed to your home screen — the screen is locked sideways " +
+      "(it may go fullscreen to do it). Where it does not, like Safari on iPhone, or while your phone's own rotation lock is on, " +
+      "the game is drawn sideways instead: hold the phone with its top to your left.</p>" +
+      "<p>The hacks panel always stays upright, so you can type with your keyboard the right way up.</p>"
+  },
+  modes: {
+    title: "Hold, toggle or mixed",
+    body:
+      "<p><b>Hold</b> — on while you hold the button, off when you let go.</p>" +
+      "<p><b>Toggle</b> — one press turns it on, the next turns it off.</p>" +
+      "<p><b>Mixed</b> — a quick tap toggles it; press and hold, and it is on only for as long as you hold. " +
+      "Tap Aim to stay aimed, or hold it for a quick look down the sights.</p>" +
+      "<p><b>Always</b> (sprint only) — you sprint whenever you run forward.</p>" +
+      "<p>Keys and touch buttons are set separately, so a phone can toggle what a keyboard holds. " +
+      "A toggled sprint ends when you stop running, and everything is let go when you respawn.</p>"
   },
   multiplayer: {
     title: "Multiplayer",

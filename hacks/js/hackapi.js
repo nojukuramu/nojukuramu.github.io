@@ -27,7 +27,7 @@ import { world, isEnemy } from "./game.js";
 import { bonesObject } from "./skeleton.js";
 import { MELEE, gunOf, spreadOf } from "./weapons.js";
 import { B, PM, LUNGE, placeBody } from "./movement.js";
-import { worldToScreen, viewProjection } from "./render.js";
+import { worldToScreen, viewProjection, view } from "./render.js";
 import { heldCodes } from "./input.js";
 import { HACK_RULES } from "./modes.js";
 import { clamp } from "./util.js";
@@ -257,7 +257,7 @@ function snapshot(dt) {
     n: ++frameNo, time: +S.time.toFixed(4), tick: S.tick, dt: +dt.toFixed(5), rules: rules(),
     me: m, players,
     projectiles: S.projectiles.map((p) => ({ owner: p.owner, position: v3o(p.x, p.y, p.z), velocity: v3o(p.vx, p.vy, p.vz), gravity: p.g })),
-    cam: { vp: viewProjection(), w: window.innerWidth, h: window.innerHeight, hfov: (S.hackView && S.hackView.fov) || save.settings.fov },
+    cam: { vp: viewProjection(), w: view.w, h: view.h, hfov: (S.hackView && S.hackView.fov) || save.settings.fov },
     input: { forward: rawCmd.fwd, side: rawCmd.side, yaw: S.view.yaw, pitch: S.view.pitch, jump: !!(rawCmd.buttons & B.JUMP), crouch: !!(rawCmd.buttons & B.CROUCH),
       sprint: !!(rawCmd.buttons & B.SPRINT), fire: !!(rawCmd.buttons & B.FIRE), aim: !!(rawCmd.buttons & B.ADS), reload: !!(rawCmd.buttons & B.RELOAD),
       lunge: !!(rawCmd.buttons & B.LUNGE), melee: !!(rawCmd.buttons & B.MELEE), slot: me.arms.cur + 1 },
@@ -316,7 +316,7 @@ function seg3(g, a, b) { if (nearClip(a, b)) { g.moveTo(A.x, A.y); g.lineTo(Bp.x
 export function drawOverlay() {
   const c = canvas();
   if (!ctx) ctx = c.getContext("2d");
-  const w = window.innerWidth, h = window.innerHeight, r = Math.min(2, window.devicePixelRatio || 1);
+  const w = view.w, h = view.h, r = Math.min(2, window.devicePixelRatio || 1);
   if (w !== cw || h !== ch || r !== dpr) { cw = w; ch = h; dpr = r; c.width = w * r; c.height = h * r; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);

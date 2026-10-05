@@ -132,6 +132,14 @@ const allJs = jsFiles.map(read).join("\n");
     const orphans = jsFiles.filter((f) => !seen.has(f));
     check("no module in js/ is unused", orphans.length === 0, orphans.join(", "));
     check("the stylesheet is in SHELL", shell.includes("css/game.css"));
+    // the models load by URL, not by import, so the walk above cannot see them
+    const glbs = fs.readdirSync(path.join(ROOT, "assets/models")).filter((f) => f.endsWith(".glb"));
+    const credits = read("assets/models/CREDITS.md");
+    check("every model is in SHELL, so the game plays offline", glbs.length > 0 && glbs.every((f) => shell.includes("assets/models/" + f)), glbs.filter((f) => !shell.includes("assets/models/" + f)).join(", "));
+    check("every model is credited, with its licence", glbs.every((f) => credits.includes("`" + f + "`")) && /CC0/.test(credits), glbs.filter((f) => !credits.includes("`" + f + "`")).join(", "));
+    const msrc = read("js/models.js");
+    const asked = JSON.parse((msrc.match(/GUN_FILES = (\[[^\]]+\])/) || [0, "[]"])[1]).concat([...msrc.matchAll(/"assets\/models\/(\w+)\.glb"/g)].map((m) => m[1]));
+    check("models.js asks for exactly the models there are", asked.length === glbs.length && asked.every((n) => glbs.includes(n + ".glb")), asked.join(","));
     const mani = JSON.parse(read("manifest.webmanifest"));
     const icons = (mani.icons || []).map((i) => i.src);
     check("manifest icons exist", icons.every(exists), icons.filter((f) => !exists(f)).join(", "));
@@ -267,6 +275,14 @@ const allJs = jsFiles.map(read).join("\n");
     run(slider, 200, (i, q) => { if (q.sliding) slid++; peak = Math.max(peak, hspeed(q)); return { fwd: 1, side: 0, yaw: 0, pitch: 0, buttons: B.CROUCH }; });
     check("crouching at a sprint slides, with a boost", slid > 40 && peak > PM.sprint + 1, slid + " ticks, peak " + peak.toFixed(2));
     check("and the slide ends in a crouch", !slider.sliding && slider.crouched);
+    const sprintCmd = () => ({ fwd: 1, side: 0, yaw: 0, pitch: 0, buttons: B.SPRINT });
+    const pushOf = (cd, ncd) => { const q = run(settle(), 128, sprintCmd); q.slideCd = cd; q.slideNudgeCd = ncd; const s0 = hspeed(q); run(q, 1, () => ({ fwd: 1, side: 0, yaw: 0, pitch: 0, buttons: B.CROUCH })); return hspeed(q) - s0; };
+    const pushes = [pushOf(0, 0), pushOf(1, 0), pushOf(1, 1)];
+    check("a slide gets the boost, or on its cooldown a smaller push, and neither more often than allowed", pushes[0] > 1.6 && pushes[1] > 0.6 && pushes[1] < 1.2 && pushes[2] < 0.1, pushes.map((v) => v.toFixed(2)).join(", "));
+    const spam = run(settle(), 128, sprintCmd);
+    let spamTop = 0;
+    run(spam, 320, (i, q) => { spamTop = Math.max(spamTop, hspeed(q)); return { fwd: 1, side: 0, yaw: 0, pitch: 0, buttons: i % 4 < 2 ? B.CROUCH : B.SPRINT }; });
+    check("tapping crouch over and over builds no speed", spamTop < PM.sprint + PM.slideBoost + 0.6, spamTop.toFixed(2) + " (sprint " + PM.sprint + ")");
     const hill = buildWorld([prism([[0, 0], [40, 0], [0, 16]], "z", -5, 5, { kind: "slope" }), box(-500, -1, -500, 500, 0, 500)]);
     const down = newBody(4, 14.6, 0, -Math.PI / 2); down.vx = 7;
     run(down, 20, () => ({ fwd: 1, side: 0, yaw: -Math.PI / 2, pitch: 0, buttons: B.SPRINT }), hill);
@@ -446,11 +462,20 @@ const allJs = jsFiles.map(read).join("\n");
       const L = C.TOUCH_LAYOUTS[o];
       check("every touch button has a place when held " + o, C.TOUCH_IDS.every((id) => L[id] && L[id].x > 0 && L[id].x < 1 && L[id].y > 0 && L[id].y < 1));
     }
+    // a button under another is one nobody can press or pick up in the editor: the defaults must not do it on any common screen
+    for (const [o, w, h] of [["landscape", 844, 390], ["landscape", 740, 360], ["landscape", 667, 375], ["landscape", 1024, 768], ["portrait", 390, 844], ["portrait", 360, 740], ["portrait", 375, 667], ["portrait", 768, 1024]]) {
+      const L = C.TOUCH_LAYOUTS[o];
+      const c = C.TOUCH_IDS.map((id) => { const q = L[id]; return { id, x: Math.min(Math.max(q.x * w, q.s / 2), w - q.s / 2), y: Math.min(Math.max(q.y * h, q.s / 2), h - q.s / 2), r: q.s / 2 }; });
+      const bad = [];
+      for (let i = 0; i < c.length; i++) for (let j = i + 1; j < c.length; j++) if (Math.hypot(c[i].x - c[j].x, c[i].y - c[j].y) < c[i].r + c[j].r) bad.push(c[i].id + "/" + c[j].id);
+      check("no two touch buttons start on top of each other, " + o + " " + w + "x" + h, bad.length === 0, bad.join(", "));
+    }
+    check("every action that can hold or toggle has a mode for keys and for touch", C.MODAL_IDS.every((id) => C.validMode(id, C.KEY_MODES[id]) && C.validMode(id, C.TOUCH_MODES[id])) && C.MODAL_IDS.every((id) => C.ACTION_IDS.includes(id)));
     // save.js reads localStorage at import; give it one to read
     const store = new Map();
     globalThis.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
     store.set("hacks:v1", JSON.stringify({
-      name: "<b>x</b>", settings: { sens: 999, fov: 10, sprintMode: "fly", crosshair: "red" },
+      name: "<b>x</b>", settings: { sens: 999, fov: 10, keyModes: { sprint: "fly", ads: "always", crouch: "mixed" }, touchModes: "nope", crosshair: "red" },
       binds: { jump: ["Escape", "Space"], fire: ["Mouse0", 5] },
       touch: { landscape: { fire: { x: 5, y: -2, s: 1000 } } },
       loadout: { primary: "rocket" },
@@ -459,7 +484,8 @@ const allJs = jsFiles.map(read).join("\n");
     }));
     const { save } = await imp("js/save.js");
     const d = save.data;
-    check("stored settings are clamped, not trusted", d.settings.sens === 10 && d.settings.fov === 70 && d.settings.sprintMode === "hold" && d.settings.crosshair === "#ffffff");
+    check("stored settings are clamped, not trusted", d.settings.sens === 10 && d.settings.fov === 70 && d.settings.keyModes.sprint === "hold" && d.settings.crosshair === "#ffffff");
+    check("a button mode is kept only where it means something", d.settings.keyModes.crouch === "mixed" && d.settings.keyModes.ads === "hold" && d.settings.touchModes.ads === "toggle");
     check("an Escape bind is dropped", d.binds.jump[0] === "" && d.binds.jump[1] === "Space" && d.binds.fire[1] === "");
     check("a touch button stored off screen is put back on it", d.touch.landscape.fire.x <= 0.97 && d.touch.landscape.fire.y >= 0.03 && d.touch.landscape.fire.s <= 220);
     check("hacks survive, duplicates and junk do not", d.hacks.length === 1 && d.hacks[0].on === true && d.hacks[0].code === "log(1)");

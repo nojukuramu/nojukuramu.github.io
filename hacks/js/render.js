@@ -1,31 +1,42 @@
-/* render.js — everything you see: the arena, the bodies, your gun, the
- * tracers, and the camera they are seen from.
+/* render.js — everything you see: the arena, the sky, the light, the
+ * effects, and the camera they are seen from.
  *
- * The arena is drawn straight from its brushes: every face becomes two or
- * more triangles in one merged mesh, coloured by its kind and textured with
- * a world-aligned grid — the look of a Source dev map, on purpose, because a
- * one-metre grid is how you judge a jump before you make it. Brush edges are
- * outlined so ledges read at speed.
+ * The arena is drawn straight from its brushes: every face becomes triangles
+ * in a few merged meshes, coloured by its kind and textured in world space —
+ * concrete, metal or the surf's lit grid — with the one-metre grid kept in
+ * every surface on purpose, because a grid is how you judge a jump before you
+ * make it. A low evening sun casts real shadows across it, and the sky it
+ * comes from is also what the metal reflects.
  *
- * Bodies are mannequins built on skeleton.js's bones: a limb is a cylinder
- * stretched between two of them, so the figure you see is exactly the one
- * the hitboxes and the hack API describe. Your own gun is a second scene
- * drawn over the first with its own camera, so it never clips into walls.
+ * Bodies are figures.js's, your own gun and arms viewmodel.js's (a second
+ * scene, drawn after this one with the depth cleared, so the gun never sinks
+ * into a wall).
+ *
+ * The canvas is measured, never assumed: the size it is drawn at, the size
+ * the HUD centres its crosshair in and the size hacks project into are one
+ * number (`view`), read off the canvas itself. On a phone the window's
+ * inner height and CSS's 100vh disagree by the address bar, and a canvas
+ * sized by one and centred by the other puts the crosshair above the point
+ * the shot goes.
  *
  * Three quality tiers, chosen the way Magic Sandbox's gfx.js does it: "auto"
  * starts at high on computers and medium on phones, and steps down once if
- * the frame rate cannot keep up. */
+ * the frame rate cannot keep up. Low drops the shadows. */
 
 import * as THREE from "three";
-import { S } from "./state.js";
+import { RoomEnvironment } from "../vendor/jsm/environments/RoomEnvironment.js";
+import { S, on } from "./state.js";
 import { KINDS } from "./map.js";
-import { BI } from "./skeleton.js";
-import { world, owns, renderPos } from "./game.js";
-import { GUNS, gunOf } from "./weapons.js";
+import { world, renderPos } from "./game.js";
+import { gunOf } from "./weapons.js";
 import { ray, newTrace } from "./brush.js";
-import { LUNGE } from "./movement.js";
+import { LUNGE, PM } from "./movement.js";
 import { save } from "./save.js";
-import { clamp, damp, wrapAngle } from "./util.js";
+import { clamp, damp } from "./util.js";
+import { loadModels } from "./models.js";
+import { initFigures, syncFigures, hideFigures, figureQuality, muzzleOf } from "./figures.js";
+import { vScene, vCam, updateViewmodel, vmVisible, vmScoped, muzzleWorld } from "./viewmodel.js";
+export { vmFire, vmSwing } from "./viewmodel.js";
 
 export const IS_TOUCH = typeof window !== "undefined" && (("ontouchstart" in window) || navigator.maxTouchPoints > 0);
 
@@ -33,94 +44,202 @@ const canvas = document.getElementById("gl");
 export const renderer = new THREE.WebGLRenderer({ canvas, antialias: (window.devicePixelRatio || 1) < 2, powerPreference: "high-performance" });
 renderer.autoClear = false;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 export const scene = new THREE.Scene();
-export const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 400);
+export const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 600);
 camera.rotation.order = "YXZ";
-const vScene = new THREE.Scene();
-const vCam = new THREE.PerspectiveCamera(58, 1, 0.01, 10);
 
-// three.js r160 measures light physically, so these read high next to older code
-scene.background = skyTexture();
-scene.fog = new THREE.Fog(0x1d2a3a, 110, 300);
-scene.add(new THREE.HemisphereLight(0xd8e6ff, 0x3a4250, 2.6));
-const sun = new THREE.DirectionalLight(0xfff4e6, 2.6);
-sun.position.set(0.45, 1, 0.3);
-scene.add(sun);
-vScene.add(new THREE.HemisphereLight(0xdde8ff, 0x303848, 2.4));
-const vsun = new THREE.DirectionalLight(0xffffff, 1.8);
-vsun.position.set(0.3, 1, 0.6);
-vScene.add(vsun);
+/** The drawing size in CSS pixels: the canvas's own box, which is the HUD's box too. */
+export const view = { w: window.innerWidth, h: window.innerHeight };
 
-function skyTexture() {
-  const c = document.createElement("canvas");
-  c.width = 4; c.height = 256;
-  const g = c.getContext("2d");
-  const gr = g.createLinearGradient(0, 0, 0, 256);
-  gr.addColorStop(0, "#0b1220"); gr.addColorStop(0.55, "#1d2a3a"); gr.addColorStop(1, "#2b3a4c");
-  g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+/* ---------------------------------------------------------------
+   Sky and light
+   --------------------------------------------------------------- */
+// a low sun from the south-west, warm; the sky above it a deepening blue
+const SUN_DIR = new THREE.Vector3(-0.45, 0.74, 0.5).normalize();
+const SKY = { top: new THREE.Color(0x0b1a33), mid: new THREE.Color(0x2c5a8c), horizon: new THREE.Color(0xe7a27a), ground: new THREE.Color(0x232a33), sun: new THREE.Color(0xffd9a8) };
+const FOG = 0x6f7f97;
+function skyMaterial() {
+  return new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: { top: { value: SKY.top }, mid: { value: SKY.mid }, horizon: { value: SKY.horizon }, ground: { value: SKY.ground }, sunColor: { value: SKY.sun }, sunDir: { value: SUN_DIR } },
+    vertexShader: "varying vec3 vDir; void main() { vDir = position; vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p.xyww; }",
+    fragmentShader: [
+      "uniform vec3 top, mid, horizon, ground, sunColor, sunDir; varying vec3 vDir;",
+      "void main() {",
+      "  vec3 d = normalize(vDir); float h = d.y;",
+      "  vec3 c = mix(horizon, mid, smoothstep(-0.02, 0.28, h));",
+      "  c = mix(c, top, smoothstep(0.28, 0.95, h));",
+      "  c = mix(c, ground, smoothstep(0.0, -0.18, h));",
+      "  float s = max(dot(d, sunDir), 0.0);",
+      "  c += sunColor * (pow(s, 900.0) * 6.0 + pow(s, 40.0) * 0.35 + pow(s, 6.0) * 0.12);",
+      "  gl_FragColor = vec4(c, 1.0);",
+      "  #include <tonemapping_fragment>",
+      "  #include <colorspace_fragment>",
+      "}"].join("\n")
+  });
+}
+const sky = new THREE.Mesh(new THREE.SphereGeometry(500, 32, 16), skyMaterial());
+sky.frustumCulled = false;
+sky.renderOrder = -1;
+scene.add(sky);
+scene.fog = new THREE.Fog(FOG, 120, 420);
+// the sky's light, and the warm floor's bounce: what lights the shade under an 18-metre wall
+const hemi = new THREE.HemisphereLight(0xe2ebf7, 0x8a7d6c, 3.0);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffe4c4, 3.3);
+sun.position.copy(SUN_DIR).multiplyScalar(160);
+sun.shadow.camera.left = -72; sun.shadow.camera.right = 72; sun.shadow.camera.top = 72; sun.shadow.camera.bottom = -72;
+sun.shadow.camera.near = 20; sun.shadow.camera.far = 340;
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+scene.add(sun); scene.add(sun.target);
+// your own shots light the walls around you, for a frame or two
+const muzzleLight = new THREE.PointLight(0xffc477, 0, 9, 2);
+scene.add(muzzleLight);
+
+/* What metal reflects: the same sky, blurred. The gun's scene gets a studio, so it reads from any angle. */
+function environments() {
+  const pm = new THREE.PMREMGenerator(renderer);
+  const s = new THREE.Scene();
+  const m = skyMaterial(); m.side = THREE.BackSide;
+  s.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), m));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshBasicMaterial({ color: 0x3a3f47 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -2;
+  s.add(floor);
+  scene.environment = pm.fromScene(s, 0.04).texture;
+  // the gun in your hands sees a soft studio, so its shape reads from any angle
+  vScene.environment = pm.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+  pm.dispose();
 }
 
 /* ---------------------------------------------------------------
    Quality
    --------------------------------------------------------------- */
-const TIERS = { low: { dpr: 0.75 }, medium: { dpr: 1.25 }, high: { dpr: 2 } };
-let tier = "high", wanted = "auto", slowFrames = 0, stepped = false;
+const TIERS = { low: { dpr: 0.75, shadow: 0 }, medium: { dpr: 1.25, shadow: 1024 }, high: { dpr: 2, shadow: 2048 } };
+let tier = "high", wanted = "auto", slowFrames = 0, stepped = false, shadowsOn = null;
 export function setQuality(q) {
   wanted = q || "auto";
   tier = wanted === "auto" ? (IS_TOUCH ? "medium" : "high") : wanted;
   stepped = false;
-  resize();
+  applyTier();
 }
 export const currentTier = () => tier;
+function applyTier() {
+  const sz = TIERS[tier].shadow;
+  const want = sz > 0;
+  figureQuality(want, tier === "low");
+  if (want !== shadowsOn) {
+    shadowsOn = want;
+    renderer.shadowMap.enabled = want;
+    sun.castShadow = want;
+    // the shadow switch changes every lit material's shader
+    scene.traverse((o) => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
+  }
+  if (want && sun.shadow.mapSize.x !== sz) {
+    sun.shadow.mapSize.set(sz, sz);
+    if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+  }
+  renderer.shadowMap.type = tier === "high" ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  if (mapGroup) for (const m of mapGroup.children) if (m.userData.mats) m.material = tier === "low" ? m.userData.mats.cheap : m.userData.mats.full;
+  resize();
+}
 function watchFrameRate(dt) {
   if (wanted !== "auto" || stepped) return;
   slowFrames = dt > 1 / 40 ? slowFrames + 1 : Math.max(0, slowFrames - 0.5);
-  if (slowFrames > 90) { stepped = true; tier = tier === "high" ? "medium" : "low"; resize(); }
+  if (slowFrames > 90) { stepped = true; tier = tier === "high" ? "medium" : "low"; applyTier(); }
 }
 export function resize() {
-  const w = window.innerWidth, h = window.innerHeight;
+  const w = canvas.clientWidth || window.innerWidth, h = canvas.clientHeight || window.innerHeight;
+  view.w = w; view.h = h;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, TIERS[tier].dpr));
   renderer.setSize(w, h, false);
-  camera.aspect = vCam.aspect = w / h;
-  camera.updateProjectionMatrix(); vCam.updateProjectionMatrix();
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
 }
+// an address bar sliding away changes the canvas without always firing a window resize
+if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => { if (canvas.clientWidth !== view.w || canvas.clientHeight !== view.h) resize(); }).observe(canvas);
 
 /* ---------------------------------------------------------------
    The arena
    --------------------------------------------------------------- */
-function gridTexture() {
-  const c = document.createElement("canvas");
-  c.width = c.height = 256;
+/* Surfaces are painted on canvases, 4 m to a tile: a base, the 1 m grid, and a 4 m seam,
+   with a height map turned into a normal map so the seams catch the low sun. */
+function surface(kind) {
+  const N = 512, c = document.createElement("canvas");
+  c.width = c.height = N;
   const g = c.getContext("2d");
-  g.fillStyle = "#d9dde4"; g.fillRect(0, 0, 256, 256);
-  g.fillStyle = "#cfd4dc"; g.fillRect(0, 0, 128, 128); g.fillRect(128, 128, 128, 128);
-  g.strokeStyle = "rgba(20,26,36,0.28)"; g.lineWidth = 2;
-  for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(i * 64, 0); g.lineTo(i * 64, 256); g.stroke(); g.beginPath(); g.moveTo(0, i * 64); g.lineTo(256, i * 64); g.stroke(); }
-  g.strokeStyle = "rgba(20,26,36,0.5)"; g.lineWidth = 4;
-  g.strokeRect(0, 0, 256, 256);
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = 4;
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+  const h = new Float32Array(N * N);
+  // base: concrete is mottled, metal brushed, the surf a dark glass
+  const rnd = (() => { let s = kind.length * 977 + 13; return () => ((s = (s * 16807) % 2147483647) / 2147483647); })();
+  const base = kind === "metal" ? [204, 209, 216] : kind === "surf" ? [70, 64, 110] : [222, 222, 218];
+  g.fillStyle = "rgb(" + base.join(",") + ")"; g.fillRect(0, 0, N, N);
+  const blots = kind === "concrete" ? 900 : 260;
+  for (let i = 0; i < blots; i++) {
+    const x = rnd() * N, y = rnd() * N, r = 4 + rnd() * (kind === "concrete" ? 26 : 10), k = (rnd() - 0.5) * (kind === "concrete" ? 26 : 12);
+    g.fillStyle = "rgba(" + (k > 0 ? "255,255,255," : "0,0,0,") + Math.abs(k) / 255 + ")";
+    if (kind === "metal") g.fillRect(x, y, r * 6, 1 + rnd() * 2); else { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+  }
+  // the grid: a fine line every metre, a groove every four
+  const lineA = kind === "surf" ? "rgba(190,170,255,0.55)" : "rgba(30,36,46,0.22)";
+  g.strokeStyle = lineA; g.lineWidth = 2;
+  for (let i = 1; i < 4; i++) { g.beginPath(); g.moveTo(i * N / 4, 0); g.lineTo(i * N / 4, N); g.moveTo(0, i * N / 4); g.lineTo(N, i * N / 4); g.stroke(); }
+  g.strokeStyle = kind === "surf" ? "rgba(220,205,255,0.9)" : "rgba(22,26,34,0.55)"; g.lineWidth = 5;
+  g.strokeRect(0, 0, N, N);
+  if (kind !== "surf") {
+    g.fillStyle = "rgba(30,34,42,0.5)";
+    for (const [x, y] of [[14, 14], [N - 14, 14], [14, N - 14], [N - 14, N - 14]]) { g.beginPath(); g.arc(x, y, 4, 0, 7); g.fill(); }
+  }
+  // height: grooves along the seams and the metre lines
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const ex = Math.min(x, N - 1 - x), ey = Math.min(y, N - 1 - y);
+    const mx = Math.abs((x % (N / 4)) - N / 8) - N / 8 + 1, my = Math.abs((y % (N / 4)) - N / 8) - N / 8 + 1;
+    let v = 1;
+    if (ex < 4 || ey < 4) v = 0.2 + Math.min(ex, ey) * 0.18;
+    else if (mx > -1.5 || my > -1.5) v = 0.75;
+    h[y * N + x] = v;
+  }
+  const nc = document.createElement("canvas");
+  nc.width = nc.height = N;
+  const ng = nc.getContext("2d"), img = ng.createImageData(N, N);
+  const s = kind === "surf" ? 1.2 : 2.4;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const xl = h[y * N + ((x - 1 + N) % N)], xr = h[y * N + ((x + 1) % N)], yu = h[((y - 1 + N) % N) * N + x], yd = h[((y + 1) % N) * N + x];
+    let nx = (xl - xr) * s, ny = (yu - yd) * s, nz = 1;
+    const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+    const o = (y * N + x) * 4;
+    img.data[o] = (nx * 0.5 + 0.5) * 255; img.data[o + 1] = (ny * 0.5 + 0.5) * 255; img.data[o + 2] = (nz * 0.5 + 0.5) * 255; img.data[o + 3] = 255;
+  }
+  ng.putImageData(img, 0, 0);
+  const tex = (cv, srgb) => {
+    const t = new THREE.CanvasTexture(cv);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  };
+  return { map: tex(c, true), normalMap: tex(nc, false) };
 }
+const CLASS = { floor: "concrete", wall: "concrete", block: "concrete", slope: "concrete", crate: "concrete", trim: "metal", shaft: "metal", core: "metal", canopy: "metal", surf: "surf" };
 
 let mapGroup = null;
+const pads = [];
 export function buildArena() {
   if (mapGroup) return;
   const W = world();
   mapGroup = new THREE.Group();
-  const pos = [], nor = [], uv = [], col = [], padPos = [], padNor = [];
-  const edges = [];
+  const buckets = {};
+  const bucket = (k) => (buckets[k] = buckets[k] || { pos: [], nor: [], uv: [], col: [] });
+  const padPos = [], padNor = [], edges = [];
   const color = new THREE.Color();
   for (const b of W.brushes) {
     const K = KINDS[b.kind] || KINDS.wall;
     if (K.invisible) continue;
     color.setHex(K.color).convertSRGBToLinear();
+    if (b.kind === "pad") pads.push(new THREE.Vector3((b.min[0] + b.max[0]) / 2, b.max[1], (b.min[2] + b.max[2]) / 2));
+    const B = b.kind === "pad" ? null : bucket(CLASS[b.kind] || "concrete");
     for (const f of b.faces) {
       const n = f.n;
       if (n[1] < -0.9 && b.min[1] <= 0.01) continue;            // undersides nobody sees
@@ -128,80 +247,72 @@ export function buildArena() {
       if (vs.every((v) => v[1] <= 0) && b.kind !== "floor") continue;  // below the floor
       const ax = Math.abs(n[0]), ay = Math.abs(n[1]), az = Math.abs(n[2]);
       const proj = ay >= ax && ay >= az ? (v) => [v[0] / 4, v[2] / 4] : ax >= az ? (v) => [v[2] / 4, v[1] / 4] : (v) => [v[0] / 4, v[1] / 4];
-      const P = b.kind === "pad" ? padPos : pos, N = b.kind === "pad" ? padNor : nor;
       for (let i = 1; i < vs.length - 1; i++) {
         for (const v of [vs[0], vs[i], vs[i + 1]]) {
-          P.push(v[0], v[1], v[2]); N.push(n[0], n[1], n[2]);
-          if (b.kind !== "pad") { const q = proj(v); uv.push(q[0], q[1]); col.push(color.r, color.g, color.b); }
+          if (!B) { padPos.push(v[0], v[1], v[2]); padNor.push(n[0], n[1], n[2]); continue; }
+          B.pos.push(v[0], v[1], v[2]); B.nor.push(n[0], n[1], n[2]);
+          const q = proj(v); B.uv.push(q[0], q[1]); B.col.push(color.r, color.g, color.b);
         }
       }
       for (let i = 0; i < vs.length; i++) { const a = vs[i], c = vs[(i + 1) % vs.length]; edges.push(a[0], a[1], a[2], c[0], c[1], c[2]); }
     }
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
-  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
-  geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
-  mapGroup.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: gridTexture(), vertexColors: true })));
+  for (const k in buckets) {
+    const B = buckets[k];
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(B.pos, 3));
+    geo.setAttribute("normal", new THREE.Float32BufferAttribute(B.nor, 3));
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(B.uv, 2));
+    geo.setAttribute("color", new THREE.Float32BufferAttribute(B.col, 3));
+    const s = surface(k);
+    const mat = new THREE.MeshStandardMaterial({
+      map: s.map, normalMap: s.normalMap, normalScale: new THREE.Vector2(0.8, 0.8), vertexColors: true,
+      roughness: k === "metal" ? 0.5 : k === "surf" ? 0.3 : 0.9, metalness: k === "metal" ? 0.25 : k === "surf" ? 0.1 : 0.0,
+      emissive: k === "surf" ? 0x2a1d66 : 0x000000, emissiveIntensity: k === "surf" ? 0.7 : 0, envMapIntensity: k === "concrete" ? 0.25 : 0.6
+    });
+    if (k === "surf") mat.emissiveMap = s.map;
+    // the low tier is for weak phones: the same textures, lit the cheap way, and no shadows
+    const cheapMat = new THREE.MeshLambertMaterial({ map: s.map, vertexColors: true, emissive: mat.emissive, emissiveIntensity: mat.emissiveIntensity, emissiveMap: mat.emissiveMap || null });
+    const mesh = new THREE.Mesh(geo, tier === "low" ? cheapMat : mat);
+    mesh.userData.mats = { full: mat, cheap: cheapMat };
+    mesh.receiveShadow = true; mesh.castShadow = true;
+    mapGroup.add(mesh);
+  }
   const pg = new THREE.BufferGeometry();
   pg.setAttribute("position", new THREE.Float32BufferAttribute(padPos, 3));
   pg.setAttribute("normal", new THREE.Float32BufferAttribute(padNor, 3));
-  mapGroup.add(new THREE.Mesh(pg, new THREE.MeshBasicMaterial({ color: 0x6dffa0 })));
+  mapGroup.add(new THREE.Mesh(pg, new THREE.MeshStandardMaterial({ color: 0x3cff8a, emissive: 0x2bff7a, emissiveIntensity: 1.4, roughness: 0.4 })));
   const eg = new THREE.BufferGeometry();
   eg.setAttribute("position", new THREE.Float32BufferAttribute(edges, 3));
-  mapGroup.add(new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0x0a0f18, transparent: true, opacity: 0.55 })));
+  mapGroup.add(new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0x0a0f18, transparent: true, opacity: 0.32 })));
   scene.add(mapGroup);
+  // a ring of light rising off every jump pad, so they read from across the map
+  for (const p of pads) {
+    for (let k = 0; k < 2; k++) {
+      const r = new THREE.Mesh(ringGeo, ringMat.clone());
+      r.rotation.x = -Math.PI / 2; r.position.copy(p); r.userData.k = k * 0.5; r.userData.y0 = p.y;
+      scene.add(r); padRings.push(r);
+    }
+  }
+}
+const ringGeo = new THREE.RingGeometry(1.15, 1.45, 40);
+const ringMat = new THREE.MeshBasicMaterial({ color: 0x5dffa0, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: true });
+const padRings = [];
+function updatePads(t) {
+  for (const r of padRings) {
+    const k = ((t * 0.7 + r.userData.k) % 1);
+    r.position.y = r.userData.y0 + 0.05 + k * 2.4;
+    r.scale.setScalar(1 - k * 0.35);
+    r.material.opacity = (1 - k) * 0.55;
+  }
 }
 
 /* ---------------------------------------------------------------
-   Mannequins
+   Tracers, sparks, holes, rounds in flight
    --------------------------------------------------------------- */
+const cyl = new THREE.CylinderGeometry(1, 1, 1, 6, 1);
 const UP = new THREE.Vector3(0, 1, 0);
-const cyl = new THREE.CylinderGeometry(1, 1, 1, 8, 1);
-const boxG = new THREE.BoxGeometry(1, 1, 1);
-const sph = new THREE.SphereGeometry(1, 10, 8);
-const bodyMat = new THREE.MeshLambertMaterial({ color: 0xc9cfd9 });
-const darkMat = new THREE.MeshLambertMaterial({ color: 0x2a303b });
-const LIMBS = [
-  ["l_shoulder", "l_elbow", 0.07], ["l_elbow", "l_hand", 0.058], ["r_shoulder", "r_elbow", 0.07], ["r_elbow", "r_hand", 0.058],
-  ["l_hip", "l_knee", 0.095], ["l_knee", "l_foot", 0.078], ["r_hip", "r_knee", 0.095], ["r_knee", "r_foot", 0.078],
-  ["chest", "neck", 0.06]
-];
-const figs = new Map();
-const xrayMat = new Map();
-
-function makeFigure(a) {
-  const g = new THREE.Group();
-  const accent = new THREE.MeshLambertMaterial({ color: a.color, emissive: a.color, emissiveIntensity: 0.35 });
-  const parts = [];
-  const add = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.matrixAutoUpdate = false; g.add(m); parts.push(m); return m; };
-  const limbs = LIMBS.map(([p, q, r]) => ({ m: add(cyl, bodyMat), a: BI[p], b: BI[q], r }));
-  const torso = add(boxG, bodyMat), belt = add(boxG, accent), head = add(boxG, bodyMat), visor = add(boxG, accent);
-  const hands = [add(sph, darkMat), add(sph, darkMat)];
-  const feet = [add(boxG, darkMat), add(boxG, darkMat)];
-  const pads = [add(boxG, accent), add(boxG, accent)];
-  const gun = add(boxG, darkMat);
-  // the x-ray copy a hack's highlight() shows through walls
-  const xg = new THREE.Group();
-  xg.visible = false;
-  const xparts = parts.map((p) => { const m = new THREE.Mesh(p.geometry, null); m.matrixAutoUpdate = false; m.renderOrder = 10; xg.add(m); return m; });
-  scene.add(g); scene.add(xg);
-  const f = { g, accent, limbs, torso, belt, head, visor, hands, feet, pads, gun, parts, xg, xparts, color: a.color, hl: null };
-  figs.set(a.id, f);
-  return f;
-}
-function dropFigure(id) {
-  const f = figs.get(id);
-  if (!f) return;
-  scene.remove(f.g); scene.remove(f.xg);
-  f.accent.dispose();
-  figs.delete(id);
-}
-
-const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vD = new THREE.Vector3(), mTmp = new THREE.Matrix4(), qTmp = new THREE.Quaternion(), sTmp = new THREE.Vector3();
-const bx = new THREE.Vector3(), by = new THREE.Vector3(), bz = new THREE.Vector3();
-function bone(bones, i, v) { return v.set(bones[i * 3], bones[i * 3 + 1], bones[i * 3 + 2]); }
+const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3(), vD = new THREE.Vector3(), qTmp = new THREE.Quaternion(), sTmp = new THREE.Vector3();
 function segment(m, a, b, r) {
   vD.subVectors(b, a);
   const len = vD.length() || 0.001;
@@ -210,233 +321,23 @@ function segment(m, a, b, r) {
   vA.addVectors(a, b).multiplyScalar(0.5);
   m.matrix.compose(vA, qTmp, sTmp);
 }
-/** A box at `c` whose y axis runs along `yAxis` and whose front faces `fwd`. */
-function oriented(m, c, yAxis, fwd, sx, sy, sz) {
-  by.copy(yAxis).normalize();
-  bz.copy(fwd).addScaledVector(by, -fwd.dot(by)).normalize().negate();
-  bx.crossVectors(by, bz);
-  mTmp.makeBasis(bx, by, bz);
-  mTmp.scale(sTmp.set(sx, sy, sz));
-  mTmp.setPosition(c);
-  m.matrix.copy(mTmp);
-}
-const P = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-function poseFigure(f, a) {
-  const bn = a.bones;
-  for (const L of f.limbs) segment(L.m, bone(bn, L.a, P[0]), bone(bn, L.b, P[1]), L.r);
-  const yaw = a.body.yaw, fwd = P[5].set(-Math.sin(yaw), 0, -Math.cos(yaw));
-  const chest = bone(bn, BI.chest, P[0]), pelvis = bone(bn, BI.pelvis, P[1]);
-  const up = P[2].subVectors(chest, pelvis);
-  const mid = P[3].addVectors(chest, pelvis).multiplyScalar(0.5);
-  oriented(f.torso, mid, up, fwd, 0.4, up.length() + 0.18, 0.24);
-  oriented(f.belt, pelvis, up, fwd, 0.42, 0.08, 0.26);
-  const head = bone(bn, BI.head, P[3]);
-  const neck = bone(bn, BI.neck, P[4]);
-  const hup = P[2].subVectors(head, neck);
-  const look = P[4].set(-Math.sin(yaw) * Math.cos(a.body.pitch), Math.sin(a.body.pitch), -Math.cos(yaw) * Math.cos(a.body.pitch));
-  oriented(f.head, head, hup, look, 0.25, 0.28, 0.27);
-  vA.copy(head).addScaledVector(look, 0.12);
-  oriented(f.visor, vA, hup, look, 0.2, 0.07, 0.05);
-  for (const [i, side] of [[0, "l"], [1, "r"]]) {
-    const h = bone(bn, BI[side + "_hand"], P[0]);
-    f.hands[i].matrix.compose(h, qTmp.identity(), sTmp.set(0.06, 0.06, 0.06));
-    const ft = bone(bn, BI[side + "_foot"], P[1]);
-    vA.copy(ft).addScaledVector(fwd, 0.06); vA.y = Math.max(vA.y, ft.y);
-    oriented(f.feet[i], vA, UP, fwd, 0.11, 0.08, 0.26);
-    const sh = bone(bn, BI[side + "_shoulder"], P[2]);
-    oriented(f.pads[i], sh, up, fwd, 0.14, 0.08, 0.2);
-  }
-  // what is in the hand, along the aim
-  const rh = bone(bn, BI.r_hand, P[0]);
-  const g = gunOf(a.arms);
-  const long = g ? (g.hold === "pistol" ? 0.22 : g.id === "talon" ? 0.95 : g.id === "mauler" ? 0.7 : 0.6) : a.arms.melee === "lancer" ? 1.7 : 0.95;
-  const thick = g ? (g.hold === "pistol" ? 0.05 : 0.07) : 0.025;
-  vA.copy(rh).addScaledVector(look, long * 0.4);
-  const side = P[1].crossVectors(look, UP).normalize();
-  oriented(f.gun, vA, look, side.lengthSq() > 0 ? P[2].crossVectors(side, look) : UP, thick, long, thick * 1.6);
-}
-
-function syncFigures(alpha) {
-  const seen = new Set();
-  const third = S.hackView && S.hackView.thirdPerson;
-  for (const a of S.actors) {
-    seen.add(a.id);
-    let f = figs.get(a.id);
-    if (!f) f = makeFigure(a);
-    if (f.color !== a.color) { f.accent.color.setHex(a.color); f.accent.emissive.setHex(a.color); f.color = a.color; }
-    const mine = a === S.me && !third && !(S.me && !S.me.alive);
-    const vis = a.alive && a.heard && !mine;
-    f.g.visible = vis;
-    if (!vis) { f.xg.visible = false; continue; }
-    if (owns(a)) {
-      // draw between ticks: shift the tick's bones by how far the body has come
-      const p = renderPos(a, alpha);
-      const dx = p[0] - a.body.x, dy = p[1] - a.body.y, dz = p[2] - a.body.z;
-      f.g.position.set(dx, dy, dz);
-    } else f.g.position.set(0, 0, 0);
-    poseFigure(f, a);
-    for (const m of f.parts) m.matrixWorldNeedsUpdate = true;
-    const hl = S.highlights && S.highlights.get(a.id);
-    if (hl) {
-      let mat = xrayMat.get(hl);
-      if (!mat) { mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(hl), transparent: true, opacity: 0.5, depthTest: false, depthWrite: false }); xrayMat.set(hl, mat); }
-      f.xg.visible = true;
-      f.xg.position.copy(f.g.position);
-      f.parts.forEach((p, i) => { f.xparts[i].matrix.copy(p.matrix); f.xparts[i].material = mat; });
-    } else f.xg.visible = false;
-  }
-  for (const id of [...figs.keys()]) if (!seen.has(id)) dropFigure(id);
-}
-
-/* ---------------------------------------------------------------
-   Your gun
-   --------------------------------------------------------------- */
-const vm = new THREE.Group();
-vm.scale.setScalar(0.72);
-vScene.add(vm);
-const vmModels = {};
-const metal = new THREE.MeshLambertMaterial({ color: 0x3a4250 });
-const dark = new THREE.MeshLambertMaterial({ color: 0x1b2029 });
-const glove = new THREE.MeshLambertMaterial({ color: 0x2e3542 });
-const sleeve = new THREE.MeshLambertMaterial({ color: 0x4b5668 });
-const accentVm = new THREE.MeshLambertMaterial({ color: 0x39c6e8, emissive: 0x1a7f99, emissiveIntensity: 0.5 });
-const bladeMat = new THREE.MeshLambertMaterial({ color: 0xe6edf5, emissive: 0x88a0b8, emissiveIntensity: 0.25 });
-function part(g, mat, sx, sy, sz, x, y, z, rx) {
-  const m = new THREE.Mesh(boxG, mat);
-  m.scale.set(sx, sy, sz); m.position.set(x, y, z);
-  if (rx) m.rotation.x = rx;
-  g.add(m);
-  return m;
-}
-function gunModel(id) {
-  const g = new THREE.Group();
-  const G = GUNS[id];
-  // the hand on the grip, and a sleeve running back out of view
-  part(g, glove, 0.045, 0.075, 0.065, 0, -0.07, 0.02, -0.3);
-  part(g, sleeve, 0.065, 0.065, 0.3, 0.015, -0.1, 0.19);
-  if (G.hold === "pistol") {
-    const L = id === "brick" ? 0.24 : 0.18;
-    part(g, metal, 0.036, 0.05, L, 0, 0, -L / 2 + 0.03);
-    part(g, dark, 0.032, 0.095, 0.045, 0, -0.06, 0.012, 0.25);
-    part(g, accentVm, 0.037, 0.006, L * 0.7, 0, -0.012, -L / 2 + 0.03);
-    part(g, dark, 0.008, 0.012, 0.012, 0, 0.031, -L + 0.05);
-    if (id === "brick") part(g, metal, 0.052, 0.052, 0.06, 0, -0.004, -0.03);
-    g.userData.muzzle = new THREE.Vector3(0, 0.005, -L + 0.02);
-  } else {
-    const L = id === "talon" ? 0.72 : id === "mauler" ? 0.54 : id === "hornet" ? 0.36 : 0.5;
-    part(g, metal, 0.042, 0.06, L * 0.62, 0, 0, -L * 0.25);                  // receiver
-    part(g, dark, 0.022, 0.022, L * 0.45, 0, 0.008, -L * 0.72);               // barrel
-    part(g, accentVm, 0.043, 0.006, L * 0.5, 0, -0.016, -L * 0.25);           // a stripe down the side
-    part(g, dark, 0.036, 0.1, 0.045, 0, -0.07, 0.02, 0.2);                   // grip
-    part(g, dark, 0.034, 0.07, 0.14, 0, -0.005, 0.12);                        // stock
-    part(g, glove, 0.045, 0.06, 0.07, -0.028, -0.045, -L * 0.42);             // the other hand
-    part(g, sleeve, 0.06, 0.06, 0.32, -0.06, -0.09, -L * 0.1);
-    if (id === "talon") { part(g, dark, 0.04, 0.04, 0.24, 0, 0.058, -0.14); part(g, accentVm, 0.042, 0.042, 0.01, 0, 0.058, -0.02); }
-    else part(g, dark, 0.012, 0.022, 0.03, 0, 0.04, -L * 0.05);               // a rear sight
-    if (id === "mauler") part(g, dark, 0.05, 0.04, 0.18, 0, -0.035, -L * 0.62);
-    if (id === "hornet") part(g, dark, 0.026, 0.13, 0.036, 0, -0.1, -0.07);
-    if (id === "kestrel") part(g, dark, 0.03, 0.12, 0.05, 0, -0.09, -0.1, 0.25);
-    g.userData.muzzle = new THREE.Vector3(0, 0.008, -L * 0.95);
-  }
-  return g;
-}
-function meleeModel(id) {
-  const g = new THREE.Group();
-  part(g, glove, 0.05, 0.08, 0.07, 0, -0.07, 0.02, -0.3);
-  part(g, sleeve, 0.07, 0.07, 0.3, 0.02, -0.1, 0.2);
-  if (id === "katana") {
-    part(g, dark, 0.03, 0.03, 0.2, 0, -0.03, 0.02);
-    part(g, accentVm, 0.08, 0.012, 0.03, 0, -0.03, -0.09);
-    part(g, bladeMat, 0.012, 0.035, 0.7, 0, -0.02, -0.45);
-  } else {
-    part(g, dark, 0.03, 0.03, 0.9, 0, -0.03, -0.2);
-    part(g, accentVm, 0.05, 0.05, 0.05, 0, -0.03, -0.66);
-    part(g, bladeMat, 0.02, 0.06, 0.28, 0, -0.03, -0.82);
-  }
-  g.userData.muzzle = new THREE.Vector3(0, 0, -0.6);
-  return g;
-}
-function vmModel(key) {
-  if (!vmModels[key]) {
-    const m = GUNS[key] ? gunModel(key) : meleeModel(key);
-    m.visible = false;
-    vm.add(m);
-    vmModels[key] = m;
-  }
-  return vmModels[key];
-}
-const flash = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.12), new THREE.MeshBasicMaterial({ color: 0xffe6a0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
-vScene.add(flash);
-const V = { bob: 0, kick: 0, kickR: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, flashT: 0, swing: 0, reload: 0, swapT: 0, key: "" };
-export function vmFire(a, e) { V.kick = Math.min(1, V.kick + (GUNS[e.gun].id === "talon" || GUNS[e.gun].id === "brick" || GUNS[e.gun].id === "mauler" ? 1 : 0.45)); V.flashT = 0.05; }
-export function vmSwing() { V.swing = 1; }
-
-function updateViewmodel(dt) {
-  const a = S.me;
-  const third = S.hackView && S.hackView.thirdPerson;
-  if (!a || !a.alive || third) { vm.visible = false; flash.material.opacity = 0; return; }
-  vm.visible = true;
-  const A = a.arms, g = gunOf(A);
-  const key = g ? g.id : A.melee;
-  if (key !== V.key) { for (const k in vmModels) vmModels[k].visible = false; V.key = key; V.swapT = 1; }
-  const model = vmModel(key);
-  model.visible = true;
-  const body = a.body;
-  const hs = Math.hypot(body.vx, body.vz);
-  V.bob += dt * (body.onGround ? hs * 1.35 : 0);
-  const bobAmt = body.onGround && !body.sliding ? Math.min(1, hs / 7) : 0;
-  // sway follows how fast you turn (radians a second), not how far you turned this frame
-  const inv = dt > 0 ? 1 / dt : 0;
-  const dy = wrapAngle(S.view.yaw - V.lastYaw) * inv, dp = (S.view.pitch - V.lastPitch) * inv;
-  V.lastYaw = S.view.yaw; V.lastPitch = S.view.pitch;
-  V.swayX = damp(V.swayX, clamp(dy * 0.022, -0.06, 0.06), 10, dt);
-  V.swayY = damp(V.swayY, clamp(-dp * 0.022, -0.06, 0.06), 10, dt);
-  V.kick = damp(V.kick, 0, 14, dt);
-  V.swing = Math.max(0, V.swing - dt * 3.2);
-  V.swapT = Math.max(0, V.swapT - dt * 4);
-  const ads = A.ads;
-  const hip = g ? (g.hold === "pistol" ? [0.15, -0.14, -0.34] : [0.17, -0.155, -0.32]) : [0.19, -0.18, -0.36];
-  const aim = g ? (g.hold === "pistol" ? [0, -0.066, -0.3] : [0, -0.058, -0.26]) : hip;
-  let x = hip[0] + (aim[0] - hip[0]) * ads, y = hip[1] + (aim[1] - hip[1]) * ads, z = hip[2] + (aim[2] - hip[2]) * ads;
-  const b = (1 - ads * 0.85) * bobAmt;
-  x += Math.sin(V.bob) * 0.012 * b - V.swayX * (1 - ads);
-  y += Math.abs(Math.cos(V.bob)) * 0.01 * b - V.swayY * (1 - ads) - V.swapT * 0.25;
-  z += V.kick * 0.06;
-  if (A.reloadT > 0) y -= 0.12 * Math.sin(Math.min(1, (g ? 1 - A.reloadT / g.reload : 0)) * Math.PI);
-  if (body.sprinting) { x += 0.04; y -= 0.03; }
-  vm.position.set(x, y, z);
-  let rx = V.kick * 0.18 * (1 - ads * 0.6), ry = 0, rz = body.sprinting ? 0.35 : 0;
-  if (!g) {
-    // blades: a swing sweeps across; a charge draws back; a lunge thrusts
-    const s = V.swing > 0 ? Math.sin((1 - V.swing) * Math.PI) : 0;
-    ry = s * 1.4 - 0.2; rz += -s * 0.8;
-    if (body.lunge === LUNGE.CHARGE) { vm.position.z += 0.08 + 0.1 * body.lungeCharge; rx -= 0.3 * body.lungeCharge; vm.position.x += 0.03; }
-    if (body.lunge === LUNGE.DASH) { vm.position.z -= 0.18; rx = -0.1; }
-  }
-  vm.rotation.set(rx, ry, rz);
-  V.flashT -= dt;
-  if (V.flashT > 0 && model.userData.muzzle) {
-    flash.position.copy(model.userData.muzzle).applyMatrix4(model.matrixWorld);
-    flash.rotation.z = Math.random() * 3;
-    flash.material.opacity = 0.9;
-    flash.scale.setScalar(g && g.id === "talon" ? 2.2 : 1 + Math.random() * 0.5);
-  } else flash.material.opacity = 0;
-}
-
-/* ---------------------------------------------------------------
-   Tracers, sparks, rounds in flight
-   --------------------------------------------------------------- */
 const TRACERS = [];
-const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffd98a, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
-for (let i = 0; i < 40; i++) { const m = new THREE.Mesh(cyl, tracerMat.clone()); m.visible = false; m.matrixAutoUpdate = false; scene.add(m); TRACERS.push({ m, t: 0 }); }
+const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffd98a, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+for (let i = 0; i < 40; i++) { const m = new THREE.Mesh(cyl, tracerMat.clone()); m.visible = false; m.matrixAutoUpdate = false; m.frustumCulled = false; scene.add(m); TRACERS.push({ m, t: 0 }); }
 let tracerI = 0;
-export function tracer(from, to, color) {
+const muzzleTmp = new THREE.Vector3();
+/** A tracer from `from` to `to`. Yours start at your gun's muzzle as your screen shows it; anybody else's at theirs. */
+export function tracer(from, to, color, mine, who) {
   const T = TRACERS[tracerI++ % TRACERS.length];
-  segment(T.m, vA.set(from[0], from[1], from[2]), vB.set(to[0], to[1], to[2]), 0.012);
+  if (mine && muzzleWorld(camera, muzzleTmp)) vB.copy(muzzleTmp);
+  else if (!mine && who != null && muzzleOf(who, muzzleTmp)) vB.copy(muzzleTmp);
+  else vB.set(from[0], from[1], from[2]);
+  segment(T.m, vB, vC.set(to[0], to[1], to[2]), 0.01);
   T.m.material.color.setHex(color || 0xffd98a);
-  T.m.visible = true; T.t = 0.09;
+  T.m.visible = true; T.t = 0.08;
+  if (mine) { muzzleLight.position.copy(camera.position); muzzleLight.intensity = 14; }
 }
-const SPARKS = 320;
+const SPARKS = 400;
 const sparkGeo = new THREE.BufferGeometry();
 const sparkPos = new Float32Array(SPARKS * 3), sparkCol = new Float32Array(SPARKS * 3);
 const sparkVel = new Float32Array(SPARKS * 3), sparkLife = new Float32Array(SPARKS);
@@ -457,8 +358,49 @@ export function burst(x, y, z, n, color, speed) {
     sparkLife[i] = 0.35 + Math.random() * 0.3;
   }
 }
+/* Puffs: dust off a wall, a red mist off a body. Soft sprites that grow and fade. */
+const puffTex = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d"), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, "rgba(255,255,255,0.9)"); r.addColorStop(0.5, "rgba(255,255,255,0.35)"); r.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
+const PUFFS = [];
+for (let i = 0; i < 48; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTex, transparent: true, depthWrite: false, opacity: 0 })); s.visible = false; scene.add(s); PUFFS.push({ s, t: 0, life: 1, grow: 1, vy: 0 }); }
+let puffI = 0;
+export function puff(x, y, z, color, size, life) {
+  const P = PUFFS[puffI++ % PUFFS.length];
+  P.s.position.set(x, y, z); P.s.material.color.setHex(color); P.s.visible = true;
+  P.t = 0; P.life = life || 0.5; P.size = size || 0.4; P.vy = 0.4;
+}
+/* Holes where shots meet walls: a pool of small dark discs laid on the surface. */
+const holeTex = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 32;
+  const g = c.getContext("2d"), r = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  r.addColorStop(0, "rgba(8,8,10,1)"); r.addColorStop(0.35, "rgba(20,20,24,0.95)"); r.addColorStop(0.55, "rgba(40,40,46,0.5)"); r.addColorStop(1, "rgba(60,60,66,0)");
+  g.fillStyle = r; g.fillRect(0, 0, 32, 32);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const HOLES = [];
+const holeMat = new THREE.MeshBasicMaterial({ map: holeTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+const holeGeo = new THREE.PlaneGeometry(0.11, 0.11);
+for (let i = 0; i < 90; i++) { const m = new THREE.Mesh(holeGeo, holeMat.clone()); m.visible = false; scene.add(m); HOLES.push({ m, t: 0 }); }
+let holeI = 0;
+const nTmp = new THREE.Vector3(), Z = new THREE.Vector3(0, 0, 1);
+export function hole(x, y, z, nx, ny, nz) {
+  if (!(nx || ny || nz)) return;
+  const H = HOLES[holeI++ % HOLES.length];
+  nTmp.set(nx, ny, nz).normalize();
+  H.m.position.set(x, y, z).addScaledVector(nTmp, 0.005);
+  H.m.quaternion.setFromUnitVectors(Z, nTmp);
+  H.m.rotateZ(Math.random() * 6.28);
+  H.m.scale.setScalar(0.7 + Math.random() * 0.6);
+  H.m.visible = true; H.t = 12; H.m.material.opacity = 1;
+}
 function updateEffects(dt) {
-  for (const T of TRACERS) if (T.m.visible) { T.t -= dt; T.m.material.opacity = Math.max(0, T.t / 0.09) * 0.8; if (T.t <= 0) T.m.visible = false; }
+  for (const T of TRACERS) if (T.m.visible) { T.t -= dt; T.m.material.opacity = Math.max(0, T.t / 0.08) * 0.85; if (T.t <= 0) T.m.visible = false; }
   for (let i = 0; i < SPARKS; i++) {
     if (sparkLife[i] <= 0) { sparkPos[i * 3 + 1] = -999; continue; }
     sparkLife[i] -= dt;
@@ -467,9 +409,21 @@ function updateEffects(dt) {
   }
   sparkGeo.attributes.position.needsUpdate = true;
   sparkGeo.attributes.color.needsUpdate = true;
+  for (const P of PUFFS) {
+    if (!P.s.visible) continue;
+    P.t += dt;
+    const k = P.t / P.life;
+    if (k >= 1) { P.s.visible = false; continue; }
+    P.s.scale.setScalar(P.size * (0.5 + k * 1.2));
+    P.s.position.y += P.vy * dt;
+    P.s.material.opacity = (1 - k) * 0.7;
+  }
+  for (const H of HOLES) if (H.m.visible) { H.t -= dt; if (H.t < 2) H.m.material.opacity = Math.max(0, H.t / 2); if (H.t <= 0) H.m.visible = false; }
+  muzzleLight.intensity = Math.max(0, muzzleLight.intensity - dt * 220);
 }
 const rounds = [];
-const roundMat = new THREE.MeshBasicMaterial({ color: 0xfff1c0 });
+const roundMat = new THREE.MeshBasicMaterial({ color: 0xfff1c0, fog: false });
+const sph = new THREE.SphereGeometry(1, 8, 6);
 function updateRounds() {
   while (rounds.length < S.projectiles.length) { const m = new THREE.Mesh(sph, roundMat); m.scale.setScalar(0.05); scene.add(m); rounds.push(m); }
   rounds.forEach((m, i) => {
@@ -482,7 +436,7 @@ function updateRounds() {
 /* ---------------------------------------------------------------
    The camera
    --------------------------------------------------------------- */
-const cam = { punch: 0, dip: 0, roll: 0, fovAdd: 0 };
+const cam = { punch: 0, dip: 0, fovAdd: 0, slide: 0, slideKick: 0 };
 export function landDip(v) { cam.dip = Math.min(0.25, cam.dip + v * 0.02); }
 export function punch(p) { cam.punch += p; }
 /** A horizontal field of view, as Source measures it, for this screen's shape. */
@@ -515,7 +469,12 @@ function placeCamera(alpha, dt) {
   const A = a.arms, g = gunOf(A);
   const zoom = g ? 1 + (g.adsZoom - 1) * A.ads : 1;
   cam.fovAdd = damp(cam.fovAdd, (a.body.sprinting ? 4 : 0) + clamp((hs - 8) * 0.7, 0, 12) + (a.body.lunge === LUNGE.DASH ? 6 : 0), 5, dt);
-  camera.fov = vfov((base + cam.fovAdd) / zoom);
+  // a slide widens the view by how fast it is going: quickly in, slowly back out, with a kick as it starts
+  const slideWant = b.sliding ? clamp(3 + (hs - PM.slideStart) * 1.2, 3, 16) : 0;
+  cam.slide = damp(cam.slide, slideWant, slideWant > cam.slide ? 10 : 3, dt);
+  cam.slideKick = Math.max(0, cam.slideKick - dt * 3);
+  const widen = save.settings.fovFx ? Math.min(24, cam.fovAdd + cam.slide + cam.slideKick * 5) : 0;
+  camera.fov = vfov((base + widen * (1 - A.ads)) / zoom);
   camera.updateProjectionMatrix();
   S.cam.x = camera.position.x; S.cam.y = camera.position.y; S.cam.z = camera.position.z;
   S.cam.yaw = yaw; S.cam.pitch = pitch; S.cam.fov = camera.fov;
@@ -532,7 +491,7 @@ const vpm = new THREE.Matrix4();
 export function worldToScreen(x, y, z, out) {
   out = out || {};
   pv.set(x, y, z).project(camera);
-  const w = window.innerWidth, h = window.innerHeight;
+  const w = view.w, h = view.h;
   out.x = (pv.x * 0.5 + 0.5) * w; out.y = (-pv.y * 0.5 + 0.5) * h;
   out.behind = pv.z > 1 || pv.z < -1;
   out.visible = !out.behind && out.x >= 0 && out.x <= w && out.y >= 0 && out.y <= h;
@@ -548,35 +507,49 @@ export function viewProjection() {
 /* ---------------------------------------------------------------
    A frame
    --------------------------------------------------------------- */
+let booted = false, clockT = 0;
+function boot() {
+  booted = true;
+  initFigures(scene);
+  environments();
+  loadModels();
+  on("tracer", (a, o, h) => { if (h.world && h.nx !== undefined) { hole(h.x, h.y, h.z, h.nx, h.ny, h.nz); puff(h.x + h.nx * 0.05, h.y + h.ny * 0.05, h.z + h.nz * 0.05, 0xb9b2a6, 0.35, 0.45); } else if (h.actor) puff(h.x, h.y, h.z, 0xb3202a, 0.3, 0.35); });
+  on("move", (a, ev) => { if (a === S.me && ev === "slide") cam.slideKick = 1; });
+  on("impact", (p, h) => { if (h.world && h.nx !== undefined) hole(h.x, h.y, h.z, h.nx, h.ny, h.nz); puff(h.x, h.y, h.z, h.actor ? 0xb3202a : 0xb9b2a6, 0.6, 0.6); });
+}
 export function frame(alpha, dt) {
+  if (!booted) boot();
   watchFrameRate(dt);
+  clockT += dt;
   if (!mapGroup) buildArena();
   placeCamera(alpha, dt);
-  syncFigures(alpha);
-  updateViewmodel(dt);
+  syncFigures(alpha, dt);
+  updateViewmodel(dt, camera.aspect, S.cam.zoom || 1);
   updateEffects(dt);
   updateRounds();
+  updatePads(clockT);
+  sky.position.copy(camera.position);
   renderer.clear();
   renderer.render(scene, camera);
-  if (vm.visible) {
+  if (vmVisible) {
     renderer.clearDepth();
-    vCam.fov = 58 / Math.max(1, (S.cam.zoom || 1) * 0.35 + 0.65);
-    vCam.updateProjectionMatrix();
-    const g = S.me && gunOf(S.me.arms);
-    const scoped = g && g.id === "talon" && S.me.arms.ads > 0.9;
-    if (!scoped) renderer.render(vScene, vCam);
+    renderer.render(vScene, vCam);
   }
+  S.cam.scoped = vmScoped;
 }
 /** Title screen: a slow orbit over the arena. */
 export function idle(t, dt) {
+  if (!booted) boot();
   if (!mapGroup) buildArena();
+  clockT += dt;
   const r = 70;
   camera.position.set(Math.sin(t * 0.05) * r, 34, Math.cos(t * 0.05) * r);
   camera.rotation.set(-0.42, t * 0.05, 0);
   camera.fov = vfov(90); camera.updateProjectionMatrix();
-  for (const f of figs.values()) { f.g.visible = false; f.xg.visible = false; }
-  vm.visible = false;
+  hideFigures();
   updateEffects(dt);
+  updatePads(clockT);
+  sky.position.copy(camera.position);
   renderer.clear();
   renderer.render(scene, camera);
 }

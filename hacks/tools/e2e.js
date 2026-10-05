@@ -55,17 +55,17 @@ function serve() {
     srv.listen(0, "127.0.0.1", () => resolve(srv));
   });
 }
-async function open(browser, base, opts) {
+async function open(browser, base, opts, settings) {
   const ctx = await browser.newContext(Object.assign({ viewport: { width: 1280, height: 720 }, serviceWorkers: "block" }, opts || {}));
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   page.on("dialog", (d) => d.accept());
-  await page.addInitScript(() => {
+  await page.addInitScript((extra) => {
     localStorage.setItem("hacks:debug", "1");
-    if (!localStorage.getItem("hacks:v1")) localStorage.setItem("hacks:v1", JSON.stringify({ settings: { quality: "low", master: 0, sfx: 0 } }));
-  });
+    if (!localStorage.getItem("hacks:v1")) localStorage.setItem("hacks:v1", JSON.stringify({ settings: Object.assign({ quality: "low", master: 0, sfx: 0 }, extra) }));
+  }, settings || {});
   await page.goto(base + "/index.html");
   await page.waitForFunction(() => window.HK_DEBUG && window.HK_DEBUG.S.mode === "title", null, { timeout: 60000 });
   return { ctx, page, errors };
@@ -80,6 +80,37 @@ async function until(page, fn, arg, t) {
 }
 const soft = (p) => p.then(() => true, () => false);
 async function shot(page, name) { if (SHOT_DIR) await page.screenshot({ path: path.join(SHOT_DIR, name + ".png") }); }
+/**
+ * The two things that drifted apart on some screens: the crosshair must be the centre of the
+ * drawn picture, and aiming a gun must put its sights there too.
+ */
+async function alignment(page, where) {
+  const r = await page.evaluate(() => {
+    const gl = document.getElementById("gl").getBoundingClientRect(), ch = document.getElementById("crosshair").getBoundingClientRect();
+    return { glx: gl.left + gl.width / 2, gly: gl.top + gl.height / 2, chx: ch.left, chy: ch.top, w: gl.width, h: gl.height, iw: innerWidth, ih: innerHeight };
+  });
+  check("on " + where + ", the crosshair is the centre of the picture", Math.abs(r.glx - r.chx) <= 1 && Math.abs(r.gly - r.chy) <= 1 && Math.abs(r.h - r.ih) <= 1, JSON.stringify(r));
+  const ok = await soft(until(page, async () => (await import("./js/models.js")).modelsReady(), null, 30000));
+  const sight = await page.evaluate(async () => {
+    const { S } = window.HK_DEBUG;
+    const V = await import("./js/viewmodel.js");
+    const was = S.paused;
+    S.paused = true;
+    S.me.arms.cur = 0; S.me.arms.reloadT = 0; S.me.arms.swapT = 0;
+    const out = [];
+    for (const slot of [0, 1]) {
+      S.me.arms.cur = slot; S.me.arms.ads = 1;
+      for (let i = 0; i < 12; i++) await new Promise((r) => requestAnimationFrame(r));
+      S.me.arms.ads = 1;
+      await new Promise((r) => requestAnimationFrame(r));
+      out.push(V.sightOnScreen());
+    }
+    S.me.arms.ads = 0; S.me.arms.cur = 0; S.paused = was;
+    return out;
+  });
+  check("on " + where + ", aiming puts both guns' sights on the centre", ok && sight.every((s) => s && Math.abs(s.x) < 0.02 && Math.abs(s.y) < 0.02), JSON.stringify(sight));
+}
+
 /** Run the match forward by `seconds` of game time, as fast as the machine allows. */
 const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = window.HK_DEBUG; for (let i = 0; i < s * 64; i++) game.tick(game.TICK); }, seconds);
 
@@ -131,11 +162,30 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     check("your loadout is in your hands", await p.evaluate(() => window.HK_DEBUG.S.me.arms.slots[0] === "mauler" && window.HK_DEBUG.S.me.arms.melee === "lancer"));
     check("the HUD is up", await p.isVisible("#hud") && await soft(until(p, () => /FFA/.test(document.getElementById("modeName").textContent), null, 5000)));
     check("the starter hack runs and draws", await soft(until(p, () => { const h = window.HK_DEBUG.hackapi; return h.running() === 1; }, null, 15000)));
+    await alignment(p, "a computer");
+    check("the guns and the bodies load", await soft(until(p, async () => (await import("./js/models.js")).modelsReady(), null, 30000)));
+    const body = await p.evaluate(async () => {
+      const { S } = window.HK_DEBUG;
+      const F = await import("./js/figures.js");
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const a = S.actors.find((x) => x.kind === "bot" && x.alive && x.heard);
+      const f = a && F.figureOf(a.id);
+      if (!f || f.kind !== "human") return { kind: f && f.kind };
+      f.g.updateMatrixWorld(true);
+      const e = f.rig.b.RightHand.matrixWorld.elements;
+      const d = Math.hypot(e[12] - a.bones[30] - f.g.position.x, e[13] - a.bones[31] - f.g.position.y, e[14] - a.bones[32] - f.g.position.z);
+      return { kind: f.kind, d };
+    });
+    check("players are drawn as bodies posed on their bones", body.kind === "human" && body.d < 0.15, JSON.stringify(body));
     await p.waitForTimeout(600);
+    // software WebGL can be a few frames a second here, and a slow frame pays out at most a quarter
+    // of a second of ticks: hold W until the walk shows, rather than for a fixed time
     const x0 = await p.evaluate(() => [window.HK_DEBUG.S.me.body.x, window.HK_DEBUG.S.me.body.z]);
-    await p.keyboard.down("KeyW"); await p.waitForTimeout(700); await p.keyboard.up("KeyW");
+    await p.keyboard.down("KeyW");
+    const walkedW = await soft(until(p, (x0) => Math.hypot(window.HK_DEBUG.S.me.body.x - x0[0], window.HK_DEBUG.S.me.body.z - x0[1]) > 1, x0, 6000));
+    await p.keyboard.up("KeyW");
     const x1 = await p.evaluate(() => [window.HK_DEBUG.S.me.body.x, window.HK_DEBUG.S.me.body.z]);
-    check("W walks you forward", Math.hypot(x1[0] - x0[0], x1[1] - x0[1]) > 1, JSON.stringify([x0, x1]));
+    check("W walks you forward", walkedW, JSON.stringify([x0, x1]));
     // software WebGL can be a few frames a second here; game time still runs in real time, so wait on the outcome
     await until(p, () => window.HK_DEBUG.S.me.body.onGround, null, 5000);
     const y0 = await p.evaluate(() => window.HK_DEBUG.S.me.body.y);
@@ -143,6 +193,30 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     const jumped = await soft(until(p, (y) => window.HK_DEBUG.S.me.body.y > y + 0.3, y0, 4000));
     await p.evaluate(() => dispatchEvent(new KeyboardEvent("keyup", { code: "Space", key: " " })));
     check("Space jumps", jumped);
+    // hold, toggle and mixed, on the crouch key
+    const crouchOn = () => p.evaluate(async () => { const I = await import("./js/input.js"); const { B } = await import("./js/movement.js"); return !!(I.buildCmd().buttons & B.CROUCH); });
+    const key = (type) => p.evaluate((type) => dispatchEvent(new KeyboardEvent(type, { code: "KeyC", key: "c" })), type);
+    const tap = async () => { await key("keydown"); await key("keyup"); };
+    await p.evaluate(() => { window.HK_DEBUG.save.settings.keyModes.crouch = "toggle"; });
+    await tap(); const t1 = await crouchOn(); await tap(); const t2 = await crouchOn();
+    check("a toggled key: one press on, the next off", t1 && !t2, JSON.stringify([t1, t2]));
+    await p.evaluate(() => { window.HK_DEBUG.save.settings.keyModes.crouch = "mixed"; });
+    await tap(); const m1 = await crouchOn(); await tap(); const m2 = await crouchOn();
+    await key("keydown"); await p.waitForTimeout(450); const m3 = await crouchOn(); await key("keyup"); const m4 = await crouchOn();
+    check("a mixed key: a tap toggles, a long press holds", m1 && !m2 && m3 && !m4, JSON.stringify([m1, m2, m3, m4]));
+    await p.evaluate(() => { window.HK_DEBUG.save.settings.keyModes.crouch = "hold"; });
+    // a slide widens the view by its speed; the setting turns it off
+    const fovAt = (sliding, speed, fx) => p.evaluate(async ([sliding, speed, fx]) => {
+      const { S, save } = window.HK_DEBUG;
+      S.paused = true; save.settings.fovFx = fx;
+      const b = S.me.body; b.sliding = sliding; b.sprinting = false; b.vx = 0; b.vz = -speed; b.onGround = true;
+      for (let i = 0; i < 40; i++) await new Promise((r) => requestAnimationFrame(r));
+      const f = S.cam.fov;
+      b.sliding = false; b.vz = 0; save.settings.fovFx = true; S.paused = false;
+      return f;
+    }, [sliding, speed, fx]);
+    const fovs = [await fovAt(false, 0, true), await fovAt(true, 7, true), await fovAt(true, 13, true), await fovAt(true, 13, false)];
+    check("a slide widens the view, more the faster it goes, unless that is switched off", fovs[1] > fovs[0] + 1 && fovs[2] > fovs[1] + 1 && Math.abs(fovs[3] - fovs[0]) < 0.5, fovs.map((f) => f.toFixed(1)).join(", "));
     await shot(p, "02-match");
     const bots0 = await p.evaluate(() => window.HK_DEBUG.S.actors.filter((a) => a.kind === "bot").map((a) => [a.body.x, a.body.z]));
     await fastForward(p, 3);
@@ -167,8 +241,13 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     check("solo play pauses while it is open", await p.evaluate(() => window.HK_DEBUG.S.paused));
     check("the starter hack's code is in the editor", /Hello, hacker/.test(await p.inputValue("#editor textarea")));
     await p.click('#hpTabs [data-htab="learn"]');
-    const lessons = await p.$$("#hpLearn [data-lesson]");
+    const lessons = await p.$$("#hpLearn .lrow[data-goto]");
     check("the Learn tab lists the lessons", lessons.length >= 12, lessons.length);
+    // the lesson pane once fell into the hack list's 210-pixel column; it must have the panel's width
+    const learnW = await p.evaluate(() => document.querySelector('#hackPanel [data-hpane="learn"]').getBoundingClientRect().width);
+    check("the Learn tab uses the panel's whole width", learnW > 1000, Math.round(learnW));
+    await p.click('#hpLearn .lrow[data-goto="boxes"]');
+    check("picking a lesson shows that lesson", /Boxes through walls/.test(await p.textContent("#hpLearn .lesson h2")));
     await p.click('#hpLearn [data-lesson="boxes"]');
     await until(p, () => window.HK_DEBUG.hackapi.running() === 2, null, 10000);
     check("a lesson opens as a new hack, running", /screen\.toScreen/.test(await p.inputValue("#editor textarea")));
@@ -190,7 +269,8 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     const errLine = await p.textContent("#editor .ed-gutter .err");
     const codeLines = (await p.inputValue("#editor textarea")).split("\n");
     check("a syntax error is marked on its own line", codeLines[+errLine - 1] && codeLines[+errLine - 1].includes("broken"), errLine);
-    check("and explained in the console", /SyntaxError/.test(await p.textContent("#hpLog")));
+    // the console redraws on a timer, so give it a moment
+    check("and explained in the console", await soft(until(p, () => /SyntaxError/.test(document.getElementById("hpLog").textContent), null, 4000)));
     await p.click("#hpClose");
     await p.keyboard.press("KeyH");
     await until(p, () => !document.getElementById("hackPanel").hidden);
@@ -231,6 +311,7 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
       await q.tap("#btnPlay"); await q.tap("#btnPlayGo");
       await until(q, () => window.HK_DEBUG.S.mode === "play" && document.body.classList.contains("touchOn"));
       check("the touch controls are up", await q.isVisible("#touch"));
+      await alignment(q, "this phone");
       const rects = await q.$$eval(".tbtn", (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.id, r.left, r.top, r.right, r.bottom]; }));
       const off = rects.filter((r) => r[1] < 0 || r[2] < 0 || r[3] > vw + 0.5 || r[4] > vh + 0.5);
       check("all " + rects.length + " buttons are on screen, all the time", rects.length === 14 && off.length === 0, JSON.stringify(off));
@@ -254,6 +335,15 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
       const walked = await soft(until(q, (p0) => Math.hypot(window.HK_DEBUG.S.me.body.x - p0[0], window.HK_DEBUG.S.me.body.z - p0[1]) > 1, p0, 6000));
       await q.evaluate(() => dispatchEvent(new PointerEvent("pointerup", { pointerId: 8, pointerType: "touch" })));
       check("pushing the stick moves you", walked);
+      // Aim starts as a toggle on touch: a tap latches it, lit, and the next tap lets go
+      const tapBtn = (id) => q.evaluate((id) => {
+        const t = document.querySelector('.tbtn[data-id="' + id + '"]'), r = t.getBoundingClientRect();
+        t.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 11, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, pointerType: "touch" }));
+        dispatchEvent(new PointerEvent("pointerup", { pointerId: 11, pointerType: "touch" }));
+      }, id);
+      const aimOn = () => q.evaluate(async () => { const I = await import("./js/input.js"); const { B } = await import("./js/movement.js"); return { on: !!(I.buildCmd().buttons & B.ADS), lit: document.querySelector('.tbtn[data-id="ads"]').classList.contains("latched") }; });
+      await tapBtn("ads"); const a1 = await aimOn(); await tapBtn("ads"); const a2 = await aimOn();
+      check("tapping Aim latches it, and lights it; tapping again lets go", a1.on && a1.lit && !a2.on && !a2.lit, JSON.stringify([a1, a2]));
       await shot(q, "05-phone-" + (vw > vh ? "landscape" : "portrait"));
       // move the fire button
       await q.evaluate(() => { window.HK_DEBUG.S.paused = true; });
@@ -263,20 +353,77 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
       await q.tap('#setTabs [data-tab="touch"]');
       await q.tap("#btnEditTouch");
       await until(q, () => document.body.classList.contains("touchEditing"));
-      const fb = await (await q.$('.tbtn[data-id="fire"]')).boundingBox();
-      await q.evaluate(([x, y]) => {
-        const t = document.querySelector('.tbtn[data-id="fire"]');
+      // every button, as circles, and the editor's bar: nothing may cover anything, or it cannot be picked up again
+      const overlaps = () => q.evaluate(() => {
+        const c = [...document.querySelectorAll(".tbtn")].map((e) => { const r = e.getBoundingClientRect(); return { id: e.dataset.id, x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.width / 2 }; });
+        // the editor's bar, and the readouts that cannot move (shown faintly while editing)
+        const fixed = ["#touchEdit .bar", "#hudTop .pill", "#hudBL", "#hudBR"].map((q) => [q, document.querySelector(q).getBoundingClientRect()]).filter(([, r]) => r.width && r.height);
+        const bad = [];
+        for (let i = 0; i < c.length; i++) {
+          for (let j = i + 1; j < c.length; j++) if (Math.hypot(c[i].x - c[j].x, c[i].y - c[j].y) < c[i].r + c[j].r - 0.5) bad.push(c[i].id + "/" + c[j].id);
+          for (const [q, b] of fixed) {
+            const nx = Math.max(b.left, Math.min(c[i].x, b.right)), ny = Math.max(b.top, Math.min(c[i].y, b.bottom));
+            if (Math.hypot(c[i].x - nx, c[i].y - ny) < c[i].r - 0.5) bad.push(c[i].id + "/" + q);
+          }
+        }
+        return fixed.length < 4 ? ["the readouts are not shown while editing"] : bad;
+      });
+      check("in the editor, no button covers another, the editor's bar or a readout", (await overlaps()).length === 0, JSON.stringify(await overlaps()));
+      const drag = (id, dx, dy, to) => q.evaluate(([id, dx, dy, to]) => {
+        const t = document.querySelector('.tbtn[data-id="' + id + '"]'), r = t.getBoundingClientRect();
+        const x = r.left + r.width / 2, y = r.top + r.height / 2;
+        let tx = x + dx, ty = y + dy;
+        if (to) { const o = document.querySelector('.tbtn[data-id="' + to + '"]').getBoundingClientRect(); tx = o.left + o.width / 2; ty = o.top + o.height / 2; }
         t.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 9, clientX: x, clientY: y, pointerType: "touch" }));
-        dispatchEvent(new PointerEvent("pointermove", { pointerId: 9, clientX: x - 60, clientY: y - 40, pointerType: "touch" }));
+        for (let k = 1; k <= 6; k++) dispatchEvent(new PointerEvent("pointermove", { pointerId: 9, clientX: x + (tx - x) * k / 6, clientY: y + (ty - y) * k / 6, pointerType: "touch" }));
         dispatchEvent(new PointerEvent("pointerup", { pointerId: 9, pointerType: "touch" }));
-      }, [fb.x + fb.width / 2, fb.y + fb.height / 2]);
+      }, [id, dx, dy, to || null]);
+      await drag("fire", 0, -24);
       const moved = await q.evaluate(() => { const o = innerWidth >= innerHeight ? "landscape" : "portrait"; return JSON.parse(localStorage.getItem("hacks:v1")).touch[o].fire; });
       const def = vw > vh ? { x: 0.86, y: 0.62 } : { x: 0.78, y: 0.7 };
-      check("dragging a button moves it, and the new place is saved", Math.abs(moved.x - (def.x - 60 / vw)) < 0.02 && Math.abs(moved.y - (def.y - 40 / vh)) < 0.02, JSON.stringify(moved));
+      check("dragging a button moves it, and the new place is saved", Math.abs(moved.x - def.x) < 0.02 && Math.abs(moved.y - (def.y - 24 / vh)) < 0.02, JSON.stringify(moved));
+      await drag("reload", 0, 0, "jump");
+      check("a button dropped on another slides clear of it", (await overlaps()).length === 0, JSON.stringify(await overlaps()));
       await q.tap("#teDone");
       check("Done goes back to the game's menu", await soft(until(q, () => !document.getElementById("scr-pause").hidden && !document.body.classList.contains("touchEditing"), null, 4000)));
       check("no errors on the phone", M.errors.length === 0, M.errors.slice(0, 4).join(" | "));
       await M.ctx.close();
+    }
+    {
+      console.log("\nA phone held upright, with Force landscape on");
+      const R = await open(browser, base, { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 }, { forceLandscape: true }); pages.push(R);
+      const q = R.page;
+      check("where the screen cannot be locked, the game is turned", await q.evaluate(() => document.body.classList.contains("turned")));
+      await q.tap("#btnPlay"); await q.tap("#btnPlayGo");
+      await until(q, () => window.HK_DEBUG.S.mode === "play" && document.body.classList.contains("touchOn"));
+      const pic = await q.evaluate(() => { const c = document.getElementById("gl"); return [c.clientWidth, c.clientHeight, document.querySelector('.tbtn[data-id="stick"]').offsetWidth]; });
+      check("it draws a landscape picture, with the sideways layout", pic[0] === 844 && pic[1] === 390 && pic[2] === 150, JSON.stringify(pic));
+      await alignment(q, "a phone forced sideways");
+      const rects = await q.$$eval(".tbtn", (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.id, r.left, r.top, r.right, r.bottom]; }));
+      check("every button is on the screen", rects.length === 14 && rects.every((r) => r[1] >= -0.5 && r[2] >= -0.5 && r[3] <= 390.5 && r[4] <= 844.5), JSON.stringify(rects.filter((r) => r[3] > 390.5 || r[4] > 844.5)));
+      await q.waitForTimeout(300);
+      const y0 = await q.evaluate(() => window.HK_DEBUG.S.me.body.y);
+      await q.evaluate(() => {
+        const t = document.querySelector('.tbtn[data-id="jump"]'), r = t.getBoundingClientRect();
+        t.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 7, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, pointerType: "touch" }));
+      });
+      const hopped = await soft(until(q, (y) => window.HK_DEBUG.S.me.body.y > y + 0.3, y0, 3000));
+      await q.evaluate(() => dispatchEvent(new PointerEvent("pointerup", { pointerId: 7, pointerType: "touch" })));
+      check("the jump button still jumps", hopped);
+      // the game's "up" is the phone's right-hand edge: pushing the stick that way is forward
+      const st = await q.evaluate(async () => {
+        const I = await import("./js/input.js");
+        const t = document.querySelector(".tbtn.stick"), r = t.getBoundingClientRect();
+        const x = r.left + r.width / 2, y = r.top + r.height / 2;
+        t.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 8, clientX: x, clientY: y, pointerType: "touch" }));
+        dispatchEvent(new PointerEvent("pointermove", { pointerId: 8, clientX: x + r.width / 2, clientY: y, pointerType: "touch" }));
+        const out = { fwd: I.touchState.fwd, side: I.touchState.side };
+        dispatchEvent(new PointerEvent("pointerup", { pointerId: 8, pointerType: "touch" }));
+        return out;
+      });
+      check("pushing the stick towards the game's top walks forward", st.fwd > 0.9 && Math.abs(st.side) < 0.1, JSON.stringify(st));
+      check("no errors on the turned phone", R.errors.length === 0, R.errors.slice(0, 4).join(" | "));
+      await R.ctx.close();
     }
   } catch (e) {
     failures++;

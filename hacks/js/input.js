@@ -11,11 +11,16 @@
  * between them, so a wheel bound to jump is a fresh press every notch — the
  * way Source players bunny hop by hand.
  *
- * Touch (touch.js) feeds the same command through `touchState`. */
+ * Touch (touch.js) feeds the same command through `touchState`.
+ *
+ * Aim, crouch, sprint, lunge and the scoreboard can each be held, toggled or
+ * "mixed" — a tap toggles, a longer press holds — chosen separately for keys
+ * and for touch (controls.js MODAL). Each source keeps its own latch, and an
+ * action is on when either source says so. */
 
-import { S, emit } from "./state.js";
+import { S, emit, on } from "./state.js";
 import { save } from "./save.js";
-import { ACTIONS } from "./controls.js";
+import { ACTIONS, MODAL_IDS, MIXED_HOLD } from "./controls.js";
 import { B } from "./movement.js";
 import { clamp } from "./util.js";
 
@@ -23,16 +28,64 @@ const down = new Set();              // codes held right now
 const edges = new Set();             // actions pressed since the last command
 let wheelQueue = [];                 // actions, one press per notch
 let wheelNow = null, wheelGap = false;
-let sprintOn = false, crouchOn = false;
 let capture = null;                  // the settings screen, waiting for a key
 export const touchState = { fwd: 0, side: 0, held: new Set(), taps: new Set() };
 
 const actionFor = (code) => { const out = []; const b = save.data.binds; for (const a of ACTIONS) if (b[a.id] && (b[a.id][0] === code || b[a.id][1] === code)) out.push(a.id); return out; };
-function held(action) {
-  const b = save.data.binds[action];
-  if (!b) return false;
-  return (b[0] && down.has(b[0])) || (b[1] && down.has(b[1])) || touchState.held.has(action) || wheelNow === action;
+const keyHeld = (action) => { const b = save.data.binds[action]; return !!b && ((b[0] && down.has(b[0])) || (b[1] && down.has(b[1]))); };
+
+/* ---------------------------------------------------------------
+   Hold, toggle, mixed
+   --------------------------------------------------------------- */
+const MODAL = new Set(MODAL_IDS);
+const latch = { key: {}, touch: {} };       // action -> on, for toggle and mixed
+const since = { key: {}, touch: {} };       // action -> when a mixed press switched it on (-1: that press switched it off)
+const modeOf = (src, a) => (src === "key" ? save.settings.keyModes : save.settings.touchModes)[a] || "hold";
+const now = () => performance.now() / 1000;
+function modalDown(src, a) {
+  const m = modeOf(src, a);
+  if (m === "toggle") latch[src][a] = !latch[src][a];
+  else if (m === "mixed") {
+    if (latch[src][a]) { latch[src][a] = false; since[src][a] = -1; }
+    else { latch[src][a] = true; since[src][a] = now(); }
+  }
+  changed(a);
 }
+function modalUp(src, a) {
+  // a mixed press that lasted was a hold: it ends with the press
+  if (modeOf(src, a) === "mixed" && latch[src][a] && since[src][a] >= 0 && now() - since[src][a] > MIXED_HOLD) latch[src][a] = false;
+  changed(a);
+}
+function sourceOn(src, a) {
+  const m = modeOf(src, a);
+  if (m === "always") return true;
+  if (m === "hold") return src === "key" ? keyHeld(a) : touchState.held.has(a);
+  return !!latch[src][a];
+}
+/** Is an action on right now, from any source, in whatever mode each source uses? */
+function held(action) {
+  if (wheelNow === action) return true;
+  if (MODAL.has(action)) return sourceOn("key", action) || sourceOn("touch", action);
+  return keyHeld(action) || touchState.held.has(action);
+}
+/** For touch.js: is this button latched on (toggle and mixed, or always)? */
+export function latched(action) {
+  const m = modeOf("touch", action);
+  return m === "always" || ((m === "toggle" || m === "mixed") && !!latch.touch[action]);
+}
+let scoreShown = false, lastFwd = 0;
+function changed(a) {
+  if (a !== "score") return;
+  const v = held("score");
+  if (v !== scoreShown) { scoreShown = v; emit("scoreboard", v); }
+}
+/** Every latch off: a new life starts standing, unaimed, with the board closed. */
+export function resetLatches() {
+  for (const src of ["key", "touch"]) { latch[src] = {}; since[src] = {}; }
+  changed("score");
+}
+on("spawn", (a) => { if (a === S.me) resetLatches(); });
+on("matchStart", resetLatches);
 
 export const locked = () => document.pointerLockElement === document.getElementById("gl");
 export function lock() {
@@ -52,29 +105,26 @@ function press(code) {
   if (!playing()) return;
   for (const a of actionFor(code)) {
     edges.add(a);
-    if (a === "sprint" && save.settings.sprintMode === "toggle") sprintOn = !sprintOn;
-    if (a === "crouch" && save.settings.crouchMode === "toggle") crouchOn = !crouchOn;
+    if (MODAL.has(a)) modalDown("key", a);
     if (a === "hacks") emit("toggleHacks");
-    if (a === "score") emit("scoreboard", true);
   }
   emit("hackKey", code);
 }
 function release(code) {
   if (!down.delete(code)) return;
-  for (const a of actionFor(code)) if (a === "score") emit("scoreboard", false);
+  // the action lets go only when neither of its keys is still down
+  for (const a of actionFor(code)) if (MODAL.has(a) && !keyHeld(a)) modalUp("key", a);
 }
 
-/** Touch buttons press actions directly. */
+/** Touch buttons press actions directly; touch.js keeps touchState.held. */
 export function touchPress(action) {
   if (!playing()) { if (action === "menu") emit("menu"); return; }
   edges.add(action);
-  if (action === "sprint") sprintOn = !sprintOn;
-  if (action === "crouch" && save.settings.crouchMode === "toggle") crouchOn = !crouchOn;
+  if (MODAL.has(action)) modalDown("touch", action);
   if (action === "hacks") emit("toggleHacks");
   if (action === "menu") emit("menu");
-  if (action === "score") emit("scoreboard", true);
 }
-export function touchRelease(action) { if (action === "score") emit("scoreboard", false); }
+export function touchRelease(action) { if (MODAL.has(action)) modalUp("touch", action); }
 
 /* ---------------------------------------------------------------
    The command for one tick
@@ -83,17 +133,21 @@ export function buildCmd() {
   // the wheel: one tick pressed, one tick released, per notch
   if (wheelGap) { wheelNow = null; wheelGap = false; }
   else if (wheelNow) { wheelNow = null; wheelGap = true; }
-  else if (wheelQueue.length) { wheelNow = wheelQueue.shift(); edges.add(wheelNow); }
+  else if (wheelQueue.length) {
+    wheelNow = wheelQueue.shift(); edges.add(wheelNow);
+    // a notch on a toggled or mixed action is a tap
+    if (MODAL.has(wheelNow) && modeOf("key", wheelNow) !== "hold") { const a = wheelNow; wheelNow = null; modalDown("key", a); modalUp("key", a); }
+  }
 
   const fwd = clamp((held("forward") ? 1 : 0) - (held("back") ? 1 : 0) + touchState.fwd, -1, 1);
   const side = clamp((held("right") ? 1 : 0) - (held("left") ? 1 : 0) + touchState.side, -1, 1);
   let b = 0;
   if (held("jump")) b |= B.JUMP;
-  const crouch = save.settings.crouchMode === "toggle" ? crouchOn : held("crouch");
-  if (crouch) b |= B.CROUCH;
-  const sm = save.settings.sprintMode;
-  if (sm === "auto" || (sm === "toggle" || touchState.sprintToggle ? sprintOn : held("sprint")) || touchState.autoSprint) b |= B.SPRINT;
-  if (fwd <= 0) sprintOn = false;            // a toggled sprint ends when you stop running
+  if (held("crouch")) b |= B.CROUCH;
+  if (held("sprint") || touchState.autoSprint) b |= B.SPRINT;
+  // a toggled sprint ends when you stop running (not merely before you start: Shift then W still sprints)
+  if (fwd <= 0 && lastFwd > 0) { latch.key.sprint = false; latch.touch.sprint = false; }
+  lastFwd = fwd;
   if (held("fire")) b |= B.FIRE;
   if (held("ads")) b |= B.ADS;
   if (held("reload")) b |= B.RELOAD;

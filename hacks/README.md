@@ -23,7 +23,7 @@ ground. None of the techniques are coded; they are what that code does when play
 | Bunny hop | Friction only runs on a tick that starts on the ground. Jump the tick you land (a fresh press — holding jump never hops) and you keep all your speed. One tick of grace either side. |
 | Air strafe | In the air, hold A or D (not W) and turn the same way. Acceleration is capped along the direction you ask for, so asking almost at right angles to your velocity gains speed every tick. |
 | Surf | The purple ridges are steeper than 45°, so they are not ground: you slide along them with no friction. |
-| Sprint, slide | Crouch at a sprint to slide, with a boost on a cooldown. Downhill, gravity along the slope speeds a slide up. Jump out of it to keep the speed. |
+| Sprint, slide | Crouch at a sprint to slide, with a boost on a cooldown; a slide while it recharges, or out of a landing, still gets a smaller push (never past 12 m/s, and tapping crouch builds nothing). The view widens with the slide's speed. Downhill, gravity along the slope speeds a slide up. Jump out of it to keep the speed. |
 | Wall climb | Jump into a wall and hold jump and forward. Over the top, you mantle. |
 | Wall jump | Tap jump beside a wall. Your speed along the wall is kept; the same wall twice in a row does not count. The red shafts are made for it. |
 | Lunge | Hold the lunge key on any surface — floor, wall, ceiling — and you stick to it and charge. Release to launch where you look; the more squarely you face away from the surface, the harder. A tap is a quick swing. |
@@ -44,6 +44,19 @@ runs the same movement at all four and compares.
 
 Recoil lifts your view and stays lifted. Moving spreads your shots, jumping more; aiming down
 sights tightens them. Health comes back after a few seconds out of the fight.
+
+Aiming puts the gun's own sights in the middle of the screen, exactly where the shot goes, on any
+screen shape: every model's sight line is level, and the aimed pose puts it on the gun camera's
+axis (`js/viewmodel.js`). The Talon looks through a scope instead.
+
+## Models
+
+The guns, the blades and the players are public-domain (CC0) models by Quaternius, from
+OpenGameArt, converted to GLB for this game — see [`assets/models/CREDITS.md`](assets/models/CREDITS.md).
+Every player is the same body, posed each frame from the seventeen bones the hitboxes use
+(`js/rig.js`), so a head you can see is a head you can hit; their shirt and the band of light
+across their eyes are their colour. Until the models have loaded, or if they never do, the old
+box-built mannequins and guns stand in.
 
 ## Hacks
 
@@ -86,9 +99,22 @@ Every keyboard and mouse action is rebindable (Settings, Keys), two keys per act
 the mouse wheel — bind jump to the wheel and each notch is a fresh press, the way Source players
 hop by hand. Escape always opens the menu.
 
+Aim, crouch, sprint, lunge and the scoreboard can each **hold**, **toggle** or be **mixed** — a
+quick tap toggles, a longer press holds — and sprint can be always on. Keys and touch are set
+separately (Settings, Controls and Touch), so a phone can toggle what a keyboard holds.
+
+**Force landscape** (Settings, Touch) plays sideways however the phone is held. Where the browser
+allows it — Android, or the game installed to the home screen — the screen is locked sideways
+(going fullscreen if it must; the lock is lifted from ARCO's `shell.js`). Where it does not, as on
+iPhone Safari or with the phone's own rotation lock on, the game itself is drawn turned a quarter
+turn and the touch controls follow (`js/orient.js`); the hacks panel stays upright for typing.
+
 On a phone every button is always on screen. **Move buttons** (Settings, Touch) lets you drag
-each one anywhere, size it and fade it, with a separate layout for sideways and upright. Fire
-and Lunge can be dragged while held to aim as you shoot; a touch anywhere else looks around.
+each one anywhere, size it and fade it, with a separate layout for sideways and upright. No
+button can be dropped on another, under the editor's bar or on the readouts that cannot move
+(score, health, ammo — shown faintly while you edit): it slides to the nearest free place, so
+none is ever lost where it cannot be picked up again. Fire and Lunge can be dragged while
+held to aim as you shoot; a touch anywhere else looks around.
 
 ## Files
 
@@ -103,7 +129,9 @@ and Lunge can be dragged while held to aim as you shoot; a touch anywhere else l
 | [`js/weapons.js`](js/weapons.js) | the guns, the blades, and what a trigger pull does |
 | [`js/game.js`](js/game.js) | a match: actors, ticks, shots, damage, deaths, scoring |
 | [`js/bots.js`](js/bots.js) | bot brains, producing the same commands a player does |
-| [`js/render.js`](js/render.js) | the arena, mannequins on the bones, your gun, tracers, the camera |
+| [`js/render.js`](js/render.js) | the arena, the sky and the light, tracers and bullet holes, the camera; the canvas measured, never assumed |
+| [`js/models.js`](js/models.js), [`js/rig.js`](js/rig.js) | the CC0 models, loaded in the background; the body posed on the game's bones |
+| [`js/figures.js`](js/figures.js), [`js/viewmodel.js`](js/viewmodel.js) | everybody else's body and gun; your own arms and gun, sights on the screen's centre |
 | [`js/input.js`](js/input.js), [`js/touch.js`](js/touch.js), [`js/controls.js`](js/controls.js) | keys and mouse, the touch controls and their editor, the table of actions and layouts |
 | [`js/hud.js`](js/hud.js), [`js/menus.js`](js/menus.js), [`js/audio.js`](js/audio.js) | what is drawn over the game, every screen, synthesised sound |
 | [`js/hackworker.js`](js/hackworker.js), [`js/hackapi.js`](js/hackapi.js) | where hacks run; what they are shown and what they may do |
@@ -111,6 +139,7 @@ and Lunge can be dragged while held to aim as you shoot; a touch anywhere else l
 | [`js/modes.js`](js/modes.js), [`js/net.js`](js/net.js), [`js/mpui.js`](js/mpui.js) | match rules and hack rules; a match kept in step across a room; the multiplayer screens |
 | [`js/peer.js`](js/peer.js), [`js/lobby.js`](js/lobby.js) | the WebRTC transport (KaraokeNatin's) and the server list and rooms (Magic Sandbox's) |
 | [`js/info.js`](js/info.js), [`js/update.js`](js/update.js) | the (i) sheet and the update prompt, lifted from Magic Sandbox |
+| [`js/orient.js`](js/orient.js) | Force landscape: the real lock (ARCO's) where there is one, the game turned where there is not |
 | [`js/save.js`](js/save.js) | the one localStorage record, re-checked on the way in |
 
 ## Checks
