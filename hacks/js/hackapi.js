@@ -25,8 +25,8 @@ import { save } from "./save.js";
 import { exportWorld } from "./brush.js";
 import { world, isEnemy } from "./game.js";
 import { bonesObject } from "./skeleton.js";
-import { MELEE, gunOf, spreadOf } from "./weapons.js";
-import { B, PM, LUNGE, placeBody } from "./movement.js";
+import { MELEE, gunOf, spreadOf, zoomOf, boltOf } from "./weapons.js";
+import { B, PM, LUNGE, HOOK, placeBody } from "./movement.js";
 import { worldToScreen, viewProjection, view } from "./render.js";
 import { heldCodes } from "./input.js";
 import { HACK_RULES } from "./modes.js";
@@ -200,7 +200,7 @@ export function patch(cmd) {
   if (n(i.side)) c.side = clamp(i.side, -1, 1);
   if (n(i.yaw)) { c.yaw = i.yaw; S.view.yaw = i.yaw; }
   if (n(i.pitch)) { c.pitch = clamp(i.pitch, -1.55, 1.55); S.view.pitch = c.pitch; }
-  const btn = { jump: B.JUMP, crouch: B.CROUCH, sprint: B.SPRINT, fire: B.FIRE, aim: B.ADS, reload: B.RELOAD, lunge: B.LUNGE, melee: B.MELEE };
+  const btn = { jump: B.JUMP, crouch: B.CROUCH, sprint: B.SPRINT, fire: B.FIRE, aim: B.ADS, reload: B.RELOAD, lunge: B.LUNGE, melee: B.MELEE, hook: B.HOOK, zoom: B.ZOOM };
   for (const k in btn) if (typeof i[k] === "boolean") c.buttons = i[k] ? c.buttons | btn[k] : c.buttons & ~btn[k];
   if (n(i.slot) && slotUsed !== latest.n) { c.slot = clamp(Math.round(i.slot), -1, 3); slotUsed = latest.n; }
   return c;
@@ -211,13 +211,15 @@ export function patch(cmd) {
    --------------------------------------------------------------- */
 const v3o = (x, y, z) => ({ x: +x.toFixed(4), y: +y.toFixed(4), z: +z.toFixed(4) });
 const lungeState = (b) => (b.lunge === LUNGE.CHARGE ? "charging" : b.lunge === LUNGE.DASH ? "dashing" : "idle");
+const hookState = (b) => (b.hook === HOOK.FLY ? "flying" : b.hook === HOOK.ON ? "holding" : "idle");
 function weaponOf(a, full) {
   const A = a.arms, g = gunOf(A);
   if (!g) { const m = MELEE[A.melee]; return { slot: 3, id: m.id, name: m.name, cls: "Melee", melee: true }; }
   const w = { slot: A.cur + 1, id: g.id, name: g.name, cls: g.cls, melee: false };
   if (full) Object.assign(w, {
     ammo: A.ammo[A.cur], mag: g.mag, reloading: A.reloadT > 0, ads: +A.ads.toFixed(3), auto: g.auto, rpm: g.rpm,
-    spread: +spreadOf(A, a.body).toFixed(3), projectile: g.projectile ? { speed: g.projectile.speed, gravity: g.projectile.gravity } : null,
+    spread: +spreadOf(A, a.body).toFixed(3), projectile: g.projectile ? { speed: g.projectile.speed, gravity: g.projectile.gravity, instant: g.projectile.instant || 0 } : null,
+    zoom: +zoomOf(A).toFixed(3), cycling: boltOf(A) > 0, pierce: g.pen ? g.pen[0] : 0,
     lastKick: { pitch: A.lastKick.pitch, yaw: A.lastKick.yaw }, shots: A.shots, damage: g.dmg, pellets: g.pellets || 1
   });
   return w;
@@ -229,6 +231,7 @@ function common(a) {
     position: v3o(b.x, b.y, b.z), velocity: v3o(b.vx, b.vy, b.vz), speed: +Math.hypot(b.vx, b.vz).toFixed(3),
     yaw: +b.yaw.toFixed(5), pitch: +b.pitch.toFixed(5), eye: v3o(b.x, b.y + b.eye, b.z),
     onGround: b.onGround, crouched: b.crouched, sliding: b.sliding, climbing: b.climbing, lunge: lungeState(b),
+    hook: { state: hookState(b), point: b.hook !== HOOK.IDLE ? v3o(b.hx, b.hy, b.hz) : null, target: b.hook === HOOK.ON && b.hTarget >= 0 ? b.hTarget : null },
     bones: bonesObject(a.bones), kills: a.kills, deaths: a.deaths
   };
 }
@@ -243,6 +246,7 @@ function snapshot(dt) {
     lungeCharge: +b.lungeCharge.toFixed(3), lungeStuck: b.lungeStuck, lungeNormal: b.lungeStuck ? v3o(b.lnx, b.lny, b.lnz) : null,
     respawnIn: me.alive ? 0 : +me.respawnT.toFixed(2)
   });
+  m.hook = Object.assign(m.hook, { rope: b.hook === HOOK.ON ? +b.hLen.toFixed(3) : 0, ready: b.hook === HOOK.IDLE && b.hookCd <= 0 });
   const players = [];
   for (const a of S.actors) {
     if (a === me || !a.heard) continue;
@@ -260,7 +264,7 @@ function snapshot(dt) {
     cam: { vp: viewProjection(), w: view.w, h: view.h, hfov: (S.hackView && S.hackView.fov) || save.settings.fov },
     input: { forward: rawCmd.fwd, side: rawCmd.side, yaw: S.view.yaw, pitch: S.view.pitch, jump: !!(rawCmd.buttons & B.JUMP), crouch: !!(rawCmd.buttons & B.CROUCH),
       sprint: !!(rawCmd.buttons & B.SPRINT), fire: !!(rawCmd.buttons & B.FIRE), aim: !!(rawCmd.buttons & B.ADS), reload: !!(rawCmd.buttons & B.RELOAD),
-      lunge: !!(rawCmd.buttons & B.LUNGE), melee: !!(rawCmd.buttons & B.MELEE), slot: me.arms.cur + 1 },
+      lunge: !!(rawCmd.buttons & B.LUNGE), melee: !!(rawCmd.buttons & B.MELEE), hook: !!(rawCmd.buttons & B.HOOK), zoom: !!(rawCmd.buttons & B.ZOOM), slot: me.arms.cur + 1 },
     keys: heldCodes(), pressed: pressed.splice(0),
     events: events.splice(0, 200),
     match: { mode: M.mode, time: +S.time.toFixed(3), timeLeft: +M.timeLeft.toFixed(2), target: M.settings.target, rules: rules(), over: M.over,
@@ -286,10 +290,10 @@ export function afterFrame(dt) {
    --------------------------------------------------------------- */
 const pos = (a) => v3o(a.body.x, a.body.y, a.body.z);
 function ev(e) { if (running() && events.length < 400) events.push(e); }
-on("tracer", (a, o, h, gun) => ev({ type: "shot", by: a.id, mine: a === S.me, weapon: gun, from: v3o(o[0], o[1], o[2]), to: v3o(h.x, h.y, h.z), hit: h.actor ? h.actor.id : null, part: h.part || null }));
+on("tracer", (a, o, h, gun) => { const f = h.from || o; ev({ type: "shot", by: a.id, mine: a === S.me, weapon: gun, from: v3o(f[0], f[1], f[2]), to: v3o(h.x, h.y, h.z), hit: h.actor ? h.actor.id : null, part: h.part || null }); });
 on("hit", (a, b, dmg, info) => { if (a === S.me) ev({ type: "hit", target: b.id, damage: dmg, part: info && info.part, weapon: info && info.weapon }); });
 on("hurt", (b, dmg, by) => { if (b === S.me) ev({ type: "hurt", by, damage: dmg }); });
-on("killfeed", (k) => ev({ type: "kill", killer: k.killer ? k.killer.id : null, victim: k.victim ? k.victim.id : null, weapon: k.weapon, head: k.head }));
+on("killfeed", (k) => ev({ type: "kill", killer: k.killer ? k.killer.id : null, victim: k.victim ? k.victim.id : null, weapon: k.weapon, head: k.head, nut: !!k.nut }));
 on("died", (b, by) => { if (b === S.me) ev({ type: "death", by }); });
 on("spawn", (a) => { if (a === S.me) ev({ type: "spawn", position: pos(a) }); });
 on("move", (a, e) => { if (a === S.me) ev({ type: e, position: pos(a), speed: +Math.hypot(a.body.vx, a.body.vz).toFixed(3) }); });

@@ -318,9 +318,9 @@ on("tick", () => {
   {
     id: "lead", title: "11 · Leading a sniper shot", learn: "projectile motion",
     body:
-      "<p>The Talon's round is not instant: it flies at " + c("me.weapon.projectile.speed") + " and falls under " + c("…gravity") + ". " +
+      "<p>A sniper's round is not instant: past its first " + c("me.weapon.projectile.instant") + " metres (covered the moment it is fired) it flies at " + c("…speed") + " and falls under " + c("…gravity") + ". " +
       "To hit a moving target you aim where they <i>will</i> be.</p>" +
-      "<p>Time of flight is distance ÷ speed. Where they will be is where they are + velocity × time. " +
+      "<p>Time of flight is the distance past that first stretch ÷ speed. Where they will be is where they are + velocity × time. " +
       "And in that time the round drops ½·g·t², so aim that much higher. That is the whole of it — the physics you learn at school, doing a job.</p>" +
       "<p>This draws the point to aim at. Turn on <b>Aim for me</b> to snap to it while you aim down sights.</p>",
     code: `const assist = ui.toggle("Aim for me (while aiming)", false);
@@ -328,7 +328,8 @@ on("tick", () => {
 function leadPoint(e) {
   const w = me.weapon;
   const target = e.bones.chest;
-  const t = vec.dist(me.eye, target) / w.projectile.speed;       // seconds in flight
+  const far = Math.max(0, vec.dist(me.eye, target) - w.projectile.instant);
+  const t = far / w.projectile.speed;                              // seconds in flight
   const future = vec.add(target, vec.scale(e.velocity, t));       // where they will be
   future.y += 0.5 * w.projectile.gravity * t * t;                  // the drop
   return { point: future, t };
@@ -422,7 +423,7 @@ export const API = [
     ["on(\"tick\", dt => …)", "Every frame, before your inputs are used. Change input.* here. dt is seconds since the last frame: scale anything that happens over time by it, so the hack behaves the same at any frame rate."],
     ["on(\"draw\", dt => …)", "Every frame, after tick. Draw here."],
     ["on(\"key\", code => …)", "A key or mouse button was pressed (KeyboardEvent.code, e.g. \"KeyG\", \"Mouse0\")."],
-    ["on(event, e => …)", "shot (anyone fired: by, mine, weapon, from, to, hit, part) · hit (you hit: target, damage, part) · hurt (you were hit: by, damage) · kill (killer, victim, weapon, head) · death · spawn · jump · land (speed) · walljump · climb · mantle · slide · stick · lunge · swing · pad"],
+    ["on(event, e => …)", "shot (anyone fired: by, mine, weapon, from, to, hit, part — a round through a body is one shot per stretch) · hit (you hit: target, damage, part — head, body, arm, leg or nut) · hurt (you were hit: by, damage) · kill (killer, victim, weapon, head, nut) · death · spawn · jump · land (speed) · walljump · climb · mantle · slide · stick · lunge · swing · pad · hookfire · hookhit · hookgrab · hookdone · hookoff · hookmiss"],
     ["log(…) / print(…)", "Write to the console under the editor."],
     ["hack", "{ id, name } of this hack."],
     ["ui.toggle(label, on)", "A switch in the panel. .value is true or false."],
@@ -438,7 +439,8 @@ export const API = [
     ["onGround, crouched, sliding, climbing, sprinting, groundKind, groundNormal", "What your body is doing, and what it stands on."],
     ["lunge, lungeCharge, lungeStuck, lungeNormal", "\"idle\" / \"charging\" / \"dashing\"; 0–1; stuck to a surface; that surface's outward normal."],
     ["slideCooldown, wallJumpReady, climbLeft, jumpHeld", "Movement timers and state."],
-    ["weapon", "{ slot, id, name, cls, melee, ammo, mag, reloading, ads, auto, rpm, spread (degrees), projectile {speed, gravity} or null, lastKick {pitch, yaw}, shots, damage, pellets }"],
+    ["weapon", "{ slot, id, name, cls, melee, ammo, mag, reloading, ads, auto, rpm, spread (degrees), projectile {speed, gravity, instant} or null, lastKick {pitch, yaw}, shots, damage, pellets, zoom, cycling (working a bolt), pierce (bodies a round goes through) }"],
+    ["hook", "Your grapple: { state: \"idle\" / \"flying\" / \"holding\", point {x,y,z} or null, target (a player's id, or null for the map), rope (metres), ready }."],
     ["bones", "{ head: {x,y,z}, neck, chest, … } — see BONES."],
     ["me.gravityScale, me.speedScale, me.jumpScale", "Write: change your body until changed back (rules: Full self)."],
     ["me.setVelocity(v) · me.addVelocity(v) · me.teleport(p)", "Once, this frame (rules: Full self). v and p are {x,y,z}. A steady push is me.addVelocity(vec.scale(push, dt)) every frame."]
@@ -448,6 +450,7 @@ export const API = [
     ["p.id, name, team, bot, enemy, alive, hp, maxHp, kills, deaths", ""],
     ["p.position, velocity, eye, speed, yaw, pitch, distance", "As for me. distance is from you, in metres."],
     ["p.onGround, crouched, sliding, climbing, lunge", ""],
+    ["p.hook", "{ state, point, target } — their grapple, as for me.hook."],
     ["p.weapon", "{ slot, id, name, cls, melee }"],
     ["p.bones", "Their skeleton — the same points the hitboxes are built on."],
     ["p.visible", "Is their chest in a straight line from your eye (no wall in between)?"],
@@ -456,7 +459,7 @@ export const API = [
   { name: "input — your buttons for this frame (rules: Assist)", items: [
     ["input.forward, input.side", "−1 to 1 (W/S, D/A). Reading gives what the player is pressing."],
     ["input.yaw, input.pitch", "Where you look, radians. Setting it turns your view."],
-    ["input.jump, crouch, sprint, fire, aim, reload, lunge, melee", "true or false."],
+    ["input.jump, crouch, sprint, fire, aim, reload, lunge, melee, hook, zoom", "true or false. hook is the grapple's button: held, it flies, holds and reels. zoom steps a sniper scope in or out on a fresh press."],
     ["input.slot", "1, 2, 3 or −1 (last weapon): switch once."],
     ["input.lookAt(point)", "Set yaw and pitch to look from your eye at a point."]
   ] },
@@ -485,7 +488,7 @@ export const API = [
     ["world.spawns, world.time, world.tick", ""],
     ["physics.simulate(player, {forward, side, yaw, pitch, jump, crouch, sprint}, ticks)", "Run the game's own movement on a copy. Returns { position, velocity, onGround, landedAt, events, path }."],
     ["physics.predict(player, seconds)", "Where a player would be if they pressed nothing."],
-    ["projectiles", "Rounds in flight: { owner, position, velocity, gravity }."],
+    ["projectiles", "Rounds in flight: { owner, position, velocity, gravity }. A sniper's round covers weapon.projectile.instant metres the moment it is fired, then flies."],
     ["match", "{ mode, time, timeLeft, target, rules, over, score: { kills, deaths, teams } }"]
   ] },
   { name: "Maths", items: [

@@ -32,16 +32,18 @@ const TOPICS = {
     body:
       "<p><b>Keys</b> (all rebindable): " + k("W A S D") + " move · " + k("Space") + " or the wheel jump · " + k("Ctrl") + " crouch / slide · " +
       k("Shift") + " sprint · " + k("Mouse 1") + " fire · " + k("Mouse 2") + " aim · " + k("R") + " reload · " + k("F") + " lunge · " +
-      k("V") + " quick melee · " + k("1") + k("2") + k("3") + " weapons · " + k("Tab") + " scores · " + k("H") + " hacks · " + k("Esc") + " menu.</p>" +
+      k("V") + " quick melee · " + k("E") + " grapple · " + k("Z") + " sniper zoom · " + k("1") + k("2") + k("3") + " weapons · " + k("Tab") + " scores · " + k("H") + " hacks · " + k("Esc") + " menu.</p>" +
       "<p><b>Bunny hop.</b> Friction only happens on the ground. Press jump the moment you land — not before, not held — and you keep all your speed.</p>" +
       "<p><b>Air strafe.</b> In the air, hold " + k("A") + " or " + k("D") + " (not " + k("W") + ") and turn the mouse the same way, smoothly. " +
       "Each turn adds a little speed. Chain it with hops and you get faster every jump.</p>" +
       "<p><b>Surf.</b> The purple ridges are too steep to stand on. Land on a side, hold into it with " + k("A") + " or " + k("D") + ", and you glide along it with no friction.</p>" +
-      "<p><b>Slide.</b> Crouch while sprinting. Downhill, a slide speeds up; jump out of it to keep the speed.</p>" +
+      "<p><b>Slide.</b> Crouch while sprinting. Downhill, a slide speeds up; jump out of it to keep the speed. On a ramp, crouching slides you down it from a standstill.</p>" +
       "<p><b>Wall climb.</b> Jump into a wall and keep holding jump and forward. Over the top, you mantle.</p>" +
       "<p><b>Wall jump.</b> Beside a wall in the air, tap jump. You keep your speed along the wall. The red shafts are made for it.</p>" +
       "<p><b>Lunge.</b> Hold " + k("F") + " on any surface — floor, wall, ceiling — and you stick to it and charge. Let go to launch where you look. " +
-      "Facing straight away from the surface is the strongest launch.</p>"
+      "Facing straight away from the surface is the strongest launch.</p>" +
+      "<p><b>Grapple.</b> Hold " + k("E") + ": the hook flies where you look and reels you in, and lets go by itself when you arrive. Steer with " + k("W A S D") + " to swing. " +
+      "Hook a player and you are both pulled together — have your blade or shotgun ready. Let go to stop. The rope cannot pass through walls.</p>"
   },
   bots: {
     title: "Bots",
@@ -56,8 +58,12 @@ const TOPICS = {
       "<p><b>Handguns.</b> Wasp P9 — quick and accurate. Brick .50 — six heavy rounds.</p>" +
       "<p><b>Full auto.</b> Hornet SMG — fast, close. Kestrel AR — the all-rounder.</p>" +
       "<p><b>Shotgun.</b> Mauler — ten pellets, deadly up close.</p>" +
-      "<p><b>Sniper.</b> Talon .338 — the only gun whose round flies. It takes time to arrive and it drops, so a moving target " +
-      "has to be led. Aim down its sights, or it sprays.</p>" +
+      "<p><b>Snipers.</b> Talon .338 and Condor .50 — their rounds fly. The first stretch is instant; past it they take time to arrive and drop, so a far, moving target " +
+      "has to be led. Aim down the scope, or they spray. " + k("Z") + " steps the scope to twice the zoom. Each shot is followed by the bolt being worked: the scope shakes and a ring by the crosshair fills until you can fire again.</p>" +
+      "<p><b>Condor .50.</b> Heavy: slow to aim, slow to carry, a long bolt — and a hit anywhere kills.</p>" +
+      "<p><b>Collateral.</b> Rounds go on through a body into the next, losing some damage each time: a sniper through three, a hand cannon through two, " +
+      "most others through one, and a shotgun pellet barely. One round, two kills, is a collateral.</p>" +
+      "<p><b>Blades</b> hit harder the faster you are going: twice as hard at 18 m/s. The multiplier shows by the crosshair.</p>" +
       "<p>Recoil lifts your view and does not come back on its own; pull down against it. Moving spreads your shots, jumping more.</p>"
   },
   lunge: {
@@ -73,7 +79,7 @@ const TOPICS = {
     title: "Touch controls",
     body:
       "<p>The stick moves you; push it to the edge to sprint. Drag anywhere that is not a button to look.</p>" +
-      "<p>Fire and Lunge can be dragged while held, so you can aim as you shoot. Aim starts as a toggle; " +
+      "<p>Fire, Lunge and the Grapple can be dragged while held, so you can aim as you shoot. Aim starts as a toggle; " +
       "every button that can hold or toggle has its own choice below.</p>" +
       "<p><b>Move buttons</b> lets you drag every button where your thumbs are, size it and fade it. " +
       "Sideways and upright each keep their own layout. Buttons can never be hidden, and never land on top of one another " +
@@ -122,6 +128,14 @@ const TOPICS = {
       "<p><b>Assist</b> — and press your buttons and move your aim. Aimbots, triggerbots, bunny hop and strafe scripts, recoil control.</p>" +
       "<p><b>Full self</b> — and change your own body: velocity, gravity, speed, jump height, where you stand.</p>" +
       "<p>No setting lets a hack change another player, or anyone's health, ammo or score. A room's rules are applied by each player's own game.</p>"
+  },
+  announcer: {
+    title: "The announcer",
+    body:
+      "<p>Kills that mean something get called out: first blood, double and triple kills, streaks, headshots, revenge, ending somebody's streak, long shots, " +
+      "and the rare ones — a <b>collateral</b> and a <b>nut shot</b>. The words show under the crosshair either way; this slider is only the voice.</p>" +
+      "<p>The voices are free recordings (credited in the game's files). The two lines no recording has are spoken by your device's own voice — " +
+      "only one that runs on the device, so nothing is sent anywhere. Without one, those two are shown, not said.</p>"
   },
   update: {
     title: "Updates",

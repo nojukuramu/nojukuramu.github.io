@@ -17,9 +17,13 @@
    2. Behaviour checks over the pure modules, imported straight into Node:
       the brush tracer, Source movement (bunny hop keeps speed, held jump
       does not, air strafing gains, surfing keeps speed, the slide, the
-      climb, the wall jump, the lunge), the same result at 30, 60, 144 and
-      240 frames a second, the arena and its nav graph, the weapons, the
-      skeleton's hitboxes, the match rules, the save record's cleaning, and
+      climb, the wall jump, the lunge, steep slopes slid down rather than
+      stuck on, the grapple's rope), the same result at 30, 60, 144 and
+      240 frames a second, the arena (with its Skyway and Halo) and its nav
+      graph, the weapons (penetration, the Condor, the scopes' zoom, blades
+      that hit harder at speed), the skeleton's hitboxes (the nut box among
+      them), a match played headless (collateral, nut shot, a hooked bot
+      pulled in), the match rules, the save record's cleaning, and
       the hack sandbox itself — run in a child process that stands in for a
       Web Worker — reading everything and writing only itself.
 
@@ -140,6 +144,15 @@ const allJs = jsFiles.map(read).join("\n");
     const msrc = read("js/models.js");
     const asked = JSON.parse((msrc.match(/GUN_FILES = (\[[^\]]+\])/) || [0, "[]"])[1]).concat([...msrc.matchAll(/"assets\/models\/(\w+)\.glb"/g)].map((m) => m[1]));
     check("models.js asks for exactly the models there are", asked.length === glbs.length && asked.every((n) => glbs.includes(n + ".glb")), asked.join(","));
+    // the sounds load by URL too
+    const sounds = fs.readdirSync(path.join(ROOT, "assets/sounds")).filter((f) => f.endsWith(".mp3"));
+    const scred = read("assets/sounds/CREDITS.md");
+    const asrc = read("js/audio.js");
+    const wanted = JSON.parse("[" + (asrc.match(/SOUND_FILES = \[([\s\S]*?)\];/) || [0, ""])[1].replace(/\s+/g, "") + "]");
+    check("audio.js asks for exactly the sounds there are (" + sounds.length + ")", wanted.length === sounds.length && wanted.every((n) => sounds.includes(n + ".mp3")), wanted.filter((n) => !sounds.includes(n + ".mp3")).concat(sounds.filter((f) => !wanted.includes(f.slice(0, -4)))).join(", "));
+    check("every sound is in SHELL, so the game plays offline", sounds.every((f) => shell.includes("assets/sounds/" + f)), sounds.filter((f) => !shell.includes("assets/sounds/" + f)).join(", "));
+    check("every sound is credited, with its licence", sounds.every((f) => scred.includes("`" + f + "`") || (/^step\d\.mp3$/.test(f) && scred.includes("`step1.mp3` … `step4.mp3`"))) && /CC0/.test(scred) && /CC BY-SA 4\.0/.test(scred), sounds.filter((f) => !scred.includes("`" + f + "`")).join(", "));
+    check("the device's voice is only ever a local one", /v\.localService/.test(asrc));
     const mani = JSON.parse(read("manifest.webmanifest"));
     const icons = (mani.icons || []).map((i) => i.src);
     check("manifest icons exist", icons.every(exists), icons.filter((f) => !exists(f)).join(", "));
@@ -290,6 +303,33 @@ const allJs = jsFiles.map(read).join("\n");
     run(down, 2, () => ({ fwd: 1, side: 0, yaw: -Math.PI / 2, pitch: 0, buttons: B.CROUCH }), hill);
     run(down, 60, () => ({ fwd: 1, side: 0, yaw: -Math.PI / 2, pitch: 0, buttons: B.CROUCH }), hill);
     check("a slide downhill speeds up", down.sliding && hspeed(down) > s0 + 1, s0.toFixed(2) + " -> " + hspeed(down).toFixed(2));
+    // a ramp: crouch from a standstill and it takes you down; it used to freeze you where you crouched
+    const ramp = buildWorld([box(-50, -1, -80, 50, 0, 50), prism([[0, 0], [-20, 12], [-20, 0]], "x", -10, 10, { kind: "slope" })]);
+    const sitter = newBody(0, 6.6, -10, Math.PI);
+    run(sitter, 30, () => idle(Math.PI), ramp);
+    run(sitter, 64 * 3, () => ({ fwd: 0, side: 0, yaw: Math.PI, pitch: 0, buttons: B.CROUCH }), ramp);
+    check("crouching on a ramp slides you down it, from a standstill", sitter.z > 0 && sitter.y < 0.1, sitter.z.toFixed(2) + ", " + sitter.y.toFixed(2));
+    // a slope too steep to stand on: you slide to its foot, crouched or not, never stopping halfway
+    for (const deg of [50, 60]) {
+      const L = 12 / Math.tan(deg * Math.PI / 180);
+      const steep = buildWorld([box(-50, -1, -80, 50, 0, 50), prism([[0, 0], [-L, 12], [-L, 0]], "x", -10, 10, { kind: "surf" })]);
+      const res = [0, B.CROUCH].map((btn) => { const q = newBody(0, 6.5, -L / 2, Math.PI); run(q, 64 * 3, () => ({ fwd: 0, side: 0, yaw: Math.PI, pitch: 0, buttons: btn }), steep); return q; });
+      check("a " + deg + "° slope is slid down to the floor, standing or crouched", res.every((q) => q.onGround && q.y < 0.1 && q.z > -1), res.map((q) => q.z.toFixed(2) + "/" + q.y.toFixed(2)).join(" "));
+    }
+    // the grapple's rope: reeled in, it lets go at the hook; across under it, it swings you up the far side
+    const HK = MV.HOOK;
+    const hooked = (x, y, z, hx, hy, hz) => { const q = newBody(x, y, z, 0); q.hook = HK.ON; q.hx = hx; q.hy = hy; q.hz = hz; q.hLen = Math.hypot(hx - x, hy - y - 0.9, hz - z); return q; };
+    const reel = hooked(0, 0.02, 0, 0, 12, -25);
+    let done = -1;
+    for (let i = 0; i < 64 * 4 && done < 0; i++) { pmove(flat, reel, idle(), TICK, {}); if (reel.ev.includes("hookdone")) done = i; reel.ev.length = 0; }
+    check("the grapple reels you in, and lets go by itself at the hook", done > 0 && reel.hook === HK.IDLE && Math.hypot(reel.x, reel.y + 0.9 - 12, reel.z + 25) < 2.6, done + " ticks, at " + [reel.x, reel.y, reel.z].map((v) => v.toFixed(1)).join(","));
+    const swing = hooked(-15, 6, 0, 0, 22, 0); swing.vx = 18;
+    let swingTop = 0, swingX = -15;
+    for (let i = 0; i < 80; i++) { pmove(flat, swing, idle(-Math.PI / 2), TICK, {}); swing.ev.length = 0; if (swing.x > 0) swingTop = Math.max(swingTop, swing.y); swingX = Math.max(swingX, swing.x); }
+    check("a rope swings: across under the hook carries you up the far side", swingX > 5 && swingTop > 12, swingX.toFixed(1) + " m across, up to " + swingTop.toFixed(1));
+    const yanked = settle();
+    for (let i = 0; i < 64; i++) { yanked.yank = [0, 1, -20]; pmove(flat, yanked, idle(), TICK, {}); yanked.ev.length = 0; }
+    check("a hook in a body pulls it towards whoever holds it, off its feet", yanked.z < -10 && hspeed(yanked) > 8, yanked.z.toFixed(1));
     // climb
     const cl = newBody(8, 0.02, 0, -Math.PI / 2);
     run(cl, 40, () => ({ fwd: 1, side: 0, yaw: -Math.PI / 2, pitch: 0, buttons: 0 }));
@@ -364,7 +404,7 @@ const allJs = jsFiles.map(read).join("\n");
     const W = MAP.buildMap();
     check("the arena is closed: a lid and four walls", W.brushes.some((b) => b.kind === "clip") && W.min[0] <= -64 && W.max[0] >= 64);
     check("every spawn point is somewhere a body fits", W.spawns.every((s) => MV.fits(W, s.x, s.y, s.z, false)), W.spawns.length);
-    check("every kind of place is there: surf, shaft, slope, canopy, pad", ["surf", "shaft", "slope", "canopy", "pad"].every((k) => W.brushes.some((b) => b.kind === k)));
+    check("every kind of place is there: surf, shaft, slope, canopy, pad, and the Skyway, the Halo and kites above them", ["surf", "shaft", "slope", "canopy", "pad", "bridge", "halo", "kite"].every((k) => W.brushes.some((b) => b.kind === k)));
     const surfFaces = W.brushes.filter((b) => b.kind === "surf").flatMap((b) => b.faces).filter((f) => f.n[1] > 0.1);
     check("the surf ridges are too steep to stand on", surfFaces.length > 0 && surfFaces.every((f) => f.n[1] < PM.walkable));
     const pad = W.brushes.find((b) => b.kind === "pad" && b.min[0] > 0 && b.min[2] > 0);
@@ -381,6 +421,12 @@ const allJs = jsFiles.map(read).join("\n");
     check("from every spawn, a bot can reach every other", fails === 0, fails + " unreachable pairs");
     const kinds = new Set(nav.nodes.flatMap((n) => n.links.map((l) => l.kind)));
     check("bots know to walk, jump, climb, drop and ride a pad", ["walk", "jump", "climb", "drop", "pad"].every((k) => kinds.has(k)), [...kinds].join(","));
+    const high = (y0, y1) => nav.nodes.filter((n) => n.reach && n.y > y0 && n.y < y1).length;
+    check("bots can reach the Skyway and the Halo", high(11.5, 12.5) > 150 && high(15.5, 16.5) > 12, high(11.5, 12.5) + " on the Skyway, " + high(15.5, 16.5) + " on the Halo");
+    check("and never wander to what only a grapple reaches", nav.nodes.some((n) => !n.reach && n.y > 13.5 && n.y < 14.5));
+    const flyFrom = (b) => { const q = newBody((b.min[0] + b.max[0]) / 2, 0.3, (b.min[2] + b.max[2]) / 2, 0); let f = false, l = null; for (let i = 0; i < 64 * 5 && !l; i++) { pmove(W, q, idle(), TICK, {}); if (q.ev.includes("pad")) f = true; else if (f && q.onGround) l = q.groundKind; q.ev.length = 0; } return l; };
+    const lands = W.brushes.filter((b) => b.kind === "pad" && b.min[0] > 0 && b.min[2] > 0).map(flyFrom);
+    check("pads throw you onto the launch deck, the Skyway and the Halo", lands.includes("block") && lands.includes("bridge") && lands.includes("halo"), lands.join(","));
   }
 
   section("Behaviour: weapons");
@@ -389,7 +435,25 @@ const allJs = jsFiles.map(read).join("\n");
     const g = Object.values(WP.GUNS);
     check("two handguns", g.filter((x) => x.hold === "pistol").length === 2);
     check("two full-auto guns", g.filter((x) => x.auto).length === 2);
-    check("one shotgun, one sniper", g.filter((x) => x.pellets > 1).length === 1 && g.filter((x) => x.projectile).length === 1);
+    check("one shotgun, two snipers — scoped bolt actions whose rounds fly", g.filter((x) => x.pellets > 1).length === 1 && g.filter((x) => x.projectile).length === 2 && g.filter((x) => x.projectile).every((x) => x.scope && x.bolt && x.projectile.instant > 0));
+    check("the Condor kills with one hit anywhere", ["head", "body", "nut", "arm", "leg"].every((p) => WP.damageFor(WP.GUNS.condor, 150, p) >= 100) && WP.GUNS.condor.adsTime > WP.GUNS.talon.adsTime && WP.GUNS.condor.speedMul < WP.GUNS.talon.speedMul);
+    check("every gun's rounds go through bodies, losing damage each time, snipers furthest", g.every((x) => x.pen && x.pen[1] < 1) && WP.GUNS.condor.pen[0] >= 3 && WP.GUNS.talon.pen[0] > WP.GUNS.hornet.pen[0]);
+    check("a nut shot does more than the body, less than the head", WP.damageFor(WP.GUNS.kestrel, 5, "nut") > WP.damageFor(WP.GUNS.kestrel, 5, "body") && WP.damageFor(WP.GUNS.kestrel, 5, "nut") < WP.damageFor(WP.GUNS.kestrel, 5, "head"));
+    check("a blade hits harder the faster you go: nothing extra at a run, twice at 18 m/s", WP.speedBonus(5) === 1 && Math.abs(WP.speedBonus(18) - 2) < 1e-9 && WP.speedBonus(40) === 2.5);
+    {
+      const S2 = WP.newArms({ primary: "talon", secondary: "wasp", melee: "katana" });
+      const b2 = newBody(0, 0, 0, 0); b2.onGround = true;
+      for (let i = 0; i < 40; i++) WP.armsTick(S2, { buttons: B.ADS, slot: 0 }, b2, TICK, Math.random, B);
+      const z1 = WP.zoomOf(S2);
+      WP.armsTick(S2, { buttons: B.ADS | B.ZOOM, slot: 0 }, b2, TICK, Math.random, B);
+      const z2 = WP.zoomOf(S2);
+      WP.armsTick(S2, { buttons: B.ADS | B.FIRE, slot: 0 }, b2, TICK, Math.random, B);
+      WP.armsTick(S2, { buttons: B.ADS, slot: 0 }, b2, TICK, Math.random, B);
+      const cyc = WP.boltOf(S2);
+      for (let i = 0; i < 100; i++) WP.armsTick(S2, { buttons: 0, slot: 0 }, b2, TICK, Math.random, B);
+      check("a scope's second zoom doubles it, and letting go of aim resets it", Math.abs(z2 - z1 * 2) < 1e-9 && S2.zoom === 0, z1 + " -> " + z2);
+      check("after a shot the bolt is worked, and boltOf says how far", cyc > 0 && cyc < 0.1 && WP.boltOf(S2) === 0, cyc);
+    }
     check("two blades that both lunge, differently", WP.MELEE_IDS.length === 2 && WP.MELEE.katana.charge < WP.MELEE.lancer.charge && WP.MELEE.katana.speed < WP.MELEE.lancer.speed && WP.MELEE.katana.lungeCone > WP.MELEE.lancer.lungeCone);
     check("a headshot does more than a body shot, a limb less", WP.damageFor(WP.GUNS.kestrel, 5, "head") > WP.damageFor(WP.GUNS.kestrel, 5, "body") && WP.damageFor(WP.GUNS.kestrel, 5, "leg") < WP.damageFor(WP.GUNS.kestrel, 5, "body"));
     check("damage falls off with range", WP.damageFor(WP.GUNS.hornet, 50, "body") < WP.damageFor(WP.GUNS.hornet, 5, "body"));
@@ -425,6 +489,12 @@ const allJs = jsFiles.map(read).join("\n");
     check("a ray past the shoulder misses", !SK.rayBones(bones, 0.8, 1.2, 10, 0, 0, -1, 50));
     const crouched = SK.pose({ x: 0, y: 0, z: 0, yaw: 0, pitch: 0, vx: 0, vz: 0, onGround: true, crouched: true, eye: 1.02, phase: 0 }, "rifle");
     check("crouching lowers the head", crouched[SK.BI.head * 3 + 1] < head[1] - 0.2);
+    const np = SK.nutPoint(bones);
+    const front = SK.rayBones(bones, np[0], np[1], np[2] - 10, 0, 0, 1, 50), back = SK.rayBones(bones, np[0], np[1], np[2] + 10, 0, 0, -1, 50);
+    const facing = bones[SK.BI.head * 3 + 2] < 0.5;     // the standing body above faces -z
+    const fromFront = facing ? front : back, fromBack = facing ? back : front;
+    check("a shot between the legs from the front is a nut shot", fromFront && fromFront.part === "nut", fromFront && fromFront.part);
+    check("from behind, however low, it is the body", fromBack && fromBack.part !== "nut", fromBack && fromBack.part);
   }
 
   section("Behaviour: match rules");
@@ -449,6 +519,76 @@ const allJs = jsFiles.map(read).join("\n");
     check("bots fill the room up to the setting", MD.botCount(MD.cleanSettings({ bots: 6 }), 2) === 4 && MD.botCount(MD.cleanSettings({ bots: 1 }), 3) === 0);
     check("a room row from a stranger is cleaned or refused", MD.cleanListing({ code: "abc" }) === null && MD.cleanListing({ code: "ABCDEF", s: { mode: "practice" } }) === null && !!MD.cleanListing({ code: "abcdef", s: {}, n: 3 }));
     check("time runs out to whoever leads", MD.timeUp(Object.assign(MD.newScore(9), { k: { 4: 2, 5: 1 } }), "ffa") === 4);
+  }
+
+  section("Behaviour: a match, headless");
+  {
+    const WP_KATANA_SWING = (await imp("js/weapons.js")).MELEE.katana.swingDmg;
+    // game.js is pure enough to play in Node: you and some dummies held still where the checks want them
+    const ST = await imp("js/state.js"), G = await imp("js/game.js"), SK = await imp("js/skeleton.js");
+    const { S } = ST;
+    const feed = [], hits = [], moves = [];
+    ST.on("killfeed", (k) => feed.push(k)); ST.on("hit", (a, b, d, i) => hits.push({ by: a, to: b, d, i }));
+    ST.on("move", (a, e) => { if (a === S.me) moves.push(e); });
+    let cmd = { fwd: 0, side: 0, buttons: 0, slot: 0 };
+    G.setLocalCmd(() => Object.assign({}, cmd, { yaw: S.view.yaw, pitch: S.view.pitch }));
+    const ticks = (n) => { for (let i = 0; i < n; i++) G.tick(TICK); };
+    const put = (a, x, z, yaw) => { const b = a.body; b.x = x; b.y = 0.02; b.z = z; b.vx = b.vy = b.vz = 0; b.yaw = a.aim.yaw = yaw || 0; };
+    const aimAt = (p) => { const e = G.eyeOf(S.me); S.view.yaw = Math.atan2(-(p[0] - e[0]), -(p[2] - e[2])); S.view.pitch = Math.atan2(p[1] - e[1], Math.hypot(p[0] - e[0], p[2] - e[2])); };
+    const chest = (a) => [a.bones[SK.BI.chest * 3], a.bones[SK.BI.chest * 3 + 1], a.bones[SK.BI.chest * 3 + 2]];
+    const match = (primary) => {
+      S.net.role = "solo";
+      G.startMatch({ mode: "ffa", bots: 4, diff: "normal", target: 25, time: 0, hacks: "full" }, { me: { id: 1, name: "Me", loadout: { primary, secondary: "wasp", melee: "katana" } }, humans: 1 });
+      for (const b of S.actors) if (b.kind === "bot") b.passive = true;
+      ticks(64);
+      // dummies that do not even wander: a body with no speed stands where it is put, legs together
+      const list = S.actors.filter((a) => a.kind === "bot");
+      for (const b of list) b.body.speedScale = 0;
+      return list;
+    };
+    // Targets that hold perfectly still: bodies owned "elsewhere", posed once, whose damage this test
+    // applies the way their owner's machine would when it hears of the hit
+    ST.on("netHit", (b, d, by, info) => G.applyDamage(b, d, by, info));
+    let nextDummy = 4000;
+    const dummy = (x, z, hp) => {
+      const a = G.addActor(G.makeActor({ id: nextDummy++, name: "Dummy", kind: "dummy" }));
+      a.alive = true; a.hp = hp || 100; put(a, x, z, Math.PI);
+      a.bones = SK.pose(G.poseState(a), "rifle", a.bones);
+      return a;
+    };
+    const head = (a) => [a.bones[SK.BI.head * 3], a.bones[SK.BI.head * 3 + 1], a.bones[SK.BI.head * 3 + 2]];
+    // 1. one Condor round through three bodies in a line
+    let bots = match("condor");
+    put(S.me, 0, 34); cmd.buttons = B.ADS; ticks(40);
+    const line = [dummy(0, 26), dummy(0, 24), dummy(0, 22)];
+    aimAt(head(line[0])); cmd.buttons = B.ADS | B.FIRE; ticks(1); cmd.buttons = 0; ticks(4);
+    const mine = hits.filter((h) => h.by === S.me);
+    const shots = new Set(mine.map((h) => h.i.shot));
+    check("one sniper round goes through three bodies, killing each: a collateral", feed.filter((k) => k.killer === S.me).length === 3 && shots.size === 1 && mine.map((h) => h.i.through).join() === "0,1,2", mine.map((h) => h.d + " " + h.i.part).join(", "));
+    G.quit(); feed.length = 0; hits.length = 0;
+    // 2. a nut shot
+    bots = match("kestrel");
+    const v = dummy(0, 30, 10);
+    put(S.me, 0, 34); cmd.buttons = B.ADS; ticks(30);      // aimed: a hip shot's spread would land on a thigh as often as not
+    aimAt(SK.nutPoint(v.bones)); cmd.buttons = B.ADS | B.FIRE; ticks(1); cmd.buttons = 0; ticks(3);
+    check("a kill between the legs is a nut shot, in the kill feed", feed.some((k) => k.killer === S.me && k.nut), JSON.stringify(hits.map((h) => h.i.part)));
+    // 3. the grapple catches a body, and each is pulled to the other
+    const w = bots[1];
+    if (v.alive) G.removeActor(v);
+    bots.forEach((b, i) => { if (b !== w) put(b, 50, -50 + i * 4); });
+    put(S.me, 0, 34); put(w, 0, 18, 0); ticks(1);
+    aimAt(chest(w)); cmd.buttons = B.HOOK; moves.length = 0;
+    const wz = w.body.z, mz = S.me.body.z;
+    for (let i = 0; i < 64 * 2 && !moves.includes("hookdone"); i++) ticks(1);
+    cmd.buttons = 0; ticks(1);
+    check("a hook catches a body, and pulls you both together until it lets go", moves.includes("hookgrab") && moves.includes("hookdone") && w.body.z > wz + 2 && S.me.body.z < mz - 5, moves.join(",") + " · them " + (w.body.z - wz).toFixed(1) + " m, you " + (S.me.body.z - mz).toFixed(1) + " m");
+    // 4. a blade at speed
+    cmd.slot = 3; ticks(1); cmd.slot = 0; ticks(30); hits.length = 0;
+    put(S.me, 0, 34); put(w, 0, 32.6, Math.PI); w.hp = 100; ticks(1);
+    S.view.yaw = 0; S.view.pitch = 0; S.me.body.vz = -16; cmd.buttons = B.MELEE; ticks(1); cmd.buttons = 0;
+    const cut = hits.find((h) => h.by === S.me && h.i.melee);
+    check("a blade swung at speed cuts deeper", cut && cut.d > WP_KATANA_SWING * 1.4 && cut.i.speedMul > 1.4, cut && cut.d);
+    G.quit();
   }
 
   section("Behaviour: controls and the saved record");

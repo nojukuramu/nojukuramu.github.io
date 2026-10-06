@@ -146,7 +146,7 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
 
     console.log("\nLoadout");
     await p.click("#btnLoadout");
-    check("six guns and two blades to choose from", (await p.$$("#loPrimary .card")).length === 6 && (await p.$$("#loMelee .card")).length === 2);
+    check("seven guns and two blades to choose from", (await p.$$("#loPrimary .card")).length === 7 && (await p.$$("#loMelee .card")).length === 2);
     await p.click('#loPrimary .card[data-id="mauler"]');
     await p.click('#loMelee .card[data-id="lancer"]');
     check("the choice is kept", await p.evaluate(() => { const l = window.HK_DEBUG.save.data.loadout; return l.primary === "mauler" && l.melee === "lancer"; }));
@@ -252,7 +252,17 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     await until(p, () => window.HK_DEBUG.hackapi.running() === 2, null, 10000);
     check("a lesson opens as a new hack, running", /screen\.toScreen/.test(await p.inputValue("#editor textarea")));
     await p.click("#hpClose");
-    await p.evaluate(() => { const { S } = window.HK_DEBUG; const e = S.actors.find((a) => a.kind === "bot" && a.alive); const b = S.me.body; b.x = e.body.x + 6; b.z = e.body.z; b.y = e.body.y + 0.02; S.me.px = b.x; S.me.pz = b.z; S.me.py = b.y; S.view.yaw = Math.PI / 2; S.view.pitch = -0.05; });
+    // six metres from a bot, facing it, somewhere a body fits (the arena has pillars and ramps to land inside)
+    await p.evaluate(async () => {
+      const { S } = window.HK_DEBUG; const MV = await import("./js/movement.js");
+      for (const e of S.actors.filter((a) => a.kind === "bot" && a.alive)) for (const [dx, dz] of [[6, 0], [-6, 0], [0, 6], [0, -6]]) {
+        const x = e.body.x + dx, z = e.body.z + dz, y = e.body.y + 0.02;
+        if (!MV.fits(S.world, x, y, z, false)) continue;
+        const b = S.me.body; b.x = x; b.z = z; b.y = y; b.vx = b.vy = b.vz = 0; S.me.px = x; S.me.pz = z; S.me.py = y;
+        S.view.yaw = Math.atan2(dx, dz); S.view.pitch = -0.05;
+        return;
+      }
+    });
     const boxes = await soft(until(p, () => { const d = window.HK_DEBUG.hackapi; return d.running() === 2; }, null, 5000));
     await p.waitForTimeout(800);
     const draws = await p.evaluate(() => { const c = document.getElementById("overlay"); const g = c.getContext("2d"); const d = g.getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 16) if (d[i] > 0) n++; return n; });
@@ -276,6 +286,36 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     await until(p, () => !document.getElementById("hackPanel").hidden);
     check("reopening the panel keeps the code as it was typed", (await p.inputValue("#editor textarea")).includes("const broken = ;"));
     await p.click("#hpClose");
+
+    console.log("\nMedals, the grapple, the scope and the death camera");
+    await p.evaluate(() => { const { S, game } = window.HK_DEBUG; const e = S.actors.find((a) => a.kind === "bot" && a.alive); game.hitActor(e, 999, S.me, { weapon: "kestrel", part: "nut" }); });
+    check("a nut shot kill is a medal under the crosshair, and across the middle", await soft(until(p, () => /Nut shot/.test(document.getElementById("killNote").textContent) && !document.getElementById("medal").hidden, null, 3000)));
+    await until(p, () => window.HK_DEBUG.S.me.alive, null, 8000);
+    await p.evaluate(async () => {
+      const { on } = await import("./js/state.js");
+      window.__hookEv = []; window.__hookSeen = false;
+      on("move", (a, e) => { if (a === window.HK_DEBUG.S.me && /^hook/.test(e)) window.__hookEv.push(e); });
+      const tick = () => { if (!document.getElementById("hookInd").hidden) window.__hookSeen = true; if (window.__hookEv.length < 50) requestAnimationFrame(tick); };
+      tick();
+      window.HK_DEBUG.S.view.pitch = -0.3;
+    });
+    await p.keyboard.down("KeyE");
+    await soft(until(p, () => window.__hookEv.some((e) => e !== "hookfire") && window.__hookSeen, null, 3000));
+    await p.keyboard.up("KeyE");
+    const hookEv = await p.evaluate(() => window.__hookEv.join(",") + (window.__hookSeen ? " · shown" : ""));
+    check("holding the grapple key fires the hook, it bites, and the HUD shows its pull", /hookfire/.test(hookEv) && /hookhit|hookgrab/.test(hookEv) && /shown/.test(hookEv), hookEv);
+    // aim held, and the zoom pressed once, through the game's own command hook
+    await p.evaluate(async () => {
+      const { S, game, hackapi } = window.HK_DEBUG; const input = await import("./js/input.js");
+      const A = S.me.arms; A.slots[0] = "condor"; A.ammo[0] = 4; A.cur = 0; A.swapT = 0;
+      let n = 0;
+      game.setLocalCmd(() => { const c = hackapi.patch(input.buildCmd()); c.buttons |= 16; if (++n === 50) c.buttons |= 512; return c; });
+    });
+    check("a sniper aimed is looked at through its scope, and Z doubles its zoom", await soft(until(p, () => !document.getElementById("scope").hidden && window.HK_DEBUG.S.cam.zoom > 9, null, 4000)), await p.evaluate(() => window.HK_DEBUG.S.cam.zoom));
+    await p.evaluate(() => { const { S, game } = window.HK_DEBUG; const e = S.actors.find((a) => a.kind === "bot" && a.alive); game.applyDamage(S.me, 999, e.id, { weapon: "kestrel", part: "body" }); });
+    check("dying puts the scope away: the spectator's view is plain", await soft(until(p, () => document.getElementById("scope").hidden && window.HK_DEBUG.S.cam.zoom === 1 && !window.HK_DEBUG.S.me.alive, null, 3000)));
+    await p.evaluate(async () => { const { game, hackapi } = window.HK_DEBUG; const input = await import("./js/input.js"); game.setLocalCmd(() => hackapi.patch(input.buildCmd())); });
+    await until(p, () => window.HK_DEBUG.S.me.alive, null, 8000);
 
     console.log("\nPause, and the end of a match");
     await p.keyboard.press("Escape");
@@ -314,7 +354,7 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
       await alignment(q, "this phone");
       const rects = await q.$$eval(".tbtn", (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.id, r.left, r.top, r.right, r.bottom]; }));
       const off = rects.filter((r) => r[1] < 0 || r[2] < 0 || r[3] > vw + 0.5 || r[4] > vh + 0.5);
-      check("all " + rects.length + " buttons are on screen, all the time", rects.length === 14 && off.length === 0, JSON.stringify(off));
+      check("all " + rects.length + " buttons are on screen, all the time", rects.length === 16 && off.length === 0, JSON.stringify(off));
       await q.waitForTimeout(400);
       const y0 = await q.evaluate(() => window.HK_DEBUG.S.me.body.y);
       const jb = await q.$('.tbtn[data-id="jump"]'), jr = await jb.boundingBox();
@@ -400,7 +440,7 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
       check("it draws a landscape picture, with the sideways layout", pic[0] === 844 && pic[1] === 390 && pic[2] === 150, JSON.stringify(pic));
       await alignment(q, "a phone forced sideways");
       const rects = await q.$$eval(".tbtn", (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.id, r.left, r.top, r.right, r.bottom]; }));
-      check("every button is on the screen", rects.length === 14 && rects.every((r) => r[1] >= -0.5 && r[2] >= -0.5 && r[3] <= 390.5 && r[4] <= 844.5), JSON.stringify(rects.filter((r) => r[3] > 390.5 || r[4] > 844.5)));
+      check("every button is on the screen", rects.length === 16 && rects.every((r) => r[1] >= -0.5 && r[2] >= -0.5 && r[3] <= 390.5 && r[4] <= 844.5), JSON.stringify(rects.filter((r) => r[3] > 390.5 || r[4] > 844.5)));
       await q.waitForTimeout(300);
       const y0 = await q.evaluate(() => window.HK_DEBUG.S.me.body.y);
       await q.evaluate(() => {

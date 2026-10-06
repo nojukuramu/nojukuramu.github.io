@@ -30,6 +30,7 @@ import * as update from "./update.js";
 import * as hackapi from "./hackapi.js";
 import * as hackui from "./hackui.js";
 import * as audio from "./audio.js";
+import "./medals.js";
 import * as net from "./net.js";
 import * as mpui from "./mpui.js";
 import * as lobby from "./lobby.js";
@@ -109,9 +110,10 @@ requestAnimationFrame(frame);
    Effects that only listen
    --------------------------------------------------------------- */
 on("tracer", (a, o, h, gun) => {
-  // your own tracer starts at your gun's muzzle as your screen shows it, anybody else's at their hand
-  const mine = a === S.me && !(S.hackView && S.hackView.thirdPerson);
-  render.tracer([a.bones[30], a.bones[31], a.bones[32]], [h.x, h.y, h.z], h.actor ? 0xff9a7a : 0xffd98a, mine, a.id);
+  // your own tracer starts at your gun's muzzle as your screen shows it, anybody else's at their hand;
+  // a round that went on through a body starts its next stretch where it came out
+  const mine = a === S.me && !(S.hackView && S.hackView.thirdPerson) && !h.from;
+  render.tracer(h.from || [a.bones[30], a.bones[31], a.bones[32]], [h.x, h.y, h.z], h.actor ? 0xff9a7a : 0xffd98a, mine, h.from ? null : a.id);
   if (h.actor) render.burst(h.x, h.y, h.z, 6, 0xff5f5f, 3);
   else if (h.world) render.burst(h.x, h.y, h.z, 4, 0xffd070, 3);
 });

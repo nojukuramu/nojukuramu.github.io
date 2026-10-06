@@ -224,7 +224,7 @@ function need(level, what) {
   warn(what + " needs the room's hack rules to be " + (level === "full" ? "Full self" : "Assist") + " (they are " + rules + "); ignored.");
   return false;
 }
-const INPUT_FIELDS = { forward: "n", side: "n", yaw: "a", pitch: "a", jump: "b", crouch: "b", sprint: "b", fire: "b", aim: "b", reload: "b", lunge: "b", melee: "b", slot: "i" };
+const INPUT_FIELDS = { forward: "n", side: "n", yaw: "a", pitch: "a", jump: "b", crouch: "b", sprint: "b", fire: "b", aim: "b", reload: "b", lunge: "b", melee: "b", hook: "b", zoom: "b", slot: "i" };
 const input = {};
 for (const f in INPUT_FIELDS) {
   Object.defineProperty(input, f, {
@@ -484,10 +484,11 @@ function placeholder() {
   const me = { id: 0, name: "you", team: 0, bot: false, alive: false, hp: 100, maxHp: 100, position: z, velocity: z, speed: 0, yaw: 0, pitch: 0, eye: { x: 0, y: 1.62, z: 0 },
     onGround: true, crouched: false, sliding: false, climbing: false, lunge: "idle", bones, kills: 0, deaths: 0, sprinting: false, groundKind: "", groundNormal: { x: 0, y: 1, z: 0 },
     jumpHeld: false, slideCooldown: 0, wallJumpReady: true, climbLeft: PM.climbTime, lungeCharge: 0, lungeStuck: false, lungeNormal: null, respawnIn: 0,
+    hook: { state: "idle", point: null, target: null, rope: 0, ready: true },
     weapon: { slot: 1, id: "", name: "", cls: "", melee: false, ammo: 0, mag: 0, reloading: false, ads: 0, auto: false, rpm: 0, spread: 0, projectile: null, lastKick: { pitch: 0, yaw: 0 }, shots: 0, damage: 0, pellets: 1 },
     loadout: {} };
   return prepare({ n: 0, time: 0, tick: 0, dt: 0, rules: "full", me, players: [], projectiles: [], cam: { vp: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], w: 1, h: 1, hfov: 90 },
-    input: { forward: 0, side: 0, yaw: 0, pitch: 0, jump: false, crouch: false, sprint: false, fire: false, aim: false, reload: false, lunge: false, melee: false, slot: 1 },
+    input: { forward: 0, side: 0, yaw: 0, pitch: 0, jump: false, crouch: false, sprint: false, fire: false, aim: false, reload: false, lunge: false, melee: false, hook: false, zoom: false, slot: 1 },
     keys: [], pressed: [], events: [], match: { mode: "", time: 0, timeLeft: 0, target: 0, rules: "full", over: false, score: { kills: {}, deaths: {}, teams: [0, 0] } } });
 }
 cur = placeholder();

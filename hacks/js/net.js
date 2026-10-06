@@ -15,7 +15,9 @@
  * Messages, small JSON on the one ordered channel peer.js gives us:
  *   start      the host starts (or catches a latecomer up on) a match
  *   bots       the host's bot roster, whenever it changes
- *   st / ps    one body's state at 30 Hz; the host sends all of them together
+ *   st / ps    one body's state at 30 Hz; the host sends all of them together —
+ *              its grapple too, so every screen draws the rope, and whoever
+ *              owns the body a hook holds pulls that body (game.js yankOf)
  *   sh         somebody fired: where from, where each round ended up
  *   hit        a shot landed on a body somebody else owns
  *   die        the owner of a body says it died (and who did it)
@@ -34,7 +36,7 @@ import { cleanLoadout, GUNS, MELEE } from "./weapons.js";
 import { cleanSettings } from "./modes.js";
 import { pose, stepPhase } from "./skeleton.js";
 import { holdOf } from "./weapons.js";
-import { PM, LUNGE } from "./movement.js";
+import { PM, LUNGE, HOOK } from "./movement.js";
 import { wrapAngle } from "./util.js";
 
 const HOST = 1;
@@ -157,11 +159,14 @@ function flags(a) {
 function pack(a, ev) {
   const b = a.body, A = a.arms;
   const w = A.cur < 2 ? A.slots[A.cur] : A.melee;
-  return [a.id, r3(b.x), r3(b.y), r3(b.z), r3(b.vx), r3(b.vy), r3(b.vz), r3(b.yaw), r3(b.pitch), flags(a), Math.ceil(a.hp), A.cur, w, ev && ev.length ? ev : 0];
+  const hook = b.hook !== HOOK.IDLE ? [r3(b.hx), r3(b.hy), r3(b.hz), b.hook, b.hTarget] : 0;
+  return [a.id, r3(b.x), r3(b.y), r3(b.z), r3(b.vx), r3(b.vy), r3(b.vz), r3(b.yaw), r3(b.pitch), flags(a), Math.ceil(a.hp), A.cur, w, ev && ev.length ? ev : 0, hook];
 }
 function unpack(x) {
   if (!Array.isArray(x) || x.length < 13) return null;
-  return { id: x[0] | 0, x: num(x[1]), y: num(x[2]), z: num(x[3]), vx: num(x[4]), vy: num(x[5]), vz: num(x[6]), yaw: num(x[7]), pitch: num(x[8]), f: x[9] | 0, hp: num(x[10], 100), cur: x[11] | 0, w: String(x[12] || ""), ev: Array.isArray(x[13]) ? x[13].slice(0, 8) : null };
+  const h = Array.isArray(x[14]) && x[14].length >= 5 ? x[14] : null;
+  return { id: x[0] | 0, x: num(x[1]), y: num(x[2]), z: num(x[3]), vx: num(x[4]), vy: num(x[5]), vz: num(x[6]), yaw: num(x[7]), pitch: num(x[8]), f: x[9] | 0, hp: num(x[10], 100), cur: x[11] | 0, w: String(x[12] || ""), ev: Array.isArray(x[13]) ? x[13].slice(0, 8) : null,
+    hook: h ? { x: num(h[0]), y: num(h[1]), z: num(h[2]), st: h[3] === HOOK.ON ? HOOK.ON : HOOK.FLY, t: h[4] | 0 } : null };
 }
 function heard(s) {
   if (!s) return;
@@ -196,6 +201,9 @@ function puppets(dt) {
     b.lunge = f & 64 ? LUNGE.DASH : f & 32 ? LUNGE.CHARGE : LUNGE.IDLE; b.sprinting = !!(f & 128);
     b.eye += ((b.crouched ? PM.eyeCrouch : PM.eyeStand) - b.eye) * Math.min(1, dt * 14);
     a.arms.ads = f & 256 ? 1 : 0;
+    // their grapple, as of their newest state: the rope is drawn to it, and a hook in a body here pulls it
+    if (s1.hook) { b.hook = s1.hook.st; b.hx = s1.hook.x; b.hy = s1.hook.y; b.hz = s1.hook.z; b.hTarget = s1.hook.st === HOOK.ON ? s1.hook.t : -1; }
+    else { b.hook = HOOK.IDLE; b.hTarget = -1; }
     const alive = !!(f & 1);
     if (alive && !a.alive) { a.alive = true; emit("spawn", a); }
     else if (!alive && a.alive) a.alive = false;
@@ -231,11 +239,11 @@ function onMsg(from, m) {
       const v = m.v | 0, by = host ? from : m.by | 0;
       const target = game.actorById(v);
       if (!target) break;
-      if (game.owns(target)) game.applyDamage(target, Math.min(250, Math.max(0, num(m.d))), by, { weapon: String(m.w || "").slice(0, 12), part: m.p === "head" ? "head" : m.p === "arm" || m.p === "leg" ? m.p : "body" });
+      if (game.owns(target)) game.applyDamage(target, Math.min(250, Math.max(0, num(m.d))), by, { weapon: String(m.w || "").slice(0, 12), part: m.p === "head" || m.p === "nut" || m.p === "arm" || m.p === "leg" ? m.p : "body" });
       else if (host && target.kind === "remote") room.to(v, Object.assign({}, m, { by }));
       break;
     }
-    case "die": if (host) { const v = m.v | 0; if (v === from) game.scoreKill(v, m.by == null ? null : m.by | 0, { weapon: String(m.w || "").slice(0, 12), part: m.p === "head" ? "head" : "body" }); } break;
+    case "die": if (host) { const v = m.v | 0; if (v === from) game.scoreKill(v, m.by == null ? null : m.by | 0, { weapon: String(m.w || "").slice(0, 12), part: m.p === "head" || m.p === "nut" ? m.p : "body" }); } break;
     case "kill": if (!host) game.killNews(m); break;
     case "end": if (!host) { if (m.sc) S.match.score = m.sc; game.endMatch(m.w); } break;
   }

@@ -135,7 +135,7 @@ function renderSettings() {
   const s = save.settings;
   const num = (id, v, d) => { $(id).value = v; $(id + "N").textContent = (+v).toFixed(d); };
   num("stSens", s.sens, 1); num("stAds", s.adsSens, 2); num("stFov", s.fov, 0);
-  num("stMaster", s.master, 2); num("stSfx", s.sfx, 2); num("stTouchLook", s.touchLook, 2);
+  num("stMaster", s.master, 2); num("stSfx", s.sfx, 2); num("stVoice", s.voice, 2); num("stTouchLook", s.touchLook, 2);
   $("stInvert").checked = s.invertY; $("stPauseEdit").checked = s.pauseEditing; $("stFovFx").checked = s.fovFx;
   $("stSpeed").checked = s.showSpeed; $("stFps").checked = s.showFps; $("stTouchSprint").checked = s.touchAutoSprint; $("stForceLand").checked = s.forceLandscape;
   $("stCross").value = s.crosshair;
@@ -249,7 +249,7 @@ export function init() {
   $("setTabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) tab(b.dataset.tab); });
   const range = (id, key, d, after) => $(id).addEventListener("input", (e) => { save.settings[key] = +e.target.value; $(id + "N").textContent = (+e.target.value).toFixed(d); if (after) after(); save.commit(); });
   range("stSens", "sens", 1); range("stAds", "adsSens", 2); range("stFov", "fov", 0); range("stTouchLook", "touchLook", 2);
-  range("stMaster", "master", 2, audio.applyVolumes); range("stSfx", "sfx", 2, audio.applyVolumes);
+  range("stMaster", "master", 2, audio.applyVolumes); range("stSfx", "sfx", 2, audio.applyVolumes); range("stVoice", "voice", 2, audio.applyVolumes);
   const tog = (id, key) => $(id).addEventListener("change", (e) => { save.settings[key] = e.target.checked; save.commit(); });
   // asked from the tap itself: browsers grant fullscreen and the orientation lock only to one
   $("stForceLand").addEventListener("change", (e) => { save.settings.forceLandscape = e.target.checked; save.commit(); if (e.target.checked) orient.lock(); else orient.unlock(); });
