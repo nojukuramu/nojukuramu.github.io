@@ -159,7 +159,7 @@ pushed out, auto-run, or a slide ending while you still run — stands you up ou
 aiming or firing ends a toggled sprint; a new weapon comes up unaimed; and **auto-run** (`=`)
 keeps you running forward until a move key takes over.
 
-**Force landscape** (Settings, Touch) plays sideways however the phone is held. Where the browser
+**Force landscape** (Settings, Touch; on by default on phones) plays sideways however the phone is held. Where the browser
 allows it — Android, or the game installed to the home screen — the screen is locked sideways
 (going fullscreen if it must; the lock is lifted from ARCO's `shell.js`). Where it does not, as on
 iPhone Safari or with the phone's own rotation lock on, the game itself is drawn turned a quarter
