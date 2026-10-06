@@ -54,7 +54,7 @@ body.turned #panelBody, body.turned #info-body { touch-action: pan-x pan-y; }
 .iconBtn.alert { color: var(--bad); border-color: rgba(255, 106, 106, 0.6); animation: blink 1s infinite; }
 @keyframes blink { 50% { background: rgba(120, 20, 20, 0.6); } }
 
-#toasts { position: absolute; top: calc(var(--top) + var(--st) + 6px); left: 50%; transform: translateX(-50%); width: min(560px, 70%); display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: 12; pointer-events: none; }
+#toasts { position: absolute; bottom: calc(var(--bh) + var(--sb) + 40px); left: 50%; transform: translateX(-50%); width: min(560px, 70%); display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: 12; pointer-events: none; }
 .toast { padding: 5px 12px; border-radius: 8px; background: rgba(14, 12, 18, 0.85); border: 1px solid var(--line); font-size: 13px; text-align: center; animation: tin .25s ease-out; transition: opacity .4s, transform .4s; max-width: 100%; }
 .toast b { margin-left: 6px; color: var(--dim); font-size: 11px; }
 .toast.good { border-color: rgba(125, 255, 176, 0.45); } .toast.bad { border-color: rgba(255, 122, 106, 0.6); color: #ffd6d0; } .toast.auto { color: var(--info); }
@@ -228,3 +228,5 @@ body:not(.touchUI) #skillPad { transform: scale(.85); transform-origin: 100% 100
   #card { grid-template-rows: repeat(3, var(--btn)); }
 }
 body.turned #toasts { width: 80%; }
+body.manual #toasts { bottom: calc(var(--sb) + 210px); }
+@media (max-height: 520px) { .toast { font-size: 12px; padding: 4px 10px; } .toast.lore { font-size: 13px; } }

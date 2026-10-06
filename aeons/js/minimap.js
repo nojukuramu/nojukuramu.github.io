@@ -105,7 +105,7 @@ export function drawMinimap() {
     ctx.globalAlpha = 1;
   }
   for (const a of G.intel.alerts) {
-    const age = now - a.t;
+    const age = Math.max(0, now - a.t);
     if (age > 12) continue;
     const [x, y] = P(a.x, a.y), r = (4 + (age * 8) % 8) * dpr;
     ctx.strokeStyle = "rgba(255,80,70," + (1 - age / 12) + ")"; ctx.lineWidth = 1.5 * dpr;

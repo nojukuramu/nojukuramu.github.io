@@ -89,7 +89,7 @@ export function toast(text, kind) {
   el.dataset.text = text; el.dataset.until = Date.now() + (kind === "lore" ? 9000 : 3500);
   el.innerHTML = "<span>" + esc(text) + "</span><b></b>";
   box.appendChild(el);
-  while (box.children.length > 5) box.firstElementChild.remove();
+  while (box.children.length > 3) box.firstElementChild.remove();
 }
 function tickToasts() { const now = Date.now(); for (const el of [...$("toasts").children]) if (+el.dataset.until < now) { el.classList.add("out"); setTimeout(() => el.remove(), 400); el.dataset.until = 9e15; } }
 let bannerT = 0;

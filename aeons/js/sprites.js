@@ -826,8 +826,10 @@ export function portrait(kind, id, era, team, hero) {
     const big = { hall: 4, barracks: 3, forge: 3, outpost: 3, altar: 3, academy: 3, stable: 3, workshop: 3, shipyard: 3, airfield: 4, beacon: 5 }[id] || 2;
     d.w = d.h = id === "wall" ? 1 : big;
     const s = buildingSprite(d, era);
-    const k = size / (d.w * 32 + 30) * 1.0;
-    x.translate(size / 2 - d.w * 16 * k, size * 0.82 - d.h * 32 * k); x.scale(k, k);
+    // fit the footprint and the height above it, whichever is the tighter
+    const tall = (HEIGHT[id] || 20) * (1 + era * 0.04) + 24;
+    const k = Math.min(size * 0.92 / (d.w * 32), size * 0.92 / (d.h * 32 + tall));
+    x.translate(size / 2 - d.w * 16 * k, size * 0.96 - d.h * 32 * k); x.scale(k, k);
     if (id === "wall") { drawWall(x, 0, 0, era, team, { n: 0, s: 0, e: 0, w: 0 }); }
     else x.drawImage(s.c, -s.ox, -s.oy, s.w, s.h);
   }
