@@ -11,10 +11,12 @@
  * it turns, whether it bunny hops, how much it strafes in a fight.
  *
  * Getting around is nav.js's graph: A* to wherever it is going, and the link
- * kinds tell it when to jump, when to climb, and that a pad is a way up. */
+ * kinds tell it when to jump, when to climb, and that a pad is a way up.
+ * The harder ones also fire their grapple at you now and then, and come in
+ * with it — the same button, held, that a player holds. */
 
 import { S } from "./state.js";
-import { B, forward, right } from "./movement.js";
+import { B, HOOK, forward, right } from "./movement.js";
 import { GUNS } from "./weapons.js";
 import { ray, newTrace } from "./brush.js";
 import { nearestNode, findPath, linkKind } from "./nav.js";
@@ -28,7 +30,7 @@ const TR = newTrace();
 export function newBrain(a) {
   return { t: 0, target: null, visible: false, lastSeen: null, lastSeenT: -99, reactT: 0, senseT: 0, err: { y: 0, p: 0 },
     path: null, pi: 0, goal: null, goalT: 0, repathT: 0, stuckT: 0, lastPos: null, strafe: 1, strafeT: 0,
-    jumpLast: false, fireLast: false, meleeLast: false, crouchT: 0, head: 0.3 };
+    jumpLast: false, fireLast: false, meleeLast: false, crouchT: 0, head: 0.3, hookT: -1 };
 }
 export function reset(a) { Object.assign(a.brain, newBrain(a)); a.brain.head = { easy: 0.1, normal: 0.25, hard: 0.45, insane: 0.7 }[a.diff] || 0.25; }
 
@@ -84,7 +86,7 @@ export function think(a, dt) {
   else if (tgt) {
     fighting = true;
     const g = GUNS[a.arms.slots[a.arms.cur]] || null;
-    const want = !g ? 1.5 : g.id === "talon" ? 45 : g.id === "mauler" ? 5 : g.id === "hornet" ? 10 : g.id === "brick" || g.id === "wasp" ? 14 : 20;
+    const want = !g ? 1.5 : g.scope ? 45 : g.id === "mauler" ? 5 : g.id === "hornet" ? 10 : g.id === "brick" || g.id === "wasp" ? 14 : 20;
     if (dist > want + 6 || !br.visible) goal = { x: tgt.body.x, y: tgt.body.y, z: tgt.body.z };
     else if (dist < want - 4 && g && g.id !== "mauler") goal = away(a, tgt);
     sprint = false;
@@ -132,9 +134,24 @@ export function think(a, dt) {
   else if (jump && !br.jumpLast) { cmd.buttons |= B.JUMP; br.jumpLast = true; }
   else br.jumpLast = false;
 
-  // guns
-  if (!a.passive) weapons(a, br, D, cmd, tgt, dist);
+  // guns, and the grapple
+  if (!a.passive) { weapons(a, br, D, cmd, tgt, dist); grapple(a, br, D, cmd, tgt, dist, dt); }
   return cmd;
+}
+
+/* Now and then, at a middling range and already on target, a bot hooks you and holds on until it
+   arrives — then the blade or the shotgun does the rest. */
+function grapple(a, br, D, cmd, t, dist, dt) {
+  const b = a.body;
+  if (br.hookT >= 0) {
+    br.hookT += dt;
+    if (b.hook === HOOK.IDLE && br.hookT > 0.1 || br.hookT > 2.5 || !t) { br.hookT = -1; return; }
+    cmd.buttons |= B.HOOK;
+    return;
+  }
+  if (!t || !D.hook || b.hook !== HOOK.IDLE || b.hookCd > 0 || br.reactT > 0) return;
+  if (dist < 9 || dist > 38 || br.aimErr > 0.05) return;
+  if (a.rng() < D.hook * dt) { br.hookT = 0; cmd.buttons |= B.HOOK; }
 }
 
 function roam(a, br, radius) {
@@ -142,7 +159,7 @@ function roam(a, br, radius) {
   if (!br.goal || br.goalT < S.time || (br.goal && Math.hypot(br.goal.x - a.body.x, br.goal.z - a.body.z) < 2)) {
     for (let i = 0; i < 12; i++) {
       const n = N[Math.floor(a.rng() * N.length)];
-      if (Math.hypot(n.x - a.body.x, n.z - a.body.z) < radius) { br.goal = { x: n.x, y: n.y, z: n.z }; break; }
+      if (n.reach && Math.hypot(n.x - a.body.x, n.z - a.body.z) < radius) { br.goal = { x: n.x, y: n.y, z: n.z }; break; }
     }
     br.goalT = S.time + 12;
     br.path = null;
@@ -204,8 +221,8 @@ function aimAt(a, br, D, t, dt, dist) {
   let x = t.bones[i], y = t.bones[i + 1], z = t.bones[i + 2];
   const g = GUNS[a.arms.slots[a.arms.cur]];
   if (g && g.projectile) {
-    // lead the target, and hold over for the drop
-    const tt = dist / g.projectile.speed;
+    // lead the target, and hold over for the drop (the first stretch of the flight takes no time)
+    const tt = Math.max(0, dist - (g.projectile.instant || 0)) / g.projectile.speed;
     x += t.body.vx * tt; z += t.body.vz * tt; y += (t.body.onGround ? 0 : t.body.vy * tt) + 0.5 * g.projectile.gravity * tt * tt;
   }
   const want = anglesTo(e[0], e[1], e[2], x, y, z);
@@ -221,7 +238,7 @@ function weapons(a, br, D, cmd, t, dist) {
   if (t) {
     const guns = A.slots.map((id) => GUNS[id]);
     let pick = 0;
-    const score = (g, i) => (A.ammo[i] > 0 ? 0 : -50) + (g.id === "talon" ? (dist > 30 ? 30 : -20) : 0) + (g.id === "mauler" ? (dist < 9 ? 30 : -25) : 0) + (g.auto ? 8 : 0) + (g.id === "brick" && dist > 12 ? 5 : 0);
+    const score = (g, i) => (A.ammo[i] > 0 ? 0 : -50) + (g.scope ? (dist > 30 ? 30 : -20) : 0) + (g.id === "mauler" ? (dist < 9 ? 30 : -25) : 0) + (g.auto ? 8 : 0) + (g.id === "brick" && dist > 12 ? 5 : 0);
     pick = score(guns[1], 1) > score(guns[0], 0) ? 1 : 0;
     if (A.cur !== pick && A.swapT <= 0 && A.cur < 2) cmd.slot = pick + 1;
     if (A.cur === 2) cmd.slot = pick + 1;
@@ -229,7 +246,7 @@ function weapons(a, br, D, cmd, t, dist) {
     if (dist < 2.2 && D.react < 0.4 && !br.meleeLast) { cmd.buttons |= B.MELEE; br.meleeLast = true; return; }
     br.meleeLast = false;
     if (!g) return;
-    if (g.id === "talon" || dist > 25) cmd.buttons |= B.ADS;
+    if (g.scope || dist > 25) cmd.buttons |= B.ADS;
     const tol = Math.atan2(g.pellets ? 1.2 : 0.35, Math.max(1, dist)) + (g.pellets ? 0.05 : 0);
     if (br.reactT <= 0 && br.aimErr < tol) {
       if (g.auto) cmd.buttons |= B.FIRE;

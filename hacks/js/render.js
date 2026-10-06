@@ -28,14 +28,14 @@ import { RoomEnvironment } from "../vendor/jsm/environments/RoomEnvironment.js";
 import { S, on } from "./state.js";
 import { KINDS } from "./map.js";
 import { world, renderPos } from "./game.js";
-import { gunOf } from "./weapons.js";
+import { gunOf, zoomOf, boltOf } from "./weapons.js";
 import { ray, newTrace } from "./brush.js";
-import { LUNGE, PM } from "./movement.js";
+import { LUNGE, PM, HOOK } from "./movement.js";
 import { save } from "./save.js";
 import { clamp, damp } from "./util.js";
 import { loadModels } from "./models.js";
 import { initFigures, syncFigures, hideFigures, figureQuality, muzzleOf } from "./figures.js";
-import { vScene, vCam, updateViewmodel, vmVisible, vmScoped, muzzleWorld } from "./viewmodel.js";
+import { vScene, vCam, updateViewmodel, vmVisible, vmScoped, muzzleWorld, hookHandWorld } from "./viewmodel.js";
 export { vmFire, vmSwing } from "./viewmodel.js";
 
 export const IS_TOUCH = typeof window !== "undefined" && (("ontouchstart" in window) || navigator.maxTouchPoints > 0);
@@ -222,7 +222,7 @@ function surface(kind) {
   };
   return { map: tex(c, true), normalMap: tex(nc, false) };
 }
-const CLASS = { floor: "concrete", wall: "concrete", block: "concrete", slope: "concrete", crate: "concrete", trim: "metal", shaft: "metal", core: "metal", canopy: "metal", surf: "surf" };
+const CLASS = { floor: "concrete", wall: "concrete", block: "concrete", slope: "concrete", crate: "concrete", trim: "metal", shaft: "metal", core: "metal", canopy: "metal", surf: "surf", bridge: "metal", halo: "metal", kite: "metal" };
 
 let mapGroup = null;
 const pads = [];
@@ -424,6 +424,38 @@ function updateEffects(dt) {
 const rounds = [];
 const roundMat = new THREE.MeshBasicMaterial({ color: 0xfff1c0, fog: false });
 const sph = new THREE.SphereGeometry(1, 8, 6);
+/* Ropes: a grapple's line from the hand to its hook, and the hook. Yours leaves your gun hand's launcher
+   as your screen shows it; anybody else's, their left hand. */
+const ropeMat = new THREE.MeshBasicMaterial({ color: 0x1b1f26, fog: true });
+const hookMat = new THREE.MeshStandardMaterial({ color: 0x9aa4b2, roughness: 0.35, metalness: 0.8 });
+const hookGeo = new THREE.ConeGeometry(0.07, 0.2, 6);
+const ropes = [];
+const ropeA = new THREE.Vector3(), ropeB = new THREE.Vector3();
+function updateRopes() {
+  let n = 0;
+  for (const a of S.actors) {
+    const b = a.body;
+    if (!a.alive || b.hook === HOOK.IDLE || !a.heard) continue;
+    const mine = a === S.me && !(S.hackView && S.hackView.thirdPerson);
+    if (!(mine && hookHandWorld(camera, ropeA))) {
+      const i = 7 * 3;           // l_hand
+      ropeA.set(a.bones[i], a.bones[i + 1], a.bones[i + 2]);
+    }
+    ropeB.set(b.hx, b.hy, b.hz);
+    if (ropes.length <= n) {
+      const line = new THREE.Mesh(cyl, ropeMat); line.matrixAutoUpdate = false; line.frustumCulled = false;
+      const head = new THREE.Mesh(hookGeo, hookMat);
+      scene.add(line); scene.add(head);
+      ropes.push({ line, head });
+    }
+    const R = ropes[n++];
+    segment(R.line, ropeA, ropeB, mine ? 0.008 : 0.012);
+    R.line.visible = true; R.head.visible = true;
+    R.head.position.copy(ropeB);
+    R.head.quaternion.setFromUnitVectors(UP, vD.subVectors(ropeB, ropeA).normalize());
+  }
+  for (let i = n; i < ropes.length; i++) { ropes[i].line.visible = false; ropes[i].head.visible = false; }
+}
 function updateRounds() {
   while (rounds.length < S.projectiles.length) { const m = new THREE.Mesh(sph, roundMat); m.scale.setScalar(0.05); scene.add(m); rounds.push(m); }
   rounds.forEach((m, i) => {
@@ -436,7 +468,7 @@ function updateRounds() {
 /* ---------------------------------------------------------------
    The camera
    --------------------------------------------------------------- */
-const cam = { punch: 0, dip: 0, fovAdd: 0, slide: 0, slideKick: 0 };
+const cam = { punch: 0, dip: 0, fovAdd: 0, slide: 0, slideKick: 0, spec: null, specYaw: 0, specPitch: 0, shakeX: 0, shakeY: 0 };
 export function landDip(v) { cam.dip = Math.min(0.25, cam.dip + v * 0.02); }
 export function punch(p) { cam.punch += p; }
 /** A horizontal field of view, as Source measures it, for this screen's shape. */
@@ -444,31 +476,41 @@ function vfov(hdeg) {
   const aspect = Math.max(1.25, camera.aspect);
   return 2 * Math.atan(Math.tan(hdeg * Math.PI / 360) / aspect) * 180 / Math.PI;
 }
+/*
+ * Dead, the camera is a spectator's and nothing of the life just lost: no
+ * scope, no zoom, no lean from a slide, no widening — it sits behind
+ * whoever got you (or above where you fell), level-ish whatever their own
+ * aim is doing, and eases there rather than snapping.
+ */
 function placeCamera(alpha, dt) {
   const a = S.me;
   if (!a) return;
   const hv = S.hackView || {};
-  const target = !a.alive && S.spectate ? S.spectate : a;
-  const p = renderPos(target, alpha);
-  const b = target.body;
+  if (!a.alive) { spectate(a, alpha, dt); return; }
+  cam.spec = null;
+  const p = renderPos(a, alpha);
+  const b = a.body;
   cam.dip = damp(cam.dip, 0, 9, dt);
   cam.punch = damp(cam.punch, 0, 12, dt);
   const eye = p[1] + b.eye - cam.dip;
   const hs = Math.hypot(b.vx, b.vz);
-  const yaw = target === a ? S.view.yaw : target.body.yaw, pitch = target === a ? S.view.pitch : target.body.pitch;
-  camera.rotation.set(pitch + cam.punch, yaw, damp(camera.rotation.z, a.body.sliding ? 0.06 : 0, 8, dt));
-  const third = hv.thirdPerson || !a.alive;
-  if (third) {
+  const yaw = S.view.yaw, pitch = S.view.pitch;
+  const A = a.arms, g = gunOf(A);
+  // a scope shakes while its bolt is worked: seen, never aimed — S.view, where the next shot goes, is untouched
+  const bolt = boltOf(A);
+  const shake = bolt > 0 && g && g.bolt ? (bolt < 0.12 ? 1 - bolt / 0.12 * 0.4 : Math.sin(Math.min(1, (bolt - 0.12) / 0.8) * Math.PI) * 0.6) * g.bolt * A.ads : 0;
+  const t = performance.now() / 1000;
+  cam.shakeX = shake * (Math.sin(t * 37) * 0.006 + Math.sin(t * 23) * 0.004);
+  cam.shakeY = shake * (Math.sin(t * 31 + 1) * 0.006 + 0.004);
+  camera.rotation.set(pitch + cam.punch + cam.shakeY, yaw + cam.shakeX, damp(camera.rotation.z, b.sliding ? 0.06 : 0, 8, dt));
+  if (hv.thirdPerson) {
     const f = [-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
-    const dist = 3.2;
-    const W = world();
-    const t = camTrace(W, p[0], eye, p[2], p[0] - f[0] * dist, eye - f[1] * dist + 0.4, p[2] - f[2] * dist);
-    camera.position.set(p[0] + (t.x - p[0]) * 0.92, eye + (t.y - eye) * 0.92, p[2] + (t.z - p[2]) * 0.92);
+    const T = camTrace(world(), p[0], eye, p[2], p[0] - f[0] * 3.2, eye - f[1] * 3.2 + 0.4, p[2] - f[2] * 3.2);
+    camera.position.set(p[0] + (T.x - p[0]) * 0.92, eye + (T.y - eye) * 0.92, p[2] + (T.z - p[2]) * 0.92);
   } else camera.position.set(p[0], eye, p[2]);
   const base = hv.fov || save.settings.fov;
-  const A = a.arms, g = gunOf(A);
-  const zoom = g ? 1 + (g.adsZoom - 1) * A.ads : 1;
-  cam.fovAdd = damp(cam.fovAdd, (a.body.sprinting ? 4 : 0) + clamp((hs - 8) * 0.7, 0, 12) + (a.body.lunge === LUNGE.DASH ? 6 : 0), 5, dt);
+  const zoom = zoomOf(A);
+  cam.fovAdd = damp(cam.fovAdd, (b.sprinting ? 4 : 0) + clamp((hs - 8) * 0.7, 0, 12) + (b.lunge === LUNGE.DASH ? 6 : 0), 5, dt);
   // a slide widens the view by how fast it is going: quickly in, slowly back out, with a kick as it starts
   const slideWant = b.sliding ? clamp(3 + (hs - PM.slideStart) * 1.2, 3, 16) : 0;
   cam.slide = damp(cam.slide, slideWant, slideWant > cam.slide ? 10 : 3, dt);
@@ -480,6 +522,30 @@ function placeCamera(alpha, dt) {
   S.cam.yaw = yaw; S.cam.pitch = pitch; S.cam.fov = camera.fov;
   S.cam.zoom = zoom;
 }
+function spectate(a, alpha, dt) {
+  const target = S.spectate && S.spectate.alive ? S.spectate : a;
+  const p = renderPos(target, alpha), b = target.body;
+  const fresh = cam.spec !== target;
+  if (fresh) { cam.spec = target; cam.specYaw = target === a ? S.view.yaw : b.yaw; cam.specPitch = -0.25; cam.fovAdd = 0; cam.slide = 0; cam.slideKick = 0; cam.punch = 0; cam.dip = 0; }
+  // their facing, softened, and a gentle look down at them: never their scope, never upside down
+  if (target !== a) cam.specYaw += wrapA(b.yaw - cam.specYaw) * Math.min(1, dt * 3);
+  cam.specPitch = damp(cam.specPitch, clamp(-0.22 - (b.pitch || 0) * 0.15, -0.45, -0.05), 3, dt);
+  const yaw = cam.specYaw, pitch = cam.specPitch;
+  const eye = p[1] + (target === a ? 1.2 : b.eye);
+  const f = [-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
+  const dist = target === a ? 4.5 : 3.6;
+  const T = camTrace(world(), p[0], eye, p[2], p[0] - f[0] * dist, eye - f[1] * dist + 0.5, p[2] - f[2] * dist);
+  const want = [p[0] + (T.x - p[0]) * 0.92, eye + (T.y - eye) * 0.92, p[2] + (T.z - p[2]) * 0.92];
+  if (fresh) camera.position.set(want[0], want[1], want[2]);
+  else camera.position.set(damp(camera.position.x, want[0], 10, dt), damp(camera.position.y, want[1], 10, dt), damp(camera.position.z, want[2], 10, dt));
+  camera.rotation.set(pitch, yaw, 0);
+  camera.fov = vfov(save.settings.fov);
+  camera.updateProjectionMatrix();
+  S.cam.x = camera.position.x; S.cam.y = camera.position.y; S.cam.z = camera.position.z;
+  S.cam.yaw = yaw; S.cam.pitch = pitch; S.cam.fov = camera.fov;
+  S.cam.zoom = 1;
+}
+const wrapA = (x) => Math.atan2(Math.sin(x), Math.cos(x));
 const TT = newTrace();
 function camTrace(W, x0, y0, z0, x1, y1, z1) { ray(W, x0, y0, z0, x1, y1, z1, TT); return TT; }
 
@@ -527,6 +593,7 @@ export function frame(alpha, dt) {
   updateViewmodel(dt, camera.aspect, S.cam.zoom || 1);
   updateEffects(dt);
   updateRounds();
+  updateRopes();
   updatePads(clockT);
   sky.position.copy(camera.position);
   renderer.clear();
@@ -547,6 +614,7 @@ export function idle(t, dt) {
   camera.rotation.set(-0.42, t * 0.05, 0);
   camera.fov = vfov(90); camera.updateProjectionMatrix();
   hideFigures();
+  for (const R of ropes) { R.line.visible = false; R.head.visible = false; }
   updateEffects(dt);
   updatePads(clockT);
   sky.position.copy(camera.position);

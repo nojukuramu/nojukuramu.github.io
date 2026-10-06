@@ -14,12 +14,17 @@
  * jumps and settles back onto the target rather than the whole gun sliding
  * off it. The arms are the same body every player has (rig.js), their hands
  * placed on the grip and the handguard. Until the models load, the old box
- * guns stand in, given sights of their own. */
+ * guns stand in, given sights of their own.
+ *
+ * Three things are animated on top of that: a sniper's bolt being worked
+ * after each shot (the scope shakes with it, hud.js), a blade carried low
+ * and forward when you are going fast with it, and the grapple — the left
+ * hand leaves the gun and points it while its rope is out. */
 
 import * as THREE from "three";
 import { S } from "./state.js";
-import { GUNS, gunOf } from "./weapons.js";
-import { LUNGE } from "./movement.js";
+import { GUNS, gunOf, boltOf } from "./weapons.js";
+import { LUNGE, HOOK } from "./movement.js";
 import { clamp, damp, wrapAngle } from "./util.js";
 import { gunCopy, humanCopy, paint, hasHuman, onModels } from "./models.js";
 import { makeRig, poseRig } from "./rig.js";
@@ -71,7 +76,7 @@ function boxItem(id) {
     if (id === "brick") part(inner, metal, 0.052, 0.052, 0.06, 0, -0.004, -0.03);
     muzzle = [0, 0.005, -L + 0.02]; sight = [0, 0.031, 0.02];
   } else if (G) {
-    const L = id === "talon" ? 0.72 : id === "mauler" ? 0.54 : id === "hornet" ? 0.36 : 0.5;
+    const L = id === "condor" ? 0.86 : id === "talon" ? 0.72 : id === "mauler" ? 0.54 : id === "hornet" ? 0.36 : 0.5;
     part(inner, metal, 0.042, 0.06, L * 0.62, 0, 0, -L * 0.25);
     part(inner, dark, 0.022, 0.022, L * 0.45, 0, 0.008, -L * 0.72);
     part(inner, accentVm, 0.043, 0.006, L * 0.5, 0, -0.016, -L * 0.25);
@@ -79,11 +84,12 @@ function boxItem(id) {
     part(inner, dark, 0.034, 0.07, 0.14, 0, -0.005, 0.12);
     part(inner, glove, 0.045, 0.06, 0.07, -0.028, -0.045, -L * 0.42);
     part(inner, sleeve, 0.06, 0.06, 0.32, -0.06, -0.09, -L * 0.1);
-    if (id === "talon") { part(inner, dark, 0.04, 0.04, 0.24, 0, 0.058, -0.14); part(inner, accentVm, 0.042, 0.042, 0.01, 0, 0.058, -0.02); sight = [0, 0.058, -0.02]; }
+    if (G.scope) { part(inner, dark, 0.04, 0.04, 0.24, 0, 0.058, -0.14); part(inner, accentVm, 0.042, 0.042, 0.01, 0, 0.058, -0.02); sight = [0, 0.058, -0.02]; }
     else { part(inner, dark, 0.012, 0.022, 0.03, 0, 0.04, -L * 0.05); part(inner, dark, 0.008, 0.02, 0.01, 0, 0.04, -L * 0.85); sight = [0, 0.051, -L * 0.05]; }
     if (id === "mauler") part(inner, dark, 0.05, 0.04, 0.18, 0, -0.035, -L * 0.62);
     if (id === "hornet") part(inner, dark, 0.026, 0.13, 0.036, 0, -0.1, -0.07);
     if (id === "kestrel") part(inner, dark, 0.03, 0.12, 0.05, 0, -0.09, -0.1, 0.25);
+    if (id === "condor") { part(inner, dark, 0.05, 0.05, 0.1, 0, 0.008, -L * 0.98); part(inner, dark, 0.012, 0.11, 0.012, 0.03, -0.06, -L * 0.7, 0.4); part(inner, dark, 0.012, 0.11, 0.012, -0.03, -0.06, -L * 0.7, 0.4); }
     muzzle = [0, 0.008, -L * 0.95];
   } else if (id === "katana") {
     part(inner, dark, 0.03, 0.03, 0.2, 0, -0.03, 0.02);
@@ -149,12 +155,20 @@ const LEFT_DOWN = new THREE.Vector3(-0.32, -0.6, 0.0);
 /* ---------------------------------------------------------------
    Every frame
    --------------------------------------------------------------- */
-const V = { bob: 0, kick: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, flashT: 0, swing: 0, swapT: 0, key: "", sprint: 0, air: 0, slide: 0 };
+const V = { bob: 0, kick: 0, swayX: 0, swayY: 0, lastYaw: 0, lastPitch: 0, flashT: 0, swing: 0, swapT: 0, key: "", sprint: 0, air: 0, slide: 0, rush: 0, rushT: 0, hook: 0 };
 export function vmFire(e) {
-  const id = GUNS[e.gun] && GUNS[e.gun].id;
-  V.kick = Math.min(1, V.kick + (id === "talon" || id === "brick" || id === "mauler" ? 1 : 0.45));
+  const G = GUNS[e.gun];
+  V.kick = Math.min(G && G.id === "condor" ? 1.4 : 1, V.kick + (G && (G.scope || G.id === "brick" || G.id === "mauler") ? 1 : 0.45));
   V.flashT = 0.055;
 }
+/* The grapple in the left hand: a stubby launcher, drawn only while its rope is out. */
+const launcher = new THREE.Group();
+part(launcher, dark, 0.05, 0.05, 0.16, 0, 0, -0.04);
+part(launcher, accentVm, 0.052, 0.012, 0.1, 0, 0.026, -0.04);
+part(launcher, metal, 0.03, 0.03, 0.05, 0, 0, -0.14);
+launcher.visible = false;
+vScene.add(launcher);
+const HOOK_HAND = new THREE.Vector3(-0.17, -0.13, -0.42);   // where the launcher's mouth sits, in the eye's frame
 export function vmSwing() { V.swing = 1; }
 const flashTex = (() => {
   const c = document.createElement("canvas");
@@ -188,7 +202,7 @@ function vmFov(aspect) {
 export function updateViewmodel(dt, aspect, zoom) {
   const a = S.me;
   const third = S.hackView && S.hackView.thirdPerson;
-  if (!a || !a.alive || third) { holder.visible = false; if (arms) arms.root.visible = false; flash.material.opacity = 0; fireLight.intensity = 0; vmVisible = false; return; }
+  if (!a || !a.alive || third) { holder.visible = false; launcher.visible = false; if (arms) arms.root.visible = false; flash.material.opacity = 0; fireLight.intensity = 0; vmVisible = false; vmScoped = false; return; }
   const A = a.arms, g = gunOf(A);
   const key = g ? g.id : A.melee;
   const it = itemFor(key);
@@ -212,6 +226,11 @@ export function updateViewmodel(dt, aspect, zoom) {
   V.air = damp(V.air, body.onGround ? 0 : clamp(-body.vy * 0.04, -0.6, 0.6), 8, dt);
   const ads = A.ads, hip = 1 - ads;
   const pistol = g && g.hold === "pistol";
+  // a blade carried at speed: low, back and pointed ahead, the faster the more (and it is a lunge too)
+  const speed3 = Math.hypot(body.vx, body.vy, body.vz);
+  V.rush = damp(V.rush, !g && (speed3 > 8 || body.lunge === LUNGE.DASH) ? clamp((speed3 - 8) / 8, body.lunge === LUNGE.DASH ? 0.7 : 0, 1) : 0, 8, dt);
+  V.rushT += dt * (8 + speed3);
+  V.hook = damp(V.hook, body.hook !== HOOK.IDLE ? 1 : 0, 14, dt);
 
   // where the grip is, hip and aimed; aimed puts the sight on the axis at a little distance from the eye
   let hx, hy, hz;
@@ -220,7 +239,7 @@ export function updateViewmodel(dt, aspect, zoom) {
   else { hx = 0.15; hy = -0.17; hz = -0.33; }
   let x = hx, y = hy, z = hz;
   if (g && it.sight) {
-    const relief = pistol ? 0.46 : g.id === "talon" ? 0.11 : 0.22;
+    const relief = pistol ? 0.46 : g.scope ? 0.11 : 0.22;
     const ax = -it.sight.x, ay = -it.sight.y, az = -relief - it.sight.z;
     x = hx + (ax - hx) * ads; y = hy + (ay - hy) * ads; z = hz + (az - hz) * ads;
   }
@@ -233,6 +252,13 @@ export function updateViewmodel(dt, aspect, zoom) {
     const k = Math.sin(Math.min(1, 1 - A.reloadT / g.reload) * Math.PI);
     y -= 0.08 * k; rz += 0.55 * k; rx += 0.25 * k;
   }
+  // working a bolt: after the kick settles, the rifle rolls over to the right hand, is racked, and comes back
+  const bolt = boltOf(A);
+  if (bolt > 0 && g && g.bolt) {
+    const k = bolt < 0.15 ? 0 : Math.sin(Math.min(1, (bolt - 0.15) / 0.75) * Math.PI);
+    const rack = Math.sin(Math.min(1, (bolt - 0.3) / 0.4) * Math.PI * 2) * (bolt > 0.3 && bolt < 0.7 ? 1 : 0);
+    rz -= 0.42 * k * g.bolt; y -= 0.035 * k; x += 0.02 * k; z += 0.025 * rack * g.bolt; rx += 0.06 * rack;
+  }
   // sliding, the gun drops and leans in
   V.slide = damp(V.slide, body.sliding ? 1 : 0, 10, dt);
   if (V.slide > 0.001) { x -= 0.025 * V.slide * hip; y -= 0.04 * V.slide * hip; rz += 0.32 * V.slide * hip; }
@@ -244,6 +270,13 @@ export function updateViewmodel(dt, aspect, zoom) {
     else { rx += 0.62 - s * 1.3; ry += s * 1.2 - 0.18; rz += 0.42 - s * 1.2; x -= s * 0.14; }
     if (body.lunge === LUNGE.CHARGE) { z += 0.08 + 0.1 * body.lungeCharge; rx += 0.3 * body.lungeCharge; x += 0.03; }
     if (body.lunge === LUNGE.DASH) { z -= 0.2; rx = A.melee === "lancer" ? 0 : 0.2; }
+    if (V.rush > 0.01) {
+      // the charge: the katana drawn back along the side, edge forward; the lance couched and levelled
+      const j = Math.sin(V.rushT) * 0.012 * V.rush, r = V.rush * (1 - s);
+      if (A.melee === "lancer") { y -= 0.04 * r; z -= 0.08 * r; rx -= 0.1 * r; x -= 0.05 * r; }
+      else { x += 0.04 * r; y -= 0.07 * r; z += 0.05 * r; rx -= 0.55 * r; ry -= 0.25 * r; rz -= 0.35 * r; }
+      x += j; y += j * 0.6;
+    }
   }
   // turn about the sight while aimed, about the grip otherwise
   if (it.sight) pivot.copy(it.sight).multiplyScalar(ads); else pivot.set(0, 0, 0);
@@ -257,6 +290,13 @@ export function updateViewmodel(dt, aspect, zoom) {
   vCam.fov = vmFov(aspect) / Math.max(1, zoom * 0.25 + 0.75);
   vCam.updateProjectionMatrix();
 
+  // the grapple: the launcher comes up in the left hand while the rope is out
+  launcher.visible = V.hook > 0.05;
+  if (launcher.visible) {
+    launcher.position.copy(HOOK_HAND).add(tmp.set(-0.08, -0.18, 0.12).multiplyScalar(1 - V.hook));
+    launcher.rotation.set(0.05, 0.08, 0.2 * (1 - V.hook));
+  }
+
   // the arms: hands on the grip and the handguard (or the magazine, mid-reload)
   const R = armsFor(a);
   if (R) {
@@ -268,6 +308,8 @@ export function updateViewmodel(dt, aspect, zoom) {
       T.lHand.copy(tmp).add(pistol ? SUPPORT_WRIST_P : SUPPORT_WRIST).applyQuaternion(q).add(holder.position).add(EYE);
     } else if (!g && A.melee === "lancer") T.lHand.set(0, 0, -0.38).applyQuaternion(q).add(holder.position).add(EYE);
     else T.lHand.copy(LEFT_DOWN).add(EYE);
+    // the left hand leaves whatever it held for the grapple
+    if (V.hook > 0.05) T.lHand.lerp(tmp.copy(launcher.position).add(SUPPORT_WRIST).add(EYE), V.hook);
     poseRig(R.rig, T);
     // the box guns bring their own glove and sleeve
     R.root.visible = !it.box;
@@ -280,12 +322,21 @@ export function updateViewmodel(dt, aspect, zoom) {
     flash.position.copy(it.muzzle).applyMatrix4(it.obj.matrixWorld);
     flash.material.rotation = Math.random() * 6.28;
     flash.material.opacity = 1;
-    flash.scale.setScalar((g.id === "talon" || g.id === "mauler" ? 0.2 : pistol ? 0.1 : 0.13) * (0.85 + Math.random() * 0.4));
+    flash.scale.setScalar((g.id === "condor" ? 0.27 : g.scope || g.id === "mauler" ? 0.2 : pistol ? 0.1 : 0.13) * (0.85 + Math.random() * 0.4));
     fireLight.position.copy(flash.position);
     fireLight.intensity = 1.6;
   } else { flash.material.opacity = 0; fireLight.intensity = 0; }
-  vmScoped = !!(g && g.id === "talon" && ads > 0.9);
+  vmScoped = !!(g && g.scope && ads > 0.9);
   vmVisible = !vmScoped;
+}
+
+/** Where the grapple's rope leaves your hand, as a point in the world, for drawing the rope from it. */
+const hk = new THREE.Vector3();
+export function hookHandWorld(camera, out) {
+  if (!vmVisible || !launcher.visible) return null;
+  hk.set(HOOK_HAND.x, HOOK_HAND.y, HOOK_HAND.z - 0.12).project(vCam);
+  hk.z = tmp.set(0, 0, -0.6).applyMatrix4(camera.projectionMatrix).z;
+  return out.copy(hk).unproject(camera);
 }
 
 /** Where your muzzle is on screen, as a point in the world half a metre out, for your own tracers. */

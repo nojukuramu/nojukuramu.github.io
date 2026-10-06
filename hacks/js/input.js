@@ -153,6 +153,9 @@ export function buildCmd() {
   if (held("reload")) b |= B.RELOAD;
   if (held("lunge")) b |= B.LUNGE;
   if (held("melee")) b |= B.MELEE;
+  if (held("hook")) b |= B.HOOK;
+  // a zoom step is a press; one shorter than a tick still counts
+  if (held("zoom") || edges.has("zoom")) b |= B.ZOOM;
   // with the blade in hand, aiming is lunging
   if (S.me && S.me.arms.cur === 2 && (b & B.ADS)) b |= B.LUNGE;
   let slot = 0;

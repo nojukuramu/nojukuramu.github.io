@@ -26,9 +26,11 @@
  *
  * On top of Source, the Apex-style moves: sprint, crouch-slide (downhill
  * speeds it up), wall climb (jump into a wall and hold), wall jump (tap jump
- * beside a wall; your speed along the wall is kept), and the melee lunge
+ * beside a wall; your speed along the wall is kept), the melee lunge
  * (hold to stick to whatever surface you touch, release to launch where you
- * look — harder the more squarely you face away from the surface).
+ * look — harder the more squarely you face away from the surface), and the
+ * grapple's rope (hold to be reeled in, steer to swing; it lets go when the
+ * pull is complete).
  *
  * Units are metres and seconds. One Source unit is an inch; where a constant
  * below is Source's, its original value is in the comment.
@@ -42,7 +44,7 @@ import { trace, newTrace } from "./brush.js";
 export const TICK = 1 / 64;
 
 /** Buttons in a command, one bit each. Players, bots and hacks all make these. */
-export const B = { JUMP: 1, CROUCH: 2, SPRINT: 4, FIRE: 8, ADS: 16, RELOAD: 32, MELEE: 64, LUNGE: 128 };
+export const B = { JUMP: 1, CROUCH: 2, SPRINT: 4, FIRE: 8, ADS: 16, RELOAD: 32, MELEE: 64, LUNGE: 128, HOOK: 256, ZOOM: 512 };
 
 export const PM = {
   gravity: 19,            // sv_gravity 800 u/s²
@@ -84,11 +86,26 @@ export const PM = {
   lungeTap: 0.18,         // released sooner than this, a lunge is a swing
   lungeStick: 0.3,        // how near a surface must be to stick to it
   lungeMaxHold: 4,
-  lungeCooldown: 0.5
+  lungeCooldown: 0.5,
+  slideSlope: 0.978,      // ground steeper than ~12° lets a crouch slide from a standstill: gravity carries it
+  hookSpeed: 120,         // the grapple's hook in flight, m/s
+  hookRange: 55,
+  hookPull: 30,           // m/s² along the rope while it reels you in
+  hookMax: 24,            // the reel never pulls you along the rope faster than this
+  hookSteer: 10,          // m/s² of swing your move keys add across the rope
+  hookReel: 6,            // m/s the rope shortens by itself, so a swing always closes in
+  hookLift: 4.2,          // a hook fired from the ground hops you off it
+  hookSwing: 22,          // how fast a swing may go round the hook (or the speed you hooked at, if more)
+  hookGravity: 0.45,      // on a rope you are held up as well as pulled in: less of gravity reaches you
+  hookDone: 2.0,          // this close to the hook, the pull is complete and it lets go
+  hookCooldown: 0.45
 };
 
 const L_IDLE = 0, L_CHARGE = 1, L_DASH = 2;
 export const LUNGE = { IDLE: L_IDLE, CHARGE: L_CHARGE, DASH: L_DASH };
+/* The grapple: idle, its hook flying (game.js moves it, since it can hit people), or holding fast. */
+const H_IDLE = 0, H_FLY = 1, H_ON = 2;
+export const HOOK = { IDLE: H_IDLE, FLY: H_FLY, ON: H_ON };
 
 export function newBody(x, y, z, yaw) {
   return {
@@ -102,6 +119,9 @@ export function newBody(x, y, z, yaw) {
     jumpHeld: false, jumpBuf: 0, crouchHeld: false,
     lunge: L_IDLE, lungeT: 0, lungeCharge: 0, lungeStuck: false, lnx: 0, lny: 0, lnz: 0, lungeHeld: false, lungeCd: 0, lungePower: 0,
     lungeDir: [0, 0, 0],
+    // the grapple: where its hook is, which way it flies, how long the rope is, and whom it holds (-1: the world)
+    hook: H_IDLE, hx: 0, hy: 0, hz: 0, hdx: 0, hdy: 0, hdz: 0, hLen: 0, hStart: 0, hFrom: 0, hTarget: -1, hookT: 0, hookCd: 0, hookHeld: false,
+    yank: null,             // set by game.js for a tick while somebody's hook holds this body: where it is pulled to
     // what a hack may change about its own body (see hackapi.js)
     gravityScale: 1, speedScale: 1, jumpScale: 1,
     ev: []
@@ -158,6 +178,12 @@ function slideMove(W, p, dt) {
     if (TR.ny > PM.walkable) blocked |= 1;
     if (TR.ny === 0) blocked |= 2;
     tl -= tl * TR.fraction;
+    // The same plane again: a rounding error against a slanted face, not a corner. Counted twice, the
+    // crease between a plane and itself has no direction and the body stopped dead halfway down every
+    // steep slope. Nudge off it and carry on, as Quake III's PM_SlideMove does.
+    let again = false;
+    for (let i = 0; i < np; i++) if (TR.nx * planes[i * 3] + TR.ny * planes[i * 3 + 1] + TR.nz * planes[i * 3 + 2] > 0.99) { again = true; break; }
+    if (again) { p.vx += TR.nx * 0.02; p.vy += TR.ny * 0.02; p.vz += TR.nz * 0.02; continue; }
     if (np >= 5) { p.vx = p.vy = p.vz = 0; break; }
     planes[np * 3] = TR.nx; planes[np * 3 + 1] = TR.ny; planes[np * 3 + 2] = TR.nz; np++;
     if (np === 1 && !p.onGround) {
@@ -293,9 +319,17 @@ function duck(W, p, want) {
     }
   }
 }
+/* Ground steep enough that gravity along it beats a slide's friction: a crouch there slides from a
+   standstill, and a slide there never runs out — before, crouching on a ramp to slide down it froze you. */
+const downhill = (p) => p.onGround && p.gny < PM.slideSlope;
 function startSlide(p, boost) {
   const s = hspeed(p);
-  if (s < PM.slideStart) return false;
+  if (s < PM.slideStart) {
+    if (!downhill(p)) return false;
+    p.sliding = true;
+    p.ev.push("slide");
+    return true;
+  }
   p.sliding = true;
   // the full boost on a fresh crouch, once per cooldown; otherwise — on its cooldown, or a slide out of a
   // landing — a smaller push, so no slide starts dead
@@ -322,7 +356,7 @@ function slideTick(p, cmd, dt) {
   }
   const w = wish(p, cmd, 1.2);
   if (w[2] > 0) accelerate(p, w[0], w[1], w[2], 6, dt);
-  if (hspeed(p) < PM.slideEnd) p.sliding = false;
+  if (hspeed(p) < PM.slideEnd && !downhill(p)) p.sliding = false;
 }
 
 /* ---------------------------------------------------------------
@@ -450,6 +484,70 @@ function lungeInput(W, p, held, dt, m) {
 }
 
 /* ---------------------------------------------------------------
+   The grapple
+   --------------------------------------------------------------- */
+/*
+ * Hold fire on the grapple and its hook flies (game.js, since it can catch a
+ * person); once it holds, this is the rope. Three things act on you, and
+ * gravity and your momentum do the rest:
+ *   - the reel: a pull along the rope, which never adds speed along it past
+ *     hookMax — so it brings you in, but a fast swing is yours to keep;
+ *   - the rope: never longer than it has been, and shortening a little by
+ *     itself. Moving away from the hook is turned into going round it, which
+ *     is a swing;
+ *   - your move keys, across the rope: steer the swing, or circle the hook.
+ * Close enough to the hook, the pull is complete and it lets go by itself.
+ * A hook in somebody pulls them too (yank): the two of you meet in the middle.
+ */
+function hookPull(W, p, cmd, dt) {
+  const c = p.y + halfH(p);
+  const dx = p.hx - p.x, dy = p.hy - c, dz = p.hz - p.z;
+  const d = Math.hypot(dx, dy, dz);
+  if (d < PM.hookDone) { p.hook = H_IDLE; p.hookCd = PM.hookCooldown; p.ev.push("hookdone"); return; }
+  const nx = dx / d, ny = dy / d, nz = dz / d;
+  if (p.onGround && ny > -0.5) { p.vy = Math.max(p.vy, PM.hookLift); p.onGround = false; p.groundTicks = -1; }
+  p.climbing = false; p.sliding = false;
+  let along = p.vx * nx + p.vy * ny + p.vz * nz;
+  if (along < PM.hookMax) {
+    const a = Math.min(PM.hookPull * dt, PM.hookMax - along);
+    p.vx += nx * a; p.vy += ny * a; p.vz += nz * a;
+  }
+  // steering: the move keys, with the part along the rope taken out, so they only ever swing you
+  const f = forward(p.yaw), r = right(p.yaw);
+  const fm = clamp1(cmd.fwd), sm = clamp1(cmd.side);
+  let wx = f[0] * fm + r[0] * sm, wy = 0, wz = f[2] * fm + r[2] * sm;
+  if (fm > 0.3) { const l = lookDir(p.yaw, p.pitch); wx = l[0] * fm + r[0] * sm; wy = l[1] * fm; wz = l[2] * fm + r[2] * sm; }
+  const wn = wx * nx + wy * ny + wz * nz;
+  wx -= nx * wn; wy -= ny * wn; wz -= nz * wn;
+  const wl = Math.hypot(wx, wy, wz);
+  if (wl > 1e-4) { const k = PM.hookSteer * dt / wl; p.vx += wx * k; p.vy += wy * k; p.vz += wz * k; }
+  // the rope: never longer than it was, a little shorter each tick, so you move in along it at least as
+  // fast as it shortens — whatever else you are doing, which turns moving away into going round
+  p.hLen = Math.max(PM.hookDone * 0.5, Math.min(p.hLen, d) - PM.hookReel * dt);
+  along = p.vx * nx + p.vy * ny + p.vz * nz;
+  const need = Math.min(PM.hookMax, (d - p.hLen) / dt);
+  if (along < need) { const k = need - along; p.vx += nx * k; p.vy += ny * k; p.vz += nz * k; along = need; }
+  // a shortening rope spins a swing up the way a skater pulling their arms in does; past what you
+  // brought to it (or hookSwing), the spin is shed rather than flinging you round the hook at 60 m/s,
+  // and more of it the last few metres in, so the pull ends at the hook instead of circling it
+  const tx = p.vx - nx * along, ty = p.vy - ny * along, tz = p.vz - nz * along;
+  const ts = Math.hypot(tx, ty, tz), cap = Math.max(PM.hookSwing, p.hFrom) * Math.min(1, d / 6);
+  if (ts > cap) { const k = cap / ts; p.vx = nx * along + tx * k; p.vy = ny * along + ty * k; p.vz = nz * along + tz * k; }
+}
+/** Somebody's hook is in this body: it is pulled towards them, and cannot stand its ground. */
+function yankPull(p, dt) {
+  const q = p.yank, c = p.y + halfH(p);
+  const dx = q[0] - p.x, dy = q[1] - c, dz = q[2] - p.z;
+  const d = Math.hypot(dx, dy, dz);
+  if (d < PM.hookDone) return;
+  const nx = dx / d, ny = dy / d, nz = dz / d;
+  if (p.onGround && ny > -0.5) { p.vy = Math.max(p.vy, PM.hookLift); p.onGround = false; p.groundTicks = -1; }
+  p.climbing = false; p.sliding = false;
+  const along = p.vx * nx + p.vy * ny + p.vz * nz;
+  if (along < PM.hookMax) { const a = Math.min(PM.hookPull * dt, PM.hookMax - along); p.vx += nx * a; p.vy += ny * a; p.vz += nz * a; }
+}
+
+/* ---------------------------------------------------------------
    CategorizePosition
    --------------------------------------------------------------- */
 function categorize(W, p) {
@@ -509,7 +607,10 @@ export function pmove(W, p, cmd, dt, o) {
 
   if (sweep(W, p, p.x, p.y, p.z, p.x, p.y, p.z).startsolid) unstick(W, p);
   lungeInput(W, p, !!(btn & B.LUNGE), dt, o.melee);
+  // a rope, yours or somebody else's, pulls you off whatever you were stuck to
+  if ((p.hook === H_ON || p.yank) && p.lunge === L_CHARGE && p.lungeStuck) p.lungeStuck = false;
   if (p.lunge === L_CHARGE && p.lungeStuck) {
+    p.yank = null;
     // Stuck to a surface: nothing moves until you let go.
     p.vx = p.vy = p.vz = 0; p.jumpBuf = 0; p.sprinting = false;
     return;
@@ -517,11 +618,17 @@ export function pmove(W, p, cmd, dt, o) {
 
   duck(W, p, crouch);
   if (p.onGround && crouchEdge && !p.sliding && p.crouched) startSlide(p, true);
+  // crouched onto a steep enough slope: it takes you down
+  else if (crouch && !p.sliding && p.crouched && downhill(p) && p.groundTicks > 0) startSlide(p, false);
   if (!crouch) p.sliding = false;
   p.sprinting = !!(btn & B.SPRINT) && !o.noSprint && cmd.fwd > 0.3 && !p.crouched && p.lunge === L_IDLE;
 
+  if (p.hook === H_ON) hookPull(W, p, cmd, dt);
+  if (p.yank) yankPull(p, dt);
+  p.yank = null;
+
   const dash = p.lunge === L_DASH;
-  const gk = dash ? 0.3 : 1;
+  const gk = dash ? 0.3 : p.hook === H_ON ? PM.hookGravity : 1;
   if (!p.onGround && !p.climbing) p.vy -= g * gk * 0.5 * dt;
 
   // Jump: off the ground, off a wall, or held for a landing one tick away.
@@ -538,7 +645,7 @@ export function pmove(W, p, cmd, dt, o) {
   p.jumpBuf = Math.max(0, p.jumpBuf - dt);
 
   // Wall climb: in the air, into a wall, holding jump and forward.
-  if (!p.onGround && !p.climbing && jump && cmd.fwd > 0.5 && p.climbBudget > 0.05 && p.vy > -8 && p.lunge === L_IDLE && wallAhead(W, p)) {
+  if (!p.onGround && !p.climbing && jump && cmd.fwd > 0.5 && p.climbBudget > 0.05 && p.vy > -8 && p.lunge === L_IDLE && p.hook !== H_ON && wallAhead(W, p)) {
     p.climbing = true;
     p.ev.push("climb");
   }

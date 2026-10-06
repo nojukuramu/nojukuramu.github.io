@@ -52,6 +52,13 @@ export const ICONS = {
   trash: P("M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13"),
   book: P("M4 5.5c2.5-1 5-1 8 1 3-2 5.5-2 8-1V19c-2.5-1-5-1-8 1-3-2-5.5-2-8-1z M12 6.5V20"),
   bolt: P("M13 3L5 14h6l-1 7 8-11h-6z"),
+  // a grappling hook: the shaft, three tines curling back, and the rope's eye
+  hook: C(12, 4.5, 1.8) + P("M12 6.3V19M12 19c-2.5 0-4.5-1.6-5.2-4M12 19c2.5 0 4.5-1.6 5.2-4M6.8 15l-1.6 1.2M17.2 15l1.6 1.2M12 19v2"),
+  zoom: C(10.5, 10.5, 6) + P("M15 15l5 5M10.5 8v5M8 10.5h5"),
+  // below the belt: two, under a waistband
+  nut: P("M5 7h14") + C(9, 14, 3.4) + C(15, 14, 3.4),
+  // a bolt being worked: the handle swung up, the receiver it slides in
+  cycle: P("M4 13h11M4 13v3h11v-3M15 14.5h3l2-4M17 6a6 6 0 0 1 3 4.5"),
   wall: P("M4 4h16v16H4zM4 9.5h16M4 15h16M9 4v5.5M15 9.5V15M9 15v5"),
   surf: P("M3 18l9-12 9 12M7 18l5-6.5 5 6.5"),
   bug: P("M8 9h8v6a4 4 0 0 1-8 0zM12 9v10M8 12H4M20 12h-4M8 16l-3 2M16 16l3 2M8.5 9L6 6.5M15.5 9L18 6.5M9.5 9a2.5 2.5 0 0 1 5 0")

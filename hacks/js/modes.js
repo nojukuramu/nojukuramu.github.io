@@ -42,10 +42,10 @@ export const HACK_RULES = {
 export const HACK_RULE_IDS = Object.keys(HACK_RULES);
 
 export const DIFFS = {
-  easy:   { id: "easy",   name: "Easy",   react: 0.55, aimErr: 0.11, turn: 5,  bhop: 0,    strafe: 0.2 },
-  normal: { id: "normal", name: "Normal", react: 0.35, aimErr: 0.06, turn: 9,  bhop: 0.35, strafe: 0.5 },
-  hard:   { id: "hard",   name: "Hard",   react: 0.22, aimErr: 0.035, turn: 14, bhop: 0.8,  strafe: 0.8 },
-  insane: { id: "insane", name: "Insane", react: 0.14, aimErr: 0.018, turn: 22, bhop: 1,    strafe: 1 }
+  easy:   { id: "easy",   name: "Easy",   react: 0.55, aimErr: 0.11, turn: 5,  bhop: 0,    strafe: 0.2, hook: 0 },
+  normal: { id: "normal", name: "Normal", react: 0.35, aimErr: 0.06, turn: 9,  bhop: 0.35, strafe: 0.5, hook: 0.06 },
+  hard:   { id: "hard",   name: "Hard",   react: 0.22, aimErr: 0.035, turn: 14, bhop: 0.8,  strafe: 0.8, hook: 0.14 },
+  insane: { id: "insane", name: "Insane", react: 0.14, aimErr: 0.018, turn: 22, bhop: 1,    strafe: 1, hook: 0.25 }
 };
 export const DIFF_IDS = Object.keys(DIFFS);
 

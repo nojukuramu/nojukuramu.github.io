@@ -12,6 +12,9 @@
  *   drop   off an edge to anything lower
  *   pad    wherever a jump pad actually throws you — found by simulating it
  *
+ * Nodes no link leads to from where the spawns stand (a stepping stone, a
+ * kite, the top of a wall) are kept but marked: a bot never wanders there.
+ *
  * A* over that graph gives a bot its route; the link kinds tell it which
  * button to press on the way. Pure, so tools/validate.js can check that every
  * spawn can reach every other. */
@@ -150,6 +153,18 @@ export function buildNav(W) {
     if (!to) continue;
     for (const a of nodes) if (a.x >= b.min[0] - 0.5 && a.x <= b.max[0] + 0.5 && a.z >= b.min[2] - 0.5 && a.z <= b.max[2] + 0.5 && Math.abs(a.y - b.max[1]) < 0.5) { a.pad = to.id; link(a, to, "pad", 4); }
   }
+  // 5. what can be reached at all: the stepping stones, the kites and the tops of walls cannot, by any
+  // link — a bot sent to roam there would stand underneath forever. Reachable is anything a path
+  // leads to from the ground the spawns stand on.
+  const seen = new Set();
+  for (const sp of W.spawns || []) {
+    const from = closest(nodes, sp.x, sp.y, sp.z, 4, cells, key);
+    if (!from || seen.has(from.id)) continue;
+    const q = [from.id];
+    seen.add(from.id);
+    while (q.length) for (const l of nodes[q.pop()].links) if (!seen.has(l.to)) { seen.add(l.to); q.push(l.to); }
+  }
+  for (const n of nodes) n.reach = !W.spawns || seen.has(n.id);
   return { nodes, cells, key, near: (x, y, z, r) => closest(nodes, x, y, z, r, cells, key) };
 }
 

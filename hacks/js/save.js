@@ -22,7 +22,7 @@ export const DEFAULT_SETTINGS = {
   keyModes: KEY_MODES,       // per action: hold | toggle | mixed (sprint: or always) — controls.js MODAL
   touchModes: TOUCH_MODES,   // the same, for the touch buttons
   quality: "auto",           // auto | low | medium | high
-  master: 0.8, sfx: 0.9,
+  master: 0.8, sfx: 0.9, voice: 0.9,   // voice: the announcer
   showSpeed: true, showFps: false,
   fovFx: true,               // the view widens at speed and in a slide
   crosshair: "#ffffff",
@@ -72,6 +72,7 @@ function clean(raw) {
   S.adsSens = clampN(s.adsSens, 0.2, 2, S.adsSens);
   S.master = clampN(s.master, 0, 1, S.master);
   S.sfx = clampN(s.sfx, 0, 1, S.sfx);
+  S.voice = clampN(s.voice, 0, 1, S.voice);
   S.touchLook = clampN(s.touchLook, 0.2, 3, S.touchLook);
   for (const k of ["invertY", "showSpeed", "showFps", "pauseEditing", "touchAutoSprint", "fovFx", "forceLandscape"]) if (typeof s[k] === "boolean") S[k] = s[k];
   const km = Object.assign({}, s.keyModes && typeof s.keyModes === "object" ? s.keyModes : null);

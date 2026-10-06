@@ -44,6 +44,11 @@ export const HITBOXES = [
   { a: "r_knee", b: "r_foot", r: 0.085, part: "leg" }
 ].map((h) => Object.assign(h, { ai: BI[h.a], bi: BI[h.b] }));
 
+/* Between the legs: not a bone, a point a little below and in front of the hips' midpoint, small, and
+   checked after the capsules — the body and thigh capsules cover it, so a ray that passes through it
+   counts as "nut" when it would otherwise have been the body or a leg just in front. */
+export const NUT_BOX = { r: 0.075, down: 0.1, fwd: 0.07, slack: 0.3 };
+
 const THIGH = 0.46, SHIN = 0.46, UPPER = 0.29, FORE = 0.28;
 
 /* ---------------------------------------------------------------
@@ -76,7 +81,8 @@ function joint(root, target, l1, l2, hint) {
 /**
  * Pose a body. `s` is anything with x, y, z, yaw, pitch, vx, vz, onGround,
  * crouched, sliding, climbing, lunge (0 idle, 1 charging, 2 dashing), eye,
- * and an animation phase `phase` (radians, advanced by whoever owns it).
+ * an animation phase `phase` (radians, advanced by whoever owns it), and the
+ * grapple's state and hook point (hook, hx, hy, hz), which the left hand follows.
  * `hold` is "rifle", "pistol", "melee" or "lance". Writes 17 × 3 numbers.
  */
 export function pose(s, hold, out) {
@@ -140,6 +146,13 @@ export function pose(s, hold, out) {
   } else {
     rH = aimAt([0.12, -0.07, -0.34]); lH = aimAt([-0.03, -0.04, -0.6]);
   }
+  if (s.hook) {
+    // the grapple is in the left hand, pointing at its hook: the world offset turned into this body's frame
+    const wx = s.hx - s.x, wz = s.hz - s.z;
+    const d = [wx * cy - wz * sy - lSh[0], s.hy - s.y - lSh[1], wx * sy + wz * cy - lSh[2]];
+    const l = len(d) || 1;
+    lH = add(lSh, scale(d, 0.55 / l));
+  }
   const lE = joint(lSh, lH, UPPER, FORE, [-0.6, -0.8, 0.2]), rE = joint(rSh, rH, UPPER, FORE, [0.6, -0.8, 0.2]);
 
   const local = [pelvis, spine, chest, neck, head, lSh, lE, lH, rSh, rE, rH, lHip, lK, lF, rHip, rK, rF];
@@ -190,7 +203,33 @@ export function rayBones(bones, ox, oy, oz, dx, dy, dz, maxT) {
     const te = Math.max(0, t - Math.sqrt(h.r * h.r - d2));
     if (!best || te < best.t) best = { t: te, part: h.part, box: h.a };
   }
-  return best;
+  if (best && best.part !== "body" && best.part !== "leg") return best;
+  const n = nutPoint(bones, NP);
+  if (dx * NP[3] + dz * NP[4] > 0.25) return best;          // from behind it is the body, however low
+  const wx = n[0] - ox, wy = n[1] - oy, wz = n[2] - oz;
+  const t = wx * dx + wy * dy + wz * dz;
+  if (t < 0 || t > maxT) return best;
+  const px = wx - dx * t, py = wy - dy * t, pz = wz - dz * t, R = NUT_BOX.r;
+  const d2 = px * px + py * py + pz * pz;
+  if (d2 > R * R) return best;
+  const te = Math.max(0, t - Math.sqrt(R * R - d2));
+  if (best && te > best.t + NUT_BOX.slack) return best;
+  return { t: best ? Math.min(best.t, te) : te, part: "nut", box: "nut" };
+}
+const NP = [0, 0, 0, 0, 0];
+/** Where the nut box is: below and in front of the middle of the hips (forward is up × the hips' right). */
+export function nutPoint(bones, out) {
+  out = out || [0, 0, 0];
+  const L = BI.l_hip * 3, Rr = BI.r_hip * 3;
+  let rx = bones[Rr] - bones[L], rz = bones[Rr + 2] - bones[L + 2];
+  const l = Math.hypot(rx, rz) || 1; rx /= l; rz /= l;
+  // up × right = (rz·1 - 0, 0, 0 - 1·rx) for up = (0, 1, 0)
+  const fx = rz, fz = -rx;
+  out[0] = (bones[L] + bones[Rr]) / 2 + fx * NUT_BOX.fwd;
+  out[1] = (bones[L + 1] + bones[Rr + 1]) / 2 - NUT_BOX.down;
+  out[2] = (bones[L + 2] + bones[Rr + 2]) / 2 + fz * NUT_BOX.fwd;
+  if (out.length > 3) { out[3] = fx; out[4] = fz; }          // and which way is forward, for rayBones
+  return out;
 }
 
 /** Bones as { name: {x, y, z} }, for the hack API. */

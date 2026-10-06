@@ -21,6 +21,9 @@ import { clone as cloneSkinned } from "../vendor/jsm/utils/SkeletonUtils.js";
 import { mulberry32 } from "./util.js";
 
 const GUN_FILES = ["kestrel", "hornet", "wasp", "brick", "mauler", "talon", "katana", "lancer"];
+/* Guns with no file of their own: another model, bigger and in a darker finish. The Condor is the Talon's
+   rifle grown to a .50 — its anchors scale with it, so its scope still sits on the axis when aimed. */
+const DERIVED = { condor: { from: "talon", scale: 1.16, tint: 0x5a5e52 } };
 const M = { guns: {}, human: null };
 let started = false, loaded = 0;
 const listeners = [];
@@ -45,12 +48,28 @@ export function loadModels() {
   const loader = new GLTFLoader();
   const done = () => { loaded++; if (modelsReady()) listeners.forEach((f) => f()); };
   for (const id of GUN_FILES) {
-    loader.load("assets/models/" + id + ".glb", (g) => { M.guns[id] = template(id, g.scene); done(); }, undefined, () => { /* keep the boxes */ });
+    loader.load("assets/models/" + id + ".glb", (g) => { M.guns[id] = template(id, g.scene); derive(id); done(); }, undefined, () => { /* keep the boxes */ });
   }
   loader.load("assets/models/human.glb", (g) => {
     const body = g.scene.getObjectByName("Body");
     if (body) { M.human = g.scene; done(); }
   }, undefined, () => { /* keep the mannequins */ });
+}
+
+function derive(from) {
+  for (const id in DERIVED) {
+    const d = DERIVED[id], t = M.guns[from];
+    if (d.from !== from || !t) continue;
+    const inner = t.scene.clone(true);
+    const tint = new THREE.Color(d.tint);
+    const tinted = (m) => { const c = m.clone(); if (c.color) c.color.multiply(tint).multiplyScalar(1.6); return c; };
+    inner.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(tinted) : tinted(o.material); });
+    const scene = new THREE.Group();
+    inner.scale.setScalar(d.scale);
+    scene.add(inner);
+    const k = (v) => (v ? v.clone().multiplyScalar(d.scale) : null);
+    M.guns[id] = { id, scene, muzzle: k(t.muzzle), sight: k(t.sight), support: k(t.support) };
+  }
 }
 
 export const gunTemplate = (id) => M.guns[id] || null;

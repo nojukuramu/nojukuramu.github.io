@@ -16,6 +16,20 @@
  *
  * The middle is the Core: two climbable tiers with a ramp up each side.
  *
+ * Above all that is a second map, for fighting in the air:
+ *
+ *   - the Skyway: a ring of bridges twelve metres up, all the way round, with
+ *     a ramp up to it in every quarter and a pad beside each corner tower.
+ *     Halfway along each side the bridge breaks, and a stepping stone in the
+ *     gap is a jump either way — or a fall;
+ *   - the Halo: a square ring of slabs floating sixteen metres over the Core,
+ *     thrown up to by four pads; drop through its middle onto the Core;
+ *   - kites: small platforms hanging in the air between the two, that only a
+ *     grapple (or a very good lunge) reaches.
+ *
+ * Long sightlines run along the Skyway, the Halo looks down on everything,
+ * and every pad, drop and swing between them crosses open air.
+ *
  * Everything is a brush (brush.js). `kind` decides the colour and nothing
  * else — any wall can be climbed, any ceiling stuck to. Positions are metres,
  * y is up, and the floor is y = 0. */
@@ -37,6 +51,9 @@ export const KINDS = {
   shaft:  { color: 0xd0654e, grid: 1 },
   canopy: { color: 0x4aaccc, grid: 1 },
   pad:    { color: 0x5ee08a, grid: 0 },
+  bridge: { color: 0x5b7fd0, grid: 1 },
+  halo:   { color: 0xe0b84a, grid: 1 },
+  kite:   { color: 0xff8a3d, grid: 1 },
   crate:  { color: 0xae8d5f, grid: 1 },
   clip:   { color: 0x000000, grid: 0, invisible: true }
 };
@@ -94,6 +111,34 @@ function quarter() {
   B.push(box(44, 0, 18, 45, 4, 26, { kind: "wall" }));
   // the long lane by the outer wall: a corridor to bunny hop down
   B.push(box(2, 0, 57, 30, 1.1, 58, { kind: "trim" }));
+
+  /* --- the air --- */
+  // the Skyway: this quarter's two bridges meet at its corner tower; turned four ways they make the ring
+  const SKY = 12, T = 0.6;
+  B.push(box(5, SKY - T, 39.5, 44, SKY, 42.5, { kind: "bridge" }));
+  B.push(box(39.5, SKY - T, 5, 42.5, SKY, 39.5, { kind: "bridge" }));
+  B.push(box(-2, SKY - T, 39.5, 2, SKY, 42.5, { kind: "bridge" }));          // the stepping stone in the gap
+  B.push(box(39.5, 0, 39.5, 42.5, SKY - T, 42.5, { kind: "trim" }));        // the corner tower
+  B.push(box(15.5, 0, 40.5, 16.5, SKY - T, 41.5, { kind: "trim" }));        // stilts
+  B.push(box(40.5, 0, 12, 41.5, SKY - T, 13, { kind: "trim" }));
+  // cover up there: low blocks to fight along the bridges from, and one on the tower's outer corner
+  // (each against one edge, so there is always a lane past it)
+  B.push(box(22, SKY, 39.5, 23.6, SKY + 1.2, 40.7, { kind: "crate" }));
+  B.push(box(31, SKY, 41.3, 32.2, SKY + 1.2, 42.5, { kind: "crate" }));
+  B.push(box(39.5, SKY, 22, 40.7, SKY + 1.2, 23.6, { kind: "crate" }));
+  B.push(box(41.3, SKY, 30, 42.5, SKY + 1.2, 31.2, { kind: "crate" }));
+  B.push(box(42.5, SKY, 41, 44, SKY + 1.2, 42.5, { kind: "trim" }));
+  // the on-ramp: a slab on its edge rising beside the bridge, open underneath
+  B.push(prism([[1, 0], [20, SKY], [20, SKY - T], [1.95, 0]], "z", 42.5, 45.5, { kind: "bridge" }));
+  // a pad beside the tower that throws you up onto the Skyway
+  B.push(box(34, 0, 44.5, 37, 0.2, 47.5, { kind: "pad", push: [0, 23.5, -2.8] }));
+
+  // the Halo: one side of the square ring of slabs over the Core, and the pad that throws you up to it
+  B.push(box(-6, 15.4, 6, 10, 16, 10, { kind: "halo" }));
+  B.push(box(14.5, 0, 6, 17.5, 0.2, 9, { kind: "pad", push: [-4.4, 26.8, 0] }));
+
+  // a kite: hanging in the air over the surf ridge, for the grapple
+  B.push(box(26, 13.4, 24, 30, 14, 28, { kind: "kite" }));
   return B;
 }
 
@@ -124,7 +169,7 @@ export function buildMap() {
 
 /* Spawn points: four a quarter, facing the middle. */
 function spawns() {
-  const one = [[6, 44], [36, 3], [56, 12], [30, 56], [58, 42], [3, 18]];
+  const one = [[6, 49], [36, 3], [56, 12], [30, 56], [58, 42], [3, 18]];
   const out = [];
   for (let q = 0; q < 4; q++) for (const [x0, z0] of one) {
     let x = x0, z = z0;

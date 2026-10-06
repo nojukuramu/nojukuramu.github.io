@@ -147,6 +147,21 @@ const setRange = (page, id, v) => page.evaluate(([id, v]) => { const t = documen
     await B.page.evaluate(([f, x, z]) => new Function("x", "z", f)(x, z), ["(" + place.toString() + ")(x, z)", spots.bx, spots.bz]);
     await until(A.page, (p) => { const q = window.HK_DEBUG.S.actors.find((a) => a.kind === "remote"); return q && Math.hypot(q.body.x - p.bx, q.body.z - p.bz) < 0.8; }, spots);
     check("each sees the other where they stand", true);
+    // the grapple across the network: Ada's hack hooks Bo, and Bo's own machine pulls Bo in
+    const gap = async () => B.page.evaluate(() => { const q = window.HK_DEBUG.S.actors.find((a) => a.kind === "remote"); const b = window.HK_DEBUG.S.me.body; return q ? Math.hypot(q.body.x - b.x, q.body.z - b.z) : 99; });
+    const gap0 = await gap();
+    await A.page.evaluate(() => {
+      const { save, hackapi } = window.HK_DEBUG;
+      save.data.hacks.push({ id: "hookbo00", name: "hookbo", on: false, code: 'on("tick", () => { const e = enemies.find((x) => x.visible); if (!e) return; input.lookAt(e.bones.chest); input.hook = me.hook.state !== "idle" || me.hook.ready; });' });
+      hackapi.run("hookbo00");
+    });
+    const pulled = await soft(until(B.page, (g) => { const q = window.HK_DEBUG.S.actors.find((a) => a.kind === "remote"); const b = window.HK_DEBUG.S.me.body; return q && Math.hypot(q.body.x - b.x, q.body.z - b.z) < g - 3; }, gap0, 10000));
+    check("a grapple hooked on one machine pulls the body on the other", pulled, gap0.toFixed(1) + " m -> " + (await gap()).toFixed(1) + " m");
+    await A.page.evaluate(() => window.HK_DEBUG.hackapi.stop("hookbo00"));
+    await B.page.waitForTimeout(400);
+    await A.page.evaluate(([f, x, z]) => new Function("x", "z", f)(x, z), ["(" + place.toString() + ")(x, z)", spots.ax, spots.az]);
+    await B.page.evaluate(([f, x, z]) => new Function("x", "z", f)(x, z), ["(" + place.toString() + ")(x, z)", spots.bx, spots.bz]);
+    await until(A.page, (p) => { const q = window.HK_DEBUG.S.actors.find((a) => a.kind === "remote"); return q && Math.hypot(q.body.x - p.bx, q.body.z - p.bz) < 0.8; }, spots);
     const hp0 = await B.page.evaluate(() => window.HK_DEBUG.S.me.hp);
     // the aimbot lesson's core, shooting for Ada
     await A.page.evaluate(() => {
