@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Aeons — an endless real-time strategy, from fire to aether</title>
+<meta name="description" content="A real-time strategy game in the old style with no last battle: phases of enemy bases on a map that keeps growing, ten eras from sticks and stones to aether, champions you can drive yourself, automation for a large realm, and fog of war. Touch first, plays offline.">
+<meta name="theme-color" content="#0b0a10">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Aeons">
+<link rel="stylesheet" href="css/aeons.css">
+<!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
+<script>window.AE_VERSION = "1";</script>
+</head>
+<body class="atTitle">
+<!-- Everything: orient.js turns this a quarter turn when a phone is held upright with Force landscape on -->
+<div id="app">
+<canvas id="view"></canvas>
+
+<!-- ============ HUD ============ -->
+<div id="hud" hidden>
+  <header id="top">
+    <div id="res"></div>
+    <button id="phaseChip" class="chip" aria-label="The realm"><b id="eraName"></b><span id="phaseTxt"></span></button>
+    <div id="topBtns">
+      <button id="btnAlert" class="iconBtn alert" hidden aria-label="Go to the last alarm"><i data-icon="alert"></i><b id="alertN"></b></button>
+      <button id="btnIntel" class="iconBtn" aria-label="Intel"><i data-icon="eye"></i></button>
+      <button id="btnAuto" class="iconBtn" aria-label="Automation"><i data-icon="auto"></i></button>
+      <button id="btnCodex" class="iconBtn" aria-label="Codex"><i data-icon="book"></i></button>
+      <button id="btnSpeed" class="iconBtn" aria-label="Game speed"><i data-icon="fast"></i><b id="speedTxt">1x</b></button>
+      <button id="btnPause" class="iconBtn" aria-label="Pause"><i data-icon="pause"></i></button>
+      <button id="btnMenu" class="iconBtn" aria-label="Menu"><i data-icon="menu"></i></button>
+    </div>
+  </header>
+  <div id="toasts" aria-live="polite"></div>
+  <div id="banner" hidden><h2 id="bannerTitle"></h2><p id="bannerLine"></p></div>
+
+  <aside id="side">
+    <div id="heroBar"></div>
+    <div id="groups"></div>
+    <button id="btnIdle" class="sideBtn" aria-label="Next idle worker"><i data-icon="worker"></i><b id="idleN">0</b></button>
+    <button id="btnArmy" class="sideBtn" aria-label="Select the army"><i data-icon="army"></i><b id="armyN">0</b></button>
+    <button id="btnBox" class="sideBtn" aria-pressed="false" aria-label="Drag to select instead of panning"><i data-icon="box"></i></button>
+  </aside>
+
+  <div id="bottom">
+    <div id="mmWrap"><canvas id="minimap" aria-label="Minimap"></canvas></div>
+    <div id="selPanel"></div>
+    <div id="cardWrap">
+      <div id="tip"></div>
+      <div id="card"></div>
+    </div>
+  </div>
+
+  <div id="targetHint" hidden><span id="targetTxt"></span><button id="targetCancel" class="iconBtn small" aria-label="Cancel"><i data-icon="close"></i></button></div>
+  <div id="placeBar" hidden>
+    <button id="placeOk" class="btn primary"><i data-icon="check"></i>Build here</button>
+    <button id="placeCancel" class="btn" aria-label="Cancel"><i data-icon="close"></i></button>
+  </div>
+
+  <div id="manualUI" hidden>
+    <div id="stickZone"><div id="stickBase"><div id="stickKnob"></div></div></div>
+    <div id="mStatus"></div>
+    <div id="skillPad">
+      <button id="mAttack" class="mBtn big" aria-label="Attack the nearest foe"><i data-icon="attack"></i></button>
+      <button class="mBtn sk" data-sk="0" aria-label="Skill 1"></button>
+      <button class="mBtn sk" data-sk="1" aria-label="Skill 2"></button>
+      <button class="mBtn sk" data-sk="2" aria-label="Skill 3"></button>
+      <button class="mBtn sk" data-sk="3" aria-label="Skill 4"></button>
+      <button id="mRelease" class="mBtn rel" aria-label="Let go"><i data-icon="release"></i></button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ the title ============ -->
+<div id="title">
+  <div class="titleCard">
+    <svg class="mark" viewBox="0 0 120 120" aria-hidden="true"><defs><radialGradient id="tg" cx="50%" cy="60%" r="55%"><stop offset="0" stop-color="#ffe7a0"/><stop offset=".5" stop-color="#ff9a3c"/><stop offset="1" stop-color="#7a2a10" stop-opacity="0"/></radialGradient></defs><circle cx="60" cy="66" r="46" fill="url(#tg)"/><path d="M60 22c10 16 22 24 22 42a22 22 0 0 1-44 0c0-10 6-16 10-22 2 8 6 10 9 10-2-10 0-20 3-30z" fill="#fff3d6" opacity=".92"/><circle cx="60" cy="60" r="56" fill="none" stroke="#d38bff" stroke-opacity=".45" stroke-dasharray="3 6"/></svg>
+    <h1>Aeons</h1>
+    <p class="tag">From the first fire to whatever comes after the last.</p>
+    <div class="stack">
+      <button class="btn wide primary" data-t="continue" id="btnContinue" hidden><i data-icon="play"></i>Continue</button>
+      <button class="btn wide" data-t="new"><i data-icon="era"></i>A new realm</button>
+      <button class="btn wide" data-t="load"><i data-icon="folder"></i>Load</button>
+      <button class="btn wide" data-t="settings"><i data-icon="gear"></i>Settings</button>
+      <button class="btn wide ghost" data-info="about"><i data-icon="info"></i>What this is</button>
+      <button class="btn wide ghost" data-info="howto"><i data-icon="info"></i>Playing on a phone</button>
+    </div>
+    <div id="newGame" class="newGame" hidden>
+      <div class="seg" role="group" aria-label="Difficulty">
+        <button data-t="diff" data-v="calm">Calm</button><button data-t="diff" data-v="normal" class="on">Normal</button><button data-t="diff" data-v="harsh">Harsh</button>
+      </div>
+      <label class="seedRow">Seed <input id="seed" type="text" maxlength="24" placeholder="random" autocomplete="off" spellcheck="false"></label>
+      <div class="row2"><button class="btn primary" data-t="begin"><i data-icon="play"></i>Begin</button><button class="btn ghost" data-t="cancelNew">Back</button></div>
+    </div>
+    <div id="titleVer"></div>
+  </div>
+</div>
+
+<!-- ============ panels ============ -->
+<div id="panel" hidden role="dialog" aria-modal="true" aria-labelledby="panelTitle">
+  <div class="panelHead"><h2 id="panelTitle"></h2><button id="panelClose" class="iconBtn" aria-label="Close"><i data-icon="close"></i></button></div>
+  <div id="panelBody"></div>
+</div>
+
+<div id="info-scrim" hidden></div>
+<div id="info-sheet" role="dialog" aria-modal="true" aria-labelledby="info-title" hidden>
+  <div class="sheet-head"><h2 id="info-title"></h2><button id="info-close" class="iconBtn" aria-label="Close"><i data-icon="close"></i></button></div>
+  <div id="info-body"></div>
+</div>
+
+<div id="update-bar" hidden>
+  <span>A new version of Aeons is ready.</span>
+  <button id="update-go" class="btn primary small">Reload</button>
+  <button id="update-later" class="iconBtn small" aria-label="Later"><i data-icon="close"></i></button>
+</div>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

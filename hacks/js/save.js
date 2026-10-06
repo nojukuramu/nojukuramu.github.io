@@ -30,7 +30,7 @@ export const DEFAULT_SETTINGS = {
   touchLook: 1.0,
   touchAutoSprint: true,     // the stick pushed out past its ring runs, and on up to the lock auto-runs
   touchFloat: true,          // a touch low on the left is the stick, wherever it lands
-  forceLandscape: false      // phones: lock or turn the game sideways (orient.js)
+  forceLandscape: true       // phones: lock or turn the game sideways (orient.js); desktops ignore it
 };
 
 const isNum = (v) => typeof v === "number" && isFinite(v);
@@ -40,7 +40,7 @@ function freshTouch() { return JSON.parse(JSON.stringify(TOUCH_LAYOUTS)); }
 
 function fresh() {
   return {
-    v: 1,
+    v: 2,
     name: "",
     settings: Object.assign({}, DEFAULT_SETTINGS, { keyModes: Object.assign({}, KEY_MODES), touchModes: Object.assign({}, TOUCH_MODES) }),
     binds: defaultBinds(),
@@ -76,6 +76,9 @@ function clean(raw) {
   S.voice = clampN(s.voice, 0, 1, S.voice);
   S.touchLook = clampN(s.touchLook, 0.2, 3, S.touchLook);
   for (const k of ["invertY", "showSpeed", "showFps", "pauseEditing", "touchAutoSprint", "touchFloat", "fovFx", "forceLandscape"]) if (typeof s[k] === "boolean") S[k] = s[k];
+  // v1 saved Force landscape off by default, so every v1 save holds a false nobody chose; v2 plays
+  // phones sideways out of the box, and turns it on once for those saves. Turning it off afterwards sticks.
+  if (!(raw.v >= 2)) S.forceLandscape = true;
   const km = Object.assign({}, s.keyModes && typeof s.keyModes === "object" ? s.keyModes : null);
   const tm = Object.assign({}, s.touchModes && typeof s.touchModes === "object" ? s.touchModes : null);
   // before every button had its own mode there were two settings, sprint and crouch, shared by keys and touch
