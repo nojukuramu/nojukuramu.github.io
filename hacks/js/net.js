@@ -158,7 +158,7 @@ function flags(a) {
 }
 function pack(a, ev) {
   const b = a.body, A = a.arms;
-  const w = A.cur < 2 ? A.slots[A.cur] : A.melee;
+  const w = A.cur < 2 ? A.slots[A.cur] : A.cur === 2 ? A.melee : "grapple";
   const hook = b.hook !== HOOK.IDLE ? [r3(b.hx), r3(b.hy), r3(b.hz), b.hook, b.hTarget] : 0;
   return [a.id, r3(b.x), r3(b.y), r3(b.z), r3(b.vx), r3(b.vy), r3(b.vz), r3(b.yaw), r3(b.pitch), flags(a), Math.ceil(a.hp), A.cur, w, ev && ev.length ? ev : 0, hook];
 }
@@ -208,7 +208,7 @@ function puppets(dt) {
     if (alive && !a.alive) { a.alive = true; emit("spawn", a); }
     else if (!alive && a.alive) a.alive = false;
     a.hp = s1.hp;
-    a.arms.cur = Math.max(0, Math.min(2, s1.cur));
+    a.arms.cur = Math.max(0, Math.min(3, s1.cur));
     if (a.arms.cur < 2 && GUNS[s1.w]) a.arms.slots[a.arms.cur] = s1.w;
     else if (a.arms.cur === 2 && MELEE[s1.w]) a.arms.melee = s1.w;
     a.heard = true;

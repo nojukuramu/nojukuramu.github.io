@@ -25,7 +25,7 @@ import { save } from "./save.js";
 import { exportWorld } from "./brush.js";
 import { world, isEnemy } from "./game.js";
 import { bonesObject } from "./skeleton.js";
-import { MELEE, gunOf, spreadOf, zoomOf, boltOf } from "./weapons.js";
+import { MELEE, GRAPPLE, gunOf, spreadOf, zoomOf, boltOf } from "./weapons.js";
 import { B, PM, LUNGE, HOOK, placeBody } from "./movement.js";
 import { worldToScreen, viewProjection, view } from "./render.js";
 import { heldCodes } from "./input.js";
@@ -202,7 +202,7 @@ export function patch(cmd) {
   if (n(i.pitch)) { c.pitch = clamp(i.pitch, -1.55, 1.55); S.view.pitch = c.pitch; }
   const btn = { jump: B.JUMP, crouch: B.CROUCH, sprint: B.SPRINT, fire: B.FIRE, aim: B.ADS, reload: B.RELOAD, lunge: B.LUNGE, melee: B.MELEE, hook: B.HOOK, zoom: B.ZOOM };
   for (const k in btn) if (typeof i[k] === "boolean") c.buttons = i[k] ? c.buttons | btn[k] : c.buttons & ~btn[k];
-  if (n(i.slot) && slotUsed !== latest.n) { c.slot = clamp(Math.round(i.slot), -1, 3); slotUsed = latest.n; }
+  if (n(i.slot) && slotUsed !== latest.n) { c.slot = clamp(Math.round(i.slot), -1, 4); slotUsed = latest.n; }
   return c;
 }
 
@@ -214,6 +214,7 @@ const lungeState = (b) => (b.lunge === LUNGE.CHARGE ? "charging" : b.lunge === L
 const hookState = (b) => (b.hook === HOOK.FLY ? "flying" : b.hook === HOOK.ON ? "holding" : "idle");
 function weaponOf(a, full) {
   const A = a.arms, g = gunOf(A);
+  if (A.cur === 3) return { slot: 4, id: GRAPPLE.id, name: GRAPPLE.name, cls: GRAPPLE.cls, melee: false, grapple: true };
   if (!g) { const m = MELEE[A.melee]; return { slot: 3, id: m.id, name: m.name, cls: "Melee", melee: true }; }
   const w = { slot: A.cur + 1, id: g.id, name: g.name, cls: g.cls, melee: false };
   if (full) Object.assign(w, {

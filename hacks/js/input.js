@@ -13,15 +13,24 @@
  *
  * Touch (touch.js) feeds the same command through `touchState`.
  *
- * Aim, crouch, sprint, lunge and the scoreboard can each be held, toggled or
+ * Aim, crouch, sprint and the scoreboard can each be held, toggled or
  * "mixed" — a tap toggles, a longer press holds — chosen separately for keys
  * and for touch (controls.js MODAL). Each source keeps its own latch, and an
- * action is on when either source says so. */
+ * action is on when either source says so.
+ *
+ * What the buttons mean depends on what is in your hands, the way it does in
+ * every shooter: Fire is the trigger of whatever is out, the grapple
+ * included; Aim is the sights with a gun and the lunge with a blade. And the
+ * small courtesies players expect, each of which used to be a fight with the
+ * controls: asking to run stands you up out of a crouch, aiming or firing
+ * ends a toggled sprint, changing weapon drops a toggled aim, and auto-run
+ * keeps you going forward until you touch a move key or the stick. */
 
 import { S, emit, on } from "./state.js";
 import { save } from "./save.js";
 import { ACTIONS, MODAL_IDS, MIXED_HOLD } from "./controls.js";
 import { B } from "./movement.js";
+import { SLOT_GRAPPLE } from "./weapons.js";
 import { clamp } from "./util.js";
 
 const down = new Set();              // codes held right now
@@ -38,11 +47,15 @@ const keyHeld = (action) => { const b = save.data.binds[action]; return !!b && (
    Hold, toggle, mixed
    --------------------------------------------------------------- */
 const MODAL = new Set(MODAL_IDS);
+const bladeOut = () => !!S.me && S.me.arms.cur === 2;
 const latch = { key: {}, touch: {} };       // action -> on, for toggle and mixed
 const since = { key: {}, touch: {} };       // action -> when a mixed press switched it on (-1: that press switched it off)
 const modeOf = (src, a) => (src === "key" ? save.settings.keyModes : save.settings.touchModes)[a] || "hold";
 const now = () => performance.now() / 1000;
 function modalDown(src, a) {
+  // with the blade out Aim is the lunge, always a hold: it must not flip the sights' latch
+  if (a === "ads" && bladeOut()) return;
+  if (a === "crouch") crouchCut = false;
   const m = modeOf(src, a);
   if (m === "toggle") latch[src][a] = !latch[src][a];
   else if (m === "mixed") {
@@ -52,6 +65,7 @@ function modalDown(src, a) {
   changed(a);
 }
 function modalUp(src, a) {
+  if (a === "ads" && bladeOut()) return;
   // a mixed press that lasted was a hold: it ends with the press
   if (modeOf(src, a) === "mixed" && latch[src][a] && since[src][a] >= 0 && now() - since[src][a] > MIXED_HOLD) latch[src][a] = false;
   changed(a);
@@ -65,6 +79,7 @@ function sourceOn(src, a) {
 /** Is an action on right now, from any source, in whatever mode each source uses? */
 function held(action) {
   if (wheelNow === action) return true;
+  if (action === "crouch" && crouchCut) return false;
   if (MODAL.has(action)) return sourceOn("key", action) || sourceOn("touch", action);
   return keyHeld(action) || touchState.held.has(action);
 }
@@ -73,7 +88,24 @@ export function latched(action) {
   const m = modeOf("touch", action);
   return m === "always" || ((m === "toggle" || m === "mixed") && !!latch.touch[action]);
 }
-let scoreShown = false, lastFwd = 0;
+/** Down right now, ignoring its mode: for the lunge, which charges while held whatever Aim is set to. */
+const rawHeld = (action) => wheelNow === action || keyHeld(action) || touchState.held.has(action);
+
+/* Standing up to run. A crouch you are holding the key for is only cut, not forgotten: it stays
+   off until that key comes up and goes down again, so the run is not undone a tick later. */
+let crouchCut = false;
+function standUp(cut) {
+  latch.key.crouch = latch.touch.crouch = false;
+  if (cut) crouchCut = true;
+}
+
+/* Auto-run: forward, at a sprint, with nothing held. The key toggles it; the stick's lock
+   (touch.js) sets it; a move key or the stick takes it away. */
+let autoRun = false;
+export const autoRunning = () => autoRun;
+export function setAutoRun(v) { if (autoRun !== !!v) { autoRun = !!v; emit("autoRun", autoRun); } }
+
+let scoreShown = false, lastFwd = 0, lastRun = false, lastSlide = false;
 function changed(a) {
   if (a !== "score") return;
   const v = held("score");
@@ -82,6 +114,8 @@ function changed(a) {
 /** Every latch off: a new life starts standing, unaimed, with the board closed. */
 export function resetLatches() {
   for (const src of ["key", "touch"]) { latch[src] = {}; since[src] = {}; }
+  crouchCut = false; lastRun = false; lastSlide = false;
+  setAutoRun(false);
   changed("score");
 }
 on("spawn", (a) => { if (a === S.me) resetLatches(); });
@@ -139,31 +173,51 @@ export function buildCmd() {
     if (MODAL.has(wheelNow) && modeOf("key", wheelNow) !== "hold") { const a = wheelNow; wheelNow = null; modalDown("key", a); modalUp("key", a); }
   }
 
-  const fwd = clamp((held("forward") ? 1 : 0) - (held("back") ? 1 : 0) + touchState.fwd, -1, 1);
+  const A = S.me ? S.me.arms : null, blade = bladeOut(), grapple = !!A && A.cur === SLOT_GRAPPLE;
+
+  if (edges.has("autorun")) setAutoRun(!autoRun);
+  else if (autoRun && (edges.has("forward") || edges.has("back"))) setAutoRun(false);
+  const fwd = autoRun ? 1 : clamp((held("forward") ? 1 : 0) - (held("back") ? 1 : 0) + touchState.fwd, -1, 1);
   const side = clamp((held("right") ? 1 : 0) - (held("left") ? 1 : 0) + touchState.side, -1, 1);
-  let b = 0;
-  if (held("jump")) b |= B.JUMP;
-  if (held("crouch")) b |= B.CROUCH;
-  if (held("sprint") || touchState.autoSprint) b |= B.SPRINT;
+
+  // with a gun, aiming or firing ends a toggled sprint, as it does in every shooter: the run is over
+  const aim = !blade && !grapple && held("ads");
+  if (A && A.cur < 2 && (edges.has("ads") || edges.has("fire"))) { latch.key.sprint = false; latch.touch.sprint = false; }
   // a toggled sprint ends when you stop running (not merely before you start: Shift then W still sprints)
   if (fwd <= 0 && lastFwd > 0) { latch.key.sprint = false; latch.touch.sprint = false; }
   lastFwd = fwd;
+  const runWant = held("sprint") || !!touchState.autoSprint || autoRun;
+  const run = runWant && fwd > 0.3;
+  // Asking to run stands you up (Apex, CoD, Battlefield all do): a fresh press of sprint, the stick
+  // pushed out to run, auto-run, or a slide that ends while you are still running. Not a crouch
+  // pressed at a run — that is a slide, and it stays one.
+  const sliding = !!(S.me && S.me.body.sliding);
+  if (run && (edges.has("sprint") || !lastRun)) standUp(true);
+  else if (run && lastSlide && !sliding) standUp(false);
+  lastRun = run; lastSlide = sliding;
+
+  let b = 0;
+  if (held("jump")) b |= B.JUMP;
+  if (held("crouch")) b |= B.CROUCH;
+  if (runWant && !aim) b |= B.SPRINT;
   if (held("fire")) b |= B.FIRE;
-  if (held("ads")) b |= B.ADS;
+  // Aim: the sights with a gun, the lunge with a blade (held, whatever Aim is set to)
+  if (blade) { if (rawHeld("ads")) b |= B.LUNGE; }
+  else if (aim) b |= B.ADS;
   if (held("reload")) b |= B.RELOAD;
-  if (held("lunge")) b |= B.LUNGE;
   if (held("melee")) b |= B.MELEE;
-  if (held("hook")) b |= B.HOOK;
   // a zoom step is a press; one shorter than a tick still counts
   if (held("zoom") || edges.has("zoom")) b |= B.ZOOM;
-  // with the blade in hand, aiming is lunging
-  if (S.me && S.me.arms.cur === 2 && (b & B.ADS)) b |= B.LUNGE;
   let slot = 0;
   if (edges.has("slot1")) slot = 1;
   else if (edges.has("slot2")) slot = 2;
   else if (edges.has("slot3")) slot = 3;
+  // the grapple's key draws it, and puts it away again
+  else if (edges.has("hook") && A) slot = grapple ? -1 : SLOT_GRAPPLE + 1;
   else if (edges.has("last")) slot = -1;
-  else if (edges.has("next") && S.me) slot = ((S.me.arms.cur + 1) % 3) + 1;
+  else if (edges.has("next") && A) slot = grapple ? A.last + 1 : ((A.cur + 1) % 3) + 1;
+  // a new weapon comes up unaimed
+  if (slot && A && slot - 1 !== A.cur) { latch.key.ads = false; latch.touch.ads = false; }
   edges.clear();
   return { fwd, side, yaw: S.view.yaw, pitch: S.view.pitch, buttons: b, slot };
 }

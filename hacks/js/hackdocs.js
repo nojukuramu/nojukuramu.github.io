@@ -231,7 +231,7 @@ function onCrosshair(e) {
 }
 
 on("tick", () => {
-  if (!enabled.value || !me.alive || me.weapon.melee) return;
+  if (!enabled.value || !me.alive || me.weapon.melee || me.weapon.grapple) return;
   const target = enemies.find((e) => e.visible && onCrosshair(e));
   if (!target) { since = -1; return; }
   if (since < 0) since = time;
@@ -439,7 +439,7 @@ export const API = [
     ["onGround, crouched, sliding, climbing, sprinting, groundKind, groundNormal", "What your body is doing, and what it stands on."],
     ["lunge, lungeCharge, lungeStuck, lungeNormal", "\"idle\" / \"charging\" / \"dashing\"; 0–1; stuck to a surface; that surface's outward normal."],
     ["slideCooldown, wallJumpReady, climbLeft, jumpHeld", "Movement timers and state."],
-    ["weapon", "{ slot, id, name, cls, melee, ammo, mag, reloading, ads, auto, rpm, spread (degrees), projectile {speed, gravity, instant} or null, lastKick {pitch, yaw}, shots, damage, pellets, zoom, cycling (working a bolt), pierce (bodies a round goes through) }"],
+    ["weapon", "{ slot, id, name, cls, melee, grapple (slot 4: id \"grapple\", and nothing about ammo), ammo, mag, reloading, ads, auto, rpm, spread (degrees), projectile {speed, gravity, instant} or null, lastKick {pitch, yaw}, shots, damage, pellets, zoom, cycling (working a bolt), pierce (bodies a round goes through) }"],
     ["hook", "Your grapple: { state: \"idle\" / \"flying\" / \"holding\", point {x,y,z} or null, target (a player's id, or null for the map), rope (metres), ready }."],
     ["bones", "{ head: {x,y,z}, neck, chest, … } — see BONES."],
     ["me.gravityScale, me.speedScale, me.jumpScale", "Write: change your body until changed back (rules: Full self)."],
@@ -459,8 +459,8 @@ export const API = [
   { name: "input — your buttons for this frame (rules: Assist)", items: [
     ["input.forward, input.side", "−1 to 1 (W/S, D/A). Reading gives what the player is pressing."],
     ["input.yaw, input.pitch", "Where you look, radians. Setting it turns your view."],
-    ["input.jump, crouch, sprint, fire, aim, reload, lunge, melee, hook, zoom", "true or false. hook is the grapple's button: held, it flies, holds and reels. zoom steps a sniper scope in or out on a fresh press."],
-    ["input.slot", "1, 2, 3 or −1 (last weapon): switch once."],
+    ["input.jump, crouch, sprint, fire, aim, reload, lunge, melee, hook, zoom", "true or false. hook is the grapple's trigger, like fire: with the grapple out (slot 4), held, it flies, holds and reels. lunge only works with the blade out (slot 3). zoom steps a sniper scope in or out on a fresh press."],
+    ["input.slot", "1, 2, 3, 4 (the grapple) or −1 (last weapon): switch once."],
     ["input.lookAt(point)", "Set yaw and pitch to look from your eye at a point."]
   ] },
   { name: "draw — on your screen (rules: any)", items: [

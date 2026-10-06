@@ -19,7 +19,7 @@
 
 import { S, emit } from "./state.js";
 import { newBody, pmove, TICK, B, LUNGE, HOOK, PM, lookDir, placeBody } from "./movement.js";
-import { newArms, armsTick, GUNS, MELEE, damageFor, speedMulOf, holdOf, cleanLoadout, speedBonus } from "./weapons.js";
+import { newArms, armsTick, GUNS, MELEE, damageFor, speedMulOf, holdOf, cleanLoadout, speedBonus, bladeOut, grappleOut } from "./weapons.js";
 import { pose, stepPhase, rayBones, BONES, BI } from "./skeleton.js";
 import { ray, newTrace } from "./brush.js";
 import { buildMap } from "./map.js";
@@ -235,7 +235,8 @@ function simulate(a, cmd, dt) {
   a.px = body.x; a.py = body.y; a.pz = body.z;
   const busy = A.cur < 2 && (cmd.buttons & (B.FIRE | B.ADS));
   hookTick(a, cmd, dt);
-  pmove(W, body, cmd, dt, { melee: MELEE[A.melee], speedMul: speedMulOf(A), noSprint: !!busy });
+  // the lunge is the blade's: with a gun or the grapple out, the button does nothing
+  pmove(W, body, cmd, dt, { melee: bladeOut(A) ? MELEE[A.melee] : null, speedMul: speedMulOf(A), noSprint: !!busy });
   for (const ev of body.ev) {
     if (ev === "swing") armsSwing(a);
     emit("move", a, ev);
@@ -255,7 +256,7 @@ function simulate(a, cmd, dt) {
   if (body.y < W.killY) die(a, null, { weapon: "fall" });
   if (a.kind === "local") S.topSpeed = Math.max(S.topSpeed || 0, Math.hypot(body.vx, body.vz));
 }
-/* A lunge key tapped rather than held is a quick swing (movement.js says which). */
+/* A lunge (Aim with the blade out) tapped rather than held is a quick swing (movement.js says which). */
 function armsSwing(a) {
   const A = a.arms;
   if (A.swingCd > 0) return false;
@@ -390,7 +391,7 @@ function projectiles(dt) {
    The grapple
    --------------------------------------------------------------- */
 /*
- * Everybody carries one, whatever is in their hands. Hold its button: the
+ * Everybody carries one, in the fourth slot. Draw it and hold Fire: the
  * hook flies where you look (PM.hookSpeed, out to PM.hookRange). If it meets
  * the level it holds there and movement.js reels you in; if it meets an
  * enemy it holds them, and each of you is pulled towards the other —
@@ -401,8 +402,12 @@ function projectiles(dt) {
  */
 const HTR = newTrace();
 function hookTick(a, cmd, dt) {
-  const b = a.body;
-  const held = !!(cmd.buttons & B.HOOK);
+  const b = a.body, A = a.arms;
+  // The grapple is a gun: out of your hands it does nothing, and in them Fire is its trigger
+  // (B.HOOK is the same trigger, for hacks and bots that name it). Put it away and the rope goes.
+  let held = grappleOut(A) && !!(cmd.buttons & (B.FIRE | B.HOOK));
+  // still coming up: a trigger held through the draw fires the moment it is ready, not never
+  if (b.hook === HOOK.IDLE && A.swapT > 0) held = false;
   b.hookCd = Math.max(0, b.hookCd - dt);
   if (b.hook !== HOOK.IDLE && !held) hookOff(a, "hookoff");
   else if (b.hook === HOOK.IDLE) { if (held && !b.hookHeld && b.hookCd <= 0) launchHook(a, cmd); }

@@ -19,6 +19,11 @@
  *              lunges far and hard, and only hits what is in front of its tip.
  *              Either hits harder the faster you are going (speedBonus).
  *
+ *   Grapple   The grappling gun, slot 4. It is a gun like the others: draw it
+ *              and Fire sends the hook (game.js), held for as long as you want
+ *              the rope. It deals no damage and has no magazine; what it
+ *              costs is a draw, so you cannot shoot and swing at once.
+ *
  * Every round goes through a body into the next one if its gun can (pen:
  * how many bodies, and how much damage it keeps through each) — a collateral.
  *
@@ -50,6 +55,11 @@ export const MELEE = {
   lancer: { id: "lancer", name: "Lancer", hold: "lance", charge: 0.8, speed: 25, dash: 0.42, swingDmg: 40, swingReach: 3.2, swingCone: 22, swingCd: 0.7, lungeDmg: 110, lungeReach: 3.3, lungeCone: 28 }
 };
 export const MELEE_IDS = Object.keys(MELEE);
+
+/* The fourth slot. Not in GUNS, so nothing that walks the guns (bots picking one, the loadout
+   screen, damage) ever mistakes it for one; gunOf() is null for it, as for a blade. */
+export const GRAPPLE = { id: "grapple", name: "Grappling gun", cls: "Grapple", hold: "pistol", swap: 0.15 };
+export const SLOT_GRAPPLE = 3;
 
 /**
  * How much harder a blade hits for how fast you are going (m/s, all three
@@ -91,7 +101,11 @@ export function newArms(loadout) {
 }
 export const gunOf = (A) => (A.cur < 2 ? GUNS[A.slots[A.cur]] : null);
 export const meleeOf = (A) => MELEE[A.melee];
-export function holdOf(A) { const g = gunOf(A); return g ? g.hold : meleeOf(A).hold; }
+export const bladeOut = (A) => A.cur === 2;
+export const grappleOut = (A) => A.cur === SLOT_GRAPPLE;
+export function holdOf(A) { const g = gunOf(A); return g ? g.hold : grappleOut(A) ? GRAPPLE.hold : meleeOf(A).hold; }
+/** What is in your hands, by name, whichever of the four it is. */
+export function heldName(A) { const g = gunOf(A); return g ? g.name : grappleOut(A) ? GRAPPLE.name : meleeOf(A).name; }
 
 /** How far a scope (or the sights) magnifies right now: the gun's zoom, doubled on a scope's second step. */
 export function zoomOf(A) {
@@ -122,24 +136,24 @@ export function spreadOf(A, body) {
 }
 
 function selectSlot(A, i) {
-  if (i === A.cur || i < 0 || i > 2) return;
+  if (i === A.cur || i < 0 || i > SLOT_GRAPPLE) return;
   A.last = A.cur; A.cur = i;
   const g = gunOf(A);
-  A.swapT = g ? g.swap : 0.2;
+  A.swapT = g ? g.swap : grappleOut(A) ? GRAPPLE.swap : 0.2;
   A.reloadT = 0; A.zoom = 0;
   A.ev.push({ type: "swap", slot: i });
 }
 
 /**
  * One tick of whatever is in your hands. `cmd` carries buttons (movement.js's
- * B), and `slot` (1–3 picks, -1 means the last one). Returns A.ev: fire,
+ * B), and `slot` (1–4 picks, 4 being the grapple; -1 means the last one). Returns A.ev: fire,
  * dry, reload, reloaded, swap, swing.
  */
 export function armsTick(A, cmd, body, dt, rng, B) {
   A.ev.length = 0;
   const btn = cmd.buttons | 0;
   if (cmd.slot === -1) selectSlot(A, A.last);
-  else if (cmd.slot >= 1 && cmd.slot <= 3) selectSlot(A, cmd.slot - 1);
+  else if (cmd.slot >= 1 && cmd.slot <= SLOT_GRAPPLE + 1) selectSlot(A, cmd.slot - 1);
   A.cool = Math.max(0, A.cool - dt);
   A.swapT = Math.max(0, A.swapT - dt);
   A.swingCd = Math.max(0, A.swingCd - dt);
@@ -174,7 +188,8 @@ export function armsTick(A, cmd, body, dt, rng, B) {
       if (A.ammo[i] > 0) shoot(A, g, body, rng);
       else if (pressed) { A.ev.push({ type: "dry" }); startReload(A, g); }
     }
-  } else if (fire && !A.trig) swing(A);
+  } else if (bladeOut(A) && fire && !A.trig) swing(A);
+  // (the grapple's trigger is game.js's: it fires a hook, not a round)
   A.trig = fire;
   return A.ev;
 }

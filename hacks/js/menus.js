@@ -137,7 +137,7 @@ function renderSettings() {
   num("stSens", s.sens, 1); num("stAds", s.adsSens, 2); num("stFov", s.fov, 0);
   num("stMaster", s.master, 2); num("stSfx", s.sfx, 2); num("stVoice", s.voice, 2); num("stTouchLook", s.touchLook, 2);
   $("stInvert").checked = s.invertY; $("stPauseEdit").checked = s.pauseEditing; $("stFovFx").checked = s.fovFx;
-  $("stSpeed").checked = s.showSpeed; $("stFps").checked = s.showFps; $("stTouchSprint").checked = s.touchAutoSprint; $("stForceLand").checked = s.forceLandscape;
+  $("stSpeed").checked = s.showSpeed; $("stFps").checked = s.showFps; $("stTouchSprint").checked = s.touchAutoSprint; $("stTouchFloat").checked = s.touchFloat; $("stForceLand").checked = s.forceLandscape;
   $("stCross").value = s.crosshair;
   seg($("stQuality"), s.quality);
   renderModes($("stKeyModes")); renderModes($("stTouchModes"));
@@ -253,7 +253,7 @@ export function init() {
   const tog = (id, key) => $(id).addEventListener("change", (e) => { save.settings[key] = e.target.checked; save.commit(); });
   // asked from the tap itself: browsers grant fullscreen and the orientation lock only to one
   $("stForceLand").addEventListener("change", (e) => { save.settings.forceLandscape = e.target.checked; save.commit(); if (e.target.checked) orient.lock(); else orient.unlock(); });
-  tog("stInvert", "invertY"); tog("stFovFx", "fovFx"); tog("stPauseEdit", "pauseEditing"); tog("stSpeed", "showSpeed"); tog("stFps", "showFps"); tog("stTouchSprint", "touchAutoSprint");
+  tog("stInvert", "invertY"); tog("stFovFx", "fovFx"); tog("stPauseEdit", "pauseEditing"); tog("stSpeed", "showSpeed"); tog("stFps", "showFps"); tog("stTouchSprint", "touchAutoSprint"); tog("stTouchFloat", "touchFloat");
   $("stCross").addEventListener("input", (e) => { save.settings.crosshair = e.target.value; save.commit(); });
   const segSet = (id, key, after) => $(id).addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; save.settings[key] = b.dataset.v; save.commit(); seg($(id), b.dataset.v); if (after) after(b.dataset.v); });
   segSet("stQuality", "quality", (q) => render.setQuality(q));

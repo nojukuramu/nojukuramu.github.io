@@ -18,12 +18,12 @@ export const ACTIONS = [
   { id: "jump",     label: "Jump",             def: ["Space", "WheelDown"] },
   { id: "crouch",   label: "Crouch / slide",   def: ["ControlLeft", "KeyC"] },
   { id: "sprint",   label: "Sprint",           def: ["ShiftLeft", ""] },
+  { id: "autorun",  label: "Auto-run",         def: ["Equal", ""] },
   { id: "fire",     label: "Fire",             def: ["Mouse0", ""] },
-  { id: "ads",      label: "Aim down sights",  def: ["Mouse2", ""] },
+  { id: "ads",      label: "Aim / lunge (blade)", def: ["Mouse2", ""] },
   { id: "reload",   label: "Reload",           def: ["KeyR", ""] },
-  { id: "lunge",    label: "Lunge",            def: ["KeyF", "Mouse3"] },
   { id: "melee",    label: "Quick melee",      def: ["KeyV", ""] },
-  { id: "hook",     label: "Grappling gun",    def: ["KeyE", "Mouse4"] },
+  { id: "hook",     label: "Grappling gun",    def: ["KeyE", "Digit4"] },
   { id: "zoom",     label: "Sniper zoom (2x)", def: ["KeyZ", "Mouse1"] },
   { id: "slot1",    label: "Primary",          def: ["Digit1", ""] },
   { id: "slot2",    label: "Secondary",        def: ["Digit2", ""] },
@@ -47,7 +47,7 @@ export function codeName(code) {
   const named = { Space: "Space", ShiftLeft: "L-Shift", ShiftRight: "R-Shift", ControlLeft: "L-Ctrl", ControlRight: "R-Ctrl",
     AltLeft: "L-Alt", AltRight: "R-Alt", Mouse0: "Mouse 1", Mouse1: "Mouse 3", Mouse2: "Mouse 2", Mouse3: "Mouse 4", Mouse4: "Mouse 5",
     WheelUp: "Wheel up", WheelDown: "Wheel down", Backquote: "`", Tab: "Tab", CapsLock: "Caps", Enter: "Enter", Backspace: "Backspace",
-    ArrowUp: "Up", ArrowDown: "Down", ArrowLeft: "Left", ArrowRight: "Right" };
+    ArrowUp: "Up", ArrowDown: "Down", ArrowLeft: "Left", ArrowRight: "Right", Equal: "=", Minus: "-" };
   if (named[code]) return named[code];
   if (/^Key[A-Z]$/.test(code)) return code.slice(3);
   if (/^Digit\d$/.test(code)) return code.slice(5);
@@ -68,20 +68,21 @@ export const validCode = (c) => typeof c === "string" && c.length > 0 && c.lengt
  *   toggle  each press turns it on, or off
  *   mixed   a quick tap toggles; a press held longer than MIXED_HOLD is a
  *           hold, and lets go when you do
- * Sprint may also be always on.
+ * Sprint may also be always on. With the blade out, Aim is the lunge, and a
+ * lunge is always a hold — charge while it is down, launch when it comes up —
+ * whatever Aim is set to (input.js).
  */
 export const MODAL = [
   { id: "ads",    label: "Aim" },
   { id: "crouch", label: "Crouch / slide" },
   { id: "sprint", label: "Sprint", always: true },
-  { id: "lunge",  label: "Lunge" },
   { id: "score",  label: "Scoreboard" }
 ];
 export const MODAL_IDS = MODAL.map((m) => m.id);
 export const MODES = ["hold", "toggle", "mixed"];
 export const MIXED_HOLD = 0.25;
-export const KEY_MODES = { ads: "hold", crouch: "hold", sprint: "hold", lunge: "hold", score: "hold" };
-export const TOUCH_MODES = { ads: "toggle", crouch: "hold", sprint: "toggle", lunge: "hold", score: "hold" };
+export const KEY_MODES = { ads: "hold", crouch: "hold", sprint: "hold", score: "hold" };
+export const TOUCH_MODES = { ads: "toggle", crouch: "hold", sprint: "toggle", score: "hold" };
 export const validMode = (id, m) => MODES.includes(m) || (m === "always" && !!MODAL.find((x) => x.id === id && x.always));
 
 /* ---------------------------------------------------------------
@@ -101,12 +102,11 @@ export const TOUCH = [
   { id: "fire2",  action: "fire",   icon: "fire",    label: "Fire (left)" },
   { id: "jump",   action: "jump",   icon: "jump",    label: "Jump" },
   { id: "crouch", action: "crouch", icon: "crouch",  label: "Crouch / slide" },
-  { id: "ads",    action: "ads",    icon: "scope",   label: "Aim" },
-  { id: "lunge",  action: "lunge",  icon: "lunge",   label: "Lunge", look: true },
+  { id: "ads",    action: "ads",    icon: "scope",   label: "Aim / lunge", look: true },
   { id: "reload", action: "reload", icon: "reload",  label: "Reload" },
   { id: "swap",   action: "next",   icon: "swap",    label: "Next weapon" },
   { id: "melee",  action: "melee",  icon: "blade",   label: "Quick melee" },
-  { id: "hook",   action: "hook",   icon: "hook",    label: "Grappling gun", look: true },
+  { id: "hook",   action: "hook",   icon: "hook",    label: "Grappling gun" },
   { id: "zoom",   action: "zoom",   icon: "zoom",    label: "Sniper zoom" },
   { id: "sprint", action: "sprint", icon: "sprint",  label: "Sprint" },
   { id: "hacks",  action: "hacks",  icon: "code",    label: "Hacks" },
@@ -123,7 +123,6 @@ export const TOUCH_LAYOUTS = {
     jump:   { x: 0.93, y: 0.82, s: 70 },
     crouch: { x: 0.8, y: 0.86, s: 62 },
     ads:    { x: 0.94, y: 0.45, s: 56 },
-    lunge:  { x: 0.74, y: 0.7, s: 60 },
     reload: { x: 0.78, y: 0.44, s: 48 },
     swap:   { x: 0.66, y: 0.88, s: 52 },
     melee:  { x: 0.7, y: 0.52, s: 46 },
@@ -141,7 +140,6 @@ export const TOUCH_LAYOUTS = {
     jump:   { x: 0.88, y: 0.86, s: 66 },
     crouch: { x: 0.68, y: 0.9, s: 56 },
     ads:    { x: 0.9, y: 0.6, s: 52 },
-    lunge:  { x: 0.62, y: 0.78, s: 56 },
     reload: { x: 0.9, y: 0.5, s: 46 },
     swap:   { x: 0.53, y: 0.9, s: 48 },
     melee:  { x: 0.75, y: 0.56, s: 44 },

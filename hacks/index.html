@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Hacks">
 <link rel="stylesheet" href="css/game.css">
 <!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
-<script>window.HK_VERSION = "3";</script>
+<script>window.HK_VERSION = "4";</script>
 <script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
 </head>
 <body class="atTitle">
@@ -88,9 +88,9 @@
     <h1 class="logo" aria-label="Hacks"><span class="prompt">&gt;</span>HACKS<span class="cursor"></span></h1>
     <p class="tag">A movement shooter you are allowed to cheat in. <button class="info" data-info="about" aria-label="What this is"><i data-icon="info"></i></button></p>
     <div class="menu-col">
-      <button id="btnPlay" class="btn primary big"><i data-icon="play"></i>Play vs bots</button>
-      <button id="btnMulti" class="btn big"><i data-icon="users"></i>Multiplayer</button>
+      <button id="btnMulti" class="btn primary big"><i data-icon="users"></i>Multiplayer</button>
       <button id="btnQuickTitle" class="btn ghost"><i data-icon="quick"></i>Quick join</button>
+      <button id="btnPlay" class="btn"><i data-icon="play"></i>Play vs bots</button>
       <button id="btnPractice" class="btn"><i data-icon="target"></i>Practice (dummies, no danger)</button>
       <button id="btnHacksTitle" class="btn"><i data-icon="code"></i>Write hacks</button>
       <div class="trow">
@@ -152,7 +152,8 @@
       <button id="btnEditTouch" class="btn wide"><i data-icon="move"></i>Move buttons</button>
       <div class="setrow"><label for="stTouchLook">Look sensitivity <b id="stTouchLookN" class="num"></b></label><input type="range" id="stTouchLook" min="0.2" max="3" step="0.05"></div>
       <label class="tog"><input type="checkbox" id="stForceLand"><span>Force landscape</span><button class="info" data-info="landscape" aria-label="About Force landscape"><i data-icon="info"></i></button></label>
-      <label class="tog"><input type="checkbox" id="stTouchSprint"><span>Push the stick to the edge to sprint</span></label>
+      <label class="tog"><input type="checkbox" id="stTouchSprint"><span>Push past the stick to run, up to the lock to auto-run</span></label>
+      <label class="tog"><input type="checkbox" id="stTouchFloat"><span>Floating stick: it comes to your left thumb</span></label>
       <div class="field"><label>Buttons: hold or toggle <button class="info" data-info="modes" aria-label="Hold, toggle and mixed"><i data-icon="info"></i></button></label><div id="stTouchModes" class="modes" data-src="touchModes"></div></div>
     </div>
     <div class="tabpane" data-pane="video" hidden>

@@ -7,19 +7,29 @@
  * Both layouts are kept (save.js) and re-checked so a button can never be
  * stored off the edge of the screen.
  *
- * How touches split: the stick moves you; Fire and Lunge are held, and a
- * drag that starts on either also turns your view (you can aim while you
- * shoot, the way mobile shooters work); a touch anywhere that is not a
- * button looks around. Aim, crouch, sprint, lunge and the scoreboard each
+ * How touches split: the stick moves you; Fire and Aim are held, and a drag
+ * that starts on either also turns your view (you can aim while you shoot,
+ * the way mobile shooters work); a touch anywhere that is not a button looks
+ * around — except low on the left, where it is the stick, which comes to
+ * your thumb (a floating stick, as CODM and PUBG Mobile have it) instead of
+ * your thumb having to find it. Aim, crouch, sprint and the scoreboard each
  * hold, toggle or do both (Settings, Touch): input.js keeps the latches, and
  * a latched button stays lit. Aim starts as a toggle, since holding it would
- * cost a thumb. */
+ * cost a thumb.
+ *
+ * Running, the mobile way: push the stick out past its ring and you sprint;
+ * keep going up to the lock above it and let go there, and you keep running
+ * with no thumb on the stick (auto-run) until you touch the stick again.
+ *
+ * The buttons say what they do with what is in your hands: Fire shows the
+ * hook with the grapple out and the blade with the blade, and Aim becomes the
+ * lunge. */
 
 import { S, emit, on } from "./state.js";
 import { save } from "./save.js";
 import { TOUCH } from "./controls.js";
 import { icon } from "./icons.js";
-import { touchState, touchPress, touchRelease, look, latched } from "./input.js";
+import { touchState, touchPress, touchRelease, look, latched, setAutoRun, autoRunning } from "./input.js";
 import { clamp } from "./util.js";
 import { appSize, toApp, appRect } from "./orient.js";
 
@@ -39,14 +49,14 @@ function layout() { return save.data.touch[orient()]; }
 export function build() {
   const r = root();
   r.innerHTML = '<div id="touchLook"></div>';
-  els.clear();
+  els.clear(); shown.clear();
   for (const t of TOUCH) {
     const el = document.createElement("div");
     el.className = "tbtn" + (t.id === "stick" ? " stick" : "");
     el.dataset.id = t.id;
     el.setAttribute("role", "button");
     el.setAttribute("aria-label", t.label);
-    el.innerHTML = t.id === "stick" ? '<div class="knob"></div>' : icon(t.icon);
+    el.innerHTML = t.id === "stick" ? '<div class="knob"></div><div class="runlock" aria-hidden="true">' + icon("sprint") + "</div>" : icon(t.icon);
     r.appendChild(el);
     els.set(t.id, el);
   }
@@ -75,9 +85,11 @@ function down(e) {
   const id = tgt ? tgt.dataset.id : null;
   if (editing) { if (id) startDrag(e, id); return; }
   const f = fingerAt(e);
+  const stickFree = ![...active.values()].some((q) => q.kind === "stick");
+  if (!id && stickFree && inStickZone(f)) { grabStick(e, f, true); return; }
   if (!id) { active.set(e.pointerId, { kind: "look", x: f.x, y: f.y }); return; }
   const t = def(id);
-  if (id === "stick") { active.set(e.pointerId, { kind: "stick", id }); moveStick(e, tgt); return; }
+  if (id === "stick") { if (stickFree) grabStick(e, f, false); return; }
   active.set(e.pointerId, { kind: "btn", id, x: f.x, y: f.y, look: !!t.look });
   tgt.classList.add("on");
   touchState.held.add(t.action);
@@ -88,7 +100,7 @@ function move(e) {
   const p = active.get(e.pointerId);
   if (!p) { if (editing) dragMove(e); return; }
   e.preventDefault();
-  if (p.kind === "stick") { moveStick(e, els.get("stick")); return; }
+  if (p.kind === "stick") { moveStick(e, p); return; }
   if (p.kind === "look" || p.look) {
     const k = save.settings.touchLook * 3.2, f = fingerAt(e);
     look((f.x - p.x) * k, (f.y - p.y) * k, 1);
@@ -102,7 +114,9 @@ function up(e) {
   active.delete(e.pointerId);
   if (p.kind === "stick") {
     touchState.fwd = touchState.side = 0; touchState.autoSprint = false;
-    const k = els.get("stick").firstChild; k.style.transform = "";
+    // let go on the lock: keep running
+    if (p.lock) setAutoRun(true);
+    stickIdle();
     return;
   }
   if (p.kind === "btn") {
@@ -114,20 +128,86 @@ function up(e) {
     sync();
   }
 }
-/** Light the buttons that are latched on; once a frame, since a sprint can unlatch by itself. */
+/** Light the buttons that are latched on, and show what Fire and Aim do with what is in your hands;
+    once a frame, since a sprint can unlatch by itself. */
+const shown = new Map();         // button id -> the icon it shows now, so it is only redrawn on a change
+function iconFor(t) {
+  const cur = S.me ? S.me.arms.cur : 0;
+  if (t.action === "fire") return cur === 3 ? "hook" : cur === 2 ? "blade" : "fire";
+  if (t.action === "ads") return cur === 2 ? "lunge" : "scope";
+  return t.icon;
+}
 export function sync() {
   if (!els.size || editing) return;
-  for (const t of TOUCH) { const el = els.get(t.id); if (el) el.classList.toggle("latched", latched(t.action)); }
+  const cur = S.me ? S.me.arms.cur : 0;
+  for (const t of TOUCH) {
+    const el = els.get(t.id);
+    if (!el) continue;
+    el.classList.toggle("latched", t.action === "hook" ? cur === 3 : latched(t.action));
+    if (t.id === "stick") continue;
+    const ic = iconFor(t);
+    if (shown.get(t.id) !== ic) { shown.set(t.id, ic); el.innerHTML = icon(ic); el.dataset.icon = ic; }
+  }
+  const st = els.get("stick");
+  if (st) st.classList.toggle("autorun", autoRunning());
 }
-function moveStick(e, el) {
-  const r = appRect(el.getBoundingClientRect()), f = fingerAt(e);
-  const cx = r.left + r.width / 2, cy = r.top + r.height / 2, rad = r.width / 2;
-  let dx = (f.x - cx) / rad, dy = (f.y - cy) / rad;
+
+/* ---------------------------------------------------------------
+   The stick
+   --------------------------------------------------------------- */
+/*
+ * The floating stick is Magic Sandbox's idea (magic_sandbox/js/input.js): it centres where the thumb
+ * lands, on the left. Its other half — a thumb past the rim drags the stick along — is not kept,
+ * because here past the rim is the run, and on up is the lock.
+ *
+ * Where a thumb that misses the stick still means "move": the lower part of the left side, below
+ * the buttons up there. A touch on a button is always that button; only empty screen counts.
+ */
+function inStickZone(f) {
+  if (!save.settings.touchFloat) return false;
+  const { w, h } = appSize();
+  return orient() === "landscape" ? f.x < w * 0.42 && f.y > h * 0.32 : f.x < w * 0.5 && f.y > h * 0.55;
+}
+/* Past the ring is a run; this far out, up, is the lock (in radii from the centre). */
+const RUN_AT = 1.0, LOCK_AT = 1.85;
+function grabStick(e, f, float) {
+  const el = els.get("stick");
+  // touching the stick is how auto-run ends: your thumb is back in charge
+  setAutoRun(false);
+  const r = appRect(el.getBoundingClientRect()), rad = r.width / 2;
+  let cx = r.left + rad, cy = r.top + rad;
+  if (float) {
+    // the stick comes to the thumb, kept on screen
+    const { w, h } = appSize();
+    cx = clamp(f.x, rad, w - rad); cy = clamp(f.y, rad, h - rad);
+    el.style.left = (cx - rad) + "px"; el.style.top = (cy - rad) + "px";
+  }
+  const p = { kind: "stick", id: "stick", cx, cy, rad, lock: false };
+  active.set(e.pointerId, p);
+  el.classList.add("on");
+  moveStick(e, p);
+}
+function moveStick(e, p) {
+  const el = els.get("stick"), f = fingerAt(e);
+  let dx = (f.x - p.cx) / p.rad, dy = (f.y - p.cy) / p.rad;
   const l = Math.hypot(dx, dy);
+  const up = l > 0 ? -dy / l : 0;
+  // out past the ring, pointing forward: a run; carried on up to the lock: auto-run on release
+  const run = save.settings.touchAutoSprint && l > RUN_AT && up > 0.6;
+  p.lock = run && l > LOCK_AT && up > 0.8;
   if (l > 1) { dx /= l; dy /= l; }
   touchState.side = dx; touchState.fwd = -dy;
-  touchState.autoSprint = save.settings.touchAutoSprint && l > 0.92 && -dy > 0.5;
-  el.firstChild.style.transform = "translate(" + (dx * rad * 0.55).toFixed(1) + "px," + (dy * rad * 0.55).toFixed(1) + "px)";
+  touchState.autoSprint = run;
+  el.classList.toggle("run", run);
+  el.classList.toggle("armed", p.lock);
+  el.firstChild.style.transform = "translate(" + (dx * p.rad * 0.55).toFixed(1) + "px," + (dy * p.rad * 0.55).toFixed(1) + "px)";
+}
+function stickIdle() {
+  const el = els.get("stick");
+  if (!el) return;
+  el.classList.remove("on", "run", "armed");
+  el.firstChild.style.transform = "";
+  place();
 }
 
 /* ---------------------------------------------------------------
