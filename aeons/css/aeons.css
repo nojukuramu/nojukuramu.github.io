@@ -230,3 +230,47 @@ body:not(.touchUI) #skillPad { transform: scale(.85); transform-origin: 100% 100
 body.turned #toasts { width: 80%; }
 body.manual #toasts { bottom: calc(var(--sb) + 210px); }
 @media (max-height: 520px) { .toast { font-size: 12px; padding: 4px 10px; } .toast.lore { font-size: 13px; } }
+
+/* ---------- the ledger, the details sheet ---------- */
+.tabs { display: flex; gap: 4px; margin: 0 0 10px; overflow-x: auto; }
+.tab { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); cursor: pointer; font-weight: 600; font-size: 13px; color: var(--dim); white-space: nowrap; }
+.tab.on { color: #1a1006; background: linear-gradient(#d8a24c, #a8701f); border-color: #e8c27a; }
+.row.led { margin-bottom: 6px; align-items: center; }
+.row.led .n { font-style: normal; color: var(--gold); font-size: 12px; margin-left: 4px; }
+.row .acts { display: flex; gap: 4px; flex: none; flex-direction: row; }
+.row .acts .iconBtn.no { opacity: .45; }
+.mbar { display: block; height: 4px; margin-top: 4px; background: rgba(0, 0, 0, 0.55); border-radius: 2px; overflow: hidden; max-width: 160px; }
+.mbar i { display: block; height: 100%; background: linear-gradient(90deg, #3a9a54, #6ee08a); }
+.squad { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.seg.small button { min-height: 32px; font-size: 12px; }
+.charts { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 8px 0; }
+.chart { margin: 0; padding: 8px 10px 4px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line); }
+.chart figcaption { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13px; }
+.chart figcaption span { font-weight: 400; color: var(--dim); font-size: 11px; }
+.chart > svg { width: 100%; height: 58px; display: block; }
+.chart .base { stroke: rgba(255, 255, 255, 0.14); stroke-width: 1; }
+.chart .val { fill: var(--text); font: 600 11px var(--sans); }
+.chart rect:hover { fill: rgba(255, 255, 255, 0.06); }
+table.st { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0 4px; }
+table.st th { text-align: left; color: var(--dim); font-weight: 500; padding: 3px 8px 3px 0; white-space: nowrap; }
+table.st td { padding: 3px 6px; }
+table.st td.nx { color: var(--good); }
+table.st tr:first-child td { font: 600 12px var(--serif); color: var(--gold); }
+table.st tr:first-child td.nx { color: var(--good); }
+.row.det { margin-bottom: 5px; align-items: flex-start; }
+.row.det small { display: block; }
+.row.det .why { color: var(--bad); }
+.row.det .t { color: var(--dim); }
+.por.xs { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.strip figure { margin: 0; text-align: center; padding: 4px; border-radius: 8px; border: 1px solid var(--line); background: radial-gradient(#2c2634, #120f16); }
+.strip figure img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; }
+.strip figure figcaption { font-size: 10px; color: var(--dim); }
+.strip figure.cur { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+.strip figure.dark img { filter: brightness(.25) saturate(0); }
+.dtl { position: absolute; right: 4px; top: 38px; }
+#hoverTip { position: absolute; z-index: 15; pointer-events: none; padding: 4px 9px; border-radius: 7px; background: rgba(12, 10, 16, 0.9); border: 1px solid var(--line2); font-size: 12px; white-space: nowrap; }
+#hoverTip b { font-family: var(--serif); }
+#hoverTip span { color: var(--dim); }
+#hoverTip i { font-style: normal; font-size: 11px; margin-left: 4px; }
+#hoverTip .foe { color: var(--bad); } #hoverTip .wild { color: #e8a040; } #hoverTip .rk { color: var(--gold); }

@@ -62,7 +62,7 @@ function packBits(a) { const o = new Uint8Array(Math.ceil(a.length / 8)); for (l
 function unpackBits(o, n) { const a = new Uint8Array(n); for (let i = 0; i < n; i++) a[i] = (o[i >> 3] >> (i & 7)) & 1; return a; }
 
 /* ---------------- the record ---------------- */
-const UNIT_KEYS = ["id", "line", "tier", "team", "hero", "x", "y", "hp", "order", "oq", "carry", "stance", "base", "boost", "lvl", "xp", "skcd", "free", "drone", "turret", "expire", "face", "dropId", "post"];
+const UNIT_KEYS = ["id", "line", "tier", "team", "hero", "x", "y", "hp", "order", "oq", "carry", "stance", "base", "boost", "lvl", "xp", "skcd", "free", "drone", "turret", "expire", "face", "dropId", "post", "kills", "rank"];
 const BLD_KEYS = ["id", "type", "team", "tx", "ty", "level", "hp", "built", "q", "qt", "loop", "rally", "base", "boost", "node", "seen", "cost", "prod"];
 
 export function serialize() {
@@ -89,11 +89,12 @@ export function serialize() {
   return {
     v: SAVE_VERSION, savedAt: Date.now(),
     seed: G.seed, diff: G.diff, time: G.time, tick: G.tick, nextId: G.nextId,
-    world: { bounds: W.bounds, nextNode: W.nextNode, chunks, explored, nodes: [...W.nodes.values()].map((n) => [n.id, n.type, n.tx, n.ty, Math.round(n.amount), n.max, n.building]) },
+    world: { bounds: W.bounds, nextNode: W.nextNode, chunks, explored, nodes: [...W.nodes.values()].map((n) => [n.id, n.type, n.tx, n.ty, Math.round(n.amount), n.max, n.building, n.camped || 0, n.guards || 0]) },
     res: G.res, era: G.era, tech: G.tech, tiers: G.tiers, doctrines: G.doctrines, researching: G.researching, heroes: G.heroes,
     phase: G.phase, bases: [...G.bases.values()], contacts: G.intel.contacts, nextContact: G.intel.nextContact,
     auto: G.auto, codex: G.codex, stats: G.stats, groups: G.groups, ghosts: [...G.ghosts.values()], loreSeen: G.loreSeen || [],
-    beaconLit: G.beaconLit, complete: G.complete, units, blds
+    beaconLit: G.beaconLit, complete: G.complete, units, blds,
+    history: G.history || [], squads: (G.squads || []).map((s) => ({ ...s, ids: s.ids.filter((id) => G.ents.has(id)) })), nextSquad: G.nextSquad || 0, rebuild: G.rebuild || []
   };
 }
 function cleanOrder(o) {
@@ -116,19 +117,21 @@ export function deserialize(d) {
   const N = CHUNK * CHUNK;
   for (const [cx, cy, t, wood] of d.world.chunks) { const c = W.chunks.get((cx + 32768) * 65536 + (cy + 32768)) || W.gen(cx, cy, false); c.t = unb64(t, N); c.wood = unb64(wood, N); c.mod = true; }
   for (const [cx, cy, bits] of d.world.explored) { const c = W.chunks.get((cx + 32768) * 65536 + (cy + 32768)); if (c) c.exp = unpackBits(unb64(bits), N); }
-  for (const [id, type, tx, ty, amount, max, building] of d.world.nodes) {
+  for (const [id, type, tx, ty, amount, max, building, camped, guards] of d.world.nodes) {
     const n = W.addNode(type, tx, ty, 0, amount);
     W.nodes.delete(n.id); n.id = id; n.max = max || amount; W.nodes.set(id, n);
     W.occupyArea(tx, ty, n.w, n.h, id);
-    n.building = building || 0;
+    n.building = building || 0; n.camped = camped || 0; if (guards) n.guards = guards;
   }
   Object.assign(G.res, d.res);
   G.era = d.era || 0; G.tech = d.tech || {}; G.tiers = d.tiers || {}; G.doctrines = d.doctrines || {}; G.researching = d.researching || {}; G.heroes = d.heroes || {};
   G.phase = d.phase; G.bases = new Map((d.bases || []).map((x) => [x.id, x]));
   G.intel.contacts = d.contacts || []; G.intel.nextContact = d.nextContact || 1;
   G.auto = Object.assign(defaultAuto(), d.auto || {});
+  G.auto.army = Object.assign(defaultAuto().army, (d.auto && d.auto.army) || {});
   G.codex = d.codex || []; G.stats = Object.assign(G.stats, d.stats || {}); G.groups = d.groups || G.groups;
   G.ghosts = new Map((d.ghosts || []).map((g) => [g.id, g]));
+  G.history = d.history || []; G.squads = d.squads || []; G.nextSquad = d.nextSquad || 0; G.rebuild = d.rebuild || [];
   G.loreSeen = d.loreSeen || []; G.beaconLit = !!d.beaconLit; G.complete = !!d.complete; G.zones = [];
   G.mode = "play";
   for (const s of d.blds) {

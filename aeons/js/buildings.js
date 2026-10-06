@@ -267,6 +267,7 @@ export function updateBuilding(b, dt) {
     for (const r in d.produces) {
       const k = d.produces[r] * (1 + 0.35 * (b.level - 1)) * dt;
       G.res[r] += k; b.prod = (b.prod || 0) + k;
+      const br = G.stats.byRes || (G.stats.byRes = {}); br[r] = (br[r] || 0) + k;
     }
   }
   // towers
@@ -350,6 +351,7 @@ function trainOut(b, line) {
   return u;
 }
 export function sendToRally(u, b) {
+  if (u.order.sq) return;   // a squad (Captains) already called this one
   const r = b.rally;
   if (u.line === "worker") {
     if (r && r.node) { const n = G.world.nodes.get(r.node); if (n) { setOrder(u, { t: "gather", res: n.type, node: n.id }); return; } }

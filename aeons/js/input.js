@@ -103,7 +103,10 @@ function placeAt(x, y) {
 }
 function doTarget(p, queue) {
   const us = myUnits(), cmd = mode.cmd;
-  if (cmd === "rally" || cmd === "muster") {
+  if (cmd === "squad") {
+    const s = (G.squads || []).find((x) => x.id === G.placingSquad);
+    if (s) { s.anchor = { x: p.x, y: p.y }; s.state = ""; ping(p.x, p.y, "#ffe9a8", 30, 1.5); emit("toast", "Squad " + s.name + " has a new place", "info"); }
+  } else if (cmd === "rally" || cmd === "muster") {
     const r = { x: p.x, y: p.y };
     if (p.ent && p.ent.kind === "node") r.node = p.ent.id;
     if (p.tree) r.tree = p.tree;
@@ -260,7 +263,7 @@ function rightClick(sx, sy, shift) {
   const bs = selected().filter((b) => b.kind === "bld" && b.team === 0);
   if (bs.length) { mode.cmd = "rally"; doTarget(p, false); }
 }
-const mouse = { x: 0, y: 0, in: false };
+export const mouse = { x: 0, y: 0, in: false };
 function wheel(e) {
   if (e.target.id !== "view") return;
   e.preventDefault();

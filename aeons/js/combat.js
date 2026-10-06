@@ -51,7 +51,7 @@ export function skillshot(src, x, y, dx, dy, range, dmg, opts) {
 export function burst(x, y, r, dmg, src, opts) {
   const team = src.team;
   near(x, y, r + 48, (e) => {
-    if (e.dead || e.team === team || e.team === 2) return;
+    if (e.dead || e.team === team) return;
     if (e.kind === "unit" && (e.hidden || (e.st.air && !(opts && opts.air)))) return;
     const d = e.kind === "bld" ? distRect(x, y, e) : Math.hypot(e.x - x, e.y - y) - e.r;
     if (d > r) return;
@@ -70,6 +70,7 @@ function distRect(x, y, b) {
 export function updateProjectiles(dt) {
   for (const p of G.projs) {
     if (p.dead) continue;
+    p.px = p.x; p.py = p.y;   // where it was a tick ago, for the renderer to draw between
     p.t += dt;
     const src = G.ents.get(p.by) || { team: p.team, dead: true, id: p.by };
     if (p.line) {

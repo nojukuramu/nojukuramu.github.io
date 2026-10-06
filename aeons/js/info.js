@@ -47,6 +47,14 @@ const TOPICS = {
       k(".") + " next idle worker · " + k("F") + " follow the selection · " + k("Esc") + " cancel, then the menu · " + k("Pause") + " pause.</p>" +
       "<p>Controlling a champion: " + k("WASD") + " walk, " + k("Q W E R") + " cast toward the pointer, " + k("Right") + " move or attack, " + k("Space") + " attack the nearest, " + k("Esc") + " let go.</p>"
   },
+  wild: {
+    title: "The wild",
+    body:
+      "<p>Out past the fires, ruins are guarded. The first time you see a far ruin, the beasts that live round it are there too — " +
+      "wolves and boars early on, stranger things in later ages. The ruin will not give up what it holds while they live.</p>" +
+      "<p>Soldiers who keep killing become <b>Blooded</b>, then <b>Veteran</b>, <b>Elite</b> and <b>Legend</b> (3, 8, 16 and 30 kills), " +
+      "each rank worth a tenth more damage and health. Their chevrons show over their heads.</p>"
+  },
   phases: {
     title: "Phases",
     body:
@@ -89,7 +97,33 @@ const TOPICS = {
       "a contact is heading. <b>Bureaucracy</b> keeps the research you tick going whenever a building is free. <b>Logistics</b> " +
       "marches new soldiers to a muster point. <b>High Command</b> strikes the nearest known enemy base once your idle army " +
       "is big enough.</p>" +
+      "<p><b>Captains</b> send new soldiers to squads short of their number. <b>Masons</b> raise again what was destroyed, where it stood. " +
+      "<b>Sentinels</b> put a tower where the alarms keep ringing. <b>Colonists</b> raise an outpost beside a vein too far to carry from. " +
+      "<b>Standing Army</b> keeps the army at a size and mix you set. <b>Rebirth</b> calls fallen champions back. Stewards can also " +
+      "<b>follow demand</b>, leaning the workers towards whatever the realm is short of.</p>" +
+      "<p><b>Wake me</b> needs no research: it pauses the game when a big contact comes near home.</p>" +
       "<p>Later: <b>Satellites</b>, <b>Drone Wing</b>, <b>Overmind</b> and <b>Continuum</b>, which do what their names suggest.</p>"
+  },
+  squads: {
+    title: "Squads",
+    body:
+      "<p>A control group is a shortcut for your hand; a squad is a standing job. Select some soldiers and press " +
+      "<b>Make a squad</b> (or use the Ledger), then give it a role:</p>" +
+      "<p><b>Defend</b> holds its place and answers alarms near it. <b>Patrol</b> walks the round of your halls, outposts and towers. " +
+      "<b>Strike</b> waits until it has its number at good health, then marches on the nearest enemy base you know of, and falls back " +
+      "to regroup when it is badly hurt. <b>Hunt</b> chases contacts that come near its place. <b>Escort</b> stands by the far " +
+      "drop-off where most of your workers are.</p>" +
+      "<p>Each squad has a number it wants. With the <b>Captains</b> doctrine, new soldiers walk to whichever squad is shortest. " +
+      "An order of yours always wins over the squad's, for as long as it lasts.</p>"
+  },
+  ledger: {
+    title: "The Ledger",
+    body:
+      "<p>Everything you own, by kind. <b>Structures</b>: how many, at what levels, how hurt, and buttons to select them all, raise " +
+      "every one that can be raised, or send workers to repair them. <b>Forces</b>: every line, its ranks, who is idle. " +
+      "<b>Squads</b>: their jobs. <b>Economy</b>: what your workers are doing, income a minute over the last hour, and what " +
+      "the realm is waiting to afford.</p>" +
+      "<p>The Ledger, Intel and Automation leave the game running; the menu pauses it.</p>"
   },
   intel: {
     title: "Fog, contacts and alarms",

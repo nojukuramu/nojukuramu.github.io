@@ -23,19 +23,24 @@ import { canPlace, startBuilding, act, actions, inTerritory } from "./buildings.
 import { explored, seen } from "./fog.js";
 import { T } from "./world.js";
 import { liveBases } from "./enemy.js";
+import { updateSquads } from "./squads.js";
+import { bldCost, TRAINED } from "./data.js";
 
 export function defaultAuto() {
   return {
     foreman: true, quarter: true, repair: true, signal: true, census: true, workerTarget: 24,
     ratio: { gold: 40, wood: 40, stone: 20 }, keep: {}, keepRefit: false, keepLevels: false, keepEra: false,
-    command: false, commandAt: 40, muster: null, drones: true, satellite: true, overmind: true
+    command: false, commandAt: 40, muster: null, drones: true, satellite: true, overmind: true,
+    captains: true, masons: true, sentinels: true, colonists: true, standing: false, rebirth: true, demand: false,
+    army: { target: 40, mix: { melee: 3, ranged: 3, mender: 1, mounted: 2, siege: 1, naval: 0, air: 1 } },
+    wake: false, wakeAt: 10
   };
 }
 export const has = (id) => !!G.doctrines[id] && G.auto[id] !== false;
 
 /* ---------------- alerts ---------------- */
 on("hit", (t, dmg, by) => {
-  if (!t || t.team !== 0 || !by || by.team !== 1) return;
+  if (!t || t.team !== 0 || !by || by.team === 0) return;
   const A = G.intel.alerts;
   for (let i = A.length - 1; i >= 0; i--) {
     const a = A[i];
@@ -119,8 +124,27 @@ function foreman() {
     if (assign(w, res) || assign(w, "wood") || assign(w, "gold")) count[w.order.res]++;
   }
 }
+/** What the realm is waiting for: everything a building offers but cannot pay for, by resource. */
+export function demand() {
+  const need = { gold: 0, wood: 0, stone: 0 };
+  for (const b of G.blds) {
+    if (b.dead || b.team !== 0 || b.built < 1) continue;
+    for (const a of actions(b)) {
+      if (a.ok || a.why !== "Not enough resources" || !a.cost) continue;
+      for (const r in need) need[r] += Math.max(0, Math.min(5000, (a.cost[r] || 0) - G.res[r]));
+    }
+  }
+  return need;
+}
+let demandCache = null, demandAt = -99;
 function pickRes(count, total) {
-  const R = G.doctrines.governor ? G.auto.ratio : { gold: 45, wood: 45, stone: 10 };
+  let R = G.doctrines.governor ? G.auto.ratio : { gold: 45, wood: 45, stone: 10 };
+  // Stewards following demand lean the split towards whatever the realm is short of
+  if (G.doctrines.governor && G.auto.demand) {
+    if (G.time - demandAt > 10) { demandCache = demand(); demandAt = G.time; }
+    const sum = demandCache.gold + demandCache.wood + demandCache.stone;
+    if (sum > 0) R = { gold: R.gold * 0.4 + 60 * demandCache.gold / sum, wood: R.wood * 0.4 + 60 * demandCache.wood / sum, stone: R.stone * 0.4 + 60 * demandCache.stone / sum };
+  }
   const sum = R.gold + R.wood + R.stone || 1;
   let best = "wood", bd = -1e9;
   for (const r of ["gold", "wood", "stone"]) {
@@ -306,6 +330,120 @@ function overmind() {
   }
 }
 
+/* ---------------- Masons: raise again what was destroyed ---------------- */
+on("death", (b) => {
+  if (b.kind !== "bld" || b.team !== 0 || b.built < 1 || BUILDINGS[b.type].unique && b.type !== "altar" && b.type !== "academy") return;
+  const R = G.rebuild || (G.rebuild = []);
+  R.push({ type: b.type, tx: b.tx, ty: b.ty, at: G.time });
+  if (R.length > 60) R.shift();
+});
+function masons() {
+  const R = G.rebuild || [];
+  for (let i = 0; i < R.length; i++) {
+    const p = R[i];
+    if (G.time - p.at < 20) continue;   // let the fighting move on first
+    let hot = false;
+    for (const u of G.units) if (!u.dead && u.team !== 0 && Math.hypot(u.x - (p.tx + 1) * TILE, u.y - (p.ty + 1) * TILE) < 12 * TILE) { hot = true; break; }
+    if (hot) continue;
+    const c = canPlace(p.type, p.tx, p.ty, 0);
+    if (!c.ok) { if (c.why !== "Not enough resources" && G.time - p.at > 600) { R.splice(i, 1); i--; } continue; }
+    if (!canAfford(bldCost(p.type))) continue;
+    const w = nearestWorker((p.tx + 1) * TILE, (p.ty + 1) * TILE);
+    if (!w) return;
+    if (startBuilding(p.type, p.tx, p.ty, [w])) { R.splice(i, 1); emit("toast", "Masons are raising a " + BUILDINGS[p.type].names[0].toLowerCase() + " again", "auto"); return; }
+  }
+}
+
+/* ---------------- Sentinels: a tower where the alarms keep ringing ---------------- */
+const sentinelCool = new Map();
+function sentinels() {
+  const A = G.intel.alerts.filter((a) => G.time - a.t0 < 180);
+  const cells = new Map();
+  for (const a of A) { const k = Math.floor(a.x / (10 * TILE)) * 10007 + Math.floor(a.y / (10 * TILE)); const c = cells.get(k) || { n: 0, x: a.x, y: a.y, k }; c.n += a.n; cells.set(k, c); }
+  for (const c of cells.values()) {
+    if (c.n < 4 || (sentinelCool.get(c.k) || -1e9) > G.time) continue;
+    if (G.blds.some((b) => !b.dead && b.team === 0 && b.type === "tower" && Math.hypot(b.x - c.x, b.y - c.y) < 7 * TILE)) continue;
+    if (!canAfford(bldCost("tower"))) return;
+    const spot = findSpot("tower", c);
+    const w = spot && nearestWorker(c.x, c.y);
+    if (!w) continue;
+    sentinelCool.set(c.k, G.time + 240);
+    if (startBuilding("tower", spot.tx, spot.ty, [w])) { emit("toast", "Sentinels: a tower goes up where the alarms ring", "auto"); return; }
+  }
+}
+
+/* ---------------- Colonists: an outpost by a vein too far to carry from ---------------- */
+function colonists() {
+  if (G.blds.some((b) => !b.dead && b.team === 0 && b.type === "outpost" && b.built < 1)) return;
+  if (!canAfford(bldCost("outpost"))) return;
+  const mine = G.blds.filter((b) => !b.dead && b.team === 0);
+  const drops = mine.filter((b) => b.built >= 1 && BUILDINGS[b.type].drop);
+  let best = null, bs = -1e18;
+  for (const n of G.world.nodes.values()) {
+    if ((n.type !== "gold" && n.type !== "stone") || n.amount < 600 || !explored(n.tx, n.ty)) continue;
+    let dd = 1e18; for (const b of drops) dd = Math.min(dd, rectDist(n.x, n.y, b));
+    if (dd < 14 * TILE) continue;
+    let dm = 1e18; for (const b of mine) dm = Math.min(dm, Math.hypot(b.x - n.x, b.y - n.y));
+    if (dm > 48 * TILE) continue;
+    let danger = false;
+    for (const gh of G.ghosts.values()) if (Math.hypot((gh.tx + 1) * TILE - n.x, (gh.ty + 1) * TILE - n.y) < 20 * TILE) { danger = true; break; }
+    if (danger) continue;
+    const s = n.amount / 1000 - dm / TILE * 0.2;
+    if (s > bs) { bs = s; best = n; }
+  }
+  if (!best) return;
+  const spot = findSpot("outpost", best);
+  const w = spot && nearestWorker(best.x, best.y);
+  if (w && startBuilding("outpost", spot.tx, spot.ty, [w])) emit("toast", "Colonists set out to raise an outpost by a far vein", "auto");
+}
+
+/* ---------------- Standing Army: keep the army at its size and mix ---------------- */
+export function armySupply() {
+  let n = 0;
+  for (const u of G.units) if (!u.dead && u.team === 0 && isMilitary(u) && !u.hero && !u.free) n += LINES[u.line].supply;
+  for (const b of G.blds) if (!b.dead && b.team === 0) for (const it of b.q) if (it.k === "unit" && it.line !== "worker") n += LINES[it.line].supply;
+  return n;
+}
+function standing() {
+  const A = G.auto.army;
+  if (armySupply() >= A.target) return;
+  const have = {};
+  for (const u of G.units) if (!u.dead && u.team === 0 && isMilitary(u) && !u.hero && !u.free) have[u.line] = (have[u.line] || 0) + 1;
+  const total = Object.values(have).reduce((a, b) => a + b, 0) + 1;
+  const wsum = Object.values(A.mix).reduce((a, b) => a + b, 0) || 1;
+  for (const b of G.blds) {
+    if (b.dead || b.team !== 0 || b.built < 1 || b.q.length) continue;
+    const lines = (BUILDINGS[b.type].trains || []).filter((l) => l !== "worker" && LINES[l].first <= G.era && (A.mix[l] || 0) > 0);
+    if (!lines.length) continue;
+    lines.sort((x, y) => ((have[y] || 0) / total - A.mix[y] / wsum) - ((have[x] || 0) / total - A.mix[x] / wsum)).reverse();
+    for (const l of lines) if (act(b, "train:" + l)) { have[l] = (have[l] || 0) + 1; break; }
+    if (armySupply() >= A.target) return;
+  }
+}
+
+/* ---------------- Rebirth: champions called back ---------------- */
+function rebirth() {
+  const altar = G.blds.find((b) => !b.dead && b.team === 0 && b.type === "altar" && b.built >= 1 && !b.q.length);
+  if (!altar) return;
+  for (const id in G.heroes) if (G.heroes[id].dead && act(altar, "hero:" + id)) { emit("toast", "The altar calls a champion back", "auto"); return; }
+}
+
+/* ---------------- waking you up ---------------- */
+let wakeCool = -99;
+const woke = new Set();
+function wake() {
+  if (G.time < wakeCool) return;
+  const homes = G.blds.filter((b) => !b.dead && b.team === 0 && (b.type === "hall" || b.type === "outpost"));
+  for (const c of G.intel.contacts) {
+    if (woke.has(c.id) || c.n < G.auto.wakeAt || G.time - c.seen > 3) continue;
+    if (!homes.some((h) => Math.hypot(h.x - c.x, h.y - c.y) < 26 * TILE)) continue;
+    woke.add(c.id); wakeCool = G.time + 90;
+    G.paused = true;
+    emit("wake", c);
+    return;
+  }
+}
+
 on("phase", (n, line, bases) => {
   if (!G.doctrines.continuum) return;
   for (const b of bases) G.temp.push({ x: b.x, y: b.y, r: 12, until: G.time + 25 });
@@ -327,6 +465,15 @@ export function updateAuto() {
     if (G.doctrines.bureau) bureau();
   }
   if (t % 100 === 7 && G.doctrines.command) command();
+  if (t % 10 === 2) updateSquads();
+  if (t % 20 === 11) {
+    if (has("masons")) masons();
+    if (has("sentinels")) sentinels();
+    if (has("standing")) standing();
+    if (has("rebirth")) rebirth();
+  }
+  if (t % 200 === 17 && has("colonists")) colonists();
+  if (t % 5 === 1 && G.auto.wake) wake();
   if (t % 10 === 5) {
     if (has("satellite")) satellite();
     if (has("drones")) drones();

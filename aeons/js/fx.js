@@ -10,7 +10,7 @@
 import { G, on } from "./state.js";
 import { TILE, ERAS, BUILDINGS } from "./data.js";
 import { seen, visiblePx } from "./fog.js";
-import { hexA } from "./sprites.js";
+import { hexA, unitSprite } from "./sprites.js";
 
 const MAX = 2600;
 export const parts = [];
@@ -19,6 +19,7 @@ export const tracers = [];
 export const rings = [];
 export const texts = [];
 export const flashes = [];   // brief lights, for the night
+export const corpses = [];
 let quality = 1;
 export function setQuality(q) { quality = q; }
 
@@ -83,7 +84,11 @@ export function init() {
       decals.push({ x: e.x, y: e.y, w: e.w * 32, h: e.h * 32, t: 0, max: 90, kind: "rubble", era: e.level - 1 });
     } else {
       if (e.st && (e.st.mech || e.st.air)) { blast(e.x, e.y, 24, null, e.tier); debris(e.x, e.y, 10, "#3a3a3a"); decals.push({ x: e.x, y: e.y, r: 14, t: 0, max: 40, kind: "scorch" }); }
-      else { dust(e.x, e.y, 5, "#8a7a6a"); decals.push({ x: e.x, y: e.y, r: 7, t: 0, max: 20, kind: "fallen", team: e.team }); }
+      else {
+        dust(e.x, e.y, 5, "#8a7a6a"); decals.push({ x: e.x, y: e.y, r: 7, t: 0, max: 20, kind: "fallen", team: e.team });
+        // the body falls the way it was facing, lies a moment, and goes
+        if (corpses.length < 80 * quality) corpses.push({ s: unitSprite(e, 6), x: e.x, y: e.y, flip: Math.cos(e.face) < 0, t: 0, max: 3.4 });
+      }
     }
   });
   on("tracer", (src, t, shot) => {
@@ -137,6 +142,8 @@ export function update(dt) {
   let w = 0; for (let i = 0; i < parts.length; i++) if (parts[i].life > 0) parts[w++] = parts[i]; parts.length = w;
   for (const a of [tracers, rings, texts, flashes]) { for (const t of a) t.t += dt; for (let i = a.length - 1; i >= 0; i--) if (a[i].t >= a[i].max) a.splice(i, 1); }
   for (const d of decals) d.t += dt;
+  for (const c of corpses) c.t += dt;
+  for (let i = corpses.length - 1; i >= 0; i--) if (corpses[i].t >= corpses[i].max) corpses.splice(i, 1);
   for (let i = decals.length - 1; i >= 0; i--) if (decals[i].t >= decals[i].max) decals.splice(i, 1);
   if (decals.length > 300) decals.splice(0, decals.length - 300);
   eraFlash = Math.max(0, eraFlash - dt * 0.6);
@@ -149,9 +156,12 @@ export function drawDecals(ctx, x0, y0, x1, y1) {
     const a = Math.min(1, (d.max - d.t) / 6);
     ctx.globalAlpha = a;
     if (d.kind === "rubble") {
-      ctx.fillStyle = "rgba(40,34,30,0.55)"; ctx.beginPath(); ctx.ellipse(d.x, d.y, d.w * 0.5, d.h * 0.45, 0, 0, 6.3); ctx.fill();
+      // scorched ground fading out at the edge, and the stones of what stood there
+      const g = ctx.createRadialGradient(d.x, d.y, 2, d.x, d.y, Math.max(d.w, d.h) * 0.55);
+      g.addColorStop(0, "rgba(36,30,26,0.42)"); g.addColorStop(1, "rgba(36,30,26,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(d.x, d.y, d.w * 0.55, d.h * 0.5, 0, 0, 6.3); ctx.fill();
       ctx.fillStyle = d.era <= 2 ? "#5a4028" : "#6a6660";
-      for (let i = 0; i < 12; i++) { const k = (i * 7919) % 100 / 100, j = (i * 104729) % 100 / 100; ctx.fillRect(d.x - d.w * 0.4 + k * d.w * 0.8, d.y - d.h * 0.35 + j * d.h * 0.7, 4 + (i % 3) * 2, 3); }
+      for (let i = 0; i < 18; i++) { const k = (i * 7919 + d.w) % 100 / 100, j = (i * 104729 + d.h) % 100 / 100; ctx.fillRect(d.x - d.w * 0.4 + k * d.w * 0.8, d.y - d.h * 0.35 + j * d.h * 0.7, 3 + (i % 3) * 2, 2 + (i % 2)); }
     } else if (d.kind === "scorch") {
       const g = ctx.createRadialGradient(d.x, d.y, 1, d.x, d.y, d.r * 1.6); g.addColorStop(0, "rgba(20,16,14,0.7)"); g.addColorStop(1, "rgba(20,16,14,0)");
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(d.x, d.y, d.r * 1.6, 0, 6.3); ctx.fill();
@@ -160,6 +170,18 @@ export function drawDecals(ctx, x0, y0, x1, y1) {
     }
   }
   ctx.globalAlpha = 1;
+}
+
+export function drawCorpses(ctx, x0, y0, x1, y1) {
+  for (const c of corpses) {
+    if (c.x < x0 - 40 || c.x > x1 + 40 || c.y < y0 - 40 || c.y > y1 + 40) continue;
+    const fall = Math.min(1, c.t / 0.4), a = (1 - Math.max(0, (c.t - 1.8) / (c.max - 1.8))) * 0.9;
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(c.x, c.y + 6);
+    ctx.rotate((c.flip ? -1 : 1) * fall * fall * 1.45);
+    if (c.flip) ctx.scale(-1, 1);
+    ctx.drawImage(c.s.c, -c.s.ox, -c.s.oy - 6, c.s.w, c.s.h);
+    ctx.restore();
+  }
 }
 
 export function drawParts(ctx, x0, y0, x1, y1, zoom) {

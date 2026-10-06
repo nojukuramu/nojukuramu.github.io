@@ -7,7 +7,7 @@
  * simulation nor the renderer has to know they exist. */
 
 import { G, on, emit } from "./state.js";
-import { TICK, TILE, ERAS, BUILDINGS, LINES, HEROES, RES_NAME } from "./data.js";
+import { TICK, TILE, ERAS, BUILDINGS, LINES, HEROES, RES_NAME, RANK_NAMES } from "./data.js";
 import { newGame, tick } from "./sim.js";
 import * as render from "./render.js";
 import { view } from "./render.js";
@@ -95,6 +95,9 @@ on("spotted", (b) => { if (b.type === "hall") { ui.toast("An enemy hall, found",
 on("scan", (x, y) => render.ping(x, y, "#62e8ff", 14 * TILE, 3));
 on("beacon", () => ui.banner("The Beacon", "Something on the other side has seen it.", "era"));
 on("defeat", () => ui.openPanel("defeat"));
+on("wake", (c) => { audio.play("alert"); ui.banner("Paused", c.n + " enemies near home. Press play when you are ready.", "phase"); view.cam.x = c.x; view.cam.y = c.y; render.clampCam(); render.ping(c.x, c.y, "#ff6a6a", 80, 6); });
+on("rank", (u) => { if (u.team === 0) { audio.play("level", near(u.x, u.y) * 0.6); if (u.rank >= 3) ui.toast("A " + ui.nameOf(u) + " is now " + RANK_NAMES[u.rank], "good"); } });
+on("camp", (n) => { ui.toast("Something lives by that ruin", "info"); });
 on("complete", () => setTimeout(() => ui.openPanel("complete"), 2500));
 on("togglePause", () => { G.paused = !G.paused; });
 on("cycleSpeed", () => { const S = [1, 1.5, 2, 3]; G.speed = S[(S.indexOf(G.speed) + 1) % S.length]; settings.speed = G.speed; ui.toast("Speed " + G.speed + "x", "info"); });
@@ -142,7 +145,7 @@ let acc = 0, last = performance.now(), mmT = 0, musT = 0, slow = 1 / 60, slowT =
 function loop(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (G.mode === "play") {
-    if (!G.paused && !ui.panelOpen()) {
+    if (!G.paused && !ui.panelPauses()) {
       acc += dt * G.speed;
       let n = 0;
       while (acc >= TICK && n < 8) { tick(); acc -= TICK; n++; }

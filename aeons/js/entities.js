@@ -8,6 +8,7 @@
  * anything else: targets, crowding, splash, auras. */
 
 import { G, emit } from "./state.js";
+import { RANKS, RANK_BONUS } from "./data.js";
 import { TILE, LINES, TECH_CATS, ATK_PER_LEVEL, ARM_PER_LEVEL, lineStats, BUILDINGS, bldHp, bldArmor, heroStats, HEROES, supplyMax, DIFFICULTY, enemyBoost, RES } from "./data.js";
 
 /* ---------------- research lookups ---------------- */
@@ -40,6 +41,7 @@ export function refreshUnit(u) {
       s.atk *= k; s.hp = Math.round(s.hp * k * DIFFICULTY[G.diff].hp);
     }
   }
+  if (u.rank) { const k = 1 + RANK_BONUS * u.rank; s.atk *= k; s.hp = Math.round(s.hp * k); }
   s.dmgTaken = 1;
   if (u.team === 0 && !u.hero && ARM_CAT[u.line]) s.dmgTaken = Math.max(0.4, 1 - ARM_PER_LEVEL * lvl(ARM_CAT[u.line]));
   if (u.hero) s.dmgTaken = Math.max(0.5, 1 - ARM_PER_LEVEL * 0.5 * lvl("inf_arm"));
@@ -164,7 +166,8 @@ export function near(x, y, r, fn) {
 
 /** Is `t` something `a` may fight? */
 export function hostile(a, t) {
-  return t && !t.dead && t.team !== a.team && t.team !== 2 && !(t.kind === "unit" && t.hidden);
+  // team 2 is the wild: it fights everyone, and everyone may fight it
+  return t && !t.dead && t.team !== a.team && !(t.kind === "unit" && t.hidden);
 }
 export function canHit(st, t) {
   if (t.kind === "unit" && t.st.air) return !!st.hitsAir;
@@ -207,6 +210,7 @@ export function damage(t, amount, by, kind) {
     if (t.buffs.marked > G.time) dmg *= 1.4;
   }
   if (by && by.st && by.st.vsBld && t.kind === "bld") dmg *= by.st.vsBld;
+  else if (by && by.st && by.st.vsBld && t.kind === "unit") dmg *= 0.7;   // siege is for walls; soldiers scatter
   dmg *= 0.88 + Math.random() * 0.12;
   t.hp -= dmg;
   t.lastHit = G.time;
@@ -238,6 +242,12 @@ export function kill(e, by) {
     }
   }
   if (e.team === 0) G.stats.lost++; else if (by && by.team === 0) G.stats.killed++;
+  // a soldier who keeps killing becomes a veteran, and stronger for it
+  if (by && by.kind === "unit" && !by.dead && !by.hero && !by.turret && by.team !== e.team) {
+    by.kills = (by.kills || 0) + (e.kind === "bld" ? 2 : 1);
+    const r = RANKS.filter((k) => by.kills >= k).length;
+    if (r > (by.rank || 0)) { by.rank = r; refreshUnit(by); by.hp = Math.min(by.maxHp, by.hp + by.maxHp * 0.25); emit("rank", by); }
+  }
   if (by && e.team !== by.team) giveXp(e, by);
   emit("death", e, by);
 }

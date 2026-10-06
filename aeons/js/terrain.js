@@ -156,7 +156,10 @@ export class Terrain {
           r += (s[0] * lit - r) * k; g += (s[1] * lit - g) * k; bb += (s[2] * lit - bb) * k;
           if (snow) { r += (236 - r) * snow; g += (240 - g) * snow; bb += (244 - bb) * snow; }
         }
-        const grain = 1 + n2 * 0.06 + n3 * 0.05;
+        // rolling ground: a slow noise read as height, lit from the top left
+        const hx = iwx >> 3, hy = iwy >> 3;
+        const relief = (nAt(N1, hx - 2, hy) - nAt(N1, hx + 2, hy)) + (nAt(N1, hx, hy - 2) - nAt(N1, hx, hy + 2));
+        const grain = (1 + n2 * 0.06 + n3 * 0.05) * (1 + relief * 0.9);
         px[o] = clamp8(r * grain); px[o + 1] = clamp8(g * grain); px[o + 2] = clamp8(bb * grain); px[o + 3] = 255;
       }
     }
