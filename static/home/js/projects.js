@@ -377,6 +377,24 @@
       c.beginPath(); c.arc(vx + 4.5, y - 5, 2.2, 0, 6.283); c.fill();
     },
 
+    /* ten ages in a row, each taller than the last, and the mist pulling back off them */
+    ages: function (c, w, h, p, a) {
+      var cols = ["#ff9a3c", "#ffb347", "#ffd27a", "#9fd0ff", "#ffe08a", "#ffcf6b", "#fff2b0", "#62e8ff", "#8da7ff", "#d38bff"];
+      var n = 10, bw = (w - 20) / n, lit = (p * 1.6) % (n + 3);
+      for (var i = 0; i < n; i++) {
+        var bh = h * (0.12 + i * 0.06), x = 10 + i * bw, y = h * 0.88 - bh;
+        c.globalAlpha = i < lit ? 1 : 0.22;
+        c.fillStyle = cols[i];
+        c.fillRect(x + bw * 0.18, y, bw * 0.64, bh);
+        if (i === Math.floor(lit) && i < n) { c.globalAlpha = 0.35; c.beginPath(); c.arc(x + bw / 2, y, bw * 0.9, 0, 6.3); c.fill(); }
+      }
+      c.globalAlpha = 1;
+      var edge = 10 + Math.min(lit, n) * bw;
+      var g = c.createLinearGradient(edge, 0, edge + 40, 0);
+      g.addColorStop(0, "rgba(40,24,60,0)"); g.addColorStop(1, "rgba(40,24,60,.85)");
+      c.fillStyle = g; c.fillRect(edge, 0, w - edge, h);
+      c.fillStyle = a; c.beginPath(); c.arc(14, h * 0.88 - 4 - Math.abs(Math.sin(p * 6)) * 3, 3, 0, 6.3); c.fill();
+    },
     /* four strings, and a bow across them */
     strings: function (c, w, h, p, a) {
       for (var i = 0; i < 4; i++) {
@@ -460,6 +478,10 @@
       desc: "Jeepney and tricycle routes, filed by the people who ride them.",
       hi: ["Anybody can file a route; the votes decide which ones stand", "Plans a trip across them, transfers and all", "Fares, a reliability meter, and the weather along the line"],
       tags: ["Supabase", "OpenStreetMap", "community"] },
+    { name: "Aeons", href: "aeons/", badge: "Strategy", accent: "#E8963C", kind: "games", motif: "ages",
+      desc: "An endless real-time strategy, from the first fire to the age of aether.",
+      hi: ["Phases of enemy bases on a map that keeps growing", "Ten eras, buildings that level up into the next, champions you can drive", "Fog of war, contacts and automation for a realm too big to click"],
+      tags: ["canvas", "RTS", "offline"] },
     { name: "ARCO", href: "arco/", badge: "Instrument", accent: "#E0A24C", kind: "sound", motif: "strings",
       desc: "A guitar for a phone held sideways.",
       hi: ["A six-string neck that hammers, pulls, slides and bends", "Tap frets to play, or pick, strum and palm-mute the body", "Power chords under one thumb, in any tuning"],
