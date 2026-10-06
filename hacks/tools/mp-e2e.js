@@ -152,7 +152,7 @@ const setRange = (page, id, v) => page.evaluate(([id, v]) => { const t = documen
     const gap0 = await gap();
     await A.page.evaluate(() => {
       const { save, hackapi } = window.HK_DEBUG;
-      save.data.hacks.push({ id: "hookbo00", name: "hookbo", on: false, code: 'on("tick", () => { const e = enemies.find((x) => x.visible); if (!e) return; input.lookAt(e.bones.chest); input.hook = me.hook.state !== "idle" || me.hook.ready; });' });
+      save.data.hacks.push({ id: "hookbo00", name: "hookbo", on: false, code: 'on("tick", () => { const e = enemies.find((x) => x.visible); if (!e) return; input.lookAt(e.bones.chest); if (!me.weapon.grapple) { input.slot = 4; return; } input.fire = me.hook.state !== "idle" || me.hook.ready; });' });
       hackapi.run("hookbo00");
     });
     const pulled = await soft(until(B.page, (g) => { const q = window.HK_DEBUG.S.actors.find((a) => a.kind === "remote"); const b = window.HK_DEBUG.S.me.body; return q && Math.hypot(q.body.x - b.x, q.body.z - b.z) < g - 3; }, gap0, 10000));

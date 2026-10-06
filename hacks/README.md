@@ -26,8 +26,8 @@ ground. None of the techniques are coded; they are what that code does when play
 | Sprint, slide | Crouch at a sprint to slide, with a boost on a cooldown; a slide while it recharges, or out of a landing, still gets a smaller push (never past 12 m/s, and tapping crouch builds nothing). The view widens with the slide's speed. Downhill, gravity along the slope speeds a slide up — and on a ramp steeper than about 12°, crouching slides you down it from a standstill. Jump out of it to keep the speed. |
 | Wall climb | Jump into a wall and hold jump and forward. Over the top, you mantle. |
 | Wall jump | Tap jump beside a wall. Your speed along the wall is kept; the same wall twice in a row does not count. The red shafts are made for it. |
-| Lunge | Hold the lunge key on any surface — floor, wall, ceiling — and you stick to it and charge. Release to launch where you look; the more squarely you face away from the surface, the harder. A tap is a quick swing. |
-| Grapple | Everybody carries one, whatever is in their hands. Hold its key and the hook flies where you look; where it bites, the rope reels you in, and lets go by itself when you arrive. The rope never lengthens, so moving away from the hook becomes going round it: steer with the move keys to swing. Hook a player and you are each pulled towards the other. Let go to stop; a wall between you and the hook cuts it. |
+| Lunge | With the blade out, hold Aim (right click; the Aim button on a phone) on any surface — floor, wall, ceiling — and you stick to it and charge. Release to launch where you look; the more squarely you face away from the surface, the harder. A tap is a quick swing. |
+| Grapple | A gun, in slot 4: its key (E or 4) draws it and puts it away. Hold Fire and the hook flies where you look; where it bites, the rope reels you in, and lets go by itself when you arrive. The rope never lengthens, so moving away from the hook becomes going round it: steer with the move keys to swing. Hook a player and you are each pulled towards the other. Let go to stop; a wall between you and the hook cuts it. |
 
 Steep slopes used to stop a body dead halfway down: against a slanted face a rounding error made the
 same plane count twice, and the crease between a plane and itself has no direction. The slide-move now
@@ -148,9 +148,16 @@ Every keyboard and mouse action is rebindable (Settings, Keys), two keys per act
 the mouse wheel — bind jump to the wheel and each notch is a fresh press, the way Source players
 hop by hand. Escape always opens the menu.
 
-Aim, crouch, sprint, lunge and the scoreboard can each **hold**, **toggle** or be **mixed** — a
+Aim, crouch, sprint and the scoreboard can each **hold**, **toggle** or be **mixed** — a
 quick tap toggles, a longer press holds — and sprint can be always on. Keys and touch are set
 separately (Settings, Controls and Touch), so a phone can toggle what a keyboard holds.
+
+Buttons mean what the thing in your hands needs: Fire is the trigger of whatever is out, the
+grapple included, and Aim is the lunge while the blade is out (always a hold, whatever Aim is set
+to). The courtesies every shooter has are here too: asking to run — a fresh sprint, the stick
+pushed out, auto-run, or a slide ending while you still run — stands you up out of a crouch;
+aiming or firing ends a toggled sprint; a new weapon comes up unaimed; and **auto-run** (`=`)
+keeps you running forward until a move key takes over.
 
 **Force landscape** (Settings, Touch) plays sideways however the phone is held. Where the browser
 allows it — Android, or the game installed to the home screen — the screen is locked sideways
@@ -162,8 +169,11 @@ On a phone every button is always on screen. **Move buttons** (Settings, Touch) 
 each one anywhere, size it and fade it, with a separate layout for sideways and upright. No
 button can be dropped on another, under the editor's bar or on the readouts that cannot move
 (score, health, ammo — shown faintly while you edit): it slides to the nearest free place, so
-none is ever lost where it cannot be picked up again. Fire and Lunge can be dragged while
-held to aim as you shoot; a touch anywhere else looks around.
+none is ever lost where it cannot be picked up again. Fire and Aim can be dragged while
+held to aim as you shoot; a touch anywhere else looks around — except low on the left, where the
+**floating stick** comes to your thumb. Push your thumb out past the stick's ring to run; carry on
+up to the lock above it and let go, and you keep running hands-free until you touch the stick. Fire
+and Aim change their pictures to say what they do (the hook, the blade, the lunge).
 
 ## Files
 
@@ -196,7 +206,7 @@ held to aim as you shoot; a touch anywhere else looks around.
 
 ```
 node tools/validate.js    # static and behaviour checks, no dependencies — the sandbox in a stand-in worker, and a match played headless
-node tools/e2e.js         # the game in Chromium: settings, a match, medals, the grapple, the scope, the hacks panel, practice, a phone both ways
+node tools/e2e.js         # the game in Chromium: settings, a match, medals, the grapple, the lunge, run-to-stand, auto-run, the scope, the hacks panel, practice, a phone both ways
 node tools/mp-e2e.js      # two browsers over real WebRTC: rooms, a grapple across machines, a hack-fought free for all, bots, hack rules
 ```
 

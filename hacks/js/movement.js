@@ -471,6 +471,9 @@ function lungeInput(W, p, held, dt, m) {
       p.lunge = L_CHARGE; p.lungeT = 0; p.lungeCharge = 0; p.lungeStuck = false;
       stick(W, p);
     }
+  } else if (p.lunge === L_CHARGE && !m) {
+    // the blade was put away mid-charge: nothing to launch with, so the charge is dropped
+    p.lunge = L_IDLE; p.lungeStuck = false;
   } else if (p.lunge === L_CHARGE) {
     p.lungeT += dt;
     p.lungeCharge = Math.min(1, p.lungeT / m.charge);

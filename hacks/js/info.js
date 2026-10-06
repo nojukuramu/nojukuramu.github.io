@@ -31,8 +31,9 @@ const TOPICS = {
     title: "How to play",
     body:
       "<p><b>Keys</b> (all rebindable): " + k("W A S D") + " move · " + k("Space") + " or the wheel jump · " + k("Ctrl") + " crouch / slide · " +
-      k("Shift") + " sprint · " + k("Mouse 1") + " fire · " + k("Mouse 2") + " aim · " + k("R") + " reload · " + k("F") + " lunge · " +
-      k("V") + " quick melee · " + k("E") + " grapple · " + k("Z") + " sniper zoom · " + k("1") + k("2") + k("3") + " weapons · " + k("Tab") + " scores · " + k("H") + " hacks · " + k("Esc") + " menu.</p>" +
+      k("Shift") + " sprint · " + k("=") + " auto-run · " + k("Mouse 1") + " fire · " + k("Mouse 2") + " aim, or lunge with the blade · " + k("R") + " reload · " +
+      k("V") + " quick melee · " + k("E") + " or " + k("4") + " grappling gun · " + k("Z") + " sniper zoom · " + k("1") + k("2") + k("3") + " weapons · " + k("Tab") + " scores · " + k("H") + " hacks · " + k("Esc") + " menu.</p>" +
+      "<p>Sprinting stands you up out of a crouch; aiming or firing ends a sprint.</p>" +
       "<p><b>Bunny hop.</b> Friction only happens on the ground. Press jump the moment you land — not before, not held — and you keep all your speed.</p>" +
       "<p><b>Air strafe.</b> In the air, hold " + k("A") + " or " + k("D") + " (not " + k("W") + ") and turn the mouse the same way, smoothly. " +
       "Each turn adds a little speed. Chain it with hops and you get faster every jump.</p>" +
@@ -40,9 +41,9 @@ const TOPICS = {
       "<p><b>Slide.</b> Crouch while sprinting. Downhill, a slide speeds up; jump out of it to keep the speed. On a ramp, crouching slides you down it from a standstill.</p>" +
       "<p><b>Wall climb.</b> Jump into a wall and keep holding jump and forward. Over the top, you mantle.</p>" +
       "<p><b>Wall jump.</b> Beside a wall in the air, tap jump. You keep your speed along the wall. The red shafts are made for it.</p>" +
-      "<p><b>Lunge.</b> Hold " + k("F") + " on any surface — floor, wall, ceiling — and you stick to it and charge. Let go to launch where you look. " +
+      "<p><b>Lunge.</b> With the blade out (" + k("3") + "), hold " + k("Mouse 2") + " on any surface — floor, wall, ceiling — and you stick to it and charge. Let go to launch where you look. " +
       "Facing straight away from the surface is the strongest launch.</p>" +
-      "<p><b>Grapple.</b> Hold " + k("E") + ": the hook flies where you look and reels you in, and lets go by itself when you arrive. Steer with " + k("W A S D") + " to swing. " +
+      "<p><b>Grapple.</b> It is a gun: " + k("E") + " draws it (and puts it away), then hold " + k("Mouse 1") + ": the hook flies where you look and reels you in, and lets go by itself when you arrive. Steer with " + k("W A S D") + " to swing. " +
       "Hook a player and you are both pulled together — have your blade or shotgun ready. Let go to stop. The rope cannot pass through walls.</p>"
   },
   bots: {
@@ -69,7 +70,7 @@ const TOPICS = {
   lunge: {
     title: "The lunge",
     body:
-      "<p>Both blades lunge. Hold " + k("F") + " (or aim with the blade out): if you are touching anything — the floor, a wall, a ceiling — you stick to it and charge. Release to launch where you look.</p>" +
+      "<p>Both blades lunge. With the blade out, hold " + k("Mouse 2") + " (the Aim button on a phone): if you are touching anything — the floor, a wall, a ceiling — you stick to it and charge. Release to launch where you look.</p>" +
       "<p>The more squarely you face away from the surface, the harder the launch: looking straight up off the floor is full power; looking along it is weak. " +
       "In the air with nothing to push from, a lunge is a short dash.</p>" +
       "<p><b>Katana:</b> charges fast, lunges short, cuts a wide arc. <b>Lancer:</b> charges slowly, lunges far and hard, and only hits what is at its tip.</p>" +
@@ -78,8 +79,13 @@ const TOPICS = {
   touch: {
     title: "Touch controls",
     body:
-      "<p>The stick moves you; push it to the edge to sprint. Drag anywhere that is not a button to look.</p>" +
-      "<p>Fire, Lunge and the Grapple can be dragged while held, so you can aim as you shoot. Aim starts as a toggle; " +
+      "<p>The stick moves you. Push your thumb out past its ring to run; carry on up to the lock above it and let go there, " +
+      "and you keep running with your thumb off the screen. Touch the stick to take over again.</p>" +
+      "<p>With <b>Floating stick</b> on, a touch anywhere low on the left is the stick, centred where your thumb landed. " +
+      "Drag anywhere else that is not a button to look.</p>" +
+      "<p>The grapple is a gun: its button draws it and puts it away, and while it is out Fire shoots the hook. " +
+      "With the blade out, Aim is the lunge: hold to charge, let go to launch. The buttons change their pictures to say so.</p>" +
+      "<p>Fire and Aim can be dragged while held, so you can aim as you shoot. Aim starts as a toggle; " +
       "every button that can hold or toggle has its own choice below.</p>" +
       "<p><b>Move buttons</b> lets you drag every button where your thumbs are, size it and fade it. " +
       "Sideways and upright each keep their own layout. Buttons can never be hidden, and never land on top of one another " +
@@ -103,7 +109,8 @@ const TOPICS = {
       "Tap Aim to stay aimed, or hold it for a quick look down the sights.</p>" +
       "<p><b>Always</b> (sprint only) — you sprint whenever you run forward.</p>" +
       "<p>Keys and touch buttons are set separately, so a phone can toggle what a keyboard holds. " +
-      "A toggled sprint ends when you stop running, and everything is let go when you respawn.</p>"
+      "A toggled sprint ends when you stop running, aim or fire, and everything is let go when you respawn. " +
+      "With the blade out, Aim is the lunge and is always a hold.</p>"
   },
   multiplayer: {
     title: "Multiplayer",

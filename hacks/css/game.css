@@ -277,6 +277,13 @@ body.touchOn #hudTop .pill { font-size: 12px; padding: 4px 10px; }
 .tbtn[data-id="fire"], .tbtn[data-id="fire2"] { background: rgba(255,95,126,0.25); border-color: rgba(255,95,126,0.6); }
 .tbtn.stick { background: rgba(12,18,26,0.3); }
 .tbtn.stick .knob { width: 42%; height: 42%; border-radius: 50%; background: rgba(255,255,255,0.35); border: 1.5px solid rgba(255,255,255,0.5); }
+/* the run lock: shown once the stick is pushed out to run, sitting where letting go turns on auto-run */
+.tbtn.stick .runlock { position: absolute; left: 50%; top: calc(50% - 92.5%); width: 38px; height: 38px; transform: translate(-50%, -50%); border-radius: 50%; display: grid; place-items: center; background: rgba(12,18,26,0.55); border: 1.5px dashed rgba(255,255,255,0.45); opacity: 0; transition: opacity 0.12s; pointer-events: none; }
+.tbtn.stick .runlock .ico { width: 58%; height: 58%; }
+.tbtn.stick.run .runlock { opacity: 1; }
+.tbtn.stick.armed .runlock, .tbtn.stick.autorun .runlock { opacity: 1; background: rgba(57,198,232,0.45); border: 1.5px solid var(--accent); }
+.tbtn.stick.run .knob, .tbtn.stick.autorun .knob { background: rgba(57,198,232,0.55); border-color: var(--accent); }
+.tbtn.stick.autorun .knob { transform: translateY(-55%); }
 body.touchEditing .tbtn { border-style: dashed; }
 body.touchEditing .tbtn.sel { border-color: var(--warn); border-style: solid; box-shadow: 0 0 0 3px rgba(255,210,74,0.3); }
 /* editing, the readouts that cannot move show faintly, so buttons are placed around them (touch.js keeps them clear) */

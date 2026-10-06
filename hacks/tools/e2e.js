@@ -294,16 +294,41 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     await p.evaluate(async () => {
       const { on } = await import("./js/state.js");
       window.__hookEv = []; window.__hookSeen = false;
-      on("move", (a, e) => { if (a === window.HK_DEBUG.S.me && /^hook/.test(e)) window.__hookEv.push(e); });
+      // the match stops the moment the hook bites, so a pull that ends within a frame (a wall a step away) still shows
+      on("move", (a, e) => { if (a === window.HK_DEBUG.S.me && /^hook/.test(e)) { window.__hookEv.push(e); if (e === "hookhit" || e === "hookgrab") window.HK_DEBUG.S.paused = true; } });
       const tick = () => { if (!document.getElementById("hookInd").hidden) window.__hookSeen = true; if (window.__hookEv.length < 50) requestAnimationFrame(tick); };
       tick();
-      window.HK_DEBUG.S.view.pitch = -0.3;
+      window.HK_DEBUG.S.view.pitch = -0.12;   // the floor a dozen metres out: a pull long enough for the HUD to be seen
     });
-    await p.keyboard.down("KeyE");
+    // the grapple is a gun: E draws it, and Fire (held, here as the touch layer holds it) sends the hook
+    await p.keyboard.press("KeyE");
+    check("the grapple key draws the grappling gun", await soft(until(p, () => window.HK_DEBUG.S.me.arms.cur === 3 && /Grappling gun/.test(document.getElementById("gunName").textContent), null, 2000)));
+    await p.evaluate(async () => { const I = await import("./js/input.js"); I.touchState.held.add("fire"); I.touchPress("fire"); });
     await soft(until(p, () => window.__hookEv.some((e) => e !== "hookfire") && window.__hookSeen, null, 3000));
-    await p.keyboard.up("KeyE");
+    await p.evaluate(async () => { window.HK_DEBUG.S.paused = false; const I = await import("./js/input.js"); I.touchState.held.delete("fire"); I.touchRelease("fire"); });
     const hookEv = await p.evaluate(() => window.__hookEv.join(",") + (window.__hookSeen ? " · shown" : ""));
-    check("holding the grapple key fires the hook, it bites, and the HUD shows its pull", /hookfire/.test(hookEv) && /hookhit|hookgrab/.test(hookEv) && /shown/.test(hookEv), hookEv);
+    check("holding Fire with the grapple out fires the hook, it bites, and the HUD shows its pull", /hookfire/.test(hookEv) && /hookhit|hookgrab/.test(hookEv) && /shown/.test(hookEv), hookEv);
+    await p.keyboard.press("KeyE");
+    check("and the key puts it away again", await soft(until(p, () => window.HK_DEBUG.S.me.arms.cur !== 3, null, 2000)));
+    // the lunge is the blade's right click: with the blade out, Aim held charges a lunge
+    await p.keyboard.press("Digit3");
+    await until(p, () => window.HK_DEBUG.S.me.arms.cur === 2 && window.HK_DEBUG.S.me.arms.swapT <= 0, null, 2000);
+    await p.evaluate(async () => { const I = await import("./js/input.js"); I.touchState.held.add("ads"); I.touchPress("ads"); });
+    check("with the blade out, Aim held charges a lunge", await soft(until(p, () => window.HK_DEBUG.S.me.body.lunge === 1, null, 2000)));
+    await p.evaluate(async () => { const I = await import("./js/input.js"); I.touchState.held.delete("ads"); I.touchRelease("ads"); });
+    await p.keyboard.press("Digit1");
+    // asking to run stands you up: crouch held, then W and Shift
+    await p.keyboard.down("KeyC");
+    await until(p, () => window.HK_DEBUG.S.me.body.crouched, null, 2000);
+    await p.keyboard.down("KeyW"); await p.keyboard.down("ShiftLeft");
+    check("sprinting stands you up out of a crouch, even with crouch still held", await soft(until(p, () => !window.HK_DEBUG.S.me.body.crouched && window.HK_DEBUG.S.me.body.sprinting, null, 2000)));
+    await p.keyboard.up("ShiftLeft"); await p.keyboard.up("KeyW"); await p.keyboard.up("KeyC");
+    // auto-run: = sets you running with no key held; W takes it away
+    await p.keyboard.press("Equal");
+    // (the state, not the distance: the last test may have left you facing a wall)
+    check("auto-run runs with nothing held", await soft(until(p, async () => (await import("./js/input.js")).autoRunning() && window.HK_DEBUG.S.me.body.sprinting, null, 3000)));
+    await p.keyboard.press("KeyW");
+    check("and a move key ends it", await p.evaluate(async () => !(await import("./js/input.js")).autoRunning()));
     // aim held, and the zoom pressed once, through the game's own command hook
     await p.evaluate(async () => {
       const { S, game, hackapi } = window.HK_DEBUG; const input = await import("./js/input.js");
@@ -354,7 +379,7 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
       await alignment(q, "this phone");
       const rects = await q.$$eval(".tbtn", (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.id, r.left, r.top, r.right, r.bottom]; }));
       const off = rects.filter((r) => r[1] < 0 || r[2] < 0 || r[3] > vw + 0.5 || r[4] > vh + 0.5);
-      check("all " + rects.length + " buttons are on screen, all the time", rects.length === 16 && off.length === 0, JSON.stringify(off));
+      check("all " + rects.length + " buttons are on screen, all the time", rects.length === 15 && off.length === 0, JSON.stringify(off));
       await q.waitForTimeout(400);
       const y0 = await q.evaluate(() => window.HK_DEBUG.S.me.body.y);
       const jb = await q.$('.tbtn[data-id="jump"]'), jr = await jb.boundingBox();
@@ -375,6 +400,41 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
       const walked = await soft(until(q, (p0) => Math.hypot(window.HK_DEBUG.S.me.body.x - p0[0], window.HK_DEBUG.S.me.body.z - p0[1]) > 1, p0, 6000));
       await q.evaluate(() => dispatchEvent(new PointerEvent("pointerup", { pointerId: 8, pointerType: "touch" })));
       check("pushing the stick moves you", walked);
+      // past the ring is a run; on up to the lock and let go is auto-run; touching the stick ends it
+      const run = await q.evaluate(async () => {
+        const I = await import("./js/input.js");
+        const t = document.querySelector(".tbtn.stick"), r = t.getBoundingClientRect();
+        const x = r.left + r.width / 2, y = r.top + r.height / 2, rad = r.width / 2;
+        t.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 9, clientX: x, clientY: y, pointerType: "touch" }));
+        dispatchEvent(new PointerEvent("pointermove", { pointerId: 9, clientX: x, clientY: y - rad * 0.8, pointerType: "touch" }));
+        const inside = !!I.touchState.autoSprint;
+        dispatchEvent(new PointerEvent("pointermove", { pointerId: 9, clientX: x, clientY: y - rad * 1.3, pointerType: "touch" }));
+        const past = !!I.touchState.autoSprint;
+        dispatchEvent(new PointerEvent("pointermove", { pointerId: 9, clientX: x, clientY: y - rad * 2.1, pointerType: "touch" }));
+        const armed = t.classList.contains("armed");
+        dispatchEvent(new PointerEvent("pointerup", { pointerId: 9, pointerType: "touch" }));
+        const locked = I.autoRunning();
+        t.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 9, clientX: x, clientY: y, pointerType: "touch" }));
+        dispatchEvent(new PointerEvent("pointerup", { pointerId: 9, pointerType: "touch" }));
+        return { inside, past, armed, locked, after: I.autoRunning() };
+      });
+      check("the stick runs past its ring, locks into auto-run above it, and a touch on it takes over again", !run.inside && run.past && run.armed && run.locked && !run.after, JSON.stringify(run));
+      // a thumb that misses the stick, low on the left, is the stick anyway
+      const fl = await q.evaluate(async () => {
+        const I = await import("./js/input.js");
+        const look = document.getElementById("touchLook"), x = innerWidth * 0.3, y = innerHeight * (innerWidth > innerHeight ? 0.55 : 0.68);
+        look.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 10, clientX: x, clientY: y, pointerType: "touch" }));
+        dispatchEvent(new PointerEvent("pointermove", { pointerId: 10, clientX: x, clientY: y - 40, pointerType: "touch" }));
+        const fwd = I.touchState.fwd;
+        dispatchEvent(new PointerEvent("pointerup", { pointerId: 10, pointerType: "touch" }));
+        return fwd;
+      });
+      check("a floating stick: a touch low on the left moves you", fl > 0.3, fl);
+      // the grapple's button draws it, and Fire then shows the hook
+      await q.evaluate(() => { const t = document.querySelector('.tbtn[data-id="hook"]'), r = t.getBoundingClientRect(); t.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 11, clientX: r.left + 5, clientY: r.top + 5, pointerType: "touch" })); dispatchEvent(new PointerEvent("pointerup", { pointerId: 11, pointerType: "touch" })); });
+      check("the grapple button draws the grapple, and Fire becomes its trigger", await soft(until(q, () => window.HK_DEBUG.S.me.arms.cur === 3 && document.querySelector('.tbtn[data-id="fire"]').dataset.icon === "hook", null, 3000)));
+      await q.evaluate(() => { const t = document.querySelector('.tbtn[data-id="hook"]'), r = t.getBoundingClientRect(); t.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 11, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, pointerType: "touch" })); dispatchEvent(new PointerEvent("pointerup", { pointerId: 11, pointerType: "touch" })); });
+      await until(q, () => window.HK_DEBUG.S.me.arms.cur !== 3 && window.HK_DEBUG.S.me.arms.swapT <= 0, null, 3000);
       // Aim starts as a toggle on touch: a tap latches it, lit, and the next tap lets go
       const tapBtn = (id) => q.evaluate((id) => {
         const t = document.querySelector('.tbtn[data-id="' + id + '"]'), r = t.getBoundingClientRect();
@@ -440,7 +500,7 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
       check("it draws a landscape picture, with the sideways layout", pic[0] === 844 && pic[1] === 390 && pic[2] === 150, JSON.stringify(pic));
       await alignment(q, "a phone forced sideways");
       const rects = await q.$$eval(".tbtn", (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.id, r.left, r.top, r.right, r.bottom]; }));
-      check("every button is on the screen", rects.length === 16 && rects.every((r) => r[1] >= -0.5 && r[2] >= -0.5 && r[3] <= 390.5 && r[4] <= 844.5), JSON.stringify(rects.filter((r) => r[3] > 390.5 || r[4] > 844.5)));
+      check("every button is on the screen", rects.length === 15 && rects.every((r) => r[1] >= -0.5 && r[2] >= -0.5 && r[3] <= 390.5 && r[4] <= 844.5), JSON.stringify(rects.filter((r) => r[3] > 390.5 || r[4] > 844.5)));
       await q.waitForTimeout(300);
       const y0 = await q.evaluate(() => window.HK_DEBUG.S.me.body.y);
       await q.evaluate(() => {

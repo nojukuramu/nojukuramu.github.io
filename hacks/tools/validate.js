@@ -364,6 +364,7 @@ const allJs = jsFiles.map(read).join("\n");
     const c = newBody(0, 1.95, 0, 0); c.vy = 5;
     for (let i = 0; i < 20; i++) { pmove(ceil, c, { fwd: 0, side: 0, yaw: 0, pitch: -1.4, buttons: B.LUNGE }, TICK, { melee: m }); c.ev.length = 0; }
     check("a charge against a ceiling sticks you to it", c.lungeStuck && c.lny < -0.9 && c.vy === 0);
+    check("without a blade in hand the lunge does nothing", (() => { const p = settle(); run(p, 30, () => ({ fwd: 1, side: 0, yaw: 0, pitch: 0, buttons: B.LUNGE }), flat, { melee: null }); return p.lunge === 0 && !p.lungeStuck && hspeed(p) > 1; })());
     check("a quick tap is a swing, not a lunge", (() => { const p = settle(); run(p, 3, () => ({ fwd: 0, side: 0, yaw: 0, pitch: 0, buttons: B.LUNGE }), flat, { melee: m }); const e = []; pmove(flat, p, idle(), TICK, { melee: m }); e.push(...p.ev); return e.includes("swing"); })());
   }
 
@@ -472,6 +473,13 @@ const allJs = jsFiles.map(read).join("\n");
     const shot = WP.armsTick(A, { buttons: B.FIRE, slot: 0 }, body, TICK, rng, B).find((e) => e.type === "fire");
     check("the sniper fires a round that flies", shot && shot.proj && shot.proj.speed > 0);
     check("recoil lifts the view", shot && shot.kick.pitch > 0);
+    // slot 4: the grapple. Its trigger is game.js's; here it must neither shoot nor swing
+    WP.armsTick(A, { buttons: 0, slot: 4 }, body, TICK, rng, B);
+    const gEv = [];
+    for (let i = 0; i < 30; i++) gEv.push(...WP.armsTick(A, { buttons: i % 2 ? B.FIRE : 0, slot: 0 }, body, TICK, rng, B));
+    check("the grapple is slot 4, and Fire with it out neither shoots nor swings", A.cur === 3 && WP.grappleOut(A) && !gEv.some((e) => e.type === "fire" || e.type === "swing") && WP.holdOf(A) === "pistol", gEv.map((e) => e.type).join());
+    WP.armsTick(A, { buttons: 0, slot: -1 }, body, TICK, rng, B);
+    check("and the last weapon comes back from it", A.cur === 1, A.cur);
   }
 
   section("Behaviour: bones and hitboxes");
@@ -577,11 +585,17 @@ const allJs = jsFiles.map(read).join("\n");
     if (v.alive) G.removeActor(v);
     bots.forEach((b, i) => { if (b !== w) put(b, 50, -50 + i * 4); });
     put(S.me, 0, 34); put(w, 0, 18, 0); ticks(1);
-    aimAt(chest(w)); cmd.buttons = B.HOOK; moves.length = 0;
+    // the grapple is a gun: with a rifle out its trigger does nothing; drawn, Fire sends the hook
+    const ammo0 = S.me.arms.ammo[0];
+    aimAt(chest(w)); cmd.buttons = B.HOOK; moves.length = 0; ticks(3);
+    check("the grapple does nothing until it is drawn", !moves.includes("hookfire") && S.me.body.hook === 0, moves.join(","));
+    cmd.buttons = 0; cmd.slot = 4; ticks(1); cmd.slot = 0;
+    aimAt(chest(w)); cmd.buttons = B.FIRE;
     const wz = w.body.z, mz = S.me.body.z;
     for (let i = 0; i < 64 * 2 && !moves.includes("hookdone"); i++) ticks(1);
     cmd.buttons = 0; ticks(1);
     check("a hook catches a body, and pulls you both together until it lets go", moves.includes("hookgrab") && moves.includes("hookdone") && w.body.z > wz + 2 && S.me.body.z < mz - 5, moves.join(",") + " · them " + (w.body.z - wz).toFixed(1) + " m, you " + (S.me.body.z - mz).toFixed(1) + " m");
+    check("the grapple is slot 4, and Fire was its trigger, not the rifle's", S.me.arms.cur === 3 && S.me.arms.ammo[0] === ammo0, S.me.arms.ammo[0] + " of " + ammo0);
     // 4. a blade at speed
     cmd.slot = 3; ticks(1); cmd.slot = 0; ticks(30); hits.length = 0;
     put(S.me, 0, 34); put(w, 0, 32.6, Math.PI); w.hp = 100; ticks(1);

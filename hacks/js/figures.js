@@ -121,7 +121,8 @@ function localBone(a, i, out) {
 const GRIP_WRIST = new THREE.Vector3(0, -0.04, 0.075), SUPPORT_WRIST = new THREE.Vector3(-0.03, -0.055, 0.045);
 function holdFor(f, a) {
   const A = a.arms, g = gunOf(A);
-  const key = g ? g.id : A.melee;
+  // the grapple has no model of its own: an empty hand, held out like a pistol (holdOf)
+  const key = g ? g.id : A.cur === 3 ? "grapple" : A.melee;
   const H = f.held;
   if (H.key !== key) {
     if (H.obj) H.obj.removeFromParent();
@@ -241,8 +242,9 @@ function poseMannequin(f, a) {
   }
   const rh = bone(bn, BI.r_hand, P[0]);
   const g = gunOf(a.arms);
-  const long = g ? (g.hold === "pistol" ? 0.22 : g.id === "talon" ? 0.95 : g.id === "mauler" ? 0.7 : 0.6) : a.arms.melee === "lancer" ? 1.7 : 0.95;
-  const thick = g ? (g.hold === "pistol" ? 0.05 : 0.07) : 0.025;
+  const grapple = a.arms.cur === 3;
+  const long = g ? (g.hold === "pistol" ? 0.22 : g.id === "talon" ? 0.95 : g.id === "mauler" ? 0.7 : 0.6) : grapple ? 0.26 : a.arms.melee === "lancer" ? 1.7 : 0.95;
+  const thick = g ? (g.hold === "pistol" ? 0.05 : 0.07) : grapple ? 0.06 : 0.025;
   vA.copy(rh).addScaledVector(look, long * 0.4);
   const side = P[1].crossVectors(look, UP).normalize();
   oriented(f.gun, vA, look, side.lengthSq() > 0 ? P[2].crossVectors(side, look) : UP, thick, long, thick * 1.6);

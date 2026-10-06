@@ -12,7 +12,7 @@
 
 import { S, on } from "./state.js";
 import { save } from "./save.js";
-import { GUNS, MELEE, gunOf, spreadOf, zoomOf, boltOf, speedBonus } from "./weapons.js";
+import { GUNS, MELEE, GRAPPLE, gunOf, spreadOf, zoomOf, boltOf, speedBonus, heldName } from "./weapons.js";
 import { LUNGE, HOOK, PM, lungeFactor, lookDir } from "./movement.js";
 import { MODES, TEAMS } from "./modes.js";
 import { icon } from "./icons.js";
@@ -78,11 +78,11 @@ export function update(dt) {
     set("ammoN", A.reloadT > 0 ? "···" : String(A.ammo[A.cur]));
     set("ammoMag", "/ " + g.mag);
     set("gunName", g.name);
-  } else { set("ammoN", ""); set("ammoMag", ""); set("gunName", MELEE[A.melee].name); }
+  } else { set("ammoN", ""); set("ammoMag", ""); set("gunName", heldName(A)); }
   const slotsKey = A.slots.join() + A.melee + A.cur;
   if (lastHud.slots !== slotsKey) {
     lastHud.slots = slotsKey;
-    $("slots").innerHTML = [GUNS[A.slots[0]].name, GUNS[A.slots[1]].name, MELEE[A.melee].name].map((n, i) => '<span class="' + (i === A.cur ? "on" : "") + '"><b>' + (i + 1) + "</b>" + escHtml(n) + "</span>").join("");
+    $("slots").innerHTML = [GUNS[A.slots[0]].name, GUNS[A.slots[1]].name, MELEE[A.melee].name, GRAPPLE.name].map((n, i) => '<span class="' + (i === A.cur ? "on" : "") + '"><b>' + (i + 1) + "</b>" + escHtml(n) + "</span>").join("");
   }
   // crosshair: gap from spread
   const spread = g ? spreadOf(A, a.body) : 0.8;
@@ -132,9 +132,10 @@ export function update(dt) {
   // a blade: how much harder it hits at this speed, and lines streaming past when you are flying with it
   const v3 = Math.hypot(hb.vx, hb.vy, hb.vz), bonus = speedBonus(v3);
   const mm = $("meleeMul");
-  mm.hidden = !a.alive || !!g || bonus < 1.05;
+  const blade = a.arms.cur === 2;
+  mm.hidden = !a.alive || !blade || bonus < 1.05;
   if (!mm.hidden) { set("meleeMul", "×" + bonus.toFixed(1)); mm.classList.toggle("hot", bonus >= 2); }
-  const rush = a.alive && !g ? Math.max(hb.lunge === LUNGE.DASH ? 0.75 : 0, Math.min(1, (v3 - 8) / 10)) : 0;
+  const rush = a.alive && blade ? Math.max(hb.lunge === LUNGE.DASH ? 0.75 : 0, Math.min(1, (v3 - 8) / 10)) : 0;
   const sl = $("speedLines"), op = rush > 0.02 ? rush.toFixed(2) : "0";
   if (sl.style.opacity !== op) sl.style.opacity = op;
   // lunge

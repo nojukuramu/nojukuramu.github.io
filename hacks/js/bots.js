@@ -30,7 +30,7 @@ const TR = newTrace();
 export function newBrain(a) {
   return { t: 0, target: null, visible: false, lastSeen: null, lastSeenT: -99, reactT: 0, senseT: 0, err: { y: 0, p: 0 },
     path: null, pi: 0, goal: null, goalT: 0, repathT: 0, stuckT: 0, lastPos: null, strafe: 1, strafeT: 0,
-    jumpLast: false, fireLast: false, meleeLast: false, crouchT: 0, head: 0.3, hookT: -1 };
+    jumpLast: false, fireLast: false, meleeLast: false, crouchT: 0, head: 0.3, hookT: -1, hookFired: false };
 }
 export function reset(a) { Object.assign(a.brain, newBrain(a)); a.brain.head = { easy: 0.1, normal: 0.25, hard: 0.45, insane: 0.7 }[a.diff] || 0.25; }
 
@@ -140,18 +140,22 @@ export function think(a, dt) {
 }
 
 /* Now and then, at a middling range and already on target, a bot hooks you and holds on until it
-   arrives — then the blade or the shotgun does the rest. */
+   arrives — then the blade or the shotgun does the rest. The grapple is a gun like anyone's: the
+   bot draws it, fires once it is up, and weapons() puts it away again when the pull is over. */
 function grapple(a, br, D, cmd, t, dist, dt) {
-  const b = a.body;
+  const b = a.body, A = a.arms;
   if (br.hookT >= 0) {
     br.hookT += dt;
-    if (b.hook === HOOK.IDLE && br.hookT > 0.1 || br.hookT > 2.5 || !t) { br.hookT = -1; return; }
-    cmd.buttons |= B.HOOK;
+    if (A.cur !== 3) { if (br.hookT > 0.5 || !t) br.hookT = -1; else cmd.slot = 4; return; }
+    if (A.swapT > 0) return;
+    if (b.hook === HOOK.IDLE && br.hookFired || br.hookT > 3 || !t) { br.hookT = -1; return; }
+    cmd.buttons |= B.FIRE;
+    if (b.hook !== HOOK.IDLE) br.hookFired = true;
     return;
   }
   if (!t || !D.hook || b.hook !== HOOK.IDLE || b.hookCd > 0 || br.reactT > 0) return;
   if (dist < 9 || dist > 38 || br.aimErr > 0.05) return;
-  if (a.rng() < D.hook * dt) { br.hookT = 0; cmd.buttons |= B.HOOK; }
+  if (a.rng() < D.hook * dt) { br.hookT = 0; br.hookFired = false; cmd.slot = 4; }
 }
 
 function roam(a, br, radius) {
@@ -235,6 +239,8 @@ function aimAt(a, br, D, t, dt, dist) {
 
 function weapons(a, br, D, cmd, t, dist) {
   const A = a.arms;
+  // the grapple is out and not in use (grapple() runs after this, and keeps it out while it is)
+  if (A.cur === 3) { if (br.hookT < 0) cmd.slot = A.last + 1; return; }
   if (t) {
     const guns = A.slots.map((id) => GUNS[id]);
     let pick = 0;

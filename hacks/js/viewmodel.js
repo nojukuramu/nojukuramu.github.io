@@ -91,6 +91,14 @@ function boxItem(id) {
     if (id === "kestrel") part(inner, dark, 0.03, 0.12, 0.05, 0, -0.09, -0.1, 0.25);
     if (id === "condor") { part(inner, dark, 0.05, 0.05, 0.1, 0, 0.008, -L * 0.98); part(inner, dark, 0.012, 0.11, 0.012, 0.03, -0.06, -L * 0.7, 0.4); part(inner, dark, 0.012, 0.11, 0.012, -0.03, -0.06, -L * 0.7, 0.4); }
     muzzle = [0, 0.008, -L * 0.95];
+  } else if (id === "grapple") {
+    // the grappling gun: a stubby launcher with the hook sitting in its mouth
+    part(inner, dark, 0.05, 0.06, 0.2, 0, 0, -0.07);
+    part(inner, accentVm, 0.052, 0.012, 0.14, 0, 0.032, -0.07);
+    part(inner, metal, 0.034, 0.034, 0.08, 0, 0, -0.2);
+    part(inner, metal, 0.07, 0.012, 0.012, 0, 0, -0.245);
+    part(inner, dark, 0.032, 0.095, 0.045, 0, -0.07, 0.01, 0.25);
+    muzzle = [0, 0, -0.25]; sight = [0, 0.04, 0.02];
   } else if (id === "katana") {
     part(inner, dark, 0.03, 0.03, 0.2, 0, -0.03, 0.02);
     part(inner, accentVm, 0.08, 0.012, 0.03, 0, -0.03, -0.09);
@@ -203,8 +211,8 @@ export function updateViewmodel(dt, aspect, zoom) {
   const a = S.me;
   const third = S.hackView && S.hackView.thirdPerson;
   if (!a || !a.alive || third) { holder.visible = false; launcher.visible = false; if (arms) arms.root.visible = false; flash.material.opacity = 0; fireLight.intensity = 0; vmVisible = false; vmScoped = false; return; }
-  const A = a.arms, g = gunOf(A);
-  const key = g ? g.id : A.melee;
+  const A = a.arms, g = gunOf(A), grapple = A.cur === 3, blade = !g && !grapple;
+  const key = g ? g.id : grapple ? "grapple" : A.melee;
   const it = itemFor(key);
   if (key !== V.key) { for (const k in items) items[k].obj.visible = false; V.key = key; V.swapT = 1; }
   it.obj.visible = true;
@@ -225,16 +233,17 @@ export function updateViewmodel(dt, aspect, zoom) {
   V.sprint = damp(V.sprint, body.sprinting && !A.ads ? 1 : 0, 10, dt);
   V.air = damp(V.air, body.onGround ? 0 : clamp(-body.vy * 0.04, -0.6, 0.6), 8, dt);
   const ads = A.ads, hip = 1 - ads;
-  const pistol = g && g.hold === "pistol";
+  const pistol = (g && g.hold === "pistol") || grapple;
   // a blade carried at speed: low, back and pointed ahead, the faster the more (and it is a lunge too)
   const speed3 = Math.hypot(body.vx, body.vy, body.vz);
-  V.rush = damp(V.rush, !g && (speed3 > 8 || body.lunge === LUNGE.DASH) ? clamp((speed3 - 8) / 8, body.lunge === LUNGE.DASH ? 0.7 : 0, 1) : 0, 8, dt);
+  V.rush = damp(V.rush, blade && (speed3 > 8 || body.lunge === LUNGE.DASH) ? clamp((speed3 - 8) / 8, body.lunge === LUNGE.DASH ? 0.7 : 0, 1) : 0, 8, dt);
   V.rushT += dt * (8 + speed3);
-  V.hook = damp(V.hook, body.hook !== HOOK.IDLE ? 1 : 0, 14, dt);
+  // the off-hand launcher: the grapple in your hands draws its own rope, so this is only for a rope that outlives the swap by a tick
+  V.hook = damp(V.hook, body.hook !== HOOK.IDLE && !grapple ? 1 : 0, 14, dt);
 
   // where the grip is, hip and aimed; aimed puts the sight on the axis at a little distance from the eye
   let hx, hy, hz;
-  if (!g) { hx = A.melee === "lancer" ? 0.2 : 0.24; hy = A.melee === "lancer" ? -0.24 : -0.3; hz = A.melee === "lancer" ? -0.2 : -0.42; }
+  if (blade) { hx = A.melee === "lancer" ? 0.2 : 0.24; hy = A.melee === "lancer" ? -0.24 : -0.3; hz = A.melee === "lancer" ? -0.2 : -0.42; }
   else if (pistol) { hx = 0.16; hy = -0.17; hz = -0.42; }
   else { hx = 0.15; hy = -0.17; hz = -0.33; }
   let x = hx, y = hy, z = hz;
@@ -263,7 +272,7 @@ export function updateViewmodel(dt, aspect, zoom) {
   V.slide = damp(V.slide, body.sliding ? 1 : 0, 10, dt);
   if (V.slide > 0.001) { x -= 0.025 * V.slide * hip; y -= 0.04 * V.slide * hip; rz += 0.32 * V.slide * hip; }
   if (V.sprint > 0) { x += 0.03 * V.sprint; y -= 0.05 * V.sprint; rz += 0.45 * V.sprint; rx -= 0.15 * V.sprint; ry += 0.35 * V.sprint; }
-  if (!g) {
+  if (blade) {
     // blades: held up; a swing sweeps across; a charge draws back; a lunge thrusts
     const s = V.swing > 0 ? Math.sin((1 - V.swing) * Math.PI) : 0;
     if (A.melee === "lancer") { rx += -0.08; ry += -0.06 + s * 0.5; z -= s * 0.25; }
@@ -306,7 +315,7 @@ export function updateViewmodel(dt, aspect, zoom) {
       tmp.copy(it.support);
       if (A.reloadT > 0 && g) { const k = Math.sin(Math.min(1, 1 - A.reloadT / g.reload) * Math.PI); tmp.lerp(new THREE.Vector3(0, -0.12, it.support.z * 0.4), k); }
       T.lHand.copy(tmp).add(pistol ? SUPPORT_WRIST_P : SUPPORT_WRIST).applyQuaternion(q).add(holder.position).add(EYE);
-    } else if (!g && A.melee === "lancer") T.lHand.set(0, 0, -0.38).applyQuaternion(q).add(holder.position).add(EYE);
+    } else if (blade && A.melee === "lancer") T.lHand.set(0, 0, -0.38).applyQuaternion(q).add(holder.position).add(EYE);
     else T.lHand.copy(LEFT_DOWN).add(EYE);
     // the left hand leaves whatever it held for the grapple
     if (V.hook > 0.05) T.lHand.lerp(tmp.copy(launcher.position).add(SUPPORT_WRIST).add(EYE), V.hook);
@@ -333,6 +342,8 @@ export function updateViewmodel(dt, aspect, zoom) {
 /** Where the grapple's rope leaves your hand, as a point in the world, for drawing the rope from it. */
 const hk = new THREE.Vector3();
 export function hookHandWorld(camera, out) {
+  // the grappling gun in your hands: the rope leaves its muzzle
+  if (S.me && S.me.arms.cur === 3) return muzzleWorld(camera, out);
   if (!vmVisible || !launcher.visible) return null;
   hk.set(HOOK_HAND.x, HOOK_HAND.y, HOOK_HAND.z - 0.12).project(vCam);
   hk.z = tmp.set(0, 0, -0.6).applyMatrix4(camera.projectionMatrix).z;
