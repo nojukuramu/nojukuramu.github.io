@@ -101,6 +101,7 @@ export function unitSprite(u, frame) {
   if (u.hero) return cached(key, 48, 52, 24, 34, (c) => person(c, { era: tier, team: u.team, line: "hero", hero: u.hero, frame }));
   if (u.turret) return cached(key, 40, 40, 20, 24, (c) => turret(c, tier, u.team, frame));
   switch (u.line) {
+    case "beast": return cached(key, 60, 50, 30, 34, (c) => beast(c, tier, frame));
     case "mounted": return tier >= 5 ? cached(key, 64, 52, 32, 26, (c) => vehicle(c, tier, u.team, frame)) : cached(key, 56, 52, 28, 36, (c) => rider(c, tier, u.team, frame));
     case "siege": return tier >= 6 ? cached(key, 64, 56, 32, 28, (c) => siegeTop(c, tier, u.team, frame)) : cached(key, 64, 56, 32, 36, (c) => siegeSide(c, tier, u.team, frame));
     case "naval": return cached(key, 84, 52, 42, 26, (c) => ship(c, tier, u.team, frame));
@@ -293,6 +294,50 @@ function rider(c, e, team, frame) {
   else if (e === 3) { line(c, -4, 2, 22, -2, "#d8d0c0", 1.8); c.fillStyle = T.main; c.beginPath(); c.moveTo(14, -1.5); c.lineTo(19, -1.8); c.lineTo(15, -4.5); c.fill(); }
   else { line(c, -2, 1, 12, -3, "#4a321c", 1.6); line(c, 2, -0.5, 12, -3.4, "#333", 1); }
   c.restore(); c.restore();
+}
+
+/* =========================================================================
+   The wild: one four-legged body, dressed differently in every era
+   ========================================================================= */
+const BEASTS = [
+  { body: "#7d7a76", belly: "#b8b2a8", s: 0.9, ears: 1 },                         // wolf
+  { body: "#5e4030", belly: "#8a6248", s: 1.0, tusk: 1, bristle: 1 },             // boar
+  { body: "#4a3426", belly: "#6e5038", s: 1.25 },                                 // cave bear
+  { body: "#3a2c24", belly: "#5e4a3a", s: 1.35, plates: "#8a8a8a" },              // dire bear
+  { body: "#3f6a3a", belly: "#a8c070", s: 1.2, tail: 1, spikes: "#d8c060" },      // wyrm
+  { body: "#7a4a30", belly: "#a07050", s: 1.25, plates: "#a85a30", rivets: 1 },   // ironback
+  { body: "#1e1e24", belly: "#3a3a44", s: 1.05, ears: 1, eye: "#ffcf6b" },        // stalker
+  { body: "#dfe4ea", belly: "#9aa6b4", s: 1.1, ears: 1, eye: "#ff4a4a", mech: 1 },// hunter-machine
+  { body: "#2a1f45", belly: "#4a3a7a", s: 1.15, ears: 1, eye: "#d38bff", aura: "#8da7ff" }, // void hound
+  { body: "#f2ecff", belly: "#c8b8ff", s: 1.25, eye: "#ffffff", aura: "#d38bff", ghost: 1 } // echo beast
+];
+function beast(c, e, frame) {
+  const B = BEASTS[Math.max(0, Math.min(9, e))], s = B.s;
+  const walk = frame < 4 ? frame : 0, strike = frame === 4;
+  c.save(); c.scale(s, s);
+  if (B.aura) glow(c, 0, -6, 18, B.aura, 0.35);
+  if (B.ghost) c.globalAlpha = 0.8;
+  c.fillStyle = "rgba(0,0,0,0.25)"; c.beginPath(); c.ellipse(0, 7, 13, 3.5, 0, 0, 6.3); c.fill();
+  c.strokeStyle = shade(B.body, -0.3); c.lineWidth = 2.6;
+  const lg = (x, ph) => { const a = Math.sin((walk + ph) * 1.57) * 2.6; c.beginPath(); c.moveTo(x, -3); c.lineTo(x + a, 7); c.stroke(); };
+  lg(-7, 0); lg(-4, 2); lg(5, 1); lg(8, 3);
+  if (B.tail) { c.strokeStyle = B.body; c.lineWidth = 3; c.beginPath(); c.moveTo(-9, -5); c.quadraticCurveTo(-18, -4, -21, 2); c.stroke(); }
+  else { c.strokeStyle = B.body; c.lineWidth = 2; c.beginPath(); c.moveTo(-9, -6); c.quadraticCurveTo(-14, -9, -15, -4); c.stroke(); }
+  c.fillStyle = B.body; c.beginPath(); c.ellipse(0, -5, 10.5, 5.2, 0, 0, 6.3); c.fill();
+  c.fillStyle = B.belly; c.beginPath(); c.ellipse(1, -2.6, 7.5, 2.4, 0, 0, 3.14); c.fill();
+  // head, lunging forward on a bite
+  const hx = strike ? 13 : 11, hy = strike ? -6 : -8;
+  c.fillStyle = B.body; c.beginPath(); c.ellipse(hx, hy, 5, 4, 0.2, 0, 6.3); c.fill();
+  c.beginPath(); c.moveTo(hx + 2, hy - 1); c.lineTo(hx + 8, hy + 1); c.lineTo(hx + 2, hy + 3); c.fill();
+  if (B.ears) { c.beginPath(); c.moveTo(hx - 2, hy - 3); c.lineTo(hx - 1, hy - 8); c.lineTo(hx + 1.5, hy - 3.5); c.fill(); }
+  if (B.tusk) { c.strokeStyle = "#efe6d0"; c.lineWidth = 1.2; c.beginPath(); c.moveTo(hx + 6, hy + 2); c.lineTo(hx + 7, hy - 1.5); c.stroke(); }
+  if (B.bristle || B.spikes) { c.fillStyle = B.spikes || shade(B.body, -0.35); for (let k = -6; k <= 4; k += 3) { c.beginPath(); c.moveTo(k - 1.5, -9.6); c.lineTo(k, -13.5); c.lineTo(k + 1.5, -9.6); c.fill(); } }
+  if (B.plates) { c.fillStyle = B.plates; for (let k = -6; k <= 4; k += 5) fillRR(c, k - 2, -10.5, 4.5, 4, 1, B.plates); if (B.rivets) for (let k = -5; k <= 5; k += 5) circle(c, k, -8.5, 0.6, "#3a2a20"); }
+  if (B.mech) { c.strokeStyle = "#9aa6b4"; c.lineWidth = 0.8; c.beginPath(); c.moveTo(-8, -5); c.lineTo(8, -5); c.stroke(); }
+  const eye = B.eye || "#1a1410";
+  circle(c, hx + 2, hy - 1, 0.9, eye);
+  if (B.eye) glow(c, hx + 2, hy - 1, 3, B.eye, 0.7);
+  c.restore();
 }
 
 /* =========================================================================
@@ -518,7 +563,7 @@ function building(c, type, e, team, W, H) {
   c.fillStyle = gg; c.beginPath(); c.ellipse(W / 2, H * 0.55, W * 0.62, H * 0.6, 0, 0, 6.3); c.fill();
   if (e >= 2) { c.fillStyle = "rgba(" + gc[0] + "," + gc[1] + "," + gc[2] + "," + Math.min(0.9, gc[3] + 0.25) + ")"; rr(c, 3, 4, W - 6, H - 6, e >= 5 ? 3 : 8); c.fill(); }
   // the shadow the sun throws to the bottom right
-  if (e > 0 && type !== "airfield" && type !== "derrick" && type !== "siphon") { c.fillStyle = "rgba(0,0,0,0.22)"; c.beginPath(); c.moveTo(W * 0.3, H - 3); c.lineTo(W - 4, H - 3); c.lineTo(W + 6, H - 8); c.lineTo(W + 6, H * 0.35); c.lineTo(W - 6, H * 0.3); c.closePath(); c.fill(); }
+  // no shadow baked in: render.js casts one from wherever the sun is
   const B = (x, y, w, d, hh, opt) => block(c, x, y, w, d, hh, S, T, e, opt || {});
   switch (type) {
     case "hall":

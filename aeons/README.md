@@ -72,6 +72,40 @@ unit can be taken in hand the same way.
 - **Outposts** claim new ground anywhere you have explored: a border, a drop-off for everything,
   workers, eyes.
 
+## Second pass: running a large realm
+
+- **The Ledger** (the list button at the top): every structure by kind with its levels and health —
+  select them all, raise every one that can be raised, send workers to repair the damaged — every
+  unit line with its ranks and its idle, the squads, and the economy: what each worker is doing,
+  income a minute for the last hour per resource (one small chart each, last value labelled, a
+  figure under the pointer for every minute), and what the realm is waiting to afford. It and
+  Intel and Automation leave the game running; only the menu pauses it.
+- **Details** (the (i) on the selection panel): a building's numbers now and at its next level,
+  everything it trains and researches, and the strip of what it looks like in each era; a unit's
+  numbers and its next version's, rank and kills; a champion's four skills.
+- **Squads** (Make a squad on the command card): a standing job for a group — defend a place,
+  patrol the round of halls, outposts and towers, strike the nearest known base when at strength
+  (and fall back to regroup when hurt), hunt contacts that come near, or escort the far drop-off
+  where most workers are. `js/squads.js`.
+- **More doctrines**: Captains (new soldiers fill squads), Masons (rebuild what was destroyed where
+  it stood), Sentinels (a tower where the alarms keep ringing), Colonists (outposts beside far
+  veins), Standing Army (keep the army at a size and mix), Rebirth (fallen champions called back),
+  Stewards that follow demand, and Wake me (pause when a big contact nears home).
+- **The wild**: far ruins are guarded by beasts that change with the ages, and a ruin gives nothing
+  while they live. **Veterans**: kills earn ranks (Blooded, Veteran, Elite, Legend), each a tenth
+  stronger, shown as chevrons.
+- **Groups march together** at the pace of their slowest; a base made only of siege dens no
+  longer fields nothing but catapults, and siege is softer against soldiers than against walls.
+- **Light**: shadows are cast every frame from where the sun is — long and leaning west in the
+  morning, short at noon, east in the evening, faint at night — as one path filled once, so
+  overlapping shadows do not stack darker. Dawn and dusk wash the frame gold; windows light at
+  night, firelight flickering until the lamps come. The ground has a gentle relief.
+- **Motion**: bodies fall the way they faced and fade, blows lean into the target, soldiers at rest
+  breathe, mounts and engines kick up dust, arrows and stones fly in an arc with a short trail,
+  every shot is drawn between ticks instead of jumping, selection rings turn, and a thread runs
+  from each selected unit to what it is fighting. With a mouse, whatever is under the pointer
+  says what it is.
+
 ## The lore
 
 Nothing is told outright. Ruins scattered across the map give up a fragment when a unit walks in,
@@ -112,6 +146,9 @@ turned a quarter turn and every touch goes through `toApp()`.
 | [`js/heroes.js`](js/heroes.js) | Champions: skills, their judgement, and manual control |
 | [`js/enemy.js`](js/enemy.js) | Phases and bases |
 | [`js/auto.js`](js/auto.js) | Contacts, alarms and the doctrines |
+| [`js/squads.js`](js/squads.js) | Squads: groups with a standing job |
+| [`js/ledger.js`](js/ledger.js) | The Ledger: structures, forces, squads, economy |
+| [`js/details.js`](js/details.js) | The details sheet for whatever is selected |
 | [`js/sim.js`](js/sim.js) | One tick, and a new game |
 | [`js/save.js`](js/save.js) | Settings in localStorage, games in IndexedDB; only what changed is saved |
 | [`js/terrain.js`](js/terrain.js) | The ground, painted per pixel from blended material fields |

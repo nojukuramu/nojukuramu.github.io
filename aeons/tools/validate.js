@@ -321,7 +321,7 @@ const jsFiles = fs.readdirSync(path.join(ROOT, "js")).filter((f) => f.endsWith("
   section("Automation");
   {
     G.doctrines.foreman = true; G.doctrines.quarter = true;
-    const w = G.units.find((u) => u.team === 0 && u.line === "worker");
+    const w = G.units.find((u) => u.team === 0 && u.line === "worker" && !u.dead) || E.spawnUnit("worker", G.era, 0, hallOf().x, hallOf().y + 100);
     U.stop(w); w.carry = null;
     run(60);
     check("Foremen send an idle worker to work", w.order.t !== "idle", JSON.stringify([w.order, w.idleT, w.manual, w.dead, w.hidden, G.auto.foreman]));
@@ -337,14 +337,88 @@ const jsFiles = fs.readdirSync(path.join(ROOT, "js")).filter((f) => f.endsWith("
     check("Quartermasters raise a house before supply runs out", raised || houses < 0);
   }
 
+  section("Veterans, the wild, and marching together");
+  {
+    const home = hallOf();
+    const vet = E.spawnUnit("melee", 3, 0, home.x + 200, home.y + 200);
+    const atk0 = vet.st.atk;
+    for (let i = 0; i < 3; i++) { const f = E.spawnUnit("melee", 0, 1, vet.x + 20, vet.y); E.kill(f, vet); }
+    check("three kills make a Blooded soldier, who hits harder", vet.rank === 1 && vet.st.atk > atk0 * 1.05);
+    // a ruin out in the wild, seen for the first time
+    const W0 = G.world;
+    let spot = null;
+    for (let r = 30; r < 60 && !spot; r += 2) for (let a = 0; a < 6.28 && !spot; a += 0.4) { const tx = Math.round(Math.cos(a) * r), ty = Math.round(Math.sin(a) * r); if (W0.inBounds(tx, ty) && W0.canPlaceNode(tx, ty, 2, 2)) spot = { tx, ty }; }
+    const ruin = W0.addNode("relic", spot.tx, spot.ty, 40);
+    G.temp.push({ x: ruin.x, y: ruin.y, r: 6, until: G.time + 1 });
+    run(12);
+    const guards = (ruin.guards || []).map((id) => G.ents.get(id)).filter(Boolean);
+    check("a far ruin, once seen, has beasts round it (" + guards.length + ")", guards.length >= 2 && guards.every((g) => g.team === 2 && g.line === "beast"));
+    const finder = E.spawnUnit("melee", 9, 0, ruin.x + 40, ruin.y);
+    finder.st.dmgTaken = 0;
+    run(12);
+    check("its ruin cannot be taken while they live", W0.nodes.has(ruin.id));
+    for (const g of guards) E.kill(g, finder);
+    run(30);
+    check("and gives itself up once they are gone", !W0.nodes.has(ruin.id));
+    E.kill(finder, null);
+    const fast = E.spawnUnit("mounted", 1, 0, home.x + 150, home.y + 150), slow = E.spawnUnit("siege", 1, 0, home.x + 170, home.y + 150);
+    U.moveGroup([fast, slow], home.x + 600, home.y + 150, "move");
+    check("a group marches at the pace of its slowest", fast.order.gs && Math.abs(U.speedOf(fast) - U.speedOf(slow)) < U.speedOf(slow) * 0.06);
+    U.stop(fast); U.stop(slow);
+  }
+
+  section("Squads and the new doctrines");
+  {
+    const SQ = await imp("js/squads.js"), AU = await imp("js/auto.js");
+    const home = hallOf();
+    const sol = [];
+    for (let i = 0; i < 4; i++) sol.push(E.spawnUnit("melee", 1, 0, home.x + 300 + i * 20, home.y + 260));
+    const sq = SQ.create(sol, "defend");
+    sq.anchor = { x: home.x - 200, y: home.y + 200 }; sq.size = 6;
+    run(80);
+    check("a defending squad goes to its place", sol.every((u) => Math.hypot(u.x - sq.anchor.x, u.y - sq.anchor.y) < 7 * D.TILE));
+    G.doctrines.captains = true;
+    const bar = G.blds.find((b) => b.type === "barracks" && b.team === 0 && !b.dead) || E.placeBuilding("barracks", home.tx + 8, home.ty - 12, 0, { built: 1 });
+    G.res.gold += 5000; G.res.wood += 5000;
+    E.recountSupply(); G.supply.cap = Math.max(G.supply.cap, G.supply.used + 20);
+    B.act(bar, "train:melee");
+    run(250);
+    check("with Captains, a new soldier joins the squad short of its number", sq.ids.length === 5);
+    G.doctrines.masons = true;
+    const spot = AU.findSpot("house", home);
+    const hut = E.placeBuilding("house", spot.tx, spot.ty, 0, { built: 1 });
+    E.kill(hut, null);
+    run(300);
+    check("Masons raise a destroyed house again where it stood", G.blds.some((b) => !b.dead && b.type === "house" && b.tx === spot.tx && b.ty === spot.ty));
+    // room to train: supply is recounted from houses every second, so the test builds them
+    for (let i = 0; i < 8; i++) { const sp = AU.findSpot("house", home); if (sp) E.placeBuilding("house", sp.tx, sp.ty, 0, { built: 1, level: 2 }); }
+    // the earlier sections' armies stop counting against supply, so there is room to train
+    for (const u of G.units) if (u.team === 0 && u.line !== "worker" && !u.hero && !sq.ids.includes(u.id)) u.free = true;
+    E.recountSupply();
+    G.doctrines.standing = true; G.auto.standing = true; G.auto.army.target = AU.armySupply() + 6;
+    for (const b of G.blds) if (b.team === 0) b.q.length = 0;
+    E.recountSupply(); G.supply.cap = Math.max(G.supply.cap, G.supply.used + 20);
+    run(25);
+    check("Standing Army keeps the barracks training", G.blds.some((b) => b.team === 0 && !b.dead && b.q.some((it) => it.k === "unit" && it.line !== "worker")));
+    G.auto.standing = false;
+    G.doctrines.rebirth = true;
+    const altar = E.placeBuilding("altar", home.tx - 14, home.ty + 8, 0, { built: 1 });
+    const w = G.units.find((u) => u.hero && !u.dead) || E.spawnHero("warden", home.x, home.y + 120);
+    E.kill(w, null);
+    run(25);
+    check("Rebirth calls a fallen champion back", altar.q.some((it) => it.k === "hero"));
+    const need = AU.demand();
+    check("the realm can say what it is waiting for", typeof need.gold === "number" && need.gold >= 0);
+  }
+
   section("Fog");
   {
     check("ground near home has been seen", F.explored(0, 0));
     const b = G.world.bounds;
     check("the far corner of the map has not", !F.explored(b.x1 - 2, b.y1 - 2) || !F.explored(b.x0 + 1, b.y1 - 2));
-    const live = [...G.bases.values()].find((x) => x.alive);
+    const live = [...G.bases.values()].find((x) => x.alive && x.blds.some((id) => G.ents.get(id) && !G.ents.get(id).dead));
     if (live) {
-      const core = G.ents.get(live.core);
+      const core = live.blds.map((id) => G.ents.get(id)).find((b) => b && !b.dead);
       G.temp.push({ x: core.x, y: core.y, r: 6, until: G.time + 0.5 });
       run(4);
       check("an enemy hall in sight is remembered", G.ghosts.has(core.id));
@@ -363,6 +437,8 @@ const jsFiles = fs.readdirSync(path.join(ROOT, "js")).filter((f) => f.endsWith("
     check("units come back", a.units.length === b.units.length);
     check("buildings come back", a.blds.length === b.blds.length);
     check("resources, era, research and phase come back", JSON.stringify([a.res, a.era, a.tech, a.tiers, a.phase.n]) === JSON.stringify([b.res, b.era, b.tech, b.tiers, b.phase.n]));
+    check("squads come back", JSON.stringify((a.squads || []).map((q) => [q.name, q.role, q.ids.length])) === JSON.stringify((b.squads || []).map((q) => [q.name, q.role, q.ids.length])) && (a.squads || []).length > 0);
+    check("ranks come back", a.units.filter((u) => u.rank).length === b.units.filter((u) => u.rank).length && a.units.some((u) => u.rank));
     check("what was explored comes back", JSON.stringify(a.world.explored) === JSON.stringify(b.world.explored));
     check("felled trees stay felled", JSON.stringify(a.world.chunks) === JSON.stringify(b.world.chunks));
     let threw = null; try { run(300); } catch (e) { threw = e; }
@@ -377,7 +453,7 @@ const jsFiles = fs.readdirSync(path.join(ROOT, "js")).filter((f) => f.endsWith("
     const add = (c) => { for (const r in c) total += c[r] || 0; };
     for (let e = 1; e <= 9; e++) { add(D.ERAS[e].adv.cost); secs += D.ERAS[e].adv.time; }
     for (const c in D.TECH_CATS) for (let L = 1; L <= D.TECH_CATS[c].max; L++) { add(D.techCost(c, L)); secs += D.techTime(c, L); }
-    for (const l in D.LINES) for (let e = D.LINES[l].first + 1; e <= 9; e++) { add(D.refitCost(l, e)); secs += D.refitTime(l, e); }
+    for (const l of D.TRAINED) for (let e = D.LINES[l].first + 1; e <= 9; e++) { add(D.refitCost(l, e)); secs += D.refitTime(l, e); }
     for (const d in D.DOCTRINES) { add(D.DOCTRINES[d].cost); secs += D.DOCTRINES[d].time; }
     const realm = ["hall", "barracks", "forge", "lumber", "mine", "academy", "altar", "stable", "workshop", "shipyard", "airfield", "tower", "tower", "tower", "outpost", "outpost", "house", "house", "house", "house", "house", "house"];
     for (const t of realm) for (let L = 2; L <= 10; L++) if (D.BUILDINGS[t].first < L) add(D.levelCost(t, L));

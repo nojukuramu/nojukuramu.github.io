@@ -96,6 +96,7 @@ function clearLine(u, x, y) {
 }
 export function speedOf(u) {
   let s = u.st.speed * TILE;
+  if (u.order.gs && !u.tgt) s = Math.min(s, u.order.gs * 1.05);
   if (u.slow > G.time) s *= 0.55;
   if (u.buffs.veil > G.time) s *= 1.3;
   if (u.buffs.haste > G.time) s *= 1.25;
@@ -421,7 +422,7 @@ function returnCargo(u, dt, done) {
   }
   if (gap(u, b) < TILE * 0.8) {
     G.res[u.carry.r] += u.carry.n;
-    if (u.team === 0) G.stats.gathered += u.carry.n;
+    if (u.team === 0) { G.stats.gathered += u.carry.n; const br = G.stats.byRes || (G.stats.byRes = {}); br[u.carry.r] = (br[u.carry.r] || 0) + u.carry.n; }
     emit("deposit", u, b, u.carry);
     u.carry = null; u.dropId = 0; u.path = null;
     done();
@@ -526,7 +527,13 @@ export function smart(units, x, y, ent, tree, queue) {
 }
 export function moveGroup(units, x, y, t, queue) {
   const slots = formation(units, x, y);
-  units.forEach((u, i) => setOrder(u, { t, x: slots[i].x, y: slots[i].y }, queue));
+  // a group that starts together arrives together: it marches at the pace of its slowest
+  let gs = 0;
+  if (units.length > 1) {
+    const cx = units.reduce((a, u) => a + u.x, 0) / units.length, cy = units.reduce((a, u) => a + u.y, 0) / units.length;
+    if (units.every((u) => Math.hypot(u.x - cx, u.y - cy) < 7 * TILE)) gs = Math.min(...units.map((u) => speedOf(u)));
+  }
+  units.forEach((u, i) => setOrder(u, gs ? { t, x: slots[i].x, y: slots[i].y, gs } : { t, x: slots[i].x, y: slots[i].y }, queue));
 }
 export function patrol(units, x, y) {
   for (const u of units) setOrder(u, { t: "patrol", ax: u.x, ay: u.y, bx: x, by: y });

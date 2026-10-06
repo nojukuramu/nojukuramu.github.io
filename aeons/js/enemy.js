@@ -184,7 +184,12 @@ function spawnFor(base, free) {
   const den = dens[Math.floor(Math.random() * dens.length)];
   const lines = BUILDINGS[den.type].trains.filter((l) => LINES[l].first <= base.era && l !== "worker" && !(l === "mender" && Math.random() < 0.6));
   if (!lines.length) return null;
-  const line = lines[Math.floor(Math.random() * lines.length)];
+  let line = lines[Math.floor(Math.random() * lines.length)];
+  // siege is a third of a garrison at most: a base of nothing but catapults is a wall of splash, not an army
+  if (line === "siege") {
+    const g = base.garrison.map((id) => G.ents.get(id)).filter((u) => u && !u.dead);
+    if (g.filter((u) => u.line === "siege").length > g.length / 3) line = Math.random() < 0.5 ? "melee" : "ranged";
+  }
   const cost = POINTS[line] * (1 + 0.12 * base.era);
   if (!free && base.budget < cost) return null;
   if (!free) base.budget -= cost;

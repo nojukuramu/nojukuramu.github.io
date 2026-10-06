@@ -17,7 +17,9 @@ import { updateProjectiles } from "./combat.js";
 import { updateHero, updateZones, manual } from "./heroes.js";
 import { updateEnemy, initPhases } from "./enemy.js";
 import { updateAuto, defaultAuto } from "./auto.js";
-import { updateFog } from "./fog.js";
+import { updateFog, explored } from "./fog.js";
+import { setOrder } from "./units.js";
+import { RES } from "./data.js";
 import { ERA_LINES, RUIN_FRAGMENTS, BEACON_LINE, EPILOGUE } from "./lore.js";
 
 const PATHS_PER_TICK = 14;
@@ -86,6 +88,7 @@ export function tick() {
   updateAuto();
   if (G.tick % 2 === 0) updateFog();
   if (G.tick % 10 === 0) sweep();
+  if (G.tick % 300 === 0) sample();   // the ledger's income history, every half minute
 }
 
 /** Bodies push each other apart, a little each tick; the one standing still gives way. */
@@ -110,6 +113,9 @@ function crowd() {
 function relics() {
   for (const n of G.world.nodes.values()) {
     if (n.type !== "relic") continue;
+    // the first time a far ruin is seen, the things that live round it are there too
+    if (!n.camped && explored(n.tx, n.ty)) { n.camped = 1; camp(n); }
+    if (n.guards && n.guards.some((id) => { const g = G.ents.get(id); return g && !g.dead; })) continue;
     let finder = null;
     near(n.x, n.y, 3 * TILE, (e) => { if (!finder && e.kind === "unit" && e.team === 0 && !e.dead && Math.hypot(e.x - n.x, e.y - n.y) < 2.6 * TILE) finder = e; });
     if (!finder) continue;
@@ -124,6 +130,34 @@ function relics() {
     emit("relic", n, finder, reward, text);
     if (text) codex(text, "ruin");
   }
+}
+
+function camp(n) {
+  const d = Math.hypot(n.tx, n.ty);
+  if (d < 24) return;
+  const tier = Math.max(0, Math.min(9, G.era - (d < 70 ? 1 : 0) + (d > 220 ? 1 : 0)));
+  const count = 2 + Math.floor(Math.min(d, 320) / 90) + (Math.random() < 0.4 ? 1 : 0);
+  n.guards = [];
+  for (let i = 0; i < count; i++) {
+    const a = i / count * 6.28 + Math.random(), r = (2.2 + Math.random() * 1.5) * TILE;
+    let x = n.x + Math.cos(a) * r, y = n.y + Math.sin(a) * r;
+    const o = G.world.nearestOpen(Math.floor(x / TILE), Math.floor(y / TILE), "land", 4);
+    if (!o) continue;
+    const u = spawnUnit("beast", tier, 2, (o.tx + 0.5) * TILE, (o.ty + 0.5) * TILE, { boost: 1 + Math.min(0.6, d / 600) });
+    u.hp = u.maxHp;
+    setOrder(u, { t: "guard", x: n.x, y: n.y });
+    n.guards.push(u.id);
+  }
+  emit("camp", n);
+}
+
+/** The ledger's income history: cumulative gathering by resource, every half minute, for two hours. */
+function sample() {
+  const H = G.history || (G.history = []);
+  const rec = { t: Math.round(G.time) };
+  for (const r of RES) rec[r] = Math.round((G.stats.byRes || {})[r] || 0);
+  H.push(rec);
+  if (H.length > 241) H.shift();
 }
 
 function sweep() {

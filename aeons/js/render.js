@@ -129,6 +129,7 @@ export function frame(k, dt) {
   }
   terrain.pump(6);
   fx.drawDecals(ctx, x0, y0, x1, y1);
+  fx.drawCorpses(ctx, x0, y0, x1, y1);
   territory();
 
   // things, back to front
@@ -154,6 +155,7 @@ export function frame(k, dt) {
     (u.move === "air" ? air : list).push(u);
   }
   list.sort((a, b) => footY(a) - footY(b));
+  shadows(list, air);
   for (const u of list) if (u.kind === "unit" && u.sel) ring(u);
   for (const e of list) {
     if (e.kind === "unit") drawUnit(e, dt);
@@ -162,9 +164,8 @@ export function frame(k, dt) {
     else drawGhost(e.gh);
   }
   drawZones();
-  drawProjectiles(x0, y0, x1, y1);
+  drawProjectiles(x0, y0, x1, y1, k);
   fx.drawParts(ctx, x0, y0, x1, y1, z);
-  for (const u of air) { ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.beginPath(); ctx.ellipse(u.dx + 10, u.dy + 14, u.r * 1.1, u.r * 0.55, 0, 0, 6.3); ctx.fill(); }
   air.sort((a, b) => a.dy - b.dy);
   for (const u of air) { if (u.sel) ring(u, -22); drawUnit(u, dt); }
 
@@ -180,6 +181,7 @@ export function frame(k, dt) {
   overlaysUnder(k);
   // night
   if (dark > 0.02) night(dark, x0, y0, x1, y1, k);
+  grade();
   // fog of war
   fog(x0, y0, x1, y1);
   veil(x0, y0, x1, y1);
@@ -201,6 +203,53 @@ export function frame(k, dt) {
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
 }
+/* ---------------- shadows that follow the sun ---------------- */
+/** Where the sun is: the shadow's direction (a unit vector on the ground), its length per pixel of height, and its strength. */
+export function sunShadow() {
+  const k = ((G.time + DAY * 0.14) % DAY) / DAY, alt = Math.max(0.06, sun());
+  const p = Math.max(0, Math.min(1, (k - 0.04) / 0.52));
+  const th = Math.PI * (1 - p);   // morning: shadows lean west; evening: east; noon: towards the viewer
+  const dx = Math.cos(th), dy = Math.sin(th) * 0.55 + 0.3, n = Math.hypot(dx, dy);
+  const day = Math.max(0, Math.min(1, sun() * 2.2 + 0.2));
+  return { dx: dx / n, dy: dy / n, len: Math.min(0.75, 0.22 + 0.5 * (1 - alt)), a: 0.05 + 0.15 * day };
+}
+function hull(pts) {
+  pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const p of pts) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
+}
+// each oval its own sub-path: without the moveTo, a path joins every ellipse to the one before it
+function oval(path, x, y, rx, ry) { path.moveTo(x + rx, y); path.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); }
+/** One path for every shadow on screen, filled once, so overlapping shadows do not stack darker. */
+function shadows(list, air) {
+  const S = sunShadow(), path = new Path2D();
+  for (const e of list) {
+    if (e.kind === "bld" || e.kind === "ghost") {
+      const b = e.kind === "bld" ? e : e.gh;
+      if (b.type === "wall") continue;
+      const h = (HEIGHT[b.type] || 20) * (1 + (b.level - 1) * 0.04) * (e.kind === "bld" && b.built < 1 ? Math.max(0.2, b.built) : 1);
+      // round huts and slim towers throw a narrower shadow than their plot
+      const ins = b.level <= 1 || b.type === "tower" || b.type === "altar" ? Math.min(b.w, b.h) * TILE * 0.28 : 4;
+      const L = h * S.len, x0 = b.tx * TILE + ins, y0 = b.ty * TILE + ins + 2, x1 = (b.tx + b.w) * TILE - ins, y1 = (b.ty + b.h) * TILE - Math.max(3, ins * 0.6);
+      const ox = S.dx * L, oy = S.dy * L;
+      const H = hull([[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0 + ox, y0 + oy], [x1 + ox, y0 + oy], [x1 + ox, y1 + oy], [x0 + ox, y1 + oy]]);
+      path.moveTo(H[0][0], H[0][1]); for (let i = 1; i < H.length; i++) path.lineTo(H[i][0], H[i][1]); path.closePath();
+    } else if (e.kind === "unit") {
+      const tall = e.cls === "inf" ? 16 : 11, L = tall * S.len * 0.5;
+      oval(path, e.dx + S.dx * L, e.dy + 6 + S.dy * L * 0.6, e.r * (0.9 + S.len * 0.3), e.r * 0.42);
+    } else if (e.kind === "node" && e.type !== "oil") {
+      const L = 14 * S.len;
+      oval(path, e.x + S.dx * L, e.y + 8 + S.dy * L * 0.5, e.w * 13, e.h * 7);
+    }
+  }
+  for (const u of air) { const L = 46 * S.len; oval(path, u.dx + S.dx * L * 0.5, u.dy + 14 + S.dy * L * 0.3, u.r * 1.1, u.r * 0.55); }
+  ctx.fillStyle = "rgba(8,10,20," + S.a + ")";
+  ctx.fill(path);
+}
+
 const footY = (e) => e.kind === "unit" ? e.dy : e.kind === "ghost" ? (e.gh.ty + e.gh.h) * TILE : (e.ty + e.h) * TILE - 2;
 const seenChunk = new WeakMap();
 function chunkSeen(ch) {
@@ -237,6 +286,14 @@ function night(dark, x0, y0, x1, y1, k) {
     if (b.team !== 0 && !bldVisible(b)) continue;
     const e = b.level - 1;
     add(b.x, b.y - 8, (2.2 + Math.max(b.w, b.h) * 0.9) * TILE, lightColor(e, b.team));
+    // windows: small lights along the front, firelight that flickers until the lamps come
+    if (e >= 1 && b.type !== "wall" && b.built >= 1 && dark > 0.15) {
+      const n = Math.max(1, b.w - (b.w > 2 ? 1 : 0)), fy = (b.ty + b.h) * TILE - (HEIGHT[b.type] || 20) * 0.45;
+      for (let i = 0; i < n; i++) {
+        const fl = e <= 4 ? 0.65 + 0.35 * Math.sin(realT * (5 + i) + b.id * 3 + i) : 1;
+        add(b.tx * TILE + (i + 0.5) * (b.w * TILE / n), fy, 0.55 * TILE, lightColor(e, b.team), fl);
+      }
+    }
   }
   for (const u of G.units) {
     if (u.dead || u.hidden || u.dx === undefined) continue;
@@ -274,6 +331,17 @@ function night(dark, x0, y0, x1, y1, k) {
     ctx.globalAlpha = 0.22 * dark * a;
     ctx.drawImage(tint(col), s.x - rr, s.y - rr, rr * 2, rr * 2);
   }
+  ctx.restore();
+}
+
+/** Dawn and dusk turn the light gold; it is one soft-light wash over the whole frame. */
+function grade() {
+  if (!view.lights) return;
+  const s = sun(), w = Math.max(0, 1 - Math.abs(s - 0.08) / 0.32);
+  if (w < 0.02) return;
+  ctx.save(); ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  ctx.globalCompositeOperation = "soft-light"; ctx.fillStyle = "rgba(255,140,60," + (0.32 * w) + ")";
+  ctx.fillRect(0, 0, view.W, view.H);
   ctx.restore();
 }
 
@@ -316,7 +384,12 @@ function veil(x0, y0, x1, y1) {
 /* ---------------- things ---------------- */
 function ring(u, lift) {
   ctx.strokeStyle = u.team === 0 ? "#7dffb0" : "#ff6a6a"; ctx.lineWidth = 1.6;
+  ctx.setLineDash([6, 3]); ctx.lineDashOffset = -realT * 12;
   ctx.beginPath(); ctx.ellipse(u.dx, u.dy + 5 + (lift || 0), u.r * 1.15, u.r * 0.62, 0, 0, 6.3); ctx.stroke();
+  ctx.setLineDash([]);
+  // and a thread to whatever it is fighting
+  const t = u.tgt && G.ents.get(u.tgt);
+  if (t && !t.dead && u.team === 0) { ctx.strokeStyle = "rgba(255,106,106,0.35)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(u.dx, u.dy); ctx.lineTo(t.dx !== undefined && t.kind === "unit" ? t.dx : t.x, t.dy !== undefined && t.kind === "unit" ? t.dy : t.y); ctx.stroke(); }
 }
 function drawUnit(u, dt) {
   const air = u.move === "air";
@@ -327,8 +400,11 @@ function drawUnit(u, dt) {
   const rot = !u.hero && rotates(u.line, u.tier);
   if (rot && (air || u.line === "naval" || u.tier >= 5)) frame = Math.floor(realT * 10) % 4;
   const s = unitSprite(u, frame);
-  const x = u.dx, y = u.dy - (air ? 22 + Math.sin(realT * 2 + u.id) * 2 : 0);
-  if (!rot && !air) { ctx.fillStyle = "rgba(0,0,0,0.28)"; ctx.beginPath(); ctx.ellipse(x + 2, u.dy + 6, u.r * 0.9, u.r * 0.42, 0, 0, 6.3); ctx.fill(); }
+  let x = u.dx, y = u.dy - (air ? 22 + Math.sin(realT * 2 + u.id) * 2 : 0);
+  // a blow leans into the target; a soldier at rest breathes
+  if (frame === 4 && !rot && u.st.range < 1.5) { const k = Math.sin(Math.max(0, u.atkAnim) / 0.25 * Math.PI); x += Math.cos(u.face) * 3.5 * k; y += Math.sin(u.face) * 2 * k; }
+  else if (frame === 6 && !rot && !air) y += Math.sin(realT * 2.2 + u.id) * 0.5;
+  if (u.moving && !air && (u.cls === "mnt" || u.cls === "sie") && Math.random() < 0.18 * view.quality) fx.dust(u.dx - Math.cos(u.face) * 8, u.dy + 6, 1, "#b8a07a");
   if (u.hero) {
     ctx.strokeStyle = hexA(ERAS[G.era].energy, 0.55 + 0.25 * Math.sin(realT * 3)); ctx.lineWidth = 2;
     ctx.beginPath(); ctx.ellipse(x, u.dy + 6, 13, 6, 0, 0, 6.3); ctx.stroke();
@@ -347,6 +423,8 @@ function drawUnit(u, dt) {
   }
   if (u.stun > G.time) { ctx.strokeStyle = "#ffe9a8"; ctx.lineWidth = 1; for (let i = 0; i < 3; i++) { const a = realT * 5 + i * 2.1; ctx.beginPath(); ctx.arc(x + Math.cos(a) * 7, y - 24 + Math.sin(a) * 2, 1.4, 0, 6.3); ctx.stroke(); } }
   if (u.buffs.bulwark > G.time) { ctx.strokeStyle = "rgba(255,233,168,0.7)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y - 8, 17, 0, 6.3); ctx.stroke(); }
+  // a veteran's chevrons, gold, one for each rank
+  if (u.rank) { ctx.strokeStyle = u.rank >= 4 ? "#ffd27a" : "#e8c27a"; ctx.lineWidth = 1.3; for (let i = 0; i < Math.min(4, u.rank); i++) { const cy = y - 26 - i * 3; ctx.beginPath(); ctx.moveTo(x + 8, cy); ctx.lineTo(x + 11, cy - 2); ctx.lineTo(x + 14, cy); ctx.stroke(); } }
   if (u.manual) { ctx.strokeStyle = "#ffe9a8"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x - 4, y - 34); ctx.lineTo(x, y - 29); ctx.lineTo(x + 4, y - 34); ctx.stroke(); }
 }
 function drawNode(n) {
@@ -461,16 +539,28 @@ function drawZones() {
   }
 }
 
-function drawProjectiles(x0, y0, x1, y1) {
+function drawProjectiles(x0, y0, x1, y1, kk) {
   for (const p of G.projs) {
     if (p.dead || p.x < x0 - 40 || p.x > x1 + 40 || p.y < y0 - 80 || p.y > y1 + 40) continue;
     if (p.team !== 0 && !visible(Math.floor(p.x / TILE), Math.floor(p.y / TILE))) continue;
     const col = fx.shotColor(p.shot);
     let h = 0;
-    if (p.lob) { const rem = Math.hypot(p.tx - p.x, p.ty - p.y), k = 1 - rem / Math.max(1, p.dist); h = Math.sin(Math.PI * Math.max(0, Math.min(1, k))) * Math.min(120, p.dist * 0.3); }
-    const dx = p.line ? p.vx : p.tx - p.x, dy = p.line ? p.vy : p.ty - p.y, a = Math.atan2(dy, dx);
-    const x = p.x, y = p.y - h - 8;
-    if (p.lob) { ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.beginPath(); ctx.ellipse(p.x, p.y, 4, 2, 0, 0, 6.3); ctx.fill(); }
+    const px = p.px === undefined ? p.x : p.px + (p.x - p.px) * kk, py = p.py === undefined ? p.y : p.py + (p.y - p.py) * kk;
+    const prog = Math.max(0, Math.min(1, 1 - Math.hypot(p.tx - px, p.ty - py) / Math.max(1, p.dist)));
+    if (p.lob) h = Math.sin(Math.PI * prog) * Math.min(120, p.dist * 0.3);
+    // arrows and stones fly in a shallow arc, not a ruler line
+    else if (!p.line && (p.shot === "arrow" || p.shot === "bolt" || p.shot === "spear" || p.shot === "stone")) h = Math.sin(Math.PI * prog) * Math.min(42, p.dist * 0.16);
+    const dx = p.line ? p.vx : p.tx - p.x, dy = p.line ? p.vy : p.ty - p.y;
+    const x = px, y = py - h - 8;
+    // the angle a flying thing points along: its motion on screen, arc included
+    const tr = p.trail || (p.trail = []);
+    tr.push(x, y); if (tr.length > 10) tr.splice(0, 2);
+    const a = tr.length >= 4 ? Math.atan2(y - tr[tr.length - 3], x - tr[tr.length - 4]) || Math.atan2(dy, dx) : Math.atan2(dy, dx);
+    if (tr.length >= 4 && view.quality > 0.5) {
+      ctx.strokeStyle = hexA(col, p.lob ? 0.18 : 0.3); ctx.lineWidth = p.shot === "hero" || p.shot === "bolt2" || p.shot === "plasma" || p.shot === "photon" ? 3 : 1.2;
+      ctx.beginPath(); ctx.moveTo(tr[0], tr[1]); for (let i = 2; i < tr.length; i += 2) ctx.lineTo(tr[i], tr[i + 1]); ctx.stroke();
+    }
+    if (p.lob || h > 4) { ctx.fillStyle = "rgba(0,0,0,0.22)"; ctx.beginPath(); ctx.ellipse(px, py, p.lob ? 4 : 2.5, p.lob ? 2 : 1.2, 0, 0, 6.3); ctx.fill(); }
     switch (p.shot) {
       case "arrow": case "bolt": case "spear":
         ctx.strokeStyle = "#e8dcc0"; ctx.lineWidth = p.shot === "spear" ? 2 : 1.2;

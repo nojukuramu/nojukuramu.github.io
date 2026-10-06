@@ -63,6 +63,6 @@ export function resetState() {
     phase: null, bases: new Map(), intel: { contacts: [], alerts: [], nextContact: 1 },
     codex: [], stats: { gathered: 0, killed: 0, lost: 0, built: 0, phases: 0, playtime: 0 },
     sel: [], groups: [[], [], [], [], [], [], [], [], [], []], ghosts: new Map(), fogStamp: 1,
-    over: false, complete: false, beaconLit: false, temp: []
+    over: false, complete: false, beaconLit: false, temp: [], squads: [], nextSquad: 0, rebuild: [], history: []
   });
 }

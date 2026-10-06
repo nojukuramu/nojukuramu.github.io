@@ -10,20 +10,24 @@
  * and the orders below for units. Its letters are its hotkeys. */
 
 import { G, emit, on } from "./state.js";
+import { TRAINED, RANK_NAMES } from "./data.js";
 import { TILE, RES, RES_NAME, RES_ERA, ERAS, LINES, BUILDINGS, HEROES, HERO_IDS, TECH_CATS, DOCTRINES, DOCTRINE_IDS, MAX_ERA, bldCost, heroXpFor, HERO_MAX_LEVEL, maxLevel, supplyMax } from "./data.js";
 import { icon, hydrateIcons } from "./icons.js";
 import { portrait } from "./sprites.js";
 import { actions, act, cancel, roman, tierOf, canPlace, territoryOf } from "./buildings.js";
 import { canAfford, lacking, lvl } from "./entities.js";
 import { setOrder, stop, isMilitary } from "./units.js";
-import { selected, select, clearSel, beginPlace, beginTarget, cancelMode, confirmPlace, mode, onHotkey, setBoxMode, isBoxMode, centerOn } from "./input.js";
+import { selected, select, clearSel, beginPlace, beginTarget, cancelMode, confirmPlace, mode, onHotkey, setBoxMode, isBoxMode, centerOn, mouse } from "./input.js";
 import { possess, release, cast, controlled, skillsOf } from "./heroes.js";
-import { view, ping, darkness } from "./render.js";
+import { view, ping, darkness, pickAt } from "./render.js";
 import { liveBases } from "./enemy.js";
 import { headingOf } from "./auto.js";
 import { exploredShare } from "./fog.js";
 import { settings, saveSettings, listSlots, saveSlot, loadSlot, deleteSlot, exportJSON, importJSON } from "./save.js";
 import * as info from "./info.js";
+import * as ledger from "./ledger.js";
+import * as details from "./details.js";
+import { create as makeSquad } from "./squads.js";
 import * as update from "./update.js";
 import * as audio from "./audio.js";
 import { HERO_LINES, ENEMY_PREFIX } from "./lore.js";
@@ -194,6 +198,7 @@ function unitItems(us) {
   items.push({ id: "hold", label: "Hold", icon: "hold", hot: "H", line2: "Stand still and only hit what comes in reach." });
   const st = us[0].stance;
   items.push({ id: "stance", label: st === "aggr" ? "Stance: aggressive" : st === "hold" ? "Stance: hold" : "Stance: scout", icon: "stance", hot: "G", line2: G.doctrines.scouts ? "Aggressive, hold, or scout (explore on their own)." : "Aggressive or hold. Pathfinders add scouting." });
+  if (us.some((u) => isMilitary(u) && !u.free)) items.push({ id: "squad", label: "Make a squad", icon: "users", hot: "Y", line2: "A standing job for these soldiers: defend, patrol, strike, hunt or escort." });
   if (workers.length) {
     items.push({ id: "build", label: "Build", icon: "build", hot: "B" });
     items.push({ id: "repair", label: "Repair", icon: "wrench", hot: "R", line2: "Tap a damaged building or a foundation." });
@@ -292,6 +297,7 @@ function runItem(it, shift) {
       drawCard(true); return true;
     }
     case "build": sub = "build"; page = 0; drawCard(true); return true;
+    case "squad": { const s = makeSquad(us); if (s) { toast("Squad " + s.name + " formed", "good"); openPanel("ledger"); ledger.setTab("squads"); renderPanel(true); } return true; }
     case "control": { const u = us[0]; if (u) u.manual ? release() : possess(u); return true; }
   }
   if (it.id.startsWith("skill:")) {
@@ -374,7 +380,8 @@ function drawSel() {
     if (e.kind === "bld" && e.team === 0 && e.q.length) html += '<div class="queue">' + e.q.map((it, i) => '<button class="qi" data-q="' + i + '" title="Cancel">' + (it.k === "unit" ? '<img src="' + portrait("unit", it.line, tierOf(it.line), 0) + '" alt="">' : icon(it.k === "tech" ? TECH_CATS[it.cat].icon : it.k === "doc" ? DOCTRINES[it.doc].icon : it.k === "level" ? "up" : it.k === "era" ? "era" : it.k === "hero" ? "crown" : "repeat")) + (i === 0 ? '<i class="qp"><i data-b="qp"></i></i>' : "") + "</button>").join("") + "</div>";
     html += "</div>";
     if (e.hero && e.team === 0) html += '<button class="btn small mode" data-act="control">' + icon(e.manual ? "release" : "control") + (e.manual ? "Let go" : "Control") + "</button>";
-    html += '<button class="iconBtn small clr" data-act="clear" aria-label="Clear the selection">' + icon("close") + "</button></div>";
+    html += '<button class="iconBtn small clr" data-act="clear" aria-label="Clear the selection">' + icon("close") + "</button>";
+    html += '<button class="iconBtn small dtl" data-act="details" aria-label="Details">' + icon("info") + "</button></div>";
     box.innerHTML = html;
   }
   const B = (k) => box.querySelector('[data-b="' + k + '"]');
@@ -414,6 +421,7 @@ function selEvents() {
     const a = e.target.closest("[data-act]");
     if (!a) return;
     if (a.dataset.act === "clear") clearSel();
+    if (a.dataset.act === "details") { openPanel("details"); return; }
     if (a.dataset.act === "control") { const u = selected()[0]; if (u) u.manual ? release() : possess(u); selSig = ""; }
   });
 }
@@ -459,7 +467,8 @@ export function openPanel(name, arg) {
   panelName = name;
   const P = $("panel");
   P.hidden = false; P.dataset.p = name;
-  $("panelTitle").textContent = { menu: "Menu", settings: "Settings", saves: arg === "save" ? "Save the realm" : "Load a realm", intel: "Intel", auto: "Automation", codex: "Codex", realm: "The Realm", defeat: "The fire is out", complete: "The long road" }[name] || name;
+  $("panelTitle").textContent = { menu: "Menu", settings: "Settings", saves: arg === "save" ? "Save the realm" : "Load a realm", intel: "Intel", auto: "Automation", codex: "Codex", realm: "The Realm", ledger: "Ledger", defeat: "The fire is out", complete: "The long road" }[name] || name;
+  if (name === "details") $("panelTitle").textContent = details.title(selected()[0]);
   P.dataset.arg = arg || "";
   renderPanel();
   if (name === "menu" || name === "defeat" || name === "complete") { wasPaused = G.paused; G.paused = true; }
@@ -472,11 +481,13 @@ export function closePanel() {
   P.hidden = true; panelName = null;
 }
 export const panelOpen = () => !$("panel").hidden;
+/** The menus stop the world; the working panels (ledger, intel, automation...) leave it running. */
+export const panelPauses = () => panelOpen() && ["menu", "saves", "settings", "defeat", "complete"].includes(panelName);
 let panelT = 0;
 function tickPanel() {
   if (!panelName || Date.now() < panelT) return;
   panelT = Date.now() + 1000;
-  if (panelName === "intel" || panelName === "realm") renderPanel(true);
+  if (panelName === "intel" || panelName === "realm" || panelName === "ledger" || panelName === "details") renderPanel(true);
 }
 function sw(id, on, enabled, label, line, infoKey) {
   return '<label class="row tog' + (enabled ? "" : " off") + '"><input type="checkbox" data-set="' + id + '"' + (on ? " checked" : "") + (enabled ? "" : " disabled") + "><span><b>" + esc(label) + "</b><small>" + esc(line) + "</small></span>" + (infoKey ? '<button class="info" data-info="' + infoKey + '" aria-label="About this">' + icon("info") + "</button>" : "") + "</label>";
@@ -517,14 +528,29 @@ function renderPanel(soft) {
     h += "<h3>Contacts</h3>" + (C.length ? C.map((c) => { const hd = headingOf(c); return '<button class="row go" data-x="' + c.x + '" data-y="' + c.y + '">' + icon(c.src === 1 ? "radar" : "eye") + "<span><b>" + c.n + (c.air ? " (" + c.air + " flying)" : "") + "</b><small>" + (G.time - c.seen < 1 ? "In sight" : "Seen " + ago(c.seen)) + (hd && hd.to ? " · heading for your " + esc(nameOf(hd.to)) + ", ~" + Math.round(hd.eta) + "s" : "") + "</small></span>" + icon("locate") + "</button>"; }).join("") : '<p class="dim">No enemies seen.</p>');
     const known = bases.map((b) => G.ghosts.get(b.core) ? b : null).filter(Boolean);
     h += "<h3>Known bases</h3>" + (known.length ? known.map((b) => '<button class="row go" data-x="' + b.x + '" data-y="' + b.y + '">' + icon("tower") + "<span><b>" + ERAS[b.era].name + " base</b><small>Phase " + b.phase + "</small></span>" + icon("locate") + "</button>").join("") : '<p class="dim">None found yet. Send scouts.</p>');
+  } else if (name === "ledger") {
+    h = ledger.render();
+  } else if (name === "details") {
+    h = details.render(selected()[0]);
   } else if (name === "auto") {
     const D = (id) => !!G.doctrines[id], A = G.auto;
     const lock = (id) => D(id) ? DOCTRINES[id].line : "Research at the academy" + (DOCTRINES[id].era > G.era ? " (" + ERAS[DOCTRINES[id].era].age + ")" : "");
     h = '<p class="dim">Habits, not clicks. <button class="info" data-info="automation" aria-label="About automation">' + icon("info") + "</button></p><div class=\"stack\">";
-    for (const id of ["foreman", "quarter", "repair", "signal", "census", "overmind", "satellite", "drones"]) h += sw("a:" + id, D(id) && A[id] !== false, D(id), DOCTRINES[id].name, lock(id));
+    h += "<h3>Economy</h3>";
+    for (const id of ["foreman", "quarter", "repair", "census", "colonists"]) h += sw("a:" + id, D(id) && A[id] !== false, D(id), DOCTRINES[id].name, lock(id));
     if (D("census")) h += slider("workerTarget", A.workerTarget, 5, 150, 1, "Workers to keep");
-    if (D("governor")) h += "<h3>Stewards</h3>" + slider("r:gold", A.ratio.gold, 0, 100, 5, "Gold") + slider("r:wood", A.ratio.wood, 0, 100, 5, "Wood") + slider("r:stone", A.ratio.stone, 0, 100, 5, "Stone");
+    if (D("governor")) h += "<h3>Stewards</h3>" + sw("a:demand", !!A.demand, true, "Follow demand", "Lean towards whatever the realm is short of.") + slider("r:gold", A.ratio.gold, 0, 100, 5, "Gold") + slider("r:wood", A.ratio.wood, 0, 100, 5, "Wood") + slider("r:stone", A.ratio.stone, 0, 100, 5, "Stone");
     else h += sw("x", false, false, DOCTRINES.governor.name, lock("governor"));
+    h += "<h3>Building</h3>";
+    for (const id of ["masons", "sentinels"]) h += sw("a:" + id, D(id) && A[id] !== false, D(id), DOCTRINES[id].name, lock(id));
+    h += "<h3>Defence</h3>";
+    for (const id of ["signal", "captains", "rebirth", "overmind", "satellite", "drones"]) h += sw("a:" + id, D(id) && A[id] !== false, D(id), DOCTRINES[id].name, lock(id));
+    h += sw("a:wake", !!A.wake, true, "Wake me", "Pause when a big contact comes near home.") + (A.wake ? slider("wakeAt", A.wakeAt, 3, 60, 1, "Contact size that wakes") : "");
+    h += "<h3>" + esc(DOCTRINES.standing.name) + "</h3>";
+    if (D("standing")) {
+      h += sw("a:standing", A.standing === true, true, "Keep the army up", "Trains whenever it is under the target.") + slider("armyTarget", A.army.target, 5, 300, 5, "Army size (supply)");
+      for (const l of ["melee", "ranged", "mender", "mounted", "siege", "naval", "air"]) if (LINES[l].first <= G.era) h += slider("mix:" + l, A.army.mix[l] || 0, 0, 6, 1, LINES[l].names[tierOf(l)]);
+    } else h += '<p class="dim">' + esc(lock("standing")) + "</p>";
     h += "<h3>" + esc(DOCTRINES.bureau.name) + "</h3>";
     if (D("bureau")) {
       h += '<p class="dim">Kept going whenever a building is free:</p>';
@@ -546,7 +572,7 @@ function renderPanel(soft) {
     h += "<h3>Phases " + '<button class="info" data-info="phases" aria-label="About phases">' + icon("info") + "</button></h3><p class=\"dim\">" + G.stats.phases + " cleared." + (G.phase && !G.phase.cleared ? " Phase " + G.phase.n + " under way." : "") + " Explored " + Math.round(exploredShare() * 100) + "% of the known land.</p>";
     h += "<h3>Champions " + '<button class="info" data-info="champions" aria-label="About champions">' + icon("info") + "</button></h3>";
     h += HERO_IDS.map((id) => { const s = G.heroes[id], u = s && s.uid && G.ents.get(s.uid); return '<div class="row"><img class="por sm" src="' + portrait("unit", "melee", G.era, 0, id) + '" alt=""><span><b>' + HEROES[id].name + "</b><small>" + HEROES[id].role + (s ? " · Lv " + s.lvl + (u ? "" : " · fallen") : " · not yet called") + "</small></span>" + (u ? '<button class="btn small" data-hero="' + id + '">' + icon(u.manual ? "release" : "control") + (u.manual ? "Let go" : "Control") + "</button>" : "") + "</div>"; }).join("");
-    h += "<h3>Lines</h3><div class=\"grid2\">" + Object.keys(LINES).filter((l) => LINES[l].first <= G.era).map((l) => "<span>" + LINES[l].names[tierOf(l)] + "</span>").join("") + "</div>";
+    h += "<h3>Lines</h3><div class=\"grid2\">" + TRAINED.filter((l) => LINES[l].first <= G.era).map((l) => "<span>" + LINES[l].names[tierOf(l)] + "</span>").join("") + "</div>";
     h += "<h3>Research</h3><div class=\"grid2\">" + Object.keys(TECH_CATS).filter((c) => (TECH_CATS[c].first || 0) <= G.era).map((c) => "<span>" + TECH_CATS[c].name + " <b>" + lvl(c) + "/" + TECH_CATS[c].max + "</b></span>").join("") + "</div>";
     const S = G.stats;
     h += "<h3>Record</h3><p class=\"dim\">" + time(S.playtime) + " played · " + fmt(S.gathered) + " gathered · " + S.built + " built · " + S.killed + " destroyed · " + S.lost + " lost.</p>";
@@ -564,7 +590,7 @@ export function completion() {
   let have = 0, all = 0;
   have += G.era; all += MAX_ERA;
   for (const c in TECH_CATS) { have += lvl(c); all += TECH_CATS[c].max; }
-  for (const l in LINES) { have += Math.max(0, tierOf(l) - LINES[l].first); all += MAX_ERA - LINES[l].first; }
+  for (const l of TRAINED) { have += Math.max(0, tierOf(l) - LINES[l].first); all += MAX_ERA - LINES[l].first; }
   have += Object.keys(G.doctrines).length * 2; all += DOCTRINE_IDS.length * 2;
   for (const id of HERO_IDS) { have += G.heroes[id] ? (G.heroes[id].lvl || 1) / 6 : 0; all += 5; }
   have += G.beaconLit ? 10 : 0; all += 10;
@@ -588,6 +614,7 @@ function fillSlots() {
 function panelEvents() {
   $("panelClose").addEventListener("click", closePanel);
   $("panel").addEventListener("click", (e) => {
+    if (panelName === "ledger" && ledger.click(e.target)) { if (panelName) renderPanel(true); return; }
     const g = e.target.closest("[data-go]");
     if (g) {
       const k = g.dataset.go;
@@ -620,7 +647,9 @@ function panelEvents() {
     if (!k) return;
     const out = t.parentElement.querySelector("output"); if (out) out.textContent = t.value;
     if (k === "master" || k === "sfx" || k === "music" || k === "panSpeed") { settings[k] = +t.value; saveSettings(); audio.setVolumes(settings); return; }
-    if (k === "workerTarget" || k === "commandAt") { G.auto[k] = +t.value; return; }
+    if (k === "workerTarget" || k === "commandAt" || k === "wakeAt") { G.auto[k] = +t.value; return; }
+    if (k === "armyTarget") { G.auto.army.target = +t.value; return; }
+    if (k.startsWith("mix:")) { G.auto.army.mix[k.slice(4)] = +t.value; return; }
     if (k.startsWith("r:")) { G.auto.ratio[k.slice(2)] = +t.value; return; }
   });
   $("panel").addEventListener("change", (e) => {
@@ -629,7 +658,7 @@ function panelEvents() {
     if (!k || t.type !== "checkbox") return;
     const v = t.checked;
     if (k.startsWith("s:")) { const n = k.slice(2); if (n === "hi") settings.quality = v ? "high" : "low"; else settings[n] = v; saveSettings(); emit("settings"); return; }
-    if (k.startsWith("a:")) { G.auto[k.slice(2)] = v; return; }
+    if (k.startsWith("a:")) { G.auto[k.slice(2)] = v; if (k === "a:wake" || k === "a:standing") renderPanel(true); return; }
     if (k.startsWith("k:")) { G.auto.keep[k.slice(2)] = v; return; }
     if (k === "kr") G.auto.keepRefit = v; if (k === "kl") G.auto.keepLevels = v; if (k === "ke") G.auto.keepEra = v;
   });
@@ -676,6 +705,9 @@ export function init() {
   sideEvents(); cardEvents(); selEvents(); panelEvents(); titleEvents();
   $("btnMenu").addEventListener("click", () => openPanel("menu"));
   $("btnIntel").addEventListener("click", () => openPanel("intel"));
+  $("btnLedger").addEventListener("click", () => openPanel("ledger"));
+  on("closePanel", () => closePanel());
+  on("squads", () => { if (panelName === "ledger") renderPanel(true); });
   $("btnAuto").addEventListener("click", () => openPanel("auto"));
   $("btnCodex").addEventListener("click", () => openPanel("codex"));
   $("phaseChip").addEventListener("click", () => openPanel("realm"));
@@ -693,10 +725,28 @@ export function init() {
   on("toast", (t, k) => toast(t, k));
   hydrateIcons(document);
 }
+/* With a mouse, whatever is under the pointer says what it is. */
+let hoverT = 0;
+function hover(dt) {
+  const tip = $("hoverTip");
+  hoverT -= dt;
+  if (hoverT > 0) return;
+  hoverT = 0.12;
+  if (document.body.classList.contains("touchUI") || !mouse.in || mode.kind || panelOpen()) { tip.hidden = true; return; }
+  const p = pickAt(mouse.x, mouse.y, 1), e = p.ent;
+  if (!e || (e.kind === "node" && e.type === "relic" && false)) { tip.hidden = true; return; }
+  let h = "<b>" + esc(nameOf(e)) + "</b>";
+  if (e.kind === "unit" || e.kind === "bld") h += " <span>" + Math.ceil(e.hp) + "/" + e.maxHp + "</span>" + (e.team === 1 ? ' <i class="foe">enemy</i>' : e.team === 2 ? ' <i class="wild">wild</i>' : "");
+  if (e.kind === "unit" && e.rank) h += ' <i class="rk">' + RANK_NAMES[e.rank] + "</i>";
+  if (e.kind === "node" && (e.type === "gold" || e.type === "stone")) h += " <span>" + fmt(e.amount) + " left</span>";
+  if (tip.dataset.h !== h) { tip.innerHTML = h; tip.dataset.h = h; }
+  tip.hidden = false;
+  tip.style.left = Math.min(view.W - 220, mouse.x + 16) + "px"; tip.style.top = Math.min(view.H - 40, mouse.y + 18) + "px";
+}
 let acc = 0;
 export function frame(dt) {
   if (document.body.classList.contains("atTitle")) return;
-  drawTop(); tickToasts(); tickBanner(); drawModes();
+  drawTop(); tickToasts(); tickBanner(); drawModes(); hover(dt);
   acc += dt;
   if (acc > 0.12) { acc = 0; drawSide(); drawCard(); drawSel(); drawManual(); tickPanel(); }
 }

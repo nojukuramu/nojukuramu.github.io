@@ -8,7 +8,7 @@
    tools/validate.js refuses to let the two drift. Bumping it is what
    publishes an update. Saved games live in IndexedDB, not here, so an
    update never touches them. */
-var CACHE = "aeons-v1";
+var CACHE = "aeons-v2";
 var SHELL = [
   "./",
   "./index.html",
@@ -19,6 +19,7 @@ var SHELL = [
   "./js/buildings.js",
   "./js/combat.js",
   "./js/data.js",
+  "./js/details.js",
   "./js/enemy.js",
   "./js/entities.js",
   "./js/fog.js",
@@ -27,6 +28,7 @@ var SHELL = [
   "./js/icons.js",
   "./js/info.js",
   "./js/input.js",
+  "./js/ledger.js",
   "./js/lore.js",
   "./js/main.js",
   "./js/minimap.js",
@@ -37,6 +39,7 @@ var SHELL = [
   "./js/save.js",
   "./js/sim.js",
   "./js/sprites.js",
+  "./js/squads.js",
   "./js/state.js",
   "./js/terrain.js",
   "./js/ui.js",

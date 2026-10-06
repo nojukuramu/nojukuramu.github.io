@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Aeons">
 <link rel="stylesheet" href="css/aeons.css">
 <!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
-<script>window.AE_VERSION = "1";</script>
+<script>window.AE_VERSION = "2";</script>
 </head>
 <body class="atTitle">
 <!-- Everything: orient.js turns this a quarter turn when a phone is held upright with Force landscape on -->
@@ -30,6 +30,7 @@
     <button id="phaseChip" class="chip" aria-label="The realm"><b id="eraName"></b><span id="phaseTxt"></span></button>
     <div id="topBtns">
       <button id="btnAlert" class="iconBtn alert" hidden aria-label="Go to the last alarm"><i data-icon="alert"></i><b id="alertN"></b></button>
+      <button id="btnLedger" class="iconBtn" aria-label="Ledger"><i data-icon="list"></i></button>
       <button id="btnIntel" class="iconBtn" aria-label="Intel"><i data-icon="eye"></i></button>
       <button id="btnAuto" class="iconBtn" aria-label="Automation"><i data-icon="auto"></i></button>
       <button id="btnCodex" class="iconBtn" aria-label="Codex"><i data-icon="book"></i></button>
@@ -114,6 +115,8 @@
   <div class="sheet-head"><h2 id="info-title"></h2><button id="info-close" class="iconBtn" aria-label="Close"><i data-icon="close"></i></button></div>
   <div id="info-body"></div>
 </div>
+
+<div id="hoverTip" hidden></div>
 
 <div id="update-bar" hidden>
   <span>A new version of Aeons is ready.</span>

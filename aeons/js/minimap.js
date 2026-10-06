@@ -87,7 +87,7 @@ export function drawMinimap() {
   }
   for (const u of G.units) {
     if (u.dead || u.hidden || (u.team !== 0 && !seen(u))) continue;
-    ctx.fillStyle = u.hero ? "#ffe9a8" : u.team === 0 ? TEAM[0].light : "#ff5a5a";
+    ctx.fillStyle = u.hero ? "#ffe9a8" : u.team === 0 ? TEAM[0].light : u.team === 2 ? "#e8a040" : "#ff5a5a";
     const [x, y] = P(u.x, u.y); const r = u.hero ? dot * 1.6 : dot;
     ctx.fillRect(x - r / 2, y - r / 2, r, r);
   }

@@ -161,6 +161,33 @@ async function centreOf(page, sel) {
       if (btn !== "#btnMenu") await page.locator("#panelClose").tap();
       await wait(150);
     }
+    await page.locator("#panelClose").tap(); await wait(150);
+    // the ledger, every tab
+    await page.locator("#btnLedger").tap(); await wait(250);
+    for (const [t, word] of [["structures", "standing"], ["forces", "units"], ["squads", "squad"], ["economy", "workers"]]) {
+      await page.locator('[data-l=tab][data-v="' + t + '"]').tap(); await wait(200);
+      const txt = (await page.locator("#panelBody").innerText()).toLowerCase();
+      check("the ledger's " + t + " tab says what it holds", txt.includes(word), txt.slice(0, 80));
+    }
+    check("the ledger leaves the game running", await page.evaluate(() => { const t = window.AE_DEBUG.G.time; return new Promise((r) => setTimeout(() => r(window.AE_DEBUG.G.time > t), 600)); }));
+    await page.locator("#panelClose").tap(); await wait(150);
+    // the details sheet for the hall
+    const hh = await page.evaluate(() => { const h = window.AE_DEBUG.G.blds.find((b) => b.type === "hall"); return { x: h.x, y: h.y }; });
+    const hp = await screenOf(page, hh.x, hh.y);
+    await page.touchscreen.tap(hp.x, hp.y); await wait(300);
+    await page.locator("[data-act=details]").tap(); await wait(300);
+    const dt = (await page.locator("#panelBody").innerText()).toLowerCase();
+    check("the details sheet shows a building now, next level, and through the ages", dt.includes("health") && dt.includes("level 2") && dt.includes("through the ages") && (await page.locator(".strip figure").count()) === 10);
+    await page.locator("#panelClose").tap(); await wait(150);
+    // a squad, from the command card
+    await page.evaluate(async () => { const ent = await import("./js/entities.js"), I = await import("./js/input.js"); const G = window.AE_DEBUG.G; const us = []; for (let i = 0; i < 3; i++) us.push(ent.spawnUnit("melee", 0, 0, 40 + i * 20, 200)); I.select(us); });
+    await wait(300);
+    await page.locator('#card .cmd[aria-label="Make a squad"]').tap(); await wait(300);
+    check("Make a squad forms one and shows it in the ledger", await page.evaluate(() => (window.AE_DEBUG.G.squads || []).length === 1) && (await page.locator("#panelBody .squad").count()) === 1);
+    await page.locator('[data-l=sqRole][data-r="patrol"]').tap(); await wait(200);
+    check("and its job can be changed", await page.evaluate(() => window.AE_DEBUG.G.squads[0].role === "patrol"));
+    await page.locator("#panelClose").tap(); await wait(150);
+    await page.locator("#btnMenu").tap(); await wait(150);
     await page.locator("[data-go=settings]").tap();
     await wait(200);
     check("settings has Force landscape on by default", await page.locator('[data-set="s:forceLandscape"]').isChecked());
@@ -221,6 +248,10 @@ async function centreOf(page, sel) {
     await page.keyboard.press("s");
     await wait(100);
     check("S stops them", await page.evaluate(() => window.AE_DEBUG.G.units.filter((u) => u.line === "worker" && u.order.t === "idle").length >= 5));
+    const hall = await page.evaluate(() => { const h = window.AE_DEBUG.G.blds.find((b) => b.type === "hall"); return { x: h.x, y: h.y }; });
+    const hs = await screenOf(page, hall.x, hall.y);
+    await page.mouse.move(hs.x, hs.y); await wait(400);
+    check("hovering the hall says what it is", await page.locator("#hoverTip").isVisible() && /Hearth/.test(await page.locator("#hoverTip").innerText()));
     await page.keyboard.press("b");
     await wait(100);
     check("B opens the build menu", (await page.locator("#card .cmd").count()) > 6);

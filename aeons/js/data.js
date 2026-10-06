@@ -102,6 +102,14 @@ export const LINES = {
     shot: ["", "spear", "arrow", "bolt", "shell", "shell", "shell", "missile", "plasma", "aether"],
     hitsAir: 6, blurb: "Rules the water and shells the shore."
   },
+  // not trained by anyone: the things that live out past the fires, guarding the ruins
+  beast: {
+    from: [], first: 0, supply: 2, cls: "mnt", move: "land", time: 0, wild: true,
+    base: { hp: 95, atk: 9, cd: 1.2, range: 0.8, speed: 2.7, sight: 6, armor: 1 },
+    cost: () => ({}),
+    names: ["Wolf", "Boar", "Cave Bear", "Dire Bear", "Wyrm", "Ironback", "Stalker", "Hunter-Machine", "Void Hound", "Echo Beast"],
+    blurb: "Lives in the wild and guards what it finds."
+  },
   air: {
     from: ["airfield"], first: 6, supply: 3, cls: "air", move: "air", time: 34, mech: 1, hitsAir: 6,
     base: { hp: 34, atk: 4.4, cd: 1.2, range: 4.2, speed: 4.2, sight: 10, armor: 0.6 },
@@ -114,6 +122,12 @@ export const LINES = {
 function cm(e) { return Math.round(Math.pow(1.33, Math.max(0, e)) * 100) / 100; }
 export const costMul = cm;
 export const LINE_IDS = Object.keys(LINES);
+/** The lines a realm can train: everything but the wild. */
+export const TRAINED = LINE_IDS.filter((l) => !LINES[l].wild);
+/** Veterancy: kills to reach each rank, and what a rank is worth. */
+export const RANKS = [3, 8, 16, 30];
+export const RANK_NAMES = ["", "Blooded", "Veteran", "Elite", "Legend"];
+export const RANK_BONUS = 0.1;   // +10% damage and health per rank
 
 /** A unit of line L at tier e: its stats, before upgrades. */
 export function lineStats(id, e) {
@@ -267,11 +281,17 @@ export const DOCTRINES = {
   scouts:    { era: 0, cost: { gold: 80, wood: 60 }, time: 30, name: "Pathfinders", icon: "compass", line: "A Scout stance: units that explore by themselves." },
   quarter:   { era: 1, cost: { gold: 250, wood: 300 }, time: 60, name: "Quartermasters", icon: "house", line: "Houses are raised before supply runs out." },
   signal:    { era: 1, cost: { gold: 300, wood: 200, stone: 100 }, time: 60, name: "Signal Fires", icon: "alert", line: "Idle soldiers answer alarms near them." },
+  captains:  { era: 1, cost: { gold: 350, wood: 250 }, time: 60, name: "Captains", icon: "users", line: "New soldiers join squads that are short of their number." },
   repair:    { era: 2, cost: { gold: 500, wood: 500 }, time: 70, name: "Wardens of Stone", icon: "hammer", line: "Workers repair damage in your borders." },
   governor:  { era: 2, cost: { gold: 700, wood: 500, stone: 300 }, time: 80, name: "Stewards", icon: "scale", line: "Set how idle workers split between resources." },
+  masons:    { era: 2, cost: { gold: 600, stone: 600 }, time: 75, name: "Masons", icon: "build", line: "What is destroyed is raised again where it stood." },
+  sentinels: { era: 2, cost: { gold: 500, stone: 700 }, time: 75, name: "Sentinels", icon: "tower", line: "A tower goes up where the alarms keep ringing." },
   census:    { era: 3, cost: { gold: 1500, wood: 1200 }, time: 90, name: "Census", icon: "users", line: "Halls and outposts keep training workers up to a target." },
   watch:     { era: 3, cost: { gold: 1600, stone: 1200 }, time: 90, name: "Watchmen", icon: "eye", line: "Enemy contacts are tracked with their heading and where they are going." },
+  colonists: { era: 3, cost: { gold: 1800, wood: 1800, stone: 600 }, time: 100, name: "Colonists", icon: "flag", line: "Outposts are raised beside veins too far to carry from." },
+  standing:  { era: 3, cost: { gold: 2000, wood: 1500 }, time: 100, name: "Standing Army", icon: "army", line: "Barracks and yards keep the army at the size and mix you set." },
   bureau:    { era: 4, cost: { gold: 4000, wood: 3000, stone: 2000 }, time: 120, name: "Bureaucracy", icon: "list", line: "A research plan your buildings work through on their own." },
+  rebirth:   { era: 4, cost: { gold: 5000, stone: 2500 }, time: 110, name: "Rebirth", icon: "crown", line: "Fallen champions are called back as soon as the altar can pay." },
   logistics: { era: 5, cost: { gold: 8000, wood: 5000, oil: 1000 }, time: 140, name: "Logistics", icon: "flag", line: "New soldiers march straight to a chosen muster point." },
   command:   { era: 6, cost: { gold: 16000, stone: 8000, oil: 5000 }, time: 160, name: "High Command", icon: "crown", line: "Your idle army strikes the nearest known enemy base when it is strong enough." },
   satellite: { era: 7, cost: { gold: 26000, oil: 12000 }, time: 180, name: "Satellites", icon: "radar", line: "A scan of a contact or the dark every 45 seconds." },
