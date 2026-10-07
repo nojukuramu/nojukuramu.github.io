@@ -12,7 +12,7 @@
    add a song, so it is cached the first time the analysis worker asks for
    it, in a cache of its own named for its version, which an app update
    leaves alone. */
-var CACHE = "burstdump-v2";
+var CACHE = "burstdump-v3";
 var VENDOR = "burstdump-essentia-0.1.3";
 var SHELL = [
   "./",
@@ -23,6 +23,7 @@ var SHELL = [
   "./js/update.js",
   "./js/info.js",
   "./js/timeline.js",
+  "./js/choreo.js",
   "./js/render.js",
   "./js/photos.js",
   "./js/audio.js",

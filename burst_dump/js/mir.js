@@ -38,6 +38,12 @@
    ============================================================ */
 
 export const MIR_SR = 22050;
+/* Measured timing bias, corrected at the source so nothing downstream has
+   to know (tools/validate.js holds these to within 5 ms of the truth):
+   - flux peaks one frame-ish ahead of the attack it reports, because each
+     frame is centred and sees the hit half a window early: -18 ms
+   - Essentia's RhythmExtractor2013 ticks land +5 ms after the attack */
+export const OWN_LAG = 0.018, ESS_LAG = -0.005;
 const NFFT = 2048, HOP = 512, NBIN = NFFT / 2 + 1;
 const N_MEL = 64, N_MFCC = 13;
 // pitch salience: 10-cent bins from A1 (55 Hz)
@@ -685,12 +691,19 @@ export function analyzeRhythm(mono, sr = MIR_SR, opts = {}) {
 
   // beat strength: the onset envelope at each beat, 0..1
   const p95 = percentile(bands.all, 0.95) || 1;
-  const exact = opts.beats && engine === "essentia" ? opts.beats : null;
+  const exact = opts.beats && engine === "essentia" ? Array.from(opts.beats, (t) => t + ESS_LAG) : null;
   const beats = beatsF.map((f, i) => {
     let m = 0; for (let k = -1; k <= 1; k++) { const j = f + k; if (j >= 0 && j < F.nFrames) m = Math.max(m, bands.all[j]); }
     const d = i >= bp.phase ? (i - bp.phase) % 4 === 0 : (bp.phase - i) % 4 === 0;
-    return { t: exact ? exact[i] : f / fps, s: clamp(m / p95, 0, 1), down: d };
+    return { t: exact ? exact[i] : f / fps + OWN_LAG, s: clamp(m / p95, 0, 1), down: d };
   });
+  for (const o of onsets) o.t += OWN_LAG;
+  /* Section edges and fills were found on frames: move each onto the beat
+     it stands for, so a section starts exactly where its downbeat is heard. */
+  const snapBeat = (t) => { let b = t, d = 0.08; for (const x of beats) { const e = Math.abs(x.t - t); if (e < d) { d = e; b = x.t; } } return b; };
+  st.sections.forEach((s, i) => { if (i > 0) s.t0 = snapBeat(s.t0); if (i < st.sections.length - 1) s.t1 = snapBeat(s.t1); });
+  for (let i = 1; i < st.sections.length; i++) st.sections[i].t0 = st.sections[i - 1].t1;
+  for (const f of st.fills) { f.t0 = snapBeat(f.t0); f.t1 = snapBeat(f.t1); }
 
   // feel curves on a 0.1 s grid
   const hopS = 0.1, nC = Math.max(1, Math.ceil(duration / hopS));

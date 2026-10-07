@@ -40,17 +40,21 @@ const TOPICS = {
   rhythm: {
     title: "Rhythm",
     body:
-      "<p><b>Follow the song</b> places every cut on the beat grid and spends more of them where the song is louder: a cut a bar in the intro, " +
-      "eighths in the chorus, a roll on the fill into it.</p>" +
+      "<p><b>Follow the song</b> edits the way an editor cuts a montage: in four-bar phrases, one steady pattern per phrase, the pace changing where the music does. " +
+      "A cut every few bars in a quiet intro, every bar or half bar in a verse, beats or eighths in a chorus. Within the bar the cuts follow the song's own groove, " +
+      "its drum hits and, in calm vocal parts, its melody. Builds speed up into the drop, a bar where the band stops holds the picture, and every drop is a cut.</p>" +
       "<p><b>On the beat</b> cuts evenly on beats, halves or quarters of beats, whichever fits the length; with no song, at the BPM you type or tap.</p>" +
       "<p><b>On the melody</b> cuts where the lead line moves to a new note. <b>On the drums</b> cuts on kicks and snares.</p>" +
       "<p><b>Accelerate</b>, <b>decelerate</b>, <b>steady</b>, <b>bursts</b> and <b>random</b> ignore the music altogether.</p>"
   },
   length: {
-    title: "Let the song decide",
+    title: "Length",
     body:
-      "<p>The reel runs from the start point to the end of the song, at the pace the music implies.</p>" +
-      "<p>With more photos than that pace needs, it goes up to twice as dense, then shows an even sample. With far too few, it ends early, on a bar line.</p>"
+      "<p><b>Fit the photos</b> (follow the song only): the music sets the pace, and the reel lasts as long as your photos do, ending at the end of a phrase. " +
+      "Drop in all of them; <b>Pace</b> makes it calmer or busier.</p>" +
+      "<p><b>Fixed length</b> ends on the bar line nearest the duration. <b>The whole song</b> runs from the start point to the end.</p>" +
+      "<p>Either way the cuts are spread to suit the music, and every photo gets one. With more photos than the music can take without turning into a blur, " +
+      "the reel shows an even sample and says so.</p>"
   },
   analysis: {
     title: "How the song is read",
@@ -103,6 +107,28 @@ const TOPICS = {
       "<p><b>Real time</b>, where the browser cannot encode video itself: the reel is recorded while it plays, so it takes as long as the reel and the tab " +
       "has to stay in front. Some browsers record WebM; the length is written into the file either way so galleries and social apps read it properly.</p>" +
       "<p>On a phone, <b>Share</b> sends the finished file straight to Photos, Instagram or a chat.</p>"
+  },
+  pace: {
+    title: "Pace",
+    body:
+      "<p>With <b>fit the photos</b>, the song sets how fast the cuts come, and the reel runs as long as your photos last, ending at the end of a phrase.</p>" +
+      "<p>Pace shifts that whole plan: each step halves or doubles the cuts in every phrase, so quiet parts stay quieter than the chorus. " +
+      "Calmer uses more of the song for the same photos; busier gets through them sooner.</p>"
+  },
+  hero: {
+    title: "Hero shots",
+    body:
+      "<p>The moment a chorus drops is the strongest cut in the reel. Hero shots puts the most striking photo nearby on it: the most colourful and contrasty one, " +
+      "from no more than six places away, so a dump in date order still reads in date order.</p>" +
+      "<p>Off, every photo plays exactly where your order puts it.</p>"
+  },
+  sync: {
+    title: "Sync",
+    body:
+      "<p>Each cut is shown on the last video frame before its beat, about a hundredth to a fiftieth of a second early, never late. " +
+      "People notice sound arriving before the picture far sooner than the reverse, and a flash with a click feels most together when the flash is slightly first.</p>" +
+      "<p>The preview also allows for the delay your speakers or Bluetooth headphones report. If the cuts still feel late through yours, " +
+      "nudge them earlier (minus); if early, later. The nudge goes into the export too.</p>"
   },
   update: {
     title: "Updates",

@@ -110,10 +110,26 @@ function mp4Duration(buf) {
       const s = window.__bd.song(), off = window.__bd.cfg.musicOff, ev = window.__bd.tl().events, beats = s.beats.map((b) => (b.t - off) * 1000);
       const per = (beats[beats.length - 1] - beats[0]) / (beats.length - 1);
       let on = 0;
-      for (const e of ev) { let best = 1e9; for (let i = 0; i < beats.length; i++) for (const f of [0, 0.25, 0.5, 0.75]) best = Math.min(best, Math.abs(e.t - (beats[i] + f * per))); if (best < 15) on++; }
+      for (const e of ev) { if (e.kind === "start") { on++; continue; } let best = 1e9; for (let i = 0; i < beats.length; i++) for (const f of [0, 0.25, 0.5, 0.75]) best = Math.min(best, Math.abs(e.mt - (beats[i] + f * per))); if (best < 15) on++; }
       return on / ev.length;
     });
     check("cuts land on the beat grid", onBeat > 0.95, (onBeat * 100).toFixed(0) + "%");
+    const fit = await page.evaluate(() => ({ len: window.__bd.cfg.lenMode, n: window.__bd.tl().events.length, note: window.__bd.tl().note, lead: window.__bd.tl().events.slice(1).every((e) => e.mt - e.t >= 7.9 && e.mt - e.t <= 8 + 1000 / 60 + 0.1) }));
+    check("fit the photos is the default, and uses every photo", fit.len === "fit" && fit.n === photos.length && !fit.note, JSON.stringify(fit));
+    check("every cut is shown a little before its beat, never after", fit.lead);
+    await page.click('[data-tab="music"]');
+    await page.click("#bestBtn");
+    await page.waitForTimeout(300);
+    const best = await page.evaluate(() => { const off = window.__bd.cfg.musicOff; return { off, onBar: window.__bd.song().bars.some((b) => Math.abs(b - off) < 0.002) }; });
+    check("Best part starts the reel on a bar", best.onBar && best.off > 0, best.off.toFixed(2) + " s");
+    await page.click('[data-tab="edit"]');
+    const d0 = await page.evaluate(() => window.__bd.tl().D);
+    await page.$eval("#pace", (el) => { el.value = "-1"; el.dispatchEvent(new Event("input", { bubbles: true })); });
+    await page.waitForTimeout(400);
+    const d1 = await page.evaluate(() => window.__bd.tl().D);
+    check("a calmer pace stretches the same photos over more of the song", d1 > d0, (d0 / 1000).toFixed(1) + " s, then " + (d1 / 1000).toFixed(1) + " s");
+    await page.$eval("#pace", (el) => { el.value = "0"; el.dispatchEvent(new Event("input", { bubbles: true })); });
+    await page.waitForTimeout(400);
     if (SHOTS) {
       await page.waitForTimeout(400);
       await page.screenshot({ path: path.join(SHOTS, `${label}-1-loaded.png`) });

@@ -24,6 +24,8 @@
    the strong positions; with more it fills in the subdivisions.
    ============================================================ */
 
+import { plan, present, LEAD_MS } from "./choreo.js";
+
 export const STYLES = ["slam", "pile", "pop", "grid", "strip", "split", "stack", "echo", "slash", "bubble", "mirror", "punch", "quad", "bars", "tape", "xerox"];
 export const MUSIC_RHYTHMS = ["song", "beat", "melody", "hits"];
 
@@ -179,7 +181,8 @@ function selectTop(cands, N, minGap) {
 const RH_THRESH = { beat: 0.5, song: 0.3, melody: 0.5, hits: 0.5 };
 
 function musicCuts(N, D, cfg, music, map, songLen) {
-  const minGap = Math.max(30, 1000 / (cfg.fps || 60) * 1.8);
+  // two and a half frames: still apart once both are moved onto the frame grid
+  const minGap = Math.max(40, 1000 / (cfg.fps || 60) * 2.5);
   const beats = timelineBeats(music, cfg, D);
   if (beats.length < 2) return null;
   const rh = cfg.rhythm;
@@ -259,6 +262,28 @@ function makeSplit(rng, W, H) {
 }
 export function enabledStyles(cfg) { const s = STYLES.filter((k) => cfg.styles[k]); return s.length ? s : ["slam"]; }
 
+/* ---------- hero shots ---------- */
+/* The strongest photos near a big moment are moved onto it: a drop first,
+   then the start of each chorus, then chorus phrases. Only within a few
+   places of where the photo already was, so a chronological dump stays
+   chronological to the eye. photos[i].impact comes from js/photos.js. */
+const HERO_WINDOW = 6;
+function heroSwap(meta, order, photos) {
+  if (!photos.length || photos[0].impact == null) return;
+  const rank = (c) => (c.kind === "drop" ? 3 : c.kind === "section" && c.sec && c.sec.type === "peak" ? 2 : c.kind === "phrase" && c.sec && c.sec.type === "peak" ? 1 : 0);
+  const heroes = meta.map((c, k) => ({ k, r: rank(c) })).filter((h) => h.r > 0).sort((a, b) => b.r - a.r || a.k - b.k);
+  const locked = new Uint8Array(order.length);
+  for (const { k } of heroes.slice(0, Math.max(1, Math.floor(order.length / 8)))) {
+    if (locked[k]) continue;
+    let best = k;
+    for (let j = Math.max(0, k - HERO_WINDOW); j <= Math.min(order.length - 1, k + HERO_WINDOW); j++) {
+      if (!locked[j] && photos[order[j]].impact > photos[order[best]].impact + 0.05) best = j;
+    }
+    [order[k], order[best]] = [order[best], order[k]];
+    locked[k] = 1;
+  }
+}
+
 /* ---------- the edit ---------- */
 /* photos: [{ar}], cfg: settings, music: analysis result or null,
    canvas: {w,h}. Returns {events, D, note, map, beats}. */
@@ -273,9 +298,15 @@ export function buildTimeline(photos, cfg, music, canvas) {
   if ((rh === "song" || rh === "melody" || rh === "hits") && !hasBeats) rh = hasTrack ? "uniform" : "accel";
   const songLen = MUSIC_RHYTHMS.includes(rh) && hasBeats && cfg.lenMode === "song";
   let D = songLen ? Math.max(1000, (music.duration - cfg.musicOff) * 1000) : clamp(cfg.durS, 2, 90) * 1000;
-  let times = [], photoIdx = null;
+  let times = [], photoIdx = null, meta = null, mts = null;
 
-  if (rh === "uniform") for (let i = 0; i < N; i++) times.push(i * D / N);
+  const pl = rh === "song" && hasBeats ? plan(N, music, cfg) : null;
+  if (pl) {
+    // follow the song: js/choreo.js plans the cuts bar by bar
+    meta = pl.cuts; times = meta.map((c) => c.t); D = Math.max(pl.D, times[times.length - 1] + 1); out.note = pl.note; out.plan = pl.bars;
+    if (times.length < N) { const C = times.length; photoIdx = times.map((_, k) => Math.min(N - 1, Math.floor(k * N / C))); }
+  }
+  else if (rh === "uniform") for (let i = 0; i < N; i++) times.push(i * D / N);
   else if (rh === "accel") for (let i = 0; i < N; i++) times.push(D * Math.pow(i / N, 1 / cfg.accel));
   else if (rh === "decel") for (let i = 0; i < N; i++) times.push(D * Math.pow(i / N, cfg.accel));
   else if (rh === "random") { const g = D / N; for (let i = 0; i < N; i++) times.push(clamp(i * g + (rng() * 2 - 1) * g * 0.45, 0, D - 1)); times.sort((a, b) => a - b); times[0] = 0; }
@@ -291,7 +322,7 @@ export function buildTimeline(photos, cfg, music, canvas) {
     const map = mapSections(hasTrack ? music : null, cfg.musicOff, D);
     const mc = musicCuts(N, D, Object.assign({}, cfg, { rhythm: rh }), hasBeats ? music : null, map, songLen);
     if (mc) {
-      times = mc.times; D = mc.D; out.note = mc.note; out.beats = mc.beats.filter((b) => b.t >= 0 && b.t < D);
+      mts = mc.times; times = present(mts, cfg); D = Math.max(mc.D, times[times.length - 1] + 1); out.note = mc.note; out.beats = mc.beats.filter((b) => b.t >= 0 && b.t < D);
       if (times.length < N) { const C = times.length; photoIdx = times.map((_, k) => Math.min(N - 1, Math.floor(k * N / C))); }
     } else for (let i = 0; i < N; i++) times.push(i * D / N);
   }
@@ -299,6 +330,9 @@ export function buildTimeline(photos, cfg, music, canvas) {
     out.map = mapSections(music, cfg.musicOff, D);
     if (!out.beats.length && hasBeats) out.beats = timelineBeats(music, cfg, D).filter((b) => b.t >= 0 && b.t < D);
   }
+  // the beat pulse leads its beat by the same margin the cuts do
+  const musicBeats = out.beats;
+  if (MUSIC_RHYTHMS.includes(rh)) { const sh = (cfg.syncNudge || 0) - LEAD_MS; out.beats = out.beats.map((b) => Object.assign({}, b, { t: b.t + sh })); }
   const map = out.map;
   const sectional = MUSIC_RHYTHMS.includes(rh) && rh !== "beat" && map.secs.length > 0;
   const fa = feelActive(cfg, music), fw = feelWeights(cfg);
@@ -310,7 +344,7 @@ export function buildTimeline(photos, cfg, music, canvas) {
     if (v.length > 20) { pLo = v[Math.floor(v.length * 0.1)]; pHi = v[Math.floor(v.length * 0.9)]; }
   }
   const pitchAt = (t) => { if (!(pHi > pLo)) return -1; const p = curveAt(music.pitch, music.curves.hop, cfg.musicOff + t / 1000); return p > 0 ? clamp((p - pLo) / (pHi - pLo), 0, 1) : -1; };
-  const isDown = (t) => { for (const b of out.beats) { if (Math.abs(b.t - t) < 2) return b.down; if (b.t > t + 2) break; } return false; };
+  const isDown = (t) => { for (const b of musicBeats) { if (Math.abs(b.t - t) < 2) return b.down; if (b.t > t + 2) break; } return false; };
 
   const modAt = (t) => {
     let m = MOD_DEFAULT;
@@ -345,10 +379,22 @@ export function buildTimeline(photos, cfg, music, canvas) {
   let run = 0, st = null, grid = null, gPtr = 0, pileCount = 0, sinceCover = 99;
   let splitL = null, sPtr = 0, stackCount = 0, slashCount = 0, bubCount = 0, tapeCount = 0, runKey = null;
   const music1 = MUSIC_RHYTHMS.includes(rh);
+  const order = photoIdx ? photoIdx.slice() : times.map((_, k) => k);
+  if (meta && cfg.hero !== false) heroSwap(meta, order, photos);
+  const loud = ["slam", "punch", "xerox"].filter((x) => cfg.styles[x]);
   for (let k = 0; k < times.length; k++) {
-    const t = times[k], mod = modAt(t);
-    const boundary = sectional && runKey !== null && mod.sectionKey !== runKey;
-    if (boundary) run = 0;
+    const t = times[k], m = meta && meta[k], mt = m ? m.mt : mts ? mts[k] : t;
+    let mod = modAt(mt);
+    let boundary;
+    if (m) {
+      // runs turn over on the planner's phrase lines, and a drop opens on a full-frame hit
+      boundary = k > 0 && m.newRun;
+      if (boundary || k === 0) run = 0;
+      if (m.kind === "drop" && loud.length) mod = Object.assign({}, mod, { styleFilter: loud });
+    } else {
+      boundary = sectional && runKey !== null && mod.sectionKey !== runKey;
+      if (boundary) run = 0;
+    }
     let runStart = false;
     if (run <= 0) {
       const prev = st;
@@ -356,7 +402,7 @@ export function buildTimeline(photos, cfg, music, canvas) {
       const rs = mod.styleFilter || pool;
       if (rs.length === 1) st = rs[0];
       else { let p; do { p = rs[rng() * rs.length | 0]; } while (p === prev && rng() < 0.7); st = p; }
-      run = sampleRunLen(rng, cfg, st, mod.runScale); runStart = true; runKey = mod.sectionKey;
+      run = m ? 1e9 : sampleRunLen(rng, cfg, st, mod.runScale); runStart = true; runKey = mod.sectionKey;
       if (st === "grid") { grid = makeGrid(rng, W, H); gPtr = 0; const n = grid.cells.length; run = Math.max(n, Math.ceil(run / n) * n); }
       if (st === "pile") pileCount = 0;
       if (st === "split") { splitL = makeSplit(rng, W, H); sPtr = 0; const n = splitL.rects.length; run = Math.max(n, Math.ceil(run / n) * n); }
@@ -365,7 +411,7 @@ export function buildTimeline(photos, cfg, music, canvas) {
       if (st === "bubble") bubCount = 0;
       if (st === "tape") tapeCount = 0;
     }
-    const pIdx = photoIdx ? photoIdx[k] : k;
+    const pIdx = order[k];
     const ev = { t, i: pIdx, st, clear: false, covers: false, flash: false, glitch: false, pop: 0, ar: photos[pIdx].ar };
     if (st === "slam") { ev.fit = cfg.fit === "mix" ? (rng() < 0.72 ? "cover" : "contain") : cfg.fit; ev.covers = true; }
     else if (st === "pile") {
@@ -406,13 +452,15 @@ export function buildTimeline(photos, cfg, music, canvas) {
 
     // the lead line lifts placed prints: a high note sits high on the frame
     if (ev.y != null && (st === "pile" || st === "pop" || st === "tape" || st === "bubble" || st === "stack")) {
-      const pn = pitchAt(t);
+      const pn = pitchAt(mt);
       if (pn >= 0) ev.y = lerp(ev.y, lerp(0.8, 0.2, pn), clamp(cfg.melodyLift, 0, 1) * (st === "stack" || st === "pop" ? 0.5 : 1));
     }
     if (k === 0) ev.clear = true;
     let flashP = mod.flashRand;
-    if (music1 && isDown(t)) flashP += 0.15 * (fa ? fw.fx : 0.5);
-    ev.flash = (runStart && rng() < mod.flashRun) || rng() < flashP || boundary;
+    if (music1 && (m ? m.kind === "phrase" || m.kind === "down" : isDown(mt))) flashP += 0.15 * (fa ? fw.fx : 0.5);
+    ev.flash = (runStart && rng() < mod.flashRun) || rng() < flashP || (m ? m.kind === "drop" || m.kind === "section" : boundary);
+    if (music1) ev.mt = mt;
+    if (m) ev.kind = m.kind;
     if (k === 0) ev.flash = false;   // the first frame is the poster: never a white-out
     ev.glitch = rng() < mod.glitchP;
     sinceCover = (ev.clear || ev.covers) ? 0 : sinceCover + 1;

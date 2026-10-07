@@ -93,14 +93,27 @@ export function clear() {
 
 /* ---------- playback ---------- */
 function latency() { const c = A.ctx; return c ? clamp((c.outputLatency || c.baseLatency || 0), 0, 0.4) : 0; }
-export function play(tMs, cfg) {
+/* How long the song fades over at the end of the reel: the hold on the last
+   photo when there is one, so the reel ends rather than being cut off mid-bar. */
+const fadeS = (cfg) => clamp((cfg.holdLast ? cfg.holdMs : 0) / 1000, 0.25, 1.5);
+/* Plays from timeline tMs; endMs, when given, is where the reel ends and the
+   music has faded out. */
+export function play(tMs, cfg, endMs) {
   stop();
   A.playing = true; A.startT = tMs;
   if (!A.ctx) return;
   A.startCtx = A.ctx.currentTime + 0.03;
   const off = cfg.musicOff + tMs / 1000;
   if (A.buffer && off < A.buffer.duration) {
-    const s = A.ctx.createBufferSource(); s.buffer = A.buffer; s.connect(A.musicGain);
+    const s = A.ctx.createBufferSource(); s.buffer = A.buffer;
+    const g = A.ctx.createGain(); s.connect(g); g.connect(A.musicGain);
+    if (endMs > tMs) {
+      const end = A.startCtx + (endMs - tMs) / 1000, f = fadeS(cfg), from = end - f;
+      const g0 = from >= A.startCtx ? 1 : clamp((end - A.startCtx) / f, 0, 1);
+      g.gain.setValueAtTime(g0, A.startCtx);
+      if (from > A.startCtx) g.gain.setValueAtTime(1, from);
+      g.gain.linearRampToValueAtTime(0, end);
+    }
     s.start(A.startCtx, Math.max(0, off)); A.src = s;
   }
 }
@@ -129,7 +142,11 @@ export async function renderMix(cfg, cutsMs, totalMs, sampleRate = 48000) {
   const len = Math.ceil(totalMs / 1000 * sampleRate);
   const oc = new C(2, Math.max(1, len), sampleRate);
   if (A.buffer && cfg.musicVol > 0) {
-    const g = oc.createGain(); g.gain.value = cfg.musicVol; g.connect(oc.destination);
+    const g = oc.createGain(); g.connect(oc.destination);
+    const end = totalMs / 1000, f = fadeS(cfg);
+    g.gain.setValueAtTime(cfg.musicVol, 0);
+    g.gain.setValueAtTime(cfg.musicVol, Math.max(0, end - f));
+    g.gain.linearRampToValueAtTime(0, end);
     const s = oc.createBufferSource(); s.buffer = A.buffer; s.connect(g);
     if (cfg.musicOff < A.buffer.duration) s.start(0, cfg.musicOff);
   }

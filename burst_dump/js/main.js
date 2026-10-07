@@ -11,6 +11,7 @@
    ============================================================ */
 import * as R from "./render.js";
 import { buildTimeline, STYLES, MUSIC_RHYTHMS } from "./timeline.js";
+import { bestStart } from "./choreo.js";
 import * as P from "./photos.js";
 import * as AU from "./audio.js";
 import * as X from "./export.js";
@@ -30,7 +31,7 @@ const TYPE_COLOR = { low: "#5b8cff", mid: "#8b9199", build: "#ffc24b", peak: "#f
 const DEFAULTS = {
   cap: 1000, sample: "even", order: "name", quality: "auto",
   aspect: "9:16", arw: 9, arh: 16, res: "1080", bgMode: "#000000", bgColor: "#0b0c0e", fit: "cover", border: "white",
-  rhythm: "accel", lenMode: "fixed", durS: 30, accel: 2.2, cluster: 16, bpm: 120, holdLast: true, holdMs: 800,
+  rhythm: "accel", lenMode: "fit", pace: 0, hero: true, syncNudge: 0, durS: 30, accel: 2.2, cluster: 16, bpm: 120, holdLast: true, holdMs: 800,
   styles: { slam: true, pile: true, pop: true, grid: true }, chaos: 0.5, runMode: "auto",
   styleRun: { slam: 4, pile: 14, pop: 6, grid: 8, strip: 8, split: 6, stack: 10, echo: 3, slash: 8, bubble: 10, mirror: 3, punch: 4, quad: 3, bars: 8, tape: 10, xerox: 3 },
   pulse: 0.35, drift: true, flash: true, glitch: true, grain: 0.10, vig: 0.35, hud: true, sfx: false, sfxVol: 0.5,
@@ -44,6 +45,8 @@ try {
   if (saved && typeof saved === "object") for (const k of Object.keys(DEFAULTS)) if (k in saved && k !== "musicOff") cfg[k] = typeof DEFAULTS[k] === "object" ? Object.assign({}, DEFAULTS[k], saved[k]) : saved[k];
 } catch (e) {}
 cfg.bg = cfg.bgMode === "custom" ? cfg.bgColor : cfg.bgMode;
+// settings saved before "fit the photos" existed asked for "fixed" only because it was the default
+try { const sv = JSON.parse(localStorage.getItem(STORE) || "null"); if (sv && !("pace" in sv) && sv.lenMode === "fixed") cfg.lenMode = "fit"; } catch (e) {}
 let saveT = 0;
 function save() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(STORE, JSON.stringify(cfg)); } catch (e) {} }, 300); }
 let rhythmTouched = false;
@@ -82,13 +85,13 @@ function play(fromGesture) {
   else if (AU.A.buffer && !(AU.A.ctx && AU.A.ctx.state === "running")) return;  // no sound without a tap; do not start mute
   if (player.t >= R.endT()) player.t = 0;
   player.playing = true; player.last = performance.now();
-  AU.play(player.t, cfg);
+  AU.play(player.t, cfg, R.endT());
   setPlayIcon();
 }
 function pause() { player.playing = false; AU.stop(); setPlayIcon(); }
 function seek(t) {
   player.t = clamp(t, 0, R.endT()); R.invalidate();
-  if (player.playing) AU.play(player.t, cfg);
+  if (player.playing) AU.play(player.t, cfg, R.endT());
   R.frame(player.t); transport();
 }
 function setPlayIcon() { $("playBtn").innerHTML = `<svg><use href="#i-${player.playing ? "pause" : "play"}"/></svg>`; $("playBtn").setAttribute("aria-label", player.playing ? "Pause" : "Play"); }
@@ -101,7 +104,7 @@ function tick(now) {
     const end = R.endT();
     if (player.t >= end && tl.D > 0) {
       if (player.exporting === "rt") { finishRealtime(); }
-      else if (player.loop) { player.t = 0; R.invalidate(); AU.play(0, cfg); }
+      else if (player.loop) { player.t = 0; R.invalidate(); AU.play(0, cfg, R.endT()); }
       else { player.t = end; pause(); }
     }
   }
@@ -128,7 +131,7 @@ function stats() {
   else {
     const D = tl.D, M = tl.events.length, rate = M / (D / 1000);
     $("lcdD").textContent = (D / 1000).toFixed(1) + "s"; $("lcdR").textContent = rate.toFixed(1) + "/s";
-    const note = tl.note === "short" ? " · ended early, not enough photos for the song's pace" : tl.note === "surplus" ? ` · an even sample of the ${N}` : "";
+    const note = tl.note === "short" ? " · ended early, not enough photos for the song's pace" : tl.note === "surplus" ? ` · ${M} of ${N} photos: more would blur the song` : "";
     $("timeStat").innerHTML = `<b>${M}</b> cuts · <b>${(D / 1000).toFixed(1)}s</b> · <b>${Math.round(D / M)}</b> ms a cut${note}`;
     if (document.activeElement !== $("pps")) $("pps").value = rate.toFixed(1);
   }
@@ -140,7 +143,7 @@ function stats() {
 }
 
 /* ---------- settings binder ---------- */
-const VAL_FMT = { durS: (v) => v + "s", accel: (v) => (+v).toFixed(1) + "×", cluster: (v) => v, bitrate: (v) => v + " Mbps", grain: (v) => (+v).toFixed(2), vig: (v) => (+v).toFixed(2) };
+const VAL_FMT = { pace: (v) => (+v === 0 ? "the song's" : (v > 0 ? "+" : "") + v), syncNudge: (v) => (+v === 0 ? "0 ms" : (v > 0 ? "+" : "") + v + " ms"), durS: (v) => v + "s", accel: (v) => (+v).toFixed(1) + "×", cluster: (v) => v, bitrate: (v) => v + " Mbps", grain: (v) => (+v).toFixed(2), vig: (v) => (+v).toFixed(2) };
 function showVal(k) { document.querySelectorAll(`[data-v="${k}"]`).forEach((el) => { el.textContent = (VAL_FMT[k] || ((v) => (+v).toFixed(2)))(cfg[k]); }); }
 function setControl(el) {
   const k = el.dataset.k;
@@ -157,7 +160,9 @@ const ON = {
   length() { R.invalidate(); transport(); drawStrip(); },
   vol() { AU.setVolumes(cfg); refreshFormat(); },
   offset() { setOffset(cfg.musicOff, true); },
-  bg() { cfg.bg = cfg.bgMode === "custom" ? cfg.bgColor : cfg.bgMode; refreshVisibility(); R.invalidate(); if (!player.playing) R.frame(player.t); },
+  bg() { cfg.bg = cfg.bgMode === "custom" ? cfg.bgColor : cfg.bgMode;
+// settings saved before "fit the photos" existed asked for "fixed" only because it was the default
+try { const sv = JSON.parse(localStorage.getItem(STORE) || "null"); if (sv && !("pace" in sv) && sv.lenMode === "fixed") cfg.lenMode = "fit"; } catch (e) {} refreshVisibility(); R.invalidate(); if (!player.playing) R.frame(player.t); },
   sfx() { if (cfg.sfx) AU.ensureCtx(cfg); refreshFormat(); },
   fmt() { refreshFormat(); },
   runs() { renderRuns(); scheduleRegen(); },
@@ -175,8 +180,10 @@ document.querySelectorAll("[data-k]").forEach((el) => {
 });
 function refreshVisibility() {
   const songish = MUSIC_RHYTHMS.includes(cfg.rhythm) && hasBeats();
+  // "fit the photos" is the follow-the-song planner's; the other music rhythms read it as fixed
+  const fitOn = cfg.lenMode === "fit" && cfg.rhythm === "song";
   const show = {
-    songish, fixedlen: !(songish && cfg.lenMode === "song"), accel: cfg.rhythm === "accel" || cfg.rhythm === "decel",
+    songish, fixedlen: !(songish && (cfg.lenMode === "song" || fitOn)), pace: songish && fitOn, songOnly: songish && cfg.rhythm === "song", accel: cfg.rhythm === "accel" || cfg.rhythm === "decel",
     bursts: cfg.rhythm === "bursts", bpm: cfg.rhythm === "beat" && !hasBeats(), customAR: cfg.aspect === "custom"
   };
   document.querySelectorAll("[data-show]").forEach((el) => { el.hidden = !show[el.dataset.show]; });
@@ -353,14 +360,24 @@ $("musicClear").onclick = () => {
 function maxOff() {
   const a = song(), d = a ? a.duration : AU.A.buffer ? AU.A.buffer.duration : 0;
   if (!(d > 0)) return 0;
-  if (MUSIC_RHYTHMS.includes(cfg.rhythm) && cfg.lenMode === "song" && hasBeats()) return Math.max(0, d - 5);
+  if (MUSIC_RHYTHMS.includes(cfg.rhythm) && (cfg.lenMode === "song" || (cfg.lenMode === "fit" && cfg.rhythm === "song")) && hasBeats()) return Math.max(0, d - 5);
   return Math.max(0, d - Math.min(R.endT(), d * 1000) / 1000);
 }
+/* With a music rhythm the reel starts on a bar line, so its first cut is a
+   downbeat: the nearest one within half a bar of where it was put. */
+function snapToBar(s) {
+  const a = song();
+  if (!a || !a.bars || a.bars.length < 2 || !MUSIC_RHYTHMS.includes(cfg.rhythm)) return s;
+  let best = s, d = Infinity;
+  for (const b of a.bars) { const e = Math.abs(b - s); if (e < d) { d = e; best = b; } }
+  const bar = (a.bars[a.bars.length - 1] - a.bars[0]) / (a.bars.length - 1);
+  return d <= bar / 2 ? best : s;
+}
 function setOffset(s, fromInput) {
-  cfg.musicOff = clamp(+s || 0, 0, maxOff());
+  cfg.musicOff = clamp(snapToBar(Math.max(0, +s || 0)), 0, maxOff());
   if (!fromInput || document.activeElement !== $("musicOff")) $("musicOff").value = cfg.musicOff.toFixed(1);
   save(); drawStrip();
-  if (player.playing) AU.play(player.t, cfg);
+  if (player.playing) AU.play(player.t, cfg, R.endT());
   scheduleRegen();
 }
 function renderSongMap() {
@@ -369,6 +386,11 @@ function renderSongMap() {
   const s0 = cfg.musicOff, s1 = cfg.musicOff + R.endT() / 1000;
   w.innerHTML = a.sections.map((s, i) => `<button class="sm${s.t1 > s0 && s.t0 < s1 ? " on" : ""}" data-i="${i}" title="Start the reel here"><i style="background:${TYPE_COLOR[s.type]}"></i><b>${s.label}</b><span class="ty">${TYPE_NAME[s.type]}</span><span class="tm">${fmtT(s.t0 * 1000).replace(/\.\d$/, "")} – ${fmtT(s.t1 * 1000).replace(/\.\d$/, "")}</span></button>`).join("");
 }
+$("bestBtn").onclick = () => {
+  const a = song(); if (!a) return;
+  const fit = cfg.rhythm === "song" && cfg.lenMode === "fit";
+  setOffset(bestStart(a, fit || !tl.D ? 30 : R.endT() / 1000)); regen(); seek(0);
+};
 $("songMap").addEventListener("click", (e) => {
   const b = e.target.closest(".sm"); if (!b) return;
   const s = song().sections[+b.dataset.i]; if (!s) return;
@@ -413,7 +435,7 @@ function drawStrip() {
   }
   // the cuts, where they land in the song
   g.fillStyle = "#ff3b30";
-  for (const e of tl.events) { const s = cfg.musicOff + e.t / 1000; if (s <= dur) g.fillRect(x(s) - 0.5, 0, 1, 6); }
+  for (const e of tl.events) { const s = cfg.musicOff + (e.mt != null ? e.mt : e.t) / 1000; if (s <= dur) g.fillRect(x(s) - 0.5, 0, 1, 6); }
   const left = cfg.musicOff / dur, width = Math.min(R.endT() / 1000, dur - cfg.musicOff) / dur;
   $("stripWin").style.left = left * 100 + "%"; $("stripWin").style.width = Math.max(0, width) * 100 + "%";
   transport();

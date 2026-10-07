@@ -95,6 +95,32 @@ async function onePass(f, maxDim) {
   }
   return viaImg(f, maxDim);
 }
+/* How much a photo stands out, 0..1: colourfulness (Hasler and Suesstrunk's
+   metric) and contrast, read off a 24 px copy. Used to put the most striking
+   photos on the drops; cheap enough for a thousand. */
+const probe = typeof document !== "undefined" ? document.createElement("canvas") : null;
+if (probe) { probe.width = probe.height = 24; }
+export function impactOf(bmp) {
+  try {
+    const g = probe.getContext("2d", { willReadFrequently: true });
+    const [sx, sy, sw, sh] = (() => { const s = Math.max(24 / bmp.width, 24 / bmp.height), w = 24 / s, h = 24 / s; return [(bmp.width - w) / 2, (bmp.height - h) / 2, w, h]; })();
+    g.drawImage(bmp, sx, sy, sw, sh, 0, 0, 24, 24);
+    const d = g.getImageData(0, 0, 24, 24).data, n = d.length / 4;
+    let mrg = 0, myb = 0, mrg2 = 0, myb2 = 0, ml = 0, ml2 = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], gg = d[i + 1], b = d[i + 2], rg = r - gg, yb = 0.5 * (r + gg) - b, l = 0.299 * r + 0.587 * gg + 0.114 * b;
+      mrg += rg; myb += yb; mrg2 += rg * rg; myb2 += yb * yb; ml += l; ml2 += l * l;
+    }
+    mrg /= n; myb /= n; ml /= n;
+    const srg = Math.sqrt(Math.max(0, mrg2 / n - mrg * mrg)), syb = Math.sqrt(Math.max(0, myb2 / n - myb * myb));
+    const colour = Math.sqrt(srg * srg + syb * syb) + 0.3 * Math.sqrt(mrg * mrg + myb * myb);
+    const contrast = Math.sqrt(Math.max(0, ml2 / n - ml * ml));
+    // a near-black or blown-out frame is no hero, however colourful its edge
+    const exposure = 1 - Math.abs(ml - 128) / 160;
+    return clamp((0.6 * Math.min(1, colour / 110) + 0.4 * Math.min(1, contrast / 75)) * clamp(exposure, 0.2, 1), 0, 1);
+  } catch (e) { return 0.5; }
+}
+
 async function decodeOne(f, maxDim) {
   try { return await onePass(f, maxDim); }
   catch (e) { if (maxDim > 480) { try { return await onePass(f, 480); } catch (e2) {} } throw e; }
@@ -119,7 +145,7 @@ export async function decodeAll(cfg, onProgress) {
       while (idx < list.length) {
         const my = idx++; if (gen !== state.gen) return;
         const f = list[my];
-        try { const bmp = await decodeOne(f, maxDim); if (gen !== state.gen) { try { bmp.close(); } catch (e) {} return; } out[my] = { bmp, name: f.name, ar: bmp.width / bmp.height }; }
+        try { const bmp = await decodeOne(f, maxDim); if (gen !== state.gen) { try { bmp.close(); } catch (e) {} return; } out[my] = { bmp, name: f.name, ar: bmp.width / bmp.height, impact: impactOf(bmp) }; }
         catch (e) { fails.push(f.name); }
         done++;
         if (done % 8 === 0 || done === list.length) { onProgress && onProgress(done, list.length); await new Promise((r) => setTimeout(r, 0)); }
@@ -139,7 +165,7 @@ export async function retryFailed() {
   state.decoding = true;
   try {
     const maxDim = state.maxDim || maxDimFor(state.files.length, "auto"), still = [];
-    for (const f of targets) { try { const bmp = await decodeOne(f, maxDim); state.photos.push({ bmp, name: f.name, ar: bmp.width / bmp.height }); } catch (e) { still.push(f.name); } }
+    for (const f of targets) { try { const bmp = await decodeOne(f, maxDim); state.photos.push({ bmp, name: f.name, ar: bmp.width / bmp.height, impact: impactOf(bmp) }); } catch (e) { still.push(f.name); } }
     state.fails = still;
   } finally { state.decoding = false; }
 }
