@@ -18,7 +18,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/burst.css">
 <!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
-<script>window.BD_VERSION = "2";</script>
+<script>window.BD_VERSION = "3";</script>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -129,7 +129,8 @@
             <div class="two"><button class="mini" id="musicReplace">Replace</button><button class="info" data-info="analysis" aria-label="How the song is read"><svg><use href="#i-info"/></svg></button></div>
           </div>
           <div class="row"><label for="musicVol">Volume</label><input type="range" id="musicVol" data-k="musicVol" data-on="vol" min="0" max="1" step="0.05"></div>
-          <div class="row"><label for="musicOff">Start at</label><input type="number" id="musicOff" data-k="musicOff" data-on="offset" min="0" step="0.1"><span class="val">s</span></div>
+          <div class="row"><label for="musicOff">Start at</label><input type="number" id="musicOff" data-k="musicOff" data-on="offset" min="0" step="0.1"><span class="val">s</span><button class="mini" id="bestBtn">Best part</button></div>
+          <div class="row"><label for="syncNudge">Sync nudge <button class="info" data-info="sync" aria-label="About sync"><svg><use href="#i-info"/></svg></button></label><input type="range" id="syncNudge" data-k="syncNudge" data-on="regen" min="-80" max="80" step="5"><span class="val" data-v="syncNudge"></span></div>
           <h3>Song map</h3>
           <div id="songMap"></div>
         </div>
@@ -156,7 +157,9 @@
           <option value="bursts">bursts</option>
           <option value="random">random</option>
         </select></div>
-        <div class="row" data-show="songish"><label for="lenMode">Length <button class="info" data-info="length" aria-label="About length"><svg><use href="#i-info"/></svg></button></label><select id="lenMode" data-k="lenMode" data-on="rhythm"><option value="fixed">fixed</option><option value="song">let the song decide</option></select></div>
+        <div class="row" data-show="songish"><label for="lenMode">Length <button class="info" data-info="length" aria-label="About length"><svg><use href="#i-info"/></svg></button></label><select id="lenMode" data-k="lenMode" data-on="rhythm"><option value="fit">fit the photos</option><option value="fixed">fixed length</option><option value="song">the whole song</option></select></div>
+        <div class="row" data-show="pace"><label for="pace">Pace <button class="info" data-info="pace" aria-label="About pace"><svg><use href="#i-info"/></svg></button></label><input type="range" id="pace" data-k="pace" data-on="regen" min="-2" max="2" step="0.5"><span class="val" data-v="pace"></span></div>
+        <div class="row" data-show="songOnly"><label>Hero shots <button class="info" data-info="hero" aria-label="About hero shots"><svg><use href="#i-info"/></svg></button></label><button class="tgl" data-k="hero" data-on="regen" aria-label="Hero shots"></button><span class="val">best photos on the drops</span></div>
         <div class="row" data-show="fixedlen"><label for="durS">Duration</label><input type="range" id="durS" data-k="durS" data-on="regen" min="3" max="90" step="1"><span class="val" data-v="durS"></span></div>
         <div class="row" data-show="fixedlen"><label for="pps">or rate</label><input type="number" id="pps" min="0.5" max="60" step="0.5"><span class="val">photos / s</span></div>
         <div class="row" data-show="accel"><label for="accel">Curve</label><input type="range" id="accel" data-k="accel" data-on="regen" min="1.2" max="3.5" step="0.1"><span class="val" data-v="accel"></span></div>

@@ -59,6 +59,8 @@ export function synthSong(opts = {}) {
     for (let b = 0; b < sec.bars; b++, barIdx++) {
       const t0 = t + b * bar;
       const chord = PROG[barIdx % 4];
+      // a break: the band stops dead for the bar before the drop
+      if (sec.kind === "break") { for (let k = 0; k < 4; k++) { const tb = t0 + k * beat; truth.beats.push(tb); if (k === 0) truth.downbeats.push(tb); } continue; }
       const lvl = sec.kind === "intro" || sec.kind === "outro" ? 0.35 : sec.kind === "build" ? 0.55 + 0.35 * b / sec.bars : sec.kind === "chorus" ? 1 : 0.6;
       // pads: a chord per bar, so harmony changes on the downbeat
       for (const m of chord) tone(t0, m, bar * 0.98, 0.05 * lvl, 4);
