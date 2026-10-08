@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Bloomworks — an idle game of glowing contraptions</title>
+<meta name="description" content="An idle game about placing glowing contraptions on an endless grey world. Light flows through your machines, turns into Glow, and brings the land back to life. Three reset layers, Tinkers that build for you, and no final cap. Plays offline.">
+<meta name="theme-color" content="#121318">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bloomworks">
+<link rel="stylesheet" href="css/bloomworks.css">
+<script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
+<!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
+<script>window.BW_VERSION = "1";</script>
+</head>
+<body>
+<canvas id="view" aria-label="The world"></canvas>
+<canvas id="overlay" aria-hidden="true"></canvas>
+
+<header id="top">
+  <div class="res">
+    <span class="chip glow"><i data-icon="glow"></i><b id="glowAmt">0</b><small id="glowRate"></small></span>
+    <span class="chip" id="seedChip" hidden><i data-icon="seed"></i><b id="seedAmt"></b></span>
+    <span class="chip" id="starChip" hidden><i data-icon="star"></i><b id="starAmt"></b></span>
+    <span class="chip" id="dustChip" hidden><i data-icon="planet"></i><b id="dustAmt"></b></span>
+  </div>
+  <div class="mid">
+    <button class="chip" data-act="panel" data-arg="season"><span id="dayIcon"></span><span id="seasonTxt"></span></button>
+    <button class="chip" data-info="weather"><i data-icon="cloud"></i><span id="weatherTxt"></span></button>
+    <button class="chip harvest" id="harvestChip" data-act="panel" data-arg="season" hidden><i data-icon="seed"></i>Harvest <b id="harvestTxt"></b></button>
+  </div>
+  <div class="end">
+    <button class="iconBtn" data-act="zen" aria-label="Zen Mode"><i data-icon="zen"></i></button>
+  </div>
+</header>
+<div id="rush" title="Rush"><i id="rushFill"></i></div>
+<div id="toasts" aria-live="polite"></div>
+
+<nav id="dock">
+  <button data-act="panel" data-arg="build"><i data-icon="hammer"></i><span>Build</span></button>
+  <button data-act="panel" data-arg="levels"><i data-icon="up"></i><span>Levels</span></button>
+  <button data-act="panel" data-arg="workshop"><i data-icon="spark"></i><span>Workshop</span></button>
+  <button data-act="panel" data-arg="season"><i data-icon="seed"></i><span>Seasons</span></button>
+  <button data-act="panel" data-arg="goals"><i data-icon="trophy"></i><span>Goals</span></button>
+  <button data-act="panel" data-arg="tinkers"><i data-icon="tinker"></i><span>Auto</span></button>
+  <button data-act="panel" data-arg="codex"><i data-icon="book"></i><span>Codex</span></button>
+  <button data-act="panel" data-arg="menu"><i data-icon="menu"></i><span>Menu</span></button>
+</nav>
+
+<div id="card" hidden></div>
+
+<div id="placeBar" hidden>
+  <span id="placeTxt"></span>
+  <label id="placePlanWrap" class="sw"><input type="checkbox" id="placePlan"> Plan</label>
+  <button id="placeRot" class="btn" aria-label="Rotate"><i data-icon="rotate"></i></button>
+  <button id="placeDone" class="btn primary"><i data-icon="check"></i>Done</button>
+</div>
+
+<section id="panel" hidden role="dialog" aria-modal="false" aria-labelledby="panelTitle">
+  <div class="panelHead"><h2 id="panelTitle"></h2><button id="panelClose" class="iconBtn" aria-label="Close"><i data-icon="close"></i></button></div>
+  <div id="panelBody"></div>
+</section>
+
+<div id="logbook" hidden role="dialog" aria-modal="true" aria-labelledby="logTitle">
+  <div class="logCard">
+    <div class="panelHead"><h2 id="logTitle">Logbook</h2><button id="logClose" class="iconBtn" aria-label="Close"><i data-icon="close"></i></button></div>
+    <div class="replay"><span>Time-lapse</span><div class="bar"><i id="replayBar"></i></div></div>
+    <div id="logBody"></div>
+  </div>
+</div>
+
+<div id="info-scrim" hidden></div>
+<div id="info-sheet" role="dialog" aria-modal="true" aria-labelledby="info-title" hidden>
+  <div class="sheet-head"><h2 id="info-title"></h2><button id="info-close" class="iconBtn" aria-label="Close"><i data-icon="close"></i></button></div>
+  <div id="info-body"></div>
+</div>
+
+<div id="update-bar" hidden>
+  <span>A new version of Bloomworks is ready.</span>
+  <button id="update-go" class="btn primary small">Reload</button>
+  <button id="update-later" class="iconBtn small" aria-label="Later"><i data-icon="close"></i></button>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
