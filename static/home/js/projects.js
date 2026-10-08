@@ -395,6 +395,24 @@
       c.fillStyle = g; c.fillRect(edge, 0, w - edge, h);
       c.fillStyle = a; c.beginPath(); c.arc(14, h * 0.88 - 4 - Math.abs(Math.sin(p * 6)) * 3, 3, 0, 6.3); c.fill();
     },
+    /* motes rolling down a track into a Hearth, and the grey turning green behind them */
+    motes: function (c, w, h, p, a) {
+      var y = h * 0.56, x0 = w * 0.12, x1 = w * 0.74, green = Math.min(1, (p * 0.12) % 1.4);
+      c.fillStyle = "rgba(93,95,94,.55)"; c.fillRect(0, h * 0.7, w, h * 0.3);
+      c.fillStyle = "rgba(111,170,74,.65)"; c.fillRect(0, h * 0.7, w * green, h * 0.3);
+      c.strokeStyle = "rgba(176,100,58,.9)"; c.lineWidth = 5;
+      c.beginPath(); c.moveTo(x0, y); c.lineTo(x1, y); c.stroke();
+      for (var i = 0; i < 6; i++) {
+        var t = ((p * 0.35 + i / 6) % 1), mx = x0 + (x1 - x0) * t;
+        c.globalAlpha = 0.35; c.fillStyle = a;
+        c.beginPath(); c.arc(mx, y, 6, 0, 6.283); c.fill();
+        c.globalAlpha = 1; c.fillStyle = "#fff8e0";
+        c.beginPath(); c.arc(mx, y, 2.4, 0, 6.283); c.fill();
+      }
+      var f = 1 + 0.15 * Math.sin(p * 9);
+      c.fillStyle = "rgba(138,132,120,.95)"; c.fillRect(x1, y - 10, 22, 20);
+      c.fillStyle = a; c.beginPath(); c.moveTo(x1 + 4, y - 4); c.quadraticCurveTo(x1 + 11, y - 26 * f, x1 + 18, y - 4); c.fill();
+    },
     /* four strings, and a bow across them */
     strings: function (c, w, h, p, a) {
       for (var i = 0; i < 4; i++) {
@@ -482,6 +500,10 @@
       desc: "An endless real-time strategy, from the first fire to the age of aether.",
       hi: ["Phases of enemy bases on a map that keeps growing", "Ten eras, buildings that level up into the next, champions you can drive", "Fog of war, contacts and automation for a realm too big to click"],
       tags: ["canvas", "RTS", "offline"] },
+    { name: "Bloomworks", href: "bloomworks/", badge: "Idle game", accent: "#FFC861", kind: "games", motif: "motes",
+      desc: "Glowing contraptions on an endless grey world, bringing it back to life.",
+      hi: ["Every unit of Glow is a mote you can watch roll, fuse and sell", "Tinkers, Ghosts and Directives automate the automation", "Three reset layers, from Seasons to Planets, and no ceiling anywhere"],
+      tags: ["Three.js", "idle", "offline"] },
     { name: "ARCO", href: "arco/", badge: "Instrument", accent: "#E0A24C", kind: "sound", motif: "strings",
       desc: "A guitar for a phone held sideways.",
       hi: ["A six-string neck that hammers, pulls, slides and bends", "Tap frets to play, or pick, strum and palm-mute the body", "Power chords under one thumb, in any tuning"],

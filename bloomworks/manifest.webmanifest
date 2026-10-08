@@ -1,0 +1,22 @@
+{
+  "name": "Bloomworks — an idle game of glowing contraptions",
+  "short_name": "Bloomworks",
+  "description": "Place glowing contraptions on an endless grey world. Light flows through your machines, turns into Glow, and brings the land back to life. Plays offline.",
+  "id": "/bloomworks/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#121318",
+  "theme_color": "#121318",
+  "categories": ["games", "entertainment"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
