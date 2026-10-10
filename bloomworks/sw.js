@@ -8,7 +8,7 @@
    window.BW_VERSION in index.html — tools/validate.js refuses to let the two
    drift. Bumping it is what publishes an update. The world is saved in
    localStorage, not here, so an update never touches it. */
-var CACHE = "bloomworks-v1";
+var CACHE = "bloomworks-v2";
 var SHELL = [
   "./",
   "./index.html",

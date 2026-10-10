@@ -777,6 +777,7 @@ html.opening:not(.splashed) .rise{ opacity:0; transform:translateY(16px); }
 .finale-title{ font-size:clamp(40px, 6vw, 88px); }
 .finale-sub{ color:var(--fg-2); font-size:clamp(16px, 1.4vw, 20px); }
 .finale .btn{ margin-top:10px; }
+.finale-cta{ display:flex; flex-wrap:wrap; justify-content:center; gap:0 12px; }
 
 /* ---------- footer ---------- */
 .site-footer{

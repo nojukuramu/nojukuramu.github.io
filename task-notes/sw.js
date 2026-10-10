@@ -6,7 +6,7 @@
  */
 importScripts('static/js/db.js', 'static/js/schedule.js', 'static/js/model.js');
 
-var CACHE = 'task-notes-v3';
+var CACHE = 'task-notes-v4';
 
 var SHELL = [
   './',

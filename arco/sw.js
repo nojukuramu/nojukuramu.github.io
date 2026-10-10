@@ -18,7 +18,7 @@
  */
 "use strict";
 
-var VERSION = "arco-v2";
+var VERSION = "arco-v3";
 var SHELL = VERSION + "-shell";
 
 var SHELL_FILES = [

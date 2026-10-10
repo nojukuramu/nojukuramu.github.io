@@ -1,5 +1,5 @@
 /* Pinoy Word Games — offline cache (app shell only, fully local bank) */
-const CACHE = "pwg-v14";
+const CACHE = "pwg-v15";
 const SHELL = [
   "./",
   "index.html",

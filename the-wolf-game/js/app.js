@@ -1047,7 +1047,8 @@
       el("button", {
         class: "linklike", id: "update-check",
         onclick: function () { if (updateReady) applyUpdate(); else checkForUpdate(true); }
-      }, [updateReady ? "Update ready — reload" : "Check for updates"])
+      }, [updateReady ? "Update ready — reload" : "Check for updates"]),
+      el("a", { class: "linklike", href: "https://buymeacoffee.com/noju", target: "_blank", rel: "noopener" }, ["Buy me a coffee"])
     ]);
   }
 

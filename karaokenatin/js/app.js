@@ -3219,7 +3219,7 @@
 
   /* Also the ?v= on every asset in index.html and in sw.js SHELL_FILES.
    * tools/version-check.js fails the build if the three drift apart. */
-  var APP_VERSION = "2.6.0";
+  var APP_VERSION = "2.6.1";
   var UPDATE_CHECK_MS = 30 * 60 * 1000;
 
   var swReg = null;

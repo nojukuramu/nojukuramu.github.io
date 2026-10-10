@@ -175,6 +175,18 @@
       z-index: 10;
     }
     .back-link:hover { color: #aaa; }
+    /* The back link's twin in the other corner: same weight, so neither
+       competes with the player in the middle. */
+    .support-link {
+      position: fixed;
+      top: 14px;
+      right: 18px;
+      font-size: 0.8rem;
+      color: #555;
+      text-decoration: none;
+      z-index: 10;
+    }
+    .support-link:hover { color: #aaa; }
 
     /* ── Focus warning banner (shown when returning after tab was hidden) ── */
     #focus-banner {
@@ -259,6 +271,7 @@
 <body>
 
   <a class="back-link" href="../">← The Atelier</a>
+  <a class="support-link" href="https://buymeacoffee.com/noju" target="_blank" rel="noopener">Buy me a coffee</a>
 
   <!-- Focus warning banner: shown when returning after tab was hidden while running -->
   <div id="focus-banner" role="alert" aria-live="assertive">

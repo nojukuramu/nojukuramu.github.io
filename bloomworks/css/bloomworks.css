@@ -13,6 +13,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); 
 #overlay { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
 .ico { width: 18px; height: 18px; flex: none; vertical-align: -4px; }
 button { font: inherit; color: inherit; cursor: pointer; }
+a.btn { color: inherit; text-decoration: none; }
 [hidden] { display: none !important; }
 input, select, textarea { font: inherit; color: var(--ink); background: rgba(0,0,0,.35); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; user-select: text; -webkit-user-select: text; }
 select { max-width: 100%; }

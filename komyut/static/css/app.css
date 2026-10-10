@@ -530,6 +530,8 @@ ol, ul { padding: 0; list-style: none; }
 .km-btn-primary:hover { background: var(--komyut-hover); }
 .km-btn-ghost { background: var(--surface-2); color: var(--ink); border-color: var(--line-strong); }
 .km-btn-quiet { background: transparent; color: var(--muted); }
+a.km-btn { text-decoration: none; }
+a.km-btn svg { width: 18px; height: 18px; }
 .km-btn-danger { background: transparent; color: var(--down); border-color: var(--down); }
 
 .km-linkish {

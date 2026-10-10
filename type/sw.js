@@ -7,7 +7,7 @@
    "skip-waiting" when the page asks, and CACHE carries the same number as
    window.TY_VERSION in index.html — tools/validate.js refuses to let the two
    drift. Bumping it is what publishes an update. */
-var CACHE = "type-v2";
+var CACHE = "type-v3";
 var SHELL = [
   "./",
   "./index.html",

@@ -597,7 +597,7 @@ export function completion() {
   return Math.min(1, have / all);
 }
 function versionLine() {
-  return '<p class="ver">Aeons v' + esc(update.version()) + ' · <button class="link" data-go="update">Check for updates</button> <span id="updState"></span> <button class="info" data-info="privacy" aria-label="What is stored">' + icon("info") + "</button></p>";
+  return '<p class="ver">Aeons v' + esc(update.version()) + ' · <button class="link" data-go="update">Check for updates</button> <span id="updState"></span> <button class="info" data-info="privacy" aria-label="What is stored">' + icon("info") + '</button> · <a class="link" href="https://buymeacoffee.com/noju" target="_blank" rel="noopener">Buy me a coffee</a></p>';
 }
 function fillSlots() {
   const box = $("slots"); if (!box) return;

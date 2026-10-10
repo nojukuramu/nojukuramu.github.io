@@ -85,6 +85,8 @@ button, select {
   cursor: pointer;
 }
 button:active { transform: translateY(1px); }
+/* the one link dressed as a button, so the setup rows read the same */
+a.mini { display: inline-flex; align-items: center; justify-content: center; color: var(--ink); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-radius: 7px; text-decoration: none; }
 
 .mini {
   font-size: 12px;
