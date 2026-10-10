@@ -347,6 +347,7 @@ kbd {
   text-align: left; padding: 8px 10px; border-radius: var(--r-sm);
   font-size: 13px; color: var(--ink-2);
 }
+a.sb-foot-btn { text-decoration: none; }
 .sb-foot-btn:hover { background: var(--surface); color: var(--ink); }
 
 .scrim {

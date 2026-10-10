@@ -219,7 +219,7 @@ const PANELS = {
     h += '<div class="row">' + btn("saveNow", null, icon("download") + "Save now") + btn("export", null, icon("copy") + "Export") + "</div>";
     h += '<textarea id="saveCode" rows="3" placeholder="Export puts a code here; paste one to import." spellcheck="false"></textarea>';
     h += '<div class="row">' + btn("import", null, icon("upload") + "Import") + btn("wipe", null, icon("trash") + "New world", "danger") + "</div>";
-    h += "<h3>About</h3><div class=\"row wrap\">" + ["about", "howto", "active", "offline", "privacy"].map((k) => '<button class="btn ghost" data-info="' + k + '">' + esc(info.has(k) ? k.charAt(0).toUpperCase() + k.slice(1) : k) + "</button>").join("") + "</div>";
+    h += "<h3>About</h3><div class=\"row wrap\">" + ["about", "howto", "active", "offline", "privacy"].map((k) => '<button class="btn ghost" data-info="' + k + '">' + esc(info.has(k) ? k.charAt(0).toUpperCase() + k.slice(1) : k) + "</button>").join("") + '<a class="btn ghost" href="https://buymeacoffee.com/noju" target="_blank" rel="noopener">' + icon("heart") + "Buy me a coffee</a></div>";
     h += '<p class="hint">Played ' + fmtTime(S.meta.stats.played) + " · " + S.meta.stats.harvests + " Harvests · " + S.meta.stats.eclipses + " Eclipses · Depth " + S.meta.depth + "</p>";
     return h;
   }

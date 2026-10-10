@@ -1,5 +1,5 @@
 /* Magic Circles — service worker (enables installability + light offline cache) */
-const CACHE = 'mc-shell-v1';
+const CACHE = 'mc-shell-v2';
 const CORE = [
   'phaser.html',
   'manifest.webmanifest',

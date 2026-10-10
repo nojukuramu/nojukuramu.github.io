@@ -9,7 +9,7 @@
    Models and textures are not in SHELL: the game fetches all of them at boot,
    and the fetch handler below keeps each one the first time it passes, so a
    second visit is fully offline without making the install wait on them. */
-var CACHE = "msandbox-v5";
+var CACHE = "msandbox-v6";
 var SHELL = [
   "./",
   "./index.html",

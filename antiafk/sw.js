@@ -1,5 +1,5 @@
 /* Anti-AFK — offline app-shell cache */
-const CACHE = "antiafk-v1";
+const CACHE = "antiafk-v2";
 const SHELL = [
   "./",
   "index.html",

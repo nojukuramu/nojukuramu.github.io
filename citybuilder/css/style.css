@@ -94,6 +94,7 @@ html,body{
 }
 .btn:active{transform:scale(.96);}
 .btn-wide{width:100%;margin-top:8px;}
+a.btn{display:block;box-sizing:border-box;text-align:center;text-decoration:none;}
 .btn-primary{background:linear-gradient(90deg,var(--accent),#00b3a4);color:#04211d;}
 .btn-secondary{background:rgba(255,255,255,.07);border:1px solid var(--panel-border);}
 .btn-ghost{background:transparent;border:1px solid var(--panel-border);color:var(--text-dim);}

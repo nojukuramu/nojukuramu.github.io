@@ -1,5 +1,5 @@
 /* SkyLine — offline app-shell cache */
-const CACHE = "skyline-v1";
+const CACHE = "skyline-v2";
 const SHELL = [
   "./",
   "index.html",

@@ -1345,6 +1345,8 @@ code { font-family: var(--mono); font-size: .92em; }
 }
 .rc-textbtn svg { width: 17px; height: 17px; }
 .rc-textbtn:hover { color: var(--matcha-hover); }
+a.rc-textbtn { text-decoration: none; }
+.rc-history-actions .rc-textbtn + .rc-textbtn { margin-left: 18px; }
 .rc-textbtn-quiet { color: var(--muted); }
 .rc-textbtn-quiet:hover { color: var(--rc-danger); }
 

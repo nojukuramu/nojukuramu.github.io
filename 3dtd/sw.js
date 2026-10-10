@@ -1,5 +1,5 @@
 /* VELL — offline app-shell cache */
-const CACHE = "vell-v1";
+const CACHE = "vell-v2";
 const SHELL = [
   "./",
   "index.html",

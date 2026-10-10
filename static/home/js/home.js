@@ -82,6 +82,7 @@
     code: icon('<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>'),
     replay: icon('<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5l3.2 6.6M20.2 9.7l-7.3 1M17.6 18.6l-4.3-6M9.2 20.1l1.9-7.1M3.6 13.6l6.5-2.8M6.6 5.4l3.9 6.2"/>'),
     rewind: icon('<circle cx="12" cy="13" r="7.5"/><circle cx="12" cy="13" r="2"/><path d="M12 5.5V3M12 3h5.5a1.5 1.5 0 0 1 0 3H16"/>'),
+    cup: icon('<path d="M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M17 10.5h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M8 2.5c-.6.8-.6 1.7 0 2.5M12 2.5c-.6.8-.6 1.7 0 2.5"/>'),
     dice: icon('<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="9" cy="9" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.3" fill="currentColor" stroke="none"/>')
   };
 
@@ -119,7 +120,9 @@
     };
   })).concat([
     { icon: I.code, label: "Source on GitHub", sub: "repository", keywords: "code repo git",
-      run: function () { global.open("https://github.com/nojukuramu/nojukuramu.github.io", "_blank", "noopener"); } }
+      run: function () { global.open("https://github.com/nojukuramu/nojukuramu.github.io", "_blank", "noopener"); } },
+    { icon: I.cup, label: "Buy me a coffee", sub: "support", keywords: "support donate tip coffee thanks",
+      run: function () { global.open("https://buymeacoffee.com/noju", "_blank", "noopener"); } }
   ]);
 
   function renderPalette(q) {
