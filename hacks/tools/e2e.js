@@ -387,7 +387,8 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
 
     for (const [label, vw, vh] of [["held sideways", 844, 390], ["held upright", 390, 844]]) {
       console.log("\nA phone " + label);
-      const M = await open(browser, base, { viewport: { width: vw, height: vh }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 }); pages.push(M);
+      // upright here means upright: Force landscape (on by default on phones) is its own case below
+      const M = await open(browser, base, { viewport: { width: vw, height: vh }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 }, vh > vw ? { forceLandscape: false } : null); pages.push(M);
       const q = M.page;
       await q.tap("#btnPlay"); await q.tap("#btnPlayGo");
       await until(q, () => window.HK_DEBUG.S.mode === "play" && document.body.classList.contains("touchOn"));
