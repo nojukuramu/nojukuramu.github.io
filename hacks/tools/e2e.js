@@ -243,6 +243,10 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     await p.keyboard.up("Tab");
     await p.waitForTimeout(200);
     check("and letting go hides it", !(await p.isVisible("#scoreboard")));
+    // from here on the checks are about the controls, not the fight: the bots stand down (they lob grenades
+    // and fire cannons now, and at a software renderer's frame rate a check could die waiting), and you live
+    const calm = () => p.evaluate(() => { const { S, game } = window.HK_DEBUG; for (const b of S.actors) if (b.kind === "bot") b.passive = true; S.throwables.length = 0; S.clouds.length = 0; if (!S.me.alive) game.spawn(S.me); });
+    await calm();
 
     console.log("\nThe hacks panel");
     await p.keyboard.press("KeyH");
@@ -262,6 +266,7 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     await until(p, () => window.HK_DEBUG.hackapi.running() === 2, null, 10000);
     check("a lesson opens as a new hack, running", /screen\.toScreen/.test(await p.inputValue("#editor textarea")));
     await p.click("#hpClose");
+    await calm();
     // six metres from a bot, facing it, somewhere a body fits (the arena has pillars and ramps to land inside)
     await p.evaluate(async () => {
       const { S } = window.HK_DEBUG; const MV = await import("./js/movement.js");
@@ -327,6 +332,7 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     check("with the blade out, Aim held charges a lunge", await soft(until(p, () => window.HK_DEBUG.S.me.body.lunge === 1, null, 2000)));
     await p.evaluate(async () => { const I = await import("./js/input.js"); I.touchState.held.delete("ads"); I.touchRelease("ads"); });
     await p.keyboard.press("Digit1");
+    await calm();
     // asking to run stands you up: crouch held, then W and Shift
     await p.keyboard.down("KeyC");
     await until(p, () => window.HK_DEBUG.S.me.body.crouched, null, 2000);
