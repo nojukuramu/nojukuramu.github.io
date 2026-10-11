@@ -400,7 +400,7 @@ on("draw", () => {
       c("me.setVelocity(v)") + " and " + c("me.teleport(p)") + " happen once.</p>" +
       "<p>This one flies: hold G, gravity goes to zero, and your velocity points where you look, scaled by your move keys.</p>" +
       "<p>A room can forbid this (its hack rules). Try it in a room set to Assist: the console says why nothing happens.</p>",
-    code: `const hold = ui.key("Hold to fly", "KeyG");
+    code: `const hold = ui.key("Hold to fly", "KeyF");
 const speed = ui.slider("Speed", 2, 40, 14, 1);
 
 on("tick", () => {
@@ -423,12 +423,12 @@ export const API = [
     ["on(\"tick\", dt => …)", "Every frame, before your inputs are used. Change input.* here. dt is seconds since the last frame: scale anything that happens over time by it, so the hack behaves the same at any frame rate."],
     ["on(\"draw\", dt => …)", "Every frame, after tick. Draw here."],
     ["on(\"key\", code => …)", "A key or mouse button was pressed (KeyboardEvent.code, e.g. \"KeyG\", \"Mouse0\")."],
-    ["on(event, e => …)", "shot (anyone fired: by, mine, weapon, from, to, hit, part — a round through a body is one shot per stretch) · hit (you hit: target, damage, part — head, body, arm, leg or nut) · hurt (you were hit: by, damage) · kill (killer, victim, weapon, head, nut) · death · spawn · jump · land (speed) · walljump · climb · mantle · slide · stick · lunge · swing · pad · hookfire · hookhit · hookgrab · hookdone · hookoff · hookmiss"],
+    ["on(event, e => …)", "shot (anyone fired: by, mine, weapon, from, to, hit, part — a round through a body is one shot per stretch) · hit (you hit: target, damage, part — head, body, arm, leg or nut) · hurt (you were hit: by, damage) · kill (killer, victim, weapon, head, nut) · death · spawn · jump · land (speed) · walljump · climb · mantle · ledgeup · wallslide · wallslideend · slide · stick · lunge · swing · pad · hookfire · hookhit · hookgrab · hookdone · hookoff · hookmiss · blast (position, radius, weapon, by) · throw (by, mine, kind, from) · flashed (amount, position) · shieldbreak · shieldup (level)"],
     ["log(…) / print(…)", "Write to the console under the editor."],
     ["hack", "{ id, name } of this hack."],
     ["ui.toggle(label, on)", "A switch in the panel. .value is true or false."],
     ["ui.slider(label, min, max, value, step)", "A slider. .value is the number."],
-    ["ui.key(label, code)", "A key you can rebind. .value is the code, .down is whether it is held."],
+    ["ui.key(label, code)", "A key you can rebind. .value is the code, .down is whether it is held. On a phone it is also a button of its own, named after the label, that holds the key down while it is held."],
     ["ui.color(label, \"#rrggbb\")", "A colour picker. .value is the colour."]
   ] },
   { name: "me — you (read; a few writes)", items: [
@@ -436,10 +436,13 @@ export const API = [
     ["yaw, pitch", "Where your body faces, in radians. Yaw 0 faces −z; turning left increases it. Pitch up is positive."],
     ["speed", "Horizontal speed, m/s."],
     ["alive, hp, maxHp, team, id, name, kills, deaths, respawnIn", ""],
+    ["shield, shieldMax, shieldLevel, shieldNext", "Your shield: on top of hp, taken first; its level (1–4, 50 a level); how far the next level is (0–1)."],
+    ["utility", "Slot 4: { id, name, count, max, cooldown, next } — next is the seconds until a spent charge is back."],
+    ["wallRiding, mantling, mantle, climbArmed, blind", "Riding a wall; climbing over a ledge, and how far (0–1); a jump press is still making a climb possible; how flashed you are (0–1)."],
     ["onGround, crouched, sliding, climbing, sprinting, groundKind, groundNormal", "What your body is doing, and what it stands on."],
     ["lunge, lungeCharge, lungeStuck, lungeNormal", "\"idle\" / \"charging\" / \"dashing\"; 0–1; stuck to a surface; that surface's outward normal."],
     ["slideCooldown, wallJumpReady, climbLeft, jumpHeld", "Movement timers and state."],
-    ["weapon", "{ slot, id, name, cls, melee, grapple (slot 4: id \"grapple\", and nothing about ammo), ammo, mag, reloading, ads, auto, rpm, spread (degrees), projectile {speed, gravity, instant} or null, lastKick {pitch, yaw}, shots, damage, pellets, zoom, cycling (working a bolt), pierce (bodies a round goes through) }"],
+    ["weapon", "{ slot, id, name, cls, melee, grapple (carried in slot 1 or 2, with nothing about ammo), utility (slot 4, with count), ammo, mag, reloading, ads, auto, rpm, spread (degrees), projectile {speed, gravity, instant} or null, lastKick {pitch, yaw}, shots, damage, pellets, zoom, cycling (working a bolt), pierce (bodies a round goes through) }"],
     ["hook", "Your grapple: { state: \"idle\" / \"flying\" / \"holding\", point {x,y,z} or null, target (a player's id, or null for the map), rope (metres), ready }."],
     ["bones", "{ head: {x,y,z}, neck, chest, … } — see BONES."],
     ["me.gravityScale, me.speedScale, me.jumpScale", "Write: change your body until changed back (rules: Full self)."],
@@ -459,8 +462,9 @@ export const API = [
   { name: "input — your buttons for this frame (rules: Assist)", items: [
     ["input.forward, input.side", "−1 to 1 (W/S, D/A). Reading gives what the player is pressing."],
     ["input.yaw, input.pitch", "Where you look, radians. Setting it turns your view."],
-    ["input.jump, crouch, sprint, fire, aim, reload, lunge, melee, hook, zoom", "true or false. hook is the grapple's trigger, like fire: with the grapple out (slot 4), held, it flies, holds and reels. lunge only works with the blade out (slot 3). zoom steps a sniper scope in or out on a fresh press."],
-    ["input.slot", "1, 2, 3, 4 (the grapple) or −1 (last weapon): switch once."],
+    ["input.jump, crouch, sprint, fire, aim, reload, lunge, melee, hook, zoom, util", "true or false. hook is the grapple's trigger, like fire: with the grapple out, held, it flies, holds and reels. lunge only works with the blade out (slot 3). zoom steps a sniper scope in or out on a fresh press."],
+    ["input.slot", "1, 2, 3, 4 (the utility) or −1 (last weapon): switch once. The grapple is in slot 1 or 2, if you carry one (me.loadout)."],
+    ["input.util", "true throws your utility from whatever is in your hands (the quick throw)."],
     ["input.lookAt(point)", "Set yaw and pitch to look from your eye at a point."]
   ] },
   { name: "draw — on your screen (rules: any)", items: [
@@ -488,7 +492,8 @@ export const API = [
     ["world.spawns, world.time, world.tick", ""],
     ["physics.simulate(player, {forward, side, yaw, pitch, jump, crouch, sprint}, ticks)", "Run the game's own movement on a copy. Returns { position, velocity, onGround, landedAt, events, path }."],
     ["physics.predict(player, seconds)", "Where a player would be if they pressed nothing."],
-    ["projectiles", "Rounds in flight: { owner, position, velocity, gravity }. A sniper's round covers weapon.projectile.instant metres the moment it is fired, then flies."],
+    ["projectiles", "Rounds in flight: { owner, weapon, position, velocity, gravity }. A sniper's round covers weapon.projectile.instant metres the moment it is fired, then flies; a cannonball bursts where it lands (weapon.blast)."],
+    ["throwables, clouds", "Grenades and mines in the world: { owner, kind, position, velocity, stuck, armed, normal }; gas: { owner, position, radius, timeLeft }."],
     ["match", "{ mode, time, timeLeft, target, rules, over, score: { kills, deaths, teams } }"]
   ] },
   { name: "Maths", items: [

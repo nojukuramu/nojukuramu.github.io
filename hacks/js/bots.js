@@ -12,12 +12,15 @@
  *
  * Getting around is nav.js's graph: A* to wherever it is going, and the link
  * kinds tell it when to jump, when to climb, and that a pad is a way up.
- * The harder ones also fire their grapple at you now and then, and come in
- * with it — the same button, held, that a player holds. */
+ * The harder ones also fire their grapple at you now and then (if they
+ * carry one), and come in with it — the same button, held, that a player
+ * holds. They lob their grenades and flashbangs at you, leave their mines
+ * where they wander, keep a cannon's blast off their own feet, and a
+ * flashbang blinds them as it blinds you: for a while, they cannot see. */
 
 import { S } from "./state.js";
 import { B, HOOK, forward, right } from "./movement.js";
-import { GUNS } from "./weapons.js";
+import { GUNS, UTILS, grappleOut, grappleSlot, utilOut } from "./weapons.js";
 import { ray, newTrace } from "./brush.js";
 import { nearestNode, findPath, linkKind } from "./nav.js";
 import { DIFFS } from "./modes.js";
@@ -30,7 +33,7 @@ const TR = newTrace();
 export function newBrain(a) {
   return { t: 0, target: null, visible: false, lastSeen: null, lastSeenT: -99, reactT: 0, senseT: 0, err: { y: 0, p: 0 },
     path: null, pi: 0, goal: null, goalT: 0, repathT: 0, stuckT: 0, lastPos: null, strafe: 1, strafeT: 0,
-    jumpLast: false, fireLast: false, meleeLast: false, crouchT: 0, head: 0.3, hookT: -1, hookFired: false };
+    jumpLast: false, fireLast: false, meleeLast: false, crouchT: 0, head: 0.3, hookT: -1, hookFired: false, blindT: 0, utilT: 2 + Math.random() * 4, climbPress: 0 };
 }
 export function reset(a) { Object.assign(a.brain, newBrain(a)); a.brain.head = { easy: 0.1, normal: 0.25, hard: 0.45, insane: 0.7 }[a.diff] || 0.25; }
 
@@ -75,7 +78,9 @@ export function think(a, dt) {
   br.t += dt;
   const cmd = { fwd: 0, side: 0, yaw: a.aim.yaw, pitch: a.aim.pitch, buttons: 0, slot: 0 };
   br.senseT -= dt;
-  if (br.senseT <= 0 && !a.passive) { br.senseT = 0.1; sense(a, br, D); }
+  // flashed: nothing is seen until it wears off, and the aim wanders
+  if (br.blindT > 0) { br.blindT -= dt; br.visible = false; br.err.y += (a.rng() - 0.5) * dt * 3; br.err.p += (a.rng() - 0.5) * dt * 2; }
+  else if (br.senseT <= 0 && !a.passive) { br.senseT = 0.1; sense(a, br, D); }
   br.reactT -= dt;
   const tgt = br.visible && br.target && br.target.alive ? br.target : null;
   const dist = tgt ? Math.hypot(tgt.body.x - body.x, tgt.body.y - body.y, tgt.body.z - body.z) : 0;
@@ -85,8 +90,8 @@ export function think(a, dt) {
   if (a.passive) { goal = roam(a, br, 18); sprint = false; }
   else if (tgt) {
     fighting = true;
-    const g = GUNS[a.arms.slots[a.arms.cur]] || null;
-    const want = !g ? 1.5 : g.scope ? 45 : g.id === "mauler" ? 5 : g.id === "hornet" ? 10 : g.id === "brick" || g.id === "wasp" ? 14 : 20;
+    const g = a.arms.cur < 2 ? GUNS[a.arms.slots[a.arms.cur]] || null : null;
+    const want = !g ? 1.5 : g.scope ? 45 : g.id === "mauler" ? 5 : g.id === "hornet" ? 10 : g.id === "cannon" ? 16 : g.id === "brick" || g.id === "wasp" ? 14 : 20;
     if (dist > want + 6 || !br.visible) goal = { x: tgt.body.x, y: tgt.body.y, z: tgt.body.z };
     else if (dist < want - 4 && g && g.id !== "mauler") goal = away(a, tgt);
     sprint = false;
@@ -130,23 +135,52 @@ export function think(a, dt) {
   // bunny hop down long straight runs, if this difficulty knows how
   const hs = Math.hypot(body.vx, body.vz);
   if (!fighting && D.bhop > 0 && br.path && hs > 5 && br.t % 10 < 10 * D.bhop) jump = jump || body.onGround;
-  if (climb) { cmd.buttons |= B.JUMP; cmd.fwd = 1; cmd.side = 0; br.jumpLast = true; }
+  // a climb starts from a jump press and goes on while forward is held: press it, let go, press again if it has not taken
+  br.climbPress -= dt;
+  if (climb) {
+    cmd.fwd = 1; cmd.side = 0;
+    if (!body.climbing && !body.mantle && !br.jumpLast && br.climbPress <= 0) { cmd.buttons |= B.JUMP; br.jumpLast = true; br.climbPress = 0.5; }
+    else br.jumpLast = false;
+  }
   else if (jump && !br.jumpLast) { cmd.buttons |= B.JUMP; br.jumpLast = true; }
   else br.jumpLast = false;
 
-  // guns, and the grapple
-  if (!a.passive) { weapons(a, br, D, cmd, tgt, dist); grapple(a, br, D, cmd, tgt, dist, dt); }
+  // guns, the grapple, and what is in the pocket
+  if (!a.passive) { weapons(a, br, D, cmd, tgt, dist); grapple(a, br, D, cmd, tgt, dist, dt); utility(a, br, D, cmd, tgt, dist, dt); }
   return cmd;
+}
+
+/* Grenades and flashbangs are lobbed at you, from a middling range, now and then; mines are left on the
+   floor ahead while wandering. A lob is the angle that reaches you at the throw's speed (the lower of two). */
+const THROW_G = 15;
+function utility(a, br, D, cmd, t, dist, dt) {
+  const A = a.arms, U = UTILS[A.util], b = a.body;
+  br.utilT -= dt;
+  if (br.utilT > 0 || A.utilN <= 0 || A.utilCd > 0 || b.lunge !== 0 || br.hookT >= 0) return;
+  if (U.stick) {
+    if (t || !b.onGround || a.rng() > 0.3) { br.utilT = 1 + a.rng() * 2; return; }
+    cmd.pitch = -0.7; cmd.buttons |= B.UTIL; br.utilT = 12 + a.rng() * 14;
+    return;
+  }
+  if (!t || dist < 8 || dist > 30 || br.reactT > 0) { br.utilT = 0.5; return; }
+  if (a.rng() > (D.hook + 0.12) * 2) { br.utilT = 2 + a.rng() * 3; return; }
+  const e = eyeOf(a), h = t.body.y + 0.5 - e[1], x = Math.hypot(t.body.x - e[0], t.body.z - e[2]), v = U.speed;
+  const disc = v * v * v * v - THROW_G * (THROW_G * x * x + 2 * h * v * v);
+  if (disc < 0) { br.utilT = 1; return; }
+  cmd.pitch = Math.atan((v * v - Math.sqrt(disc)) / (THROW_G * x)) - 0.1;
+  cmd.buttons |= B.UTIL;
+  br.utilT = 6 + a.rng() * 8;
 }
 
 /* Now and then, at a middling range and already on target, a bot hooks you and holds on until it
    arrives — then the blade or the shotgun does the rest. The grapple is a gun like anyone's: the
    bot draws it, fires once it is up, and weapons() puts it away again when the pull is over. */
 function grapple(a, br, D, cmd, t, dist, dt) {
-  const b = a.body, A = a.arms;
+  const b = a.body, A = a.arms, gs = grappleSlot(A);
+  if (gs < 0) return;
   if (br.hookT >= 0) {
     br.hookT += dt;
-    if (A.cur !== 3) { if (br.hookT > 0.5 || !t) br.hookT = -1; else cmd.slot = 4; return; }
+    if (!grappleOut(A)) { if (br.hookT > 0.5 || !t) br.hookT = -1; else cmd.slot = gs + 1; return; }
     if (A.swapT > 0) return;
     if (b.hook === HOOK.IDLE && br.hookFired || br.hookT > 3 || !t) { br.hookT = -1; return; }
     cmd.buttons |= B.FIRE;
@@ -155,7 +189,7 @@ function grapple(a, br, D, cmd, t, dist, dt) {
   }
   if (!t || !D.hook || b.hook !== HOOK.IDLE || b.hookCd > 0 || br.reactT > 0) return;
   if (dist < 9 || dist > 38 || br.aimErr > 0.05) return;
-  if (a.rng() < D.hook * dt) { br.hookT = 0; br.hookFired = false; cmd.slot = 4; }
+  if (a.rng() < D.hook * dt) { br.hookT = 0; br.hookFired = false; cmd.slot = gs + 1; }
 }
 
 function roam(a, br, radius) {
@@ -223,7 +257,9 @@ function aimAt(a, br, D, t, dt, dist) {
   const bone = a.rng() < br.head ? "head" : "chest";
   const i = BI[bone] * 3;
   let x = t.bones[i], y = t.bones[i + 1], z = t.bones[i + 2];
-  const g = GUNS[a.arms.slots[a.arms.cur]];
+  const g = a.arms.cur < 2 ? GUNS[a.arms.slots[a.arms.cur]] : null;
+  // a cannon is aimed at the feet: a miss there still bursts beside them
+  if (g && g.projectile && g.projectile.explode) y = t.body.y + 0.15;
   if (g && g.projectile) {
     // lead the target, and hold over for the drop (the first stretch of the flight takes no time)
     const tt = Math.max(0, dist - (g.projectile.instant || 0)) / g.projectile.speed;
@@ -240,19 +276,23 @@ function aimAt(a, br, D, t, dt, dist) {
 function weapons(a, br, D, cmd, t, dist) {
   const A = a.arms;
   // the grapple is out and not in use (grapple() runs after this, and keeps it out while it is)
-  if (A.cur === 3) { if (br.hookT < 0) cmd.slot = A.last + 1; return; }
+  if (grappleOut(A)) { if (br.hookT < 0) cmd.slot = (GUNS[A.slots[0]] ? 0 : 1) + 1; return; }
+  if (utilOut(A)) { cmd.slot = (GUNS[A.slots[0]] ? 0 : 1) + 1; return; }
   if (t) {
-    const guns = A.slots.map((id) => GUNS[id]);
+    const guns = A.slots.map((id) => GUNS[id] || null);
     let pick = 0;
-    const score = (g, i) => (A.ammo[i] > 0 ? 0 : -50) + (g.scope ? (dist > 30 ? 30 : -20) : 0) + (g.id === "mauler" ? (dist < 9 ? 30 : -25) : 0) + (g.auto ? 8 : 0) + (g.id === "brick" && dist > 12 ? 5 : 0);
+    const score = (g, i) => !g ? -100 : (A.ammo[i] > 0 ? 0 : -50) + (g.scope ? (dist > 30 ? 30 : -20) : 0) + (g.id === "mauler" ? (dist < 9 ? 30 : -25) : 0) + (g.auto ? 8 : 0) + (g.id === "brick" && dist > 12 ? 5 : 0) +
+      (g.id === "cannon" ? (dist > 7 && dist < 32 ? 22 : -40) : 0);
     pick = score(guns[1], 1) > score(guns[0], 0) ? 1 : 0;
     if (A.cur !== pick && A.swapT <= 0 && A.cur < 2) cmd.slot = pick + 1;
     if (A.cur === 2) cmd.slot = pick + 1;
-    const g = guns[A.cur] || null;
+    const g = A.cur < 2 ? guns[A.cur] : null;
     if (dist < 2.2 && D.react < 0.4 && !br.meleeLast) { cmd.buttons |= B.MELEE; br.meleeLast = true; return; }
     br.meleeLast = false;
     if (!g) return;
     if (g.scope || dist > 25) cmd.buttons |= B.ADS;
+    // never a ball at your own feet
+    if (g.projectile && g.projectile.explode && dist < 6) { br.fireLast = false; return; }
     const tol = Math.atan2(g.pellets ? 1.2 : 0.35, Math.max(1, dist)) + (g.pellets ? 0.05 : 0);
     if (br.reactT <= 0 && br.aimErr < tol) {
       if (g.auto) cmd.buttons |= B.FIRE;
@@ -261,8 +301,8 @@ function weapons(a, br, D, cmd, t, dist) {
     br.fireLast = false;
   } else {
     // quiet moment: top up the gun in hand
-    const g = GUNS[A.slots[A.cur]];
-    if (g && A.cur < 2 && A.ammo[A.cur] < g.mag * 0.5 && A.reloadT <= 0) cmd.buttons |= B.RELOAD;
+    const g = A.cur < 2 ? GUNS[A.slots[A.cur]] : null;
+    if (g && A.ammo[A.cur] < g.mag * 0.5 && A.reloadT <= 0) cmd.buttons |= B.RELOAD;
     br.fireLast = false;
   }
 }

@@ -25,8 +25,10 @@
  * "fresh press" rule is kept, which is exactly what a bhop hack is for.
  *
  * On top of Source, the Apex-style moves: sprint, crouch-slide (downhill
- * speeds it up), wall climb (jump into a wall and hold), wall jump (tap jump
- * beside a wall; your speed along the wall is kept), the melee lunge
+ * speeds it up), wall climb (jump into a wall, then keep pushing forward; a
+ * ledge within reach is grabbed and climbed over by itself — the mantle),
+ * wall jump (tap jump beside a wall; your speed along the wall is kept), the
+ * wall ride (slide fast along a wall and you ride it; jump to kick away), the melee lunge
  * (hold to stick to whatever surface you touch, release to launch where you
  * look — harder the more squarely you face away from the surface), and the
  * grapple's rope (hold to be reeled in, steer to swing; it lets go when the
@@ -44,7 +46,7 @@ import { trace, newTrace } from "./brush.js";
 export const TICK = 1 / 64;
 
 /** Buttons in a command, one bit each. Players, bots and hacks all make these. */
-export const B = { JUMP: 1, CROUCH: 2, SPRINT: 4, FIRE: 8, ADS: 16, RELOAD: 32, MELEE: 64, LUNGE: 128, HOOK: 256, ZOOM: 512 };
+export const B = { JUMP: 1, CROUCH: 2, SPRINT: 4, FIRE: 8, ADS: 16, RELOAD: 32, MELEE: 64, LUNGE: 128, HOOK: 256, ZOOM: 512, UTIL: 1024 };
 
 export const PM = {
   gravity: 19,            // sv_gravity 800 u/s²
@@ -78,7 +80,14 @@ export const PM = {
   slideEnd: 3.2,
   climbSpeed: 5.0,
   climbTime: 0.9,
+  climbArm: 0.55,         // a jump press makes a climb possible for this long: no press, no climb
   mantle: 4.8,
+  ledgeReach: 2.45,       // how far above your feet a ledge can be caught and climbed over
+  wallSlideMin: 7.2,      // a slide at least this fast beside a wall rides it
+  wallSlideFriction: 0.07,
+  wallSlideDrag: 0.3,
+  wallSlideStick: 3,      // m/s² into the wall, so a ride along a slightly curving run keeps its contact
+  wallSlideKick: 6.5,     // the jump off a ridden wall: out from it, on top of the speed along it
   wallPush: 5.5,
   wallUp: 6.0,
   wallCooldown: 0.18,
@@ -114,7 +123,9 @@ export function newBody(x, y, z, yaw) {
     onGround: false, gnx: 0, gny: 1, gnz: 0, groundKind: "", groundTicks: -1,
     crouched: false, eye: PM.eyeStand, sprinting: false,
     sliding: false, slideCd: 0, slideNudgeCd: 0,
-    climbing: false, climbBudget: PM.climbTime,
+    climbing: false, climbBudget: PM.climbTime, climbArm: 0,
+    mantle: null,           // climbing over a ledge: { t, dur, x0, y0, z0, x1, y1, z1, fx, fz }
+    wallSlide: false, wsnx: 0, wsnz: 0,
     wallCd: 0, lastWall: null,
     jumpHeld: false, jumpBuf: 0, crouchHeld: false,
     lunge: L_IDLE, lungeT: 0, lungeCharge: 0, lungeStuck: false, lnx: 0, lny: 0, lnz: 0, lungeHeld: false, lungeCd: 0, lungePower: 0,
@@ -351,9 +362,12 @@ function slideTick(p, cmd, dt) {
   p.vx += g * p.gnx * p.gny * dt;
   p.vz += g * p.gnz * p.gny * dt;
   if (s > 0.01) {
-    const ns = Math.max(0, s - (s * PM.slideFriction + PM.slideDrag) * dt) / s;
+    const fr = p.wallSlide ? PM.wallSlideFriction : PM.slideFriction, dr = p.wallSlide ? PM.wallSlideDrag : PM.slideDrag;
+    const ns = Math.max(0, s - (s * fr + dr) * dt) / s;
     p.vx *= ns; p.vz *= ns;
   }
+  // leaning into a ridden wall keeps you on it
+  if (p.wallSlide) { p.vx -= p.wsnx * PM.wallSlideStick * dt; p.vz -= p.wsnz * PM.wallSlideStick * dt; }
   const w = wish(p, cmd, 1.2);
   if (w[2] > 0) accelerate(p, w[0], w[1], w[2], 6, dt);
   if (hspeed(p) < PM.slideEnd && !downhill(p)) p.sliding = false;
@@ -363,9 +377,9 @@ function slideTick(p, cmd, dt) {
    Walls: what is in front, what is beside
    --------------------------------------------------------------- */
 const wallN = [0, 0, 0];
-function wallAhead(W, p) {
+function wallAhead(W, p, at) {
   const f = forward(p.yaw);
-  const y = p.y + (p.crouched ? 0.8 : 1.1);
+  const y = p.y + (at != null ? at : p.crouched ? 0.8 : 1.1);
   trace(W, p.x, y, p.z, p.x + f[0] * (PM.halfWidth + 0.45), y, p.z + f[2] * (PM.halfWidth + 0.45), 0.15, 0.15, 0.15, TR);
   if (TR.fraction < 1 && Math.abs(TR.ny) < 0.35 && -(f[0] * TR.nx + f[2] * TR.nz) > 0.55) {
     wallN[0] = TR.nx; wallN[1] = TR.ny; wallN[2] = TR.nz;
@@ -401,6 +415,115 @@ function tryWallJump(W, p) {
   p.climbing = false;
   p.ev.push("walljump");
   return true;
+}
+/* A jump pressed while climbing: off the wall, backwards, the way Apex lets you leave a climb. */
+function climbKick(W, p) {
+  const n = wallAhead(W, p);
+  p.climbing = false;
+  if (!n) return false;
+  const hl = Math.hypot(n[0], n[2]) || 1, nx = n[0] / hl, nz = n[2] / hl;
+  p.vx = nx * PM.wallPush; p.vz = nz * PM.wallPush;
+  p.vy = Math.max(p.vy, PM.wallUp * 0.85 * p.jumpScale);
+  p.wallCd = PM.wallCooldown;
+  p.lastWall = [nx, nz, p.x * nx + p.z * nz];
+  p.ev.push("walljump");
+  return true;
+}
+
+/* ---------------------------------------------------------------
+   Ledges: the mantle
+   --------------------------------------------------------------- */
+/*
+ * Apex's mantle: climbing (or jumping) into a wall whose top is within your
+ * reach, the hands catch the edge and the body is pulled up and over onto it,
+ * by itself, whatever you do. Found by dropping a small box onto the space in
+ * front of you from a little above your reach: if it lands on ground there,
+ * and a body fits on top, and nothing is in the way going up then over, that
+ * is a ledge. Pure geometry, so a bot, a hack's physics.simulate and the
+ * validator all mantle the same way.
+ */
+const LTR = newTrace();
+function startMantle(W, p) {
+  const f = forward(p.yaw);
+  const ahead = PM.halfWidth + 0.5;
+  const fx = p.x + f[0] * ahead, fz = p.z + f[2] * ahead;
+  trace(W, fx, p.y + PM.ledgeReach + 0.15, fz, fx, p.y + 0.3, fz, 0.12, 0.05, 0.12, LTR);
+  if (LTR.startsolid || LTR.allsolid || LTR.fraction >= 1 || LTR.ny < PM.walkable) return false;
+  const top = LTR.y - 0.05 + 0.03;
+  if (top < p.y + 0.55) return false;                 // a step, not a ledge: walking deals with it
+  const on = PM.halfWidth * 2 + 0.3;
+  const lx = p.x + f[0] * on, lz = p.z + f[2] * on;
+  // standing on it if a body fits there, crouched if only a crouch does
+  const crouch = !fits(W, lx, top, lz, false);
+  if (crouch && !fits(W, lx, top, lz, true)) return false;
+  const was = p.crouched;
+  if (crouch && !p.crouched) { p.crouched = true; p.eye = Math.min(p.eye, PM.eyeCrouch + 0.3); }
+  // up the face, then over the edge: both must be clear
+  sweep(W, p, p.x, p.y, p.z, p.x, top, p.z);
+  const upOk = TR.fraction === 1 && !TR.startsolid;
+  sweep(W, p, p.x, top, p.z, lx, top, lz);
+  const overOk = TR.fraction === 1 && !TR.startsolid;
+  if (!upOk || !overOk) { p.crouched = was; return false; }
+  const rise = top - p.y;
+  // up the face, then over: a little longer the higher the ledge, never a slow crawl
+  p.mantle = { t: 0, up: 0.16 + rise * 0.12, over: 0.17, x0: p.x, y0: p.y, z0: p.z, x1: lx, y1: top, z1: lz, fx: f[0], fz: f[2], rise };
+  p.climbing = false; p.sliding = false; p.wallSlide = false; p.climbArm = 0;
+  p.vx = p.vy = p.vz = 0;
+  p.ev.push("mantle");
+  return true;
+}
+const smooth = (k) => k * k * (3 - 2 * k);
+/** How far through a mantle a body is, 0..1, for the camera and the arms. */
+export const mantleOf = (p) => (p.mantle ? Math.min(1, p.mantle.t / (p.mantle.up + p.mantle.over)) : 0);
+function mantleTick(W, p, dt) {
+  const m = p.mantle;
+  m.t += dt;
+  // straight up the face until the feet clear the top, then forward onto it: one after the other, so the
+  // body never drags against the edge it is climbing over
+  const up = smooth(Math.min(1, m.t / m.up)), over = smooth(Math.max(0, Math.min(1, (m.t - m.up) / m.over)));
+  const x = m.x0 + (m.x1 - m.x0) * over, y = m.y0 + (m.y1 - m.y0) * up, z = m.z0 + (m.z1 - m.z0) * over;
+  const px = p.x, py = p.y, pz = p.z, h = halfH(p);
+  sweep(W, p, p.x, p.y, p.z, p.x, y, p.z);
+  if (!TR.startsolid) p.y = TR.y - h;
+  sweep(W, p, p.x, p.y, p.z, x, p.y, z);
+  if (!TR.startsolid) { p.x = TR.x; p.z = TR.z; }
+  // the velocity is the movement, so drawing between ticks and anything reading speed sees it
+  p.vx = (p.x - px) / dt; p.vy = (p.y - py) / dt; p.vz = (p.z - pz) / dt;
+  if (m.t < m.up + m.over) return;
+  p.mantle = null;
+  p.vx = m.fx * 3; p.vz = m.fz * 3; p.vy = 0;
+  categorize(W, p);
+  p.ev.push("ledgeup");
+}
+
+/* ---------------------------------------------------------------
+   The wall ride: a fast slide along a wall
+   --------------------------------------------------------------- */
+/* Riding: sliding on the ground, fast, with a wall at your side and your speed along it rather
+   than into it or away from it. A ridden wall takes almost nothing off the slide (the wall
+   carries you, not the floor), and jump kicks you off it, keeping the speed along it. */
+function wallRide(W, p) {
+  const s = hspeed(p);
+  if (!p.sliding || !p.onGround || s < (p.wallSlide ? PM.wallSlideMin - 1.5 : PM.wallSlideMin)) return endRide(p);
+  const n = wallBeside(W, p);
+  if (!n) return endRide(p);
+  const hl = Math.hypot(n[0], n[2]) || 1, nx = n[0] / hl, nz = n[2] / hl;
+  const vn = p.vx * nx + p.vz * nz;
+  if (Math.abs(vn) > s * 0.5) return endRide(p);
+  if (!p.wallSlide) { p.wallSlide = true; p.ev.push("wallslide"); }
+  p.wsnx = nx; p.wsnz = nz;
+  return true;
+}
+function endRide(p) { if (p.wallSlide) { p.wallSlide = false; p.ev.push("wallslideend"); } return false; }
+function rideKick(p) {
+  const nx = p.wsnx, nz = p.wsnz, vn = p.vx * nx + p.vz * nz;
+  const tx = p.vx - vn * nx, tz = p.vz - vn * nz, out = Math.max(vn, 0) + PM.wallSlideKick;
+  p.vx = tx + nx * out; p.vz = tz + nz * out;
+  p.vy = PM.wallUp * p.jumpScale;
+  p.onGround = false; p.groundTicks = -1; p.sliding = false; p.wallSlide = false;
+  p.wallCd = PM.wallCooldown;
+  p.lastWall = [nx, nz, p.x * nx + p.z * nz];
+  p.ev.push("walljump");
 }
 
 /* ---------------------------------------------------------------
@@ -593,7 +716,9 @@ export function pmove(W, p, cmd, dt, o) {
   p.yaw = isFinite(cmd.yaw) ? cmd.yaw : p.yaw;
   p.pitch = isFinite(cmd.pitch) ? Math.max(-1.55, Math.min(1.55, cmd.pitch)) : p.pitch;
   const jump = !!(btn & B.JUMP);
-  if (jump && !p.jumpHeld) p.jumpBuf = PM.jumpBuffer;
+  // a fresh press: a jump, and the only thing that can start a climb
+  if (jump && !p.jumpHeld) { p.jumpBuf = PM.jumpBuffer; p.climbArm = PM.climbArm; }
+  else p.climbArm = Math.max(0, p.climbArm - dt);
   p.jumpHeld = jump;
   const crouch = !!(btn & B.CROUCH);
   const crouchEdge = crouch && !p.crouchHeld;
@@ -618,6 +743,9 @@ export function pmove(W, p, cmd, dt, o) {
     p.vx = p.vy = p.vz = 0; p.jumpBuf = 0; p.sprinting = false;
     return;
   }
+  // Over a ledge: the mantle carries you, unless a rope pulls you off it
+  if (p.mantle && (p.hook === H_ON || p.yank)) p.mantle = null;
+  if (p.mantle) { p.yank = null; p.jumpBuf = 0; p.sprinting = false; mantleTick(W, p, dt); return; }
 
   duck(W, p, crouch);
   if (p.onGround && crouchEdge && !p.sliding && p.crouched) startSlide(p, true);
@@ -636,28 +764,34 @@ export function pmove(W, p, cmd, dt, o) {
 
   // Jump: off the ground, off a wall, or held for a landing one tick away.
   if (p.jumpBuf > 0 && p.lunge !== L_CHARGE) {
-    if (p.onGround) {
+    if (p.onGround && p.wallSlide) { rideKick(p); p.jumpBuf = 0; }
+    else if (p.onGround) {
       p.vy = PM.jump * p.jumpScale;
       p.onGround = false; p.groundTicks = -1;
       p.sliding = false;
       p.jumpBuf = 0;
       p.ev.push("jump");
-    } else if (!p.climbing && p.jumpBuf === PM.jumpBuffer && !(cmd.fwd > 0.5 && wallAhead(W, p)) && tryWallJump(W, p)) p.jumpBuf = 0;
+    } else if (p.climbing && p.jumpBuf === PM.jumpBuffer) { climbKick(W, p); p.jumpBuf = 0; }
+    else if (!p.climbing && p.jumpBuf === PM.jumpBuffer && !(cmd.fwd > 0.5 && wallAhead(W, p)) && tryWallJump(W, p)) p.jumpBuf = 0;
     // (facing a wall and pushing into it is the start of a climb, not a kick off it)
   }
   p.jumpBuf = Math.max(0, p.jumpBuf - dt);
 
-  // Wall climb: in the air, into a wall, holding jump and forward.
-  if (!p.onGround && !p.climbing && jump && cmd.fwd > 0.5 && p.climbBudget > 0.05 && p.vy > -8 && p.lunge === L_IDLE && p.hook !== H_ON && wallAhead(W, p)) {
-    p.climbing = true;
-    p.ev.push("climb");
+  // Wall climb: only after a jump press, in the air, into a wall, pushing forward. Forward keeps it
+  // going (jump need not be held); letting go of forward lets go of the wall. A ledge in reach is
+  // climbed over instead.
+  if (!p.onGround && !p.climbing && p.climbArm > 0 && cmd.fwd > 0.5 && p.climbBudget > 0.05 && p.vy > -8 && p.lunge === L_IDLE && p.hook !== H_ON && (wallAhead(W, p) || wallAhead(W, p, 0.55))) {
+    p.climbArm = 0;
+    if (!startMantle(W, p)) { p.climbing = true; p.ev.push("climb"); }
+    else return;
   }
   if (p.climbing) {
     const n = wallAhead(W, p);
-    if (!jump || cmd.fwd <= 0.3 || p.climbBudget <= 0 || p.onGround) {
+    if (cmd.fwd <= 0.3 || p.climbBudget <= 0 || p.onGround) {
       p.climbing = false;
       if (p.vy > 2) p.vy = 2;
-    } else if (!n) {
+    } else if (startMantle(W, p)) return;
+    else if (!n) {
       // over the top: pop up and forward onto the ledge
       const f = forward(p.yaw);
       p.climbing = false;
@@ -676,10 +810,11 @@ export function pmove(W, p, cmd, dt, o) {
 
   if (p.onGround) {
     p.vy = 0;
-    if (p.sliding) slideTick(p, cmd, dt);
-    else if (!dash && p.groundTicks > 0) friction(p, dt);
+    if (p.sliding) { wallRide(W, p); slideTick(p, cmd, dt); }
+    else { endRide(p); if (!dash && p.groundTicks > 0) friction(p, dt); }
     walkMove(W, p, cmd, dt, o);
   } else {
+    endRide(p);
     if (!p.climbing) {
       const w = wish(p, cmd, maxSpeed(p, o));
       if (w[2] > 0) airAccelerate(p, w[0], w[1], w[2], PM.airaccelerate, dt);

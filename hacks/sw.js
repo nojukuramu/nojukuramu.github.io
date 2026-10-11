@@ -6,7 +6,7 @@
    answers "skip-waiting" when the page asks, and CACHE carries the same
    number as window.HK_VERSION in index.html — tools/validate.js refuses to
    let the two drift. Bumping it is what publishes an update. */
-var CACHE = "hacks-v6";
+var CACHE = "hacks-v7";
 var SHELL = [
   "./",
   "./index.html",
@@ -51,6 +51,10 @@ var SHELL = [
   "./js/lobby.js",
   "./js/net.js",
   "./js/mpui.js",
+  "./js/worldfx.js",
+  "./js/fx.js",
+  "./js/buy.js",
+  "./js/gyro.js",
   "./vendor/build/three.module.min.js",
   "./vendor/jsm/loaders/GLTFLoader.js",
   "./vendor/jsm/utils/BufferGeometryUtils.js",
@@ -117,6 +121,21 @@ var SHELL = [
   "./assets/sounds/wasp.mp3",
   "./assets/sounds/wasp_far.mp3",
   "./assets/sounds/yelp.mp3",
+  "./assets/sounds/cannon.mp3",
+  "./assets/sounds/explode.mp3",
+  "./assets/sounds/crunch.mp3",
+  "./assets/sounds/shield_hit.mp3",
+  "./assets/sounds/shield_break.mp3",
+  "./assets/sounds/shield_charge.mp3",
+  "./assets/sounds/shield_full.mp3",
+  "./assets/sounds/bounce.mp3",
+  "./assets/sounds/gas.mp3",
+  "./assets/sounds/beep.mp3",
+  "./assets/sounds/zap.mp3",
+  "./assets/sounds/punch.mp3",
+  "./assets/sounds/grab.mp3",
+  "./assets/sounds/buy.mp3",
+  "./assets/sounds/deny.mp3",
   "./assets/icons/icon.svg",
   "./assets/icons/icon-192.png",
   "./assets/icons/icon-512.png",

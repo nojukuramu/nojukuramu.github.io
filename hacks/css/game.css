@@ -438,3 +438,43 @@ dl.api dt code { color: var(--accent2); word-break: break-word; } dl.api dd { ma
   .lesson, .apidoc { padding: 12px 18px 28px; }
   .hp-console { height: 30vh; min-height: 80px; }
 }
+
+/* ============ v7: screen effects, shields, utilities, the buy menu, hack buttons ============ */
+#fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
+/* the shield over the health: cells of 50 in the level's colour, the way to the next level under them */
+.hpbox .bars { display: flex; flex-direction: column; gap: 4px; }
+.shbar { --cells: 1; --sc: #e8eef5; position: relative; width: 150px; height: 7px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.shbar i { display: block; height: 100%; width: 100%; background: var(--sc); box-shadow: 0 0 8px var(--sc); transition: width .1s; }
+.shbar::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(90deg, transparent 0, transparent calc(100% / var(--cells) - 2px), rgba(8,12,17,0.9) calc(100% / var(--cells) - 2px), rgba(8,12,17,0.9) calc(100% / var(--cells))); }
+.shbar em { position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: rgba(255,255,255,0.75); }
+.shbar.charging i { animation: shcharge .6s ease-in-out infinite alternate; }
+.shbar.empty { background: rgba(255,80,80,0.12); }
+@keyframes shcharge { from { opacity: .65; } to { opacity: 1; } }
+body.touchOn .shbar { width: 80px; height: 5px; }
+@media (max-width: 760px) { .shbar { width: 90px; } }
+#hitmark.sh i { background: var(--hc, #3f9bff); box-shadow: 0 0 4px var(--hc, #3f9bff), 0 0 0 1px rgba(0,0,0,.5); }
+#slots span.out { opacity: .45; }
+#utilChip { --u: 100%; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 4px; padding: 1px 8px 1px 4px; border-radius: 9px; font-size: 12px; color: var(--text);
+  background: linear-gradient(90deg, rgba(57,198,232,0.28) var(--u), rgba(255,255,255,0.06) var(--u)); }
+#utilChip .ico { width: 16px; height: 16px; display: block; }
+#utilChip.out { color: var(--muted); }
+body.touchOn #utilChip { margin: 0; }
+/* the buy menu: over the game, under the menus; keys on a computer, taps on a phone */
+#buy { position: fixed; left: calc(16px + var(--safe-l)); top: 50%; transform: translateY(-50%); z-index: 12; width: min(320px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto;
+  background: rgba(8,12,17,0.9); border: 1px solid var(--line); border-radius: 12px; padding: 8px; pointer-events: auto; touch-action: pan-y; }
+#buy .bhead { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 6px; }
+#buy .bhead b { font-size: 15px; letter-spacing: .04em; text-transform: uppercase; }
+.brow { display: grid; grid-template-columns: 28px 1fr; grid-template-rows: auto auto; column-gap: 8px; width: 100%; text-align: left; padding: 6px 8px; margin: 2px 0; border-radius: 8px; border: 1px solid transparent; background: rgba(255,255,255,0.04); color: var(--text); }
+.brow kbd { grid-row: span 2; align-self: center; text-align: center; font: 700 14px var(--mono); color: var(--accent); }
+.brow b { font-size: 14px; }
+.brow span { font-size: 11px; color: var(--muted); }
+.brow.on { border-color: var(--accent); background: rgba(57,198,232,0.14); }
+.brow:hover { background: rgba(255,255,255,0.09); }
+#buyNote { display: block; padding: 6px 4px 2px; }
+body.turned #buy { left: calc(16px + var(--safe-l)); }
+/* a hack's button: its name instead of an icon */
+.tbtn.custom { border-style: dashed; border-color: rgba(255,210,74,0.7); background: rgba(40,30,8,0.4); }
+.tbtn.custom.on { background: rgba(255,210,74,0.35); border-style: solid; }
+.tbtn .tlab { font: 700 11px var(--mono); text-align: center; line-height: 1.05; padding: 0 3px; pointer-events: none; overflow: hidden; }
+.tbtn.na { opacity: .35 !important; }
+#gyroSet { padding-left: 8px; border-left: 2px solid var(--line); margin: 4px 0 8px; }

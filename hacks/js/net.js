@@ -19,7 +19,10 @@
  *              its grapple too, so every screen draws the rope, and whoever
  *              owns the body a hook holds pulls that body (game.js yankOf)
  *   sh         somebody fired: where from, where each round ended up
- *   hit        a shot landed on a body somebody else owns
+ *   hit        a shot landed on a body somebody else owns (with a blast's push)
+ *   th         somebody threw a grenade or a mine: from where, how fast
+ *   ms         their mine stuck: exactly where, facing which way
+ *   bo         their grenade or mine went off, here
  *   die        the owner of a body says it died (and who did it)
  *   kill       the host's word on a death, with the whole score
  *   end        the host calls the match
@@ -32,7 +35,7 @@
 import { S, on, emit } from "./state.js";
 import * as game from "./game.js";
 import { save } from "./save.js";
-import { cleanLoadout, GUNS, MELEE } from "./weapons.js";
+import { cleanLoadout, GUNS, MELEE, UTILS, GRAPPLE } from "./weapons.js";
 import { cleanSettings } from "./modes.js";
 import { pose, stepPhase } from "./skeleton.js";
 import { holdOf } from "./weapons.js";
@@ -154,19 +157,23 @@ function refill() {
 function flags(a) {
   const b = a.body;
   return (a.alive ? 1 : 0) | (b.onGround ? 2 : 0) | (b.crouched ? 4 : 0) | (b.sliding ? 8 : 0) | (b.climbing ? 16 : 0) |
-    (b.lunge === LUNGE.CHARGE ? 32 : 0) | (b.lunge === LUNGE.DASH ? 64 : 0) | (b.sprinting ? 128 : 0) | (a.arms.ads > 0.5 ? 256 : 0);
+    (b.lunge === LUNGE.CHARGE ? 32 : 0) | (b.lunge === LUNGE.DASH ? 64 : 0) | (b.sprinting ? 128 : 0) | (a.arms.ads > 0.5 ? 256 : 0) |
+    (b.wallSlide ? 512 : 0) | (b.mantle ? 1024 : 0);
 }
 function pack(a, ev) {
   const b = a.body, A = a.arms;
-  const w = A.cur < 2 ? A.slots[A.cur] : A.cur === 2 ? A.melee : "grapple";
+  const w = A.cur < 2 ? A.slots[A.cur] : A.cur === 2 ? A.melee : A.util;
   const hook = b.hook !== HOOK.IDLE ? [r3(b.hx), r3(b.hy), r3(b.hz), b.hook, b.hTarget] : 0;
-  return [a.id, r3(b.x), r3(b.y), r3(b.z), r3(b.vx), r3(b.vy), r3(b.vz), r3(b.yaw), r3(b.pitch), flags(a), Math.ceil(a.hp), A.cur, w, ev && ev.length ? ev : 0, hook];
+  return [a.id, r3(b.x), r3(b.y), r3(b.z), r3(b.vx), r3(b.vy), r3(b.vz), r3(b.yaw), r3(b.pitch), flags(a), Math.ceil(a.hp), A.cur, w, ev && ev.length ? ev : 0, hook,
+    Math.ceil(a.shield || 0), a.shieldLevel || 1, b.wallSlide ? [r3(b.wsnx), r3(b.wsnz)] : 0];
 }
 function unpack(x) {
   if (!Array.isArray(x) || x.length < 13) return null;
   const h = Array.isArray(x[14]) && x[14].length >= 5 ? x[14] : null;
+  const ws = Array.isArray(x[17]) && x[17].length >= 2 ? x[17] : null;
   return { id: x[0] | 0, x: num(x[1]), y: num(x[2]), z: num(x[3]), vx: num(x[4]), vy: num(x[5]), vz: num(x[6]), yaw: num(x[7]), pitch: num(x[8]), f: x[9] | 0, hp: num(x[10], 100), cur: x[11] | 0, w: String(x[12] || ""), ev: Array.isArray(x[13]) ? x[13].slice(0, 8) : null,
-    hook: h ? { x: num(h[0]), y: num(h[1]), z: num(h[2]), st: h[3] === HOOK.ON ? HOOK.ON : HOOK.FLY, t: h[4] | 0 } : null };
+    hook: h ? { x: num(h[0]), y: num(h[1]), z: num(h[2]), st: h[3] === HOOK.ON ? HOOK.ON : HOOK.FLY, t: h[4] | 0 } : null,
+    sh: Math.max(0, Math.min(200, num(x[15], 0))), shl: Math.max(1, Math.min(4, x[16] | 0 || 1)), ws: ws ? [num(ws[0]), num(ws[1])] : null };
 }
 function heard(s) {
   if (!s) return;
@@ -197,7 +204,8 @@ function puppets(dt) {
     b.vx = s1.vx; b.vy = s1.vy; b.vz = s1.vz;
     b.yaw = s0.yaw + wrapAngle(s1.yaw - s0.yaw) * k; b.pitch = s0.pitch + (s1.pitch - s0.pitch) * k;
     const f = s1.f;
-    b.onGround = !!(f & 2); b.crouched = !!(f & 4); b.sliding = !!(f & 8); b.climbing = !!(f & 16);
+    b.onGround = !!(f & 2); b.crouched = !!(f & 4); b.sliding = !!(f & 8); b.climbing = !!(f & 16) || !!(f & 1024);
+    b.wallSlide = !!(f & 512); if (s1.ws) { b.wsnx = s1.ws[0]; b.wsnz = s1.ws[1]; }
     b.lunge = f & 64 ? LUNGE.DASH : f & 32 ? LUNGE.CHARGE : LUNGE.IDLE; b.sprinting = !!(f & 128);
     b.eye += ((b.crouched ? PM.eyeCrouch : PM.eyeStand) - b.eye) * Math.min(1, dt * 14);
     a.arms.ads = f & 256 ? 1 : 0;
@@ -208,9 +216,11 @@ function puppets(dt) {
     if (alive && !a.alive) { a.alive = true; emit("spawn", a); }
     else if (!alive && a.alive) a.alive = false;
     a.hp = s1.hp;
+    a.shield = s1.sh; a.shieldLevel = s1.shl; a.shieldMax = 50 * s1.shl;
     a.arms.cur = Math.max(0, Math.min(3, s1.cur));
-    if (a.arms.cur < 2 && GUNS[s1.w]) a.arms.slots[a.arms.cur] = s1.w;
+    if (a.arms.cur < 2 && (GUNS[s1.w] || s1.w === GRAPPLE.id)) a.arms.slots[a.arms.cur] = s1.w;
     else if (a.arms.cur === 2 && MELEE[s1.w]) a.arms.melee = s1.w;
+    else if (a.arms.cur === 3 && UTILS[s1.w]) a.arms.util = s1.w;
     a.heard = true;
     a.phase = stepPhase(a.phase, Math.hypot(b.vx, b.vz), dt, b.onGround);
     a.bones = pose(game.poseState(a), holdOf(a.arms), a.bones);
@@ -239,8 +249,19 @@ function onMsg(from, m) {
       const v = m.v | 0, by = host ? from : m.by | 0;
       const target = game.actorById(v);
       if (!target) break;
-      if (game.owns(target)) game.applyDamage(target, Math.min(250, Math.max(0, num(m.d))), by, { weapon: String(m.w || "").slice(0, 12), part: m.p === "head" || m.p === "nut" || m.p === "arm" || m.p === "leg" ? m.p : "body" });
+      if (game.owns(target)) game.applyDamage(target, Math.min(250, Math.max(0, num(m.d))), by, { weapon: String(m.w || "").slice(0, 12), part: m.p === "head" || m.p === "nut" || m.p === "arm" || m.p === "leg" ? m.p : "body",
+        push: Array.isArray(m.k) ? m.k.slice(0, 3).map((v) => Math.max(-40, Math.min(40, num(v)))) : null, gas: !!m.g, blast: !!m.k });
       else if (host && target.kind === "remote") room.to(v, Object.assign({}, m, { by }));
+      break;
+    }
+    case "th": case "ms": case "bo": {
+      const by = host ? from : m.by | 0;
+      if (host) room.broadcast(Object.assign({}, m, { by }), from);
+      if (by === room.me) break;
+      const id = m.id | 0, v3 = (a) => (Array.isArray(a) ? a.slice(0, 3).map((x) => num(x)) : null);
+      if (m.t === "th" && UTILS[m.k]) game.addForeignThrowable(by, m.k, v3(m.o) || [0, 0, 0], v3(m.v) || [0, 0, 0], id);
+      else if (m.t === "ms" && v3(m.p) && v3(m.n)) game.foreignMine(id, v3(m.p), v3(m.n));
+      else if (m.t === "bo") game.foreignBoom(id, v3(m.p));
       break;
     }
     case "die": if (host) { const v = m.v | 0; if (v === from) game.scoreKill(v, m.by == null ? null : m.by | 0, { weapon: String(m.w || "").slice(0, 12), part: m.p === "head" || m.p === "nut" ? m.p : "body" }); } break;
@@ -281,6 +302,8 @@ function flushShots() {
 on("netHit", (b, dmg, byId, info) => {
   if (!inMatch()) return;
   const m = { t: "hit", v: b.id, d: Math.round(dmg * 10) / 10, p: info.part || "body", w: info.weapon || "", by: byId };
+  if (Array.isArray(info.push)) m.k = info.push.map(r3);
+  if (info.gas) m.g = 1;
   if (isHost()) { if (b.kind === "remote") room.to(b.id, m); }
   else room.send(m);
 });
@@ -297,6 +320,11 @@ on("matchEnd", (m) => {
 on("move", (a, ev) => { if (a === S.me && inMatch() && moveEv.length < 8) moveEv.push(ev); });
 on("arms", (a, e) => { if (a === S.me && inMatch() && e.type === "swing" && moveEv.length < 8) moveEv.push("swing"); });
 on("quit", () => { latest.clear(); moveEv = []; });
+/* Grenades and mines: thrown, stuck and gone off on the thrower's machine, flown and shown on everyone's. */
+const send = (m) => { if (!room || !inMatch()) return; if (isHost()) room.broadcast(m); else room.send(m); };
+on("thrown", (th) => { if (th.mine) send({ t: "th", id: th.id, k: th.kind, by: th.owner, o: [r3(th.x), r3(th.y), r3(th.z)], v: [r3(th.vx), r3(th.vy), r3(th.vz)] }); });
+on("mineSet", (th) => { if (th.mine) send({ t: "ms", id: th.id, by: th.owner, p: [r3(th.x), r3(th.y), r3(th.z)], n: [r3(th.nx), r3(th.ny), r3(th.nz)] }); });
+on("boom", (th) => { if (th.mine) send({ t: "bo", id: th.id, by: th.owner, p: [r3(th.x), r3(th.y), r3(th.z)] }); });
 
 /** Host: a latecomer gets the match as it stands. */
 function catchUp(id) {

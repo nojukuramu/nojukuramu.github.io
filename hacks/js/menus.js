@@ -9,7 +9,7 @@
 import { S, on, emit } from "./state.js";
 import { save } from "./save.js";
 import { ACTIONS, MODAL, codeName } from "./controls.js";
-import { GUNS, GUN_IDS, MELEE, MELEE_IDS } from "./weapons.js";
+import { GUNS, MELEE, MELEE_IDS, UTILS, UTIL_IDS, SLOT_IDS, GRAPPLE, cleanLoadout } from "./weapons.js";
 import { MODES, DIFFS, DIFF_IDS } from "./modes.js";
 import { hydrateIcons } from "./icons.js";
 import { $, escHtml } from "./util.js";
@@ -20,6 +20,7 @@ import * as audio from "./audio.js";
 import * as render from "./render.js";
 import * as update from "./update.js";
 import * as orient from "./orient.js";
+import * as gyro from "./gyro.js";
 import { boardHtml } from "./hud.js";
 
 const stack = [];
@@ -107,20 +108,24 @@ function card(kind, id, name, cls, on, stats) {
 }
 function gunStats(g) {
   const bar = (v) => '<i style="--v:' + Math.max(0.05, Math.min(1, v)).toFixed(2) + '"></i>';
-  const dps = g.dmg * (g.pellets || 1) * g.rpm / 60;
-  return bar(g.dmg * (g.pellets || 1) / 100) + bar(dps / 250) + bar(1 - g.spread[0] / 7);
+  // a blast counts its splash, not the ball's knock
+  const hit = g.projectile && g.projectile.explode ? g.projectile.explode.dmg : g.dmg * (g.pellets || 1);
+  const dps = hit * g.rpm / 60;
+  return bar(hit / 100) + bar(dps / 250) + bar(1 - g.spread[0] / 7);
 }
 function renderLoadout() {
   const L = save.data.loadout;
-  const guns = (slot) => GUN_IDS.map((id) => card(slot, id, GUNS[id].name, GUNS[id].cls, L[slot] === id, gunStats(GUNS[id]))).join("");
+  const guns = (slot) => SLOT_IDS.map((id) => GUNS[id] ? card(slot, id, GUNS[id].name, GUNS[id].cls, L[slot] === id, gunStats(GUNS[id])) : card(slot, id, GRAPPLE.name, "Instead of a gun", L[slot] === id)).join("");
   $("loPrimary").innerHTML = guns("primary");
   $("loSecondary").innerHTML = guns("secondary");
   $("loMelee").innerHTML = MELEE_IDS.map((id) => card("melee", id, MELEE[id].name, id === "katana" ? "Fast charge, wide cut" : "Slow charge, long reach", L.melee === id)).join("");
+  $("loUtility").innerHTML = UTIL_IDS.map((id) => card("utility", id, UTILS[id].name, UTILS[id].cls + " · " + UTILS[id].charges + " charges, " + UTILS[id].cooldown + " s", L.utility === id)).join("");
 }
 function pickLoadout(kind, id) {
   const L = save.data.loadout;
-  if (kind !== "melee" && L[kind === "primary" ? "secondary" : "primary"] === id) L[kind === "primary" ? "secondary" : "primary"] = L[kind];
+  if ((kind === "primary" || kind === "secondary") && L[kind === "primary" ? "secondary" : "primary"] === id) L[kind === "primary" ? "secondary" : "primary"] = L[kind];
   L[kind] = id;
+  Object.assign(L, cleanLoadout(L));
   save.commit();
   renderLoadout();
   if (S.me) S.me.loadout = Object.assign({}, L);
@@ -138,10 +143,20 @@ function renderSettings() {
   num("stMaster", s.master, 2); num("stSfx", s.sfx, 2); num("stVoice", s.voice, 2); num("stTouchLook", s.touchLook, 2);
   $("stInvert").checked = s.invertY; $("stPauseEdit").checked = s.pauseEditing; $("stFovFx").checked = s.fovFx;
   $("stSpeed").checked = s.showSpeed; $("stFps").checked = s.showFps; $("stTouchSprint").checked = s.touchAutoSprint; $("stTouchFloat").checked = s.touchFloat; $("stForceLand").checked = s.forceLandscape;
+  $("stGyro").checked = s.gyro; $("stGyroInvX").checked = s.gyroInvX; $("stGyroInvY").checked = s.gyroInvY;
+  num("stGyroX", s.gyroX, 1); num("stGyroY", s.gyroY, 1); num("stGyroDead", s.gyroDead, 1);
+  seg($("stGyroMode"), s.gyroMode);
+  renderGyro();
   $("stCross").value = s.crosshair;
   seg($("stQuality"), s.quality);
   renderModes($("stKeyModes")); renderModes($("stTouchModes"));
   renderBinds();
+}
+/* The gyro's settings show only while it is on; its line says whether this device has one. */
+function renderGyro() {
+  $("gyroSet").hidden = !save.settings.gyro;
+  const p = gyro.permission();
+  $("gyroState").textContent = !gyro.supported() ? "This device reports no motion." : p === false ? "Motion was refused: allow it in the browser's settings." : "Turn the phone to aim; the stick and the screen still work.";
 }
 /* One row per action that can hold or toggle; keys and touch each have their own (controls.js MODAL). */
 function renderModes(box) {
@@ -257,6 +272,15 @@ export function init() {
   $("stCross").addEventListener("input", (e) => { save.settings.crosshair = e.target.value; save.commit(); });
   const segSet = (id, key, after) => $(id).addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; save.settings[key] = b.dataset.v; save.commit(); seg($(id), b.dataset.v); if (after) after(b.dataset.v); });
   segSet("stQuality", "quality", (q) => render.setQuality(q));
+  // asked from the tap itself: iOS gives motion only to a page that asked from a gesture
+  $("stGyro").addEventListener("change", (e) => {
+    save.settings.gyro = e.target.checked; save.commit();
+    if (e.target.checked) gyro.ask().then(renderGyro);
+    renderGyro();
+  });
+  range("stGyroX", "gyroX", 1); range("stGyroY", "gyroY", 1); range("stGyroDead", "gyroDead", 1);
+  tog("stGyroInvX", "gyroInvX"); tog("stGyroInvY", "gyroInvY");
+  segSet("stGyroMode", "gyroMode");
   for (const id of ["stKeyModes", "stTouchModes"]) $(id).addEventListener("click", (e) => {
     const b = e.target.closest("button"), row = b && b.closest("[data-act]");
     if (!row) return;

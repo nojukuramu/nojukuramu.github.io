@@ -32,18 +32,20 @@ const TOPICS = {
     body:
       "<p><b>Keys</b> (all rebindable): " + k("W A S D") + " move · " + k("Space") + " or the wheel jump · " + k("Ctrl") + " crouch / slide · " +
       k("Shift") + " sprint · " + k("=") + " auto-run · " + k("Mouse 1") + " fire · " + k("Mouse 2") + " aim, or lunge with the blade · " + k("R") + " reload · " +
-      k("V") + " quick melee · " + k("E") + " or " + k("4") + " grappling gun · " + k("Z") + " sniper zoom · " + k("1") + k("2") + k("3") + " weapons · " + k("Tab") + " scores · " + k("H") + " hacks · " + k("Esc") + " menu.</p>" +
+      k("V") + " quick melee · " + k("E") + " grappling gun · " + k("G") + " quick throw · " + k("Z") + " sniper zoom · " + k("1") + k("2") + k("3") + k("4") + " weapons and utility · " + k("B") + " buy · " + k("Tab") + " scores · " + k("H") + " hacks · " + k("Esc") + " menu.</p>" +
       "<p>Sprinting stands you up out of a crouch; aiming or firing ends a sprint.</p>" +
       "<p><b>Bunny hop.</b> Friction only happens on the ground. Press jump the moment you land — not before, not held — and you keep all your speed.</p>" +
       "<p><b>Air strafe.</b> In the air, hold " + k("A") + " or " + k("D") + " (not " + k("W") + ") and turn the mouse the same way, smoothly. " +
       "Each turn adds a little speed. Chain it with hops and you get faster every jump.</p>" +
       "<p><b>Surf.</b> The purple ridges are too steep to stand on. Land on a side, hold into it with " + k("A") + " or " + k("D") + ", and you glide along it with no friction.</p>" +
       "<p><b>Slide.</b> Crouch while sprinting. Downhill, a slide speeds up; jump out of it to keep the speed. On a ramp, crouching slides you down it from a standstill.</p>" +
-      "<p><b>Wall climb.</b> Jump into a wall and keep holding jump and forward. Over the top, you mantle.</p>" +
+      "<p><b>Wall climb.</b> Press jump into a wall, then keep pushing forward: you climb for as long as you hold " + k("W") + " (jump need not be held), and letting go lets go of the wall. Press jump while climbing to kick off backwards.</p>" +
+      "<p><b>Mantle.</b> A ledge within reach of your hands is caught and climbed over by itself, Apex-style: jump at a crate holding " + k("W") + " and you are on it.</p>" +
+      "<p><b>Wall ride.</b> Slide fast along a wall and you ride it, barely slowing; the view leans off the wall. Jump to kick off it, keeping your speed along it. The teal slipways in each corner are made for it.</p>" +
       "<p><b>Wall jump.</b> Beside a wall in the air, tap jump. You keep your speed along the wall. The red shafts are made for it.</p>" +
       "<p><b>Lunge.</b> With the blade out (" + k("3") + "), hold " + k("Mouse 2") + " on any surface — floor, wall, ceiling — and you stick to it and charge. Let go to launch where you look. " +
       "Facing straight away from the surface is the strongest launch.</p>" +
-      "<p><b>Grapple.</b> It is a gun: " + k("E") + " draws it (and puts it away), then hold " + k("Mouse 1") + ": the hook flies where you look and reels you in, and lets go by itself when you arrive. Steer with " + k("W A S D") + " to swing. " +
+      "<p><b>Grapple.</b> Carried instead of a gun (Loadout). " + k("E") + " draws it (and puts it away), then hold " + k("Mouse 1") + ": the hook flies where you look and reels you in, and lets go by itself when you arrive. Steer with " + k("W A S D") + " to swing. " +
       "Hook a player and you are both pulled together — have your blade or shotgun ready. Let go to stop. The rope cannot pass through walls.</p>"
   },
   bots: {
@@ -65,7 +67,34 @@ const TOPICS = {
       "<p><b>Collateral.</b> Rounds go on through a body into the next, losing some damage each time: a sniper through three, a hand cannon through two, " +
       "most others through one, and a shotgun pellet barely. One round, two kills, is a collateral.</p>" +
       "<p><b>Blades</b> hit harder the faster you are going: twice as hard at 18 m/s. The multiplier shows by the crosshair.</p>" +
-      "<p>Recoil lifts your view and does not come back on its own; pull down against it. Moving spreads your shots, jumping more.</p>"
+      "<p><b>Cannon.</b> A slow ball that falls as it flies and bursts where it lands. The blast hurts and throws everyone near it, you included (less), and the nearer the harder: fire it at your own feet and jump for a rocket jump.</p>" +
+      "<p><b>Grappling gun.</b> Carried in place of a gun, primary or secondary.</p>" +
+      "<p>Recoil lifts your view and does not come back on its own; pull down against it. Moving spreads your shots, jumping more.</p>" +
+      "<p><b>Shields</b> sit on top of your health: 50 to start, and dealing damage evolves them a level at a time, 50 more each, to 200 — white, blue, purple, red. A shield takes damage first and charges back after a few quiet seconds, before your health does. Gas goes straight through it. A new life starts on the first level.</p>"
+  },
+  utility: {
+    title: "Utilities",
+    body:
+      "<p>Slot 4 (" + k("4") + "), or thrown from anything with " + k("G") + ". They are on a cooldown, like an ability: two charges, and each one you throw comes back by itself ten to fifteen seconds later, for as long as you live. The chip by your ammo shows the charges and the seconds to the next.</p>" +
+      "<p><b>Frag grenade.</b> Bounces, and bursts two seconds after it leaves your hand. Hurts and throws whoever is near — you too.</p>" +
+      "<p><b>Flashbang.</b> Goes off a beat after landing. Looking at it, near, it burns the moment into your eyes: a dark, discoloured patch where it went off that heals slowly, the scene smeared as if several moments were on screen at once, and your ears ringing. With your back to it, only a little; behind a wall, nothing. It blinds bots too.</p>" +
+      "<p><b>Tripmine.</b> Sticks where it lands and arms after a second; a red beam runs out from it, and an enemy who crosses it sets it off.</p>" +
+      "<p><b>Gas mine.</b> Sticks and arms the same way; an enemy who comes near it gets a cloud that hurts for as long as they stay in it, straight through their shield.</p>" +
+      "<p>Three mines of yours at most; a fourth takes the place of the oldest.</p>"
+  },
+  buy: {
+    title: "Buying",
+    body:
+      "<p>In a match, " + k("B") + " opens the buy menu without stopping the game. " + k("1") + " primary, " + k("2") + " secondary, " + k("3") + " melee, " + k("4") + " utility, then a number for the thing itself. " +
+      k("0") + " goes back; " + k("B") + " closes it. On a phone, tap the cart and then a row.</p>" +
+      "<p>What you buy is your loadout from then on. In the first seconds of a life (any time, in practice) it is in your hands at once, full; after that it comes with your next life — the menu is not a way to refill a gun mid-fight.</p>"
+  },
+  gyro: {
+    title: "Gyro aim",
+    body:
+      "<p>Turn the phone to turn your view, on top of the touch look, the way mobile shooters do it. It follows how fast the phone turns, so it never drifts, and putting the phone down never spins you round.</p>" +
+      "<p><b>Always</b> or only <b>while aiming</b> down sights, so it fine tunes a shot and leaves the rest to your thumb. Set how fast it turns across and up and down separately, and flip either. <b>Steadiness</b> ignores a hand's tremor below it.</p>" +
+      "<p>On iPhone the browser asks first, once. The motion is read on the phone and never leaves it.</p>"
   },
   lunge: {
     title: "The lunge",
@@ -83,7 +112,9 @@ const TOPICS = {
       "and you keep running with your thumb off the screen. Touch the stick to take over again.</p>" +
       "<p>With <b>Floating stick</b> on, a touch anywhere low on the left is the stick, centred where your thumb landed. " +
       "Drag anywhere else that is not a button to look.</p>" +
-      "<p>The grapple is a gun: its button draws it and puts it away, and while it is out Fire shoots the hook. " +
+      "<p>The grapple is carried in place of a gun: its button draws it and puts it away (dimmed when you carry none), and while it is out Fire shoots the hook. " +
+      "The grenade button throws your utility from anything; the cart opens the buy menu.</p>" +
+      "<p><b>Hack buttons.</b> A running hack that waits for a key (its " + "<code>ui.key</code>" + ") gets a dashed button of its own, named after it, that presses that key while you hold it. They come and go with the hacks, and Move buttons places them like the rest.</p><p>" +
       "With the blade out, Aim is the lunge: hold to charge, let go to launch. The buttons change their pictures to say so.</p>" +
       "<p>Fire and Aim can be dragged while held, so you can aim as you shoot. Aim starts as a toggle; " +
       "every button that can hold or toggle has its own choice below.</p>" +

@@ -23,13 +23,23 @@
  *
  * The buttons say what they do with what is in your hands: Fire shows the
  * hook with the grapple out and the blade with the blade, and Aim becomes the
- * lunge. */
+ * lunge; the grapple's button is dimmed when you are not carrying one.
+ *
+ * Hack buttons. A phone has no keys, so a hack that waits for one — every
+ * ui.key(…) a running hack made, "Hold to fly" and the like — gets a button
+ * of its own, named after it, that presses that key while it is held
+ * (input.js virtualDown), so the hack cannot tell it from the keyboard. They
+ * come and go with the hacks, start in the first free place below the top
+ * row, and the layout editor moves and sizes them like any other; where each
+ * was put is kept by its label (save.js touchHack). */
 
 import { S, emit, on } from "./state.js";
 import { save } from "./save.js";
 import { TOUCH } from "./controls.js";
 import { icon } from "./icons.js";
-import { touchState, touchPress, touchRelease, look, latched, setAutoRun, autoRunning } from "./input.js";
+import { touchState, touchPress, touchRelease, look, latched, setAutoRun, autoRunning, virtualDown, virtualUp } from "./input.js";
+import { keyButtons } from "./hackapi.js";
+import { grappleSlot, grappleOut, bladeOut, utilOut } from "./weapons.js";
 import { clamp } from "./util.js";
 import { appSize, toApp, appRect } from "./orient.js";
 
@@ -44,28 +54,69 @@ let editing = false, selected = null;
 
 export const isTouch = () => matchMedia("(pointer: coarse)").matches || ("ontouchstart" in window && navigator.maxTouchPoints > 0);
 
-function layout() { return save.data.touch[orient()]; }
+/* The buttons: the fixed ones, then one for each key a running hack is waiting on. */
+let custom = [];                   // [{ id: "h:<label>", label, code, short, custom: true }]
+const allDefs = () => TOUCH.concat(custom);
+/** A hack button's face: the label without "Hold to", short enough to fit. */
+function shortOf(label) { const t = String(label).replace(/^(hold|press|tap|toggle)( to)?\s+/i, "").trim() || String(label); return t.length > 7 ? t.slice(0, 6) + "." : t; }
+function layout() {
+  const o = orient(), L = save.data.touch[o];
+  const H = save.data.touchHack[o] = save.data.touchHack[o] || {};
+  // a hack button with no place yet gets the first free one below the top row, down the middle-left
+  custom.forEach((c, i) => {
+    if (L[c.id]) return;
+    if (!H[c.label]) {
+      const { w, h } = appSize(), sz = 50;
+      L[c.id] = { x: 0.4, y: 0.3, s: sz, a: 1 };
+      const p = freeSpot(c.id, w * 0.4, h * (0.26 + i * 0.13), sz / 2, hudRects()) || { x: w * 0.4, y: h * 0.3 };
+      H[c.label] = { x: clamp(p.x / w, 0.03, 0.97), y: clamp(p.y / h, 0.03, 0.97), s: sz, a: 1 };
+    }
+    L[c.id] = H[c.label];
+  });
+  return L;
+}
 
 export function build() {
   const r = root();
   r.innerHTML = '<div id="touchLook"></div>';
   els.clear(); shown.clear();
-  for (const t of TOUCH) {
+  for (const t of allDefs()) {
     const el = document.createElement("div");
-    el.className = "tbtn" + (t.id === "stick" ? " stick" : "");
+    el.className = "tbtn" + (t.id === "stick" ? " stick" : "") + (t.custom ? " custom" : "");
     el.dataset.id = t.id;
     el.setAttribute("role", "button");
-    el.setAttribute("aria-label", t.label);
-    el.innerHTML = t.id === "stick" ? '<div class="knob"></div><div class="runlock" aria-hidden="true">' + icon("sprint") + "</div>" : icon(t.icon);
+    el.setAttribute("aria-label", t.custom ? t.label + " (a hack's key)" : t.label);
+    el.innerHTML = t.id === "stick" ? '<div class="knob"></div><div class="runlock" aria-hidden="true">' + icon("sprint") + "</div>" : t.custom ? '<span class="tlab"></span>' : icon(t.icon);
+    if (t.custom) el.firstChild.textContent = t.short;
     r.appendChild(el);
     els.set(t.id, el);
   }
   place();
 }
+/** The hacks' keys changed (one started, stopped, or was rebound): their buttons follow. */
+function hackButtons() {
+  const want = [];
+  const seen = new Set();
+  for (const k of keyButtons()) {
+    const id = "h:" + k.label;
+    if (seen.has(id) || !k.code) continue;
+    seen.add(id);
+    want.push({ id, label: k.label, code: k.code, short: shortOf(k.label), custom: true });
+  }
+  const sig = (l) => l.map((c) => c.id + "=" + c.code).join("|");
+  if (sig(want) === sig(custom)) return;
+  // let go of any hack key a vanishing button was holding
+  for (const [pid, p] of [...active]) if (p.kind === "btn" && p.custom) { virtualUp(p.code); active.delete(pid); }
+  for (const c of custom) delete save.data.touch.landscape[c.id], delete save.data.touch.portrait[c.id];
+  custom = want;
+  if (els.size) { build(); if (editing) { select(selected && els.has(selected) ? selected : "fire"); separate(); } }
+}
+export const hackButtonCount = () => custom.length;
 export function place() {
   const L = layout(), { w, h } = appSize();
   for (const [id, el] of els) {
     const q = L[id];
+    if (!q) continue;
     el.style.width = el.style.height = q.s + "px";
     el.style.left = clamp(q.x * w - q.s / 2, 0, w - q.s) + "px";
     el.style.top = clamp(q.y * h - q.s / 2, 0, h - q.s) + "px";
@@ -77,7 +128,7 @@ export function place() {
 /* ---------------------------------------------------------------
    Playing
    --------------------------------------------------------------- */
-const def = (id) => TOUCH.find((t) => t.id === id);
+const def = (id) => allDefs().find((t) => t.id === id);
 function down(e) {
   if (!document.body.classList.contains("touchOn")) return;
   const tgt = e.target.closest ? e.target.closest(".tbtn") : null;
@@ -89,7 +140,16 @@ function down(e) {
   if (!id && stickFree && inStickZone(f)) { grabStick(e, f, true); return; }
   if (!id) { active.set(e.pointerId, { kind: "look", x: f.x, y: f.y }); return; }
   const t = def(id);
+  if (!t) return;
   if (id === "stick") { if (stickFree) grabStick(e, f, false); return; }
+  if (t.custom) {
+    // a hack's key: down while held, as the keyboard would have it
+    const again = [...active.values()].some((q) => q.kind === "btn" && q.id === id);
+    active.set(e.pointerId, { kind: "btn", id, custom: true, code: t.code, x: f.x, y: f.y });
+    tgt.classList.add("on");
+    if (!again) virtualDown(t.code);
+    return;
+  }
   active.set(e.pointerId, { kind: "btn", id, x: f.x, y: f.y, look: !!t.look });
   tgt.classList.add("on");
   touchState.held.add(t.action);
@@ -119,6 +179,11 @@ function up(e) {
     stickIdle();
     return;
   }
+  if (p.kind === "btn" && p.custom) {
+    const still = [...active.values()].some((q) => q.kind === "btn" && q.id === p.id);
+    if (!still) { const el = els.get(p.id); if (el) el.classList.remove("on"); virtualUp(p.code); }
+    return;
+  }
   if (p.kind === "btn") {
     const t = def(p.id);
     els.get(p.id).classList.remove("on");
@@ -132,18 +197,21 @@ function up(e) {
     once a frame, since a sprint can unlatch by itself. */
 const shown = new Map();         // button id -> the icon it shows now, so it is only redrawn on a change
 function iconFor(t) {
-  const cur = S.me ? S.me.arms.cur : 0;
-  if (t.action === "fire") return cur === 3 ? "hook" : cur === 2 ? "blade" : "fire";
-  if (t.action === "ads") return cur === 2 ? "lunge" : "scope";
+  const A = S.me ? S.me.arms : null;
+  if (t.action === "fire") return A && grappleOut(A) ? "hook" : A && bladeOut(A) ? "blade" : A && utilOut(A) ? "grenade" : "fire";
+  if (t.action === "ads") return A && bladeOut(A) ? "lunge" : "scope";
+  if (t.action === "util") return A && A.util === "flash" ? "flash" : A && A.util !== "frag" ? "mine" : "grenade";
   return t.icon;
 }
 export function sync() {
   if (!els.size || editing) return;
-  const cur = S.me ? S.me.arms.cur : 0;
+  const A = S.me ? S.me.arms : null;
   for (const t of TOUCH) {
     const el = els.get(t.id);
     if (!el) continue;
-    el.classList.toggle("latched", t.action === "hook" ? cur === 3 : latched(t.action));
+    el.classList.toggle("latched", t.action === "hook" ? !!A && grappleOut(A) : latched(t.action));
+    if (t.action === "hook") el.classList.toggle("na", !!A && grappleSlot(A) < 0);
+    if (t.action === "util") el.classList.toggle("na", !!A && A.utilN <= 0);
     if (t.id === "stick") continue;
     const ic = iconFor(t);
     if (shown.get(t.id) !== ic) { shown.set(t.id, ic); el.innerHTML = icon(ic); el.dataset.icon = ic; }
@@ -252,8 +320,8 @@ function freeSpot(id, x, y, r, rects) {
   x = clamp(x, x0, x1); y = clamp(y, y0, y1);
   for (let it = 0; it < 80; it++) {
     let hit = false;
-    for (const t of TOUCH) {
-      if (t.id === id) continue;
+    for (const t of allDefs()) {
+      if (t.id === id || !layout()[t.id]) continue;
       const o = circleOf(t.id);
       let dx = x - o.x, dy = y - o.y, d = Math.hypot(dx, dy);
       const need = r + o.r + GAP;
@@ -290,7 +358,7 @@ function placeBar() {
     for (const x of xs) {
       const b = { left: x, right: x + bw, top: y, bottom: y + bh };
       let cost = 0;
-      for (const t of TOUCH) { const c = circleOf(t.id); cost += intoRect(c.x, c.y, c.r, b); }
+      for (const t of allDefs()) { const c = circleOf(t.id); cost += intoRect(c.x, c.y, c.r, b); }
       // covering a readout is not as bad as covering a button, but still worse than covering nothing
       for (const q of hud) cost += Math.max(0, Math.min(b.right, q.right) - Math.max(b.left, q.left)) * Math.max(0, Math.min(b.bottom, q.bottom) - Math.max(b.top, q.top)) / 400;
       if (!best || cost < best.cost) best = { x, y, cost };
@@ -303,7 +371,7 @@ function placeBar() {
 /** Pull apart whatever a layout already had overlapping. */
 function separate() {
   const bar = fixedRects();
-  for (let pass = 0; pass < 3; pass++) for (const t of TOUCH) {
+  for (let pass = 0; pass < 3; pass++) for (const t of allDefs()) {
     const c = circleOf(t.id);
     const p = freeSpot(t.id, c.x, c.y, c.r, bar);
     if (p && (Math.abs(p.x - c.x) > 0.5 || Math.abs(p.y - c.y) > 0.5)) setCentre(t.id, p);
@@ -337,7 +405,7 @@ function resize(v) {
 function select(id) {
   selected = id;
   const q = layout()[id];
-  document.getElementById("teSel").textContent = def(id).label;
+  document.getElementById("teSel").textContent = def(id) ? def(id).label : "";
   document.getElementById("teSize").value = q.s;
   document.getElementById("teAlpha").value = q.a == null ? 1 : q.a;
   place();
@@ -370,10 +438,12 @@ export function init() {
   document.getElementById("teAlpha").addEventListener("input", (e) => { if (selected) { layout()[selected].a = +e.target.value; place(); } });
   document.getElementById("teAlpha").addEventListener("change", () => save.commit());
   document.getElementById("teSize").addEventListener("change", () => save.commit());
-  document.getElementById("teReset").addEventListener("click", () => { save.resetTouch(orient()); place(); placeBar(); separate(); if (selected) select(selected); });
+  document.getElementById("teReset").addEventListener("click", () => { for (const c of custom) delete save.data.touch[orient()][c.id]; save.data.touchHack[orient()] = {}; save.resetTouch(orient()); place(); placeBar(); separate(); if (selected && els.has(selected)) select(selected); });
   document.getElementById("teDone").addEventListener("click", () => edit(false));
   on("matchStart", () => show(true));
   // turned or straightened: the other layout, and the buttons put where it says
   on("turned", () => { if (!els.size) return; place(); if (editing) { placeBar(); separate(); } });
   on("quit", () => show(false));
+  on("hacksChanged", hackButtons);
+  on("hackButtons", hackButtons);
 }

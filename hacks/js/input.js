@@ -24,13 +24,20 @@
  * small courtesies players expect, each of which used to be a fight with the
  * controls: asking to run stands you up out of a crouch, aiming or firing
  * ends a toggled sprint, changing weapon drops a toggled aim, and auto-run
- * keeps you going forward until you touch a move key or the stick. */
+ * keeps you going forward until you touch a move key or the stick.
+ *
+ * Slot 4 is the utility, and the quick-throw key throws it from anything.
+ * The grapple's key draws whichever slot carries the grapple, if one does.
+ * B opens the buy menu; while it is open the number keys are its (buy.js).
+ * Touch buttons a hack asked for (touch.js) press their key here as a key
+ * would, and the gyro (gyro.js) turns the view through turn(). */
 
 import { S, emit, on } from "./state.js";
 import { save } from "./save.js";
 import { ACTIONS, MODAL_IDS, MIXED_HOLD } from "./controls.js";
 import { B } from "./movement.js";
-import { SLOT_GRAPPLE } from "./weapons.js";
+import { SLOT_UTIL, grappleOut, grappleSlot, gunOf } from "./weapons.js";
+import * as buy from "./buy.js";
 import { clamp } from "./util.js";
 
 const down = new Set();              // codes held right now
@@ -48,6 +55,7 @@ const keyHeld = (action) => { const b = save.data.binds[action]; return !!b && (
    --------------------------------------------------------------- */
 const MODAL = new Set(MODAL_IDS);
 const bladeOut = () => !!S.me && S.me.arms.cur === 2;
+const DIGIT = /^(?:Digit|Numpad)(\d)$/;
 const latch = { key: {}, touch: {} };       // action -> on, for toggle and mixed
 const since = { key: {}, touch: {} };       // action -> when a mixed press switched it on (-1: that press switched it off)
 const modeOf = (src, a) => (src === "key" ? save.settings.keyModes : save.settings.touchModes)[a] || "hold";
@@ -137,13 +145,23 @@ function press(code) {
   if (down.has(code)) return;
   down.add(code);
   if (!playing()) return;
+  // the buy menu has the number keys while it is open (and Backspace, as its 0)
+  if (buy.isOpen()) {
+    const m = DIGIT.exec(code);
+    if (m) { buy.key(+m[1]); return; }
+    if (code === "Backspace") { buy.key(0); return; }
+  }
   for (const a of actionFor(code)) {
     edges.add(a);
     if (MODAL.has(a)) modalDown("key", a);
     if (a === "hacks") emit("toggleHacks");
+    if (a === "buy") emit("toggleBuy");
   }
   emit("hackKey", code);
 }
+/** A touch button a hack asked for: its key goes down and up as a real key would (touch.js). */
+export function virtualDown(code) { if (code) press(code); }
+export function virtualUp(code) { if (code) release(code); }
 function release(code) {
   if (!down.delete(code)) return;
   // the action lets go only when neither of its keys is still down
@@ -156,6 +174,7 @@ export function touchPress(action) {
   edges.add(action);
   if (MODAL.has(action)) modalDown("touch", action);
   if (action === "hacks") emit("toggleHacks");
+  if (action === "buy") emit("toggleBuy");
   if (action === "menu") emit("menu");
 }
 export function touchRelease(action) { if (MODAL.has(action)) modalUp("touch", action); }
@@ -173,7 +192,7 @@ export function buildCmd() {
     if (MODAL.has(wheelNow) && modeOf("key", wheelNow) !== "hold") { const a = wheelNow; wheelNow = null; modalDown("key", a); modalUp("key", a); }
   }
 
-  const A = S.me ? S.me.arms : null, blade = bladeOut(), grapple = !!A && A.cur === SLOT_GRAPPLE;
+  const A = S.me ? S.me.arms : null, blade = bladeOut(), grapple = !!A && grappleOut(A);
 
   if (edges.has("autorun")) setAutoRun(!autoRun);
   else if (autoRun && (edges.has("forward") || edges.has("back"))) setAutoRun(false);
@@ -182,7 +201,7 @@ export function buildCmd() {
 
   // with a gun, aiming or firing ends a toggled sprint, as it does in every shooter: the run is over
   const aim = !blade && !grapple && held("ads");
-  if (A && A.cur < 2 && (edges.has("ads") || edges.has("fire"))) { latch.key.sprint = false; latch.touch.sprint = false; }
+  if (A && gunOf(A) && (edges.has("ads") || edges.has("fire"))) { latch.key.sprint = false; latch.touch.sprint = false; }
   // a toggled sprint ends when you stop running (not merely before you start: Shift then W still sprints)
   if (fwd <= 0 && lastFwd > 0) { latch.key.sprint = false; latch.touch.sprint = false; }
   lastFwd = fwd;
@@ -206,16 +225,18 @@ export function buildCmd() {
   else if (aim) b |= B.ADS;
   if (held("reload")) b |= B.RELOAD;
   if (held("melee")) b |= B.MELEE;
+  if (held("util") || edges.has("util")) b |= B.UTIL;
   // a zoom step is a press; one shorter than a tick still counts
   if (held("zoom") || edges.has("zoom")) b |= B.ZOOM;
   let slot = 0;
   if (edges.has("slot1")) slot = 1;
   else if (edges.has("slot2")) slot = 2;
   else if (edges.has("slot3")) slot = 3;
-  // the grapple's key draws it, and puts it away again
-  else if (edges.has("hook") && A) slot = grapple ? -1 : SLOT_GRAPPLE + 1;
+  else if (edges.has("slot4")) slot = SLOT_UTIL + 1;
+  // the grapple's key draws whichever slot carries it, and puts it away again
+  else if (edges.has("hook") && A && grappleSlot(A) >= 0) slot = grapple ? -1 : grappleSlot(A) + 1;
   else if (edges.has("last")) slot = -1;
-  else if (edges.has("next") && A) slot = grapple ? A.last + 1 : ((A.cur + 1) % 3) + 1;
+  else if (edges.has("next") && A) slot = ((A.cur + 1) % 4) + 1;
   // a new weapon comes up unaimed
   if (slot && A && slot - 1 !== A.cur) { latch.key.ads = false; latch.touch.ads = false; }
   edges.clear();
@@ -228,6 +249,14 @@ export function heldCodes() { return [...down]; }
    Looking
    --------------------------------------------------------------- */
 const DEG = Math.PI / 180;
+/** Turn the view by angles (radians), as the gyro does: steadied by a scope's zoom the way the mouse is. */
+export function turn(dyaw, dpitch) {
+  const a = S.me;
+  let k = 1;
+  if (a && a.arms) { const zoom = S.cam.zoom || 1; k = 1 + (save.settings.adsSens / zoom - 1) * a.arms.ads; }
+  S.view.yaw += dyaw * k;
+  S.view.pitch = clamp(S.view.pitch + dpitch * k, -1.55, 1.55);
+}
 export function look(dx, dy, scale) {
   const a = S.me;
   let k = save.settings.sens * 0.022 * DEG * (scale || 1);

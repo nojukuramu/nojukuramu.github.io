@@ -44,6 +44,29 @@ anyone close) and a mid-distance take (`_far`, anyone more than ~28 m away).
 | `clank.mp3`, `dink.mp3` (pitched up 25%) | `impactMetal_000`, `impactMetal_002` from **Sci-fi Sounds**, https://opengameart.org/content/sci-fi-sounds | Kenney |
 | `yelp.mp3` (pitched up 45%), `grunt.mp3` | `2yell1.wav`, `3grunt1.wav` from **Male Grunt/Yelling sounds**, https://opengameart.org/content/male-gruntyelling-sounds | HaelDB |
 
+## Blasts, shields, utilities, the buy menu — CC0 1.0
+
+All by Kenney (kenney.nl), from three of his public-domain packs. Trimmed, mono, peak-normalised and
+faded as above; `cannon.mp3` and `gas.mp3` cut to their first 0.85 and 3 seconds.
+
+| File | Source | Pack |
+|------|--------|------|
+| `explode.mp3` | `lowFrequency_explosion_000` | **Sci-Fi Sounds**, https://opengameart.org/content/sci-fi-sounds |
+| `cannon.mp3` | `lowFrequency_explosion_001` | Sci-Fi Sounds |
+| `crunch.mp3` | `explosionCrunch_000` | Sci-Fi Sounds |
+| `shield_charge.mp3` | `forceField_002` | Sci-Fi Sounds |
+| `gas.mp3` | `thrusterFire_000` | Sci-Fi Sounds |
+| `zap.mp3` | `laserSmall_000` | Sci-Fi Sounds |
+| `shield_hit.mp3` | `impactGlass_light_001` | **Impact Sounds**, https://kenney.nl/assets/impact-sounds |
+| `shield_break.mp3` | `impactGlass_heavy_001` | Impact Sounds |
+| `bounce.mp3` | `impactMetal_light_000` | Impact Sounds |
+| `punch.mp3` | `impactPunch_heavy_001` | Impact Sounds |
+| `grab.mp3` | `impactSoft_medium_000` | Impact Sounds |
+| `shield_full.mp3` | `maximize_003` | **Interface Sounds**, https://opengameart.org/content/interface-sounds |
+| `beep.mp3` | `select_001` | Interface Sounds |
+| `buy.mp3` | `switch_002` | Interface Sounds |
+| `deny.mp3` | `error_004` | Interface Sounds |
+
 ## Announcer
 
 | File | Source | Author | Licence |

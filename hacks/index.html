@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Hacks">
 <link rel="stylesheet" href="css/game.css">
 <!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
-<script>window.HK_VERSION = "6";</script>
+<script>window.HK_VERSION = "7";</script>
 <script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
 </head>
 <body class="atTitle">
@@ -24,6 +24,7 @@
 <div id="app">
 <canvas id="gl"></canvas>
 <canvas id="overlay" aria-hidden="true"></canvas>
+<canvas id="fx" aria-hidden="true"></canvas>
 <div id="tags" aria-hidden="true"></div>
 
 <!-- ============ HUD ============ -->
@@ -43,10 +44,11 @@
   </div>
   <div id="killfeed"></div>
   <div id="hudBL">
-    <div class="hpbox"><b id="hpN">100</b><div class="bar"><i id="hpF"></i></div></div>
+    <div class="hpbox"><b id="hpN">100</b><div class="bars"><div id="shBar" class="shbar"><i id="shF"></i><em id="shEvo"></em></div><div class="bar"><i id="hpF"></i></div></div></div>
     <div id="speedo" class="mono"><b id="speedN">0.0</b><small>m/s</small></div>
   </div>
   <div id="hudBR">
+    <div id="utilChip" title="Utility"><span id="utilIco"></span><b id="utilN" class="mono"></b></div>
     <div id="slots"></div>
     <div class="ammo"><b id="ammoN" class="mono"></b><small id="ammoMag" class="mono"></small></div>
     <div id="gunName"></div>
@@ -70,6 +72,12 @@
   <b id="scopeZoom" class="mono"></b>
 </div>
 <div id="scoreboard" hidden></div>
+<!-- the buy menu: B, a number, a number (buy.js) -->
+<div id="buy" hidden>
+  <div class="bhead"><b id="buyTitle">Buy</b><button id="buyClose" class="iconBtn" aria-label="Close"><i data-icon="close"></i></button></div>
+  <div id="buyRows"></div>
+  <small id="buyNote" class="muted"></small>
+</div>
 
 <!-- ============ touch controls (built by touch.js) ============ -->
 <div id="touch" hidden></div>
@@ -123,7 +131,8 @@
     <h3 class="sub">Primary</h3><div id="loPrimary" class="cards"></div>
     <h3 class="sub">Secondary</h3><div id="loSecondary" class="cards"></div>
     <h3 class="sub">Melee <button class="info" data-info="lunge" aria-label="About the lunge"><i data-icon="info"></i></button></h3><div id="loMelee" class="cards"></div>
-    <p class="muted small">Changes apply at your next spawn.</p>
+    <h3 class="sub">Utility <button class="info" data-info="utility" aria-label="About utilities"><i data-icon="info"></i></button></h3><div id="loUtility" class="cards"></div>
+    <p class="muted small">Changes apply at your next spawn. In a match, <kbd>B</kbd> buys. <button class="info" data-info="buy" aria-label="About the buy menu"><i data-icon="info"></i></button></p>
     <div class="stackbtns"><button class="btn primary wide" data-back>Done</button></div>
   </div>
 </section>
@@ -154,6 +163,16 @@
       <label class="tog"><input type="checkbox" id="stForceLand"><span>Force landscape</span><button class="info" data-info="landscape" aria-label="About Force landscape"><i data-icon="info"></i></button></label>
       <label class="tog"><input type="checkbox" id="stTouchSprint"><span>Push past the stick to run, up to the lock to auto-run</span></label>
       <label class="tog"><input type="checkbox" id="stTouchFloat"><span>Floating stick: it comes to your left thumb</span></label>
+      <label class="tog"><input type="checkbox" id="stGyro"><span>Gyro aim: turn the phone to aim</span><button class="info" data-info="gyro" aria-label="About gyro aim"><i data-icon="info"></i></button></label>
+      <div id="gyroSet">
+        <div class="field"><label>Gyro is on</label><div id="stGyroMode" class="seg"><button data-v="always">Always</button><button data-v="ads">While aiming</button></div></div>
+        <div class="setrow"><label for="stGyroX">Gyro across <b id="stGyroXN" class="num"></b></label><input type="range" id="stGyroX" min="0.2" max="5" step="0.1"></div>
+        <div class="setrow"><label for="stGyroY">Gyro up and down <b id="stGyroYN" class="num"></b></label><input type="range" id="stGyroY" min="0.2" max="5" step="0.1"></div>
+        <div class="setrow"><label for="stGyroDead">Steadiness <b id="stGyroDeadN" class="num"></b></label><input type="range" id="stGyroDead" min="0" max="8" step="0.5"></div>
+        <label class="tog"><input type="checkbox" id="stGyroInvX"><span>Invert gyro across</span></label>
+        <label class="tog"><input type="checkbox" id="stGyroInvY"><span>Invert gyro up and down</span></label>
+        <small id="gyroState" class="muted"></small>
+      </div>
       <div class="field"><label>Buttons: hold or toggle <button class="info" data-info="modes" aria-label="Hold, toggle and mixed"><i data-icon="info"></i></button></label><div id="stTouchModes" class="modes" data-src="touchModes"></div></div>
     </div>
     <div class="tabpane" data-pane="video" hidden>

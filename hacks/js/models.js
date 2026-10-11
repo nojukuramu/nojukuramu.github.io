@@ -72,9 +72,49 @@ function derive(from) {
   }
 }
 
+/* Things with no file at all, built here: the cannon and the grappling gun. Same conventions as the
+   files — metres, the barrel along -Z, the grip at the origin, a level sight line — so the viewmodel
+   aims them and a body holds them exactly as it does the others. */
+const PROC = {
+  cannon() {
+    const g = new THREE.Group();
+    const iron = new THREE.MeshStandardMaterial({ color: 0x2b2f35, roughness: 0.42, metalness: 0.75 });
+    const brass = new THREE.MeshStandardMaterial({ color: 0xb58a3c, roughness: 0.35, metalness: 0.85 });
+    const grip = new THREE.MeshStandardMaterial({ color: 0x3a2a1e, roughness: 0.8 });
+    const cyl = (r0, r1, l, mat, z, y) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, l, 18), mat); m.rotation.x = Math.PI / 2; m.position.set(0, y || 0.03, z); g.add(m); return m; };
+    cyl(0.036, 0.046, 0.56, iron, -0.24);
+    cyl(0.05, 0.05, 0.035, brass, -0.505);
+    cyl(0.049, 0.049, 0.025, brass, -0.08);
+    const breech = new THREE.Mesh(new THREE.SphereGeometry(0.052, 16, 12), iron); breech.position.set(0, 0.03, 0.04); g.add(breech);
+    const box = (sx, sy, sz, mat, x, y, z, rx) => { const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat); m.position.set(x, y, z); if (rx) m.rotation.x = rx; g.add(m); return m; };
+    box(0.034, 0.1, 0.045, grip, 0, -0.06, 0.02, 0.25);
+    box(0.03, 0.08, 0.04, grip, 0, -0.05, -0.27, -0.1);
+    box(0.012, 0.02, 0.012, brass, 0, 0.087, 0.0);
+    box(0.008, 0.018, 0.008, brass, 0, 0.087, -0.46);
+    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    return { id: "cannon", scene: g, muzzle: new THREE.Vector3(0, 0.03, -0.53), sight: new THREE.Vector3(0, 0.096, 0.0), support: new THREE.Vector3(0, -0.02, -0.27) };
+  },
+  grapple() {
+    const g = new THREE.Group();
+    const body = new THREE.MeshStandardMaterial({ color: 0x252a31, roughness: 0.5, metalness: 0.5 });
+    const steel = new THREE.MeshStandardMaterial({ color: 0x9aa4b2, roughness: 0.3, metalness: 0.85 });
+    const glow = new THREE.MeshStandardMaterial({ color: 0x39c6e8, emissive: 0x1a7f99, emissiveIntensity: 0.8 });
+    const box = (sx, sy, sz, mat, x, y, z, rx) => { const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat); m.position.set(x, y, z); if (rx) m.rotation.x = rx; g.add(m); return m; };
+    box(0.05, 0.06, 0.2, body, 0, 0, -0.07);
+    box(0.052, 0.012, 0.14, glow, 0, 0.032, -0.07);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.09, 12), steel); barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0, -0.21); g.add(barrel);
+    for (let i = 0; i < 3; i++) { const t = box(0.008, 0.008, 0.05, steel, 0, 0, -0.27); t.rotation.z = i * Math.PI * 2 / 3; t.position.set(Math.cos(i * 2.1) * 0.02, Math.sin(i * 2.1) * 0.02, -0.265); }
+    box(0.032, 0.095, 0.045, body, 0, -0.07, 0.01, 0.25);
+    box(0.01, 0.014, 0.01, steel, 0, 0.045, 0.0);
+    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    return { id: "grapple", scene: g, muzzle: new THREE.Vector3(0, 0, -0.28), sight: new THREE.Vector3(0, 0.052, 0.0), support: null };
+  }
+};
+
 export const gunTemplate = (id) => M.guns[id] || null;
 /** A copy of a gun or blade: shared geometry and materials, its own transform. */
 export function gunCopy(id) {
+  if (!M.guns[id] && PROC[id]) M.guns[id] = PROC[id]();
   const t = M.guns[id];
   if (!t) return null;
   const g = t.scene.clone(true);

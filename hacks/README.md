@@ -24,10 +24,12 @@ ground. None of the techniques are coded; they are what that code does when play
 | Air strafe | In the air, hold A or D (not W) and turn the same way. Acceleration is capped along the direction you ask for, so asking almost at right angles to your velocity gains speed every tick. |
 | Surf | The purple ridges are steeper than 45°, so they are not ground: you slide along them with no friction, all the way to the foot. |
 | Sprint, slide | Crouch at a sprint to slide, with a boost on a cooldown; a slide while it recharges, or out of a landing, still gets a smaller push (never past 12 m/s, and tapping crouch builds nothing). The view widens with the slide's speed. Downhill, gravity along the slope speeds a slide up — and on a ramp steeper than about 12°, crouching slides you down it from a standstill. Jump out of it to keep the speed. |
-| Wall climb | Jump into a wall and hold jump and forward. Over the top, you mantle. |
+| Wall climb | Press jump into a wall, then keep pushing forward: you climb while W is held (jump need not be), and letting go of W lets go of the wall. Jump while climbing to kick off it backwards. |
+| Mantle | A ledge within reach of your hands (about 2.4 m above your feet) is caught and climbed over by itself, up the face and then onto the top, the way Apex does it — jump at a crate holding W and you are on it. |
+| Wall ride | Slide fast (over ~7 m/s) along a wall and you ride it: the wall carries you, so it barely slows you, and the view leans off it. Jump to kick off it, keeping your speed along it. Each corner has a slipway — a steep slide-in beside a teal panel, then an alley with a panel on either side to kick between. |
 | Wall jump | Tap jump beside a wall. Your speed along the wall is kept; the same wall twice in a row does not count. The red shafts are made for it. |
 | Lunge | With the blade out, hold Aim (right click; the Aim button on a phone) on any surface — floor, wall, ceiling — and you stick to it and charge. Release to launch where you look; the more squarely you face away from the surface, the harder. A tap is a quick swing. |
-| Grapple | A gun, in slot 4: its key (E or 4) draws it and puts it away. Hold Fire and the hook flies where you look; where it bites, the rope reels you in, and lets go by itself when you arrive. The rope never lengthens, so moving away from the hook becomes going round it: steer with the move keys to swing. Hook a player and you are each pulled towards the other. Let go to stop; a wall between you and the hook cuts it. |
+| Grapple | Carried in place of a gun, primary or secondary: its key (E) draws it and puts it away. Hold Fire and the hook flies where you look; where it bites, the rope reels you in, and lets go by itself when you arrive. The rope never lengthens, so moving away from the hook becomes going round it: steer with the move keys to swing. Hook a player and you are each pulled towards the other. Let go to stop; a wall between you and the hook cuts it. |
 
 Steep slopes used to stop a body dead halfway down: against a slanted face a rounding error made the
 same plane count twice, and the crease between a plane and itself has no direction. The slide-move now
@@ -45,7 +47,9 @@ runs the same movement at all four and compares.
 | Full auto | **Hornet SMG** — close, 900 rpm | **Kestrel AR** — the all-rounder |
 | Shotgun | **Mauler** — ten pellets, pump | |
 | Snipers | **Talon .338** — a bolt action whose round flies: it has travel time and drops | **Condor .50** — heavy: slow to aim and carry, a long bolt, and a hit anywhere kills |
+| Launcher | **Cannon** — a slow ball that falls as it flies and bursts where it lands; the blast hurts and throws everyone near it, you too (by less), harder the nearer — a rocket jump at your own feet | |
 | Melee | **Katana** — charges fast, lunges short, cuts wide | **Lancer** — charges slowly, lunges far and hard, hits only at its tip |
+| Utility (slot 4) | **Frag grenade**, **Flashbang** | **Tripmine**, **Gas mine** |
 
 Recoil lifts your view and stays lifted. Moving spreads your shots, jumping more; aiming down
 sights tightens them. Health comes back after a few seconds out of the fight.
@@ -60,6 +64,23 @@ Every round goes on through a body into the next, keeping a share of its damage 
 through two or three, the Brick through two, most guns through one, a pellet barely. One round, two
 kills, is a **collateral**. Between the legs, from the front, is the **nut** box: more than the body,
 less than the head, and announced.
+
+The **grappling gun** goes in a gun's slot (Loadout, or the buy menu). Slot 4 is a **utility**, on a cooldown
+like an Apex ability: two charges, and each one thrown comes back by itself 9–14 seconds later, for as long
+as you live. Fire with it in hand throws one; G throws it from anything. A frag bounces and bursts; a
+flashbang blinds whoever looks at it — not with a white screen but the way an eye is blinded: the moment is
+burned in and stays while the scene comes back, the spot where it went off is a dark, wrongly coloured patch
+that heals slowly wherever you look, the picture smears as if several moments were on screen at once, and
+your ears ring under a closing low-pass (`js/fx.js`); bots are blinded too. A tripmine sticks and arms, and
+its beam crossed sets it off; a gas mine's cloud hurts its thrower's enemies straight through their shields.
+
+**Shields**, Apex's Evo: everyone spawns with 50 on top of 100 health, and dealing damage evolves it a level
+at a time, 50 more each, to 200 — white, blue, purple, red. A shield takes damage first, crackles when hit
+and shatters when it breaks (yours cracks the screen's edges in its colour), and charges back after a few
+quiet seconds, before health does. A hit marker on a shield is drawn in that shield's colour.
+
+A swing steps you into it. At speed a cut leaves an arc across the view — a cold streak when it cuts air, a
+hot one with a jolt of red and an instant of hit-stop when it lands.
 
 Blades hit harder the faster you are going when they land (speed in all three axes, so a dive counts):
 nothing extra at a run, twice as hard at 18 m/s, two and a half times past 24. The multiplier shows
@@ -86,7 +107,9 @@ to are marked so a bot never wanders under them.
 ## Sound and the announcer
 
 Every gun's shot is a real recording, with a distant take for somebody far away; so are the reloads,
-the bolt, the pump, the blades, footsteps and metal. All are free (CC0, except the announcer's
+the bolt, the pump, the blades, footsteps and metal, and the blasts, shields, grenades and mines (Kenney's
+CC0 packs). The mix is loud on purpose — compressed, made up and limited — so it cuts through a phone's
+speaker. All are free (CC0, except the announcer's
 WARLORD lines, CC BY-SA 4.0), listed with their sources in
 [`assets/sounds/CREDITS.md`](assets/sounds/CREDITS.md). Until a file has loaded its synthesised
 version plays, so the game is never silent and never waits.
@@ -144,6 +167,10 @@ links, each checked with the same box sweeps movement uses.
 
 ## Controls
 
+**B** opens the buy menu, Counter-Strike style, without stopping the game: 1 primary, 2 secondary, 3 melee,
+4 utility, then a number for the item (0 goes back, B closes). Early in a life — or any time in practice —
+it is in your hands at once; later, at your next spawn (`js/buy.js`).
+
 Every keyboard and mouse action is rebindable (Settings, Keys), two keys per action, including
 the mouse wheel — bind jump to the wheel and each notch is a fresh press, the way Source players
 hop by hand. Escape always opens the menu.
@@ -175,6 +202,14 @@ held to aim as you shoot; a touch anywhere else looks around — except low on t
 up to the lock above it and let go, and you keep running hands-free until you touch the stick. Fire
 and Aim change their pictures to say what they do (the hook, the blade, the lunge).
 
+**Hack buttons.** A phone has no keys, so every `ui.key(…)` a running hack makes gets a dashed button of its
+own, named after it, that holds that key down while it is held — the hack cannot tell it from a keyboard.
+They come and go with the hacks, and Move buttons places and sizes them like the rest.
+
+**Gyro aim** (Settings, Touch): turn the phone to aim, on top of the touch look — always or only while aiming
+down sights, with its own speed across and up and down, either axis inverted, and a steadiness floor for a
+hand's tremor (`js/gyro.js`). It reads the rotation rate, so it never drifts; iPhone asks permission once.
+
 ## Files
 
 | File | What it is |
@@ -193,6 +228,8 @@ and Aim change their pictures to say what they do (the hook, the blade, the lung
 | [`js/figures.js`](js/figures.js), [`js/viewmodel.js`](js/viewmodel.js) | everybody else's body and gun; your own arms and gun, sights on the screen's centre |
 | [`js/input.js`](js/input.js), [`js/touch.js`](js/touch.js), [`js/controls.js`](js/controls.js) | keys and mouse, the touch controls and their editor, the table of actions and layouts |
 | [`js/hud.js`](js/hud.js), [`js/menus.js`](js/menus.js), [`js/audio.js`](js/audio.js) | what is drawn over the game, every screen, recorded and synthesised sound and the announcer |
+| [`js/worldfx.js`](js/worldfx.js), [`js/fx.js`](js/fx.js) | blasts, grenades, mines and gas in the world; what happens to your eyes (slashes, the flashbang, gas, a broken shield) |
+| [`js/buy.js`](js/buy.js), [`js/gyro.js`](js/gyro.js) | the buy menu; aiming by turning the phone |
 | [`js/medals.js`](js/medals.js) | what each of your kills was worth, and which of it the announcer says |
 | [`js/hackworker.js`](js/hackworker.js), [`js/hackapi.js`](js/hackapi.js) | where hacks run; what they are shown and what they may do |
 | [`js/hackui.js`](js/hackui.js), [`js/editor.js`](js/editor.js), [`js/hackdocs.js`](js/hackdocs.js) | the hacks panel, the code editor, the lessons and the API reference |

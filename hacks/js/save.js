@@ -30,7 +30,12 @@ export const DEFAULT_SETTINGS = {
   touchLook: 1.0,
   touchAutoSprint: true,     // the stick pushed out past its ring runs, and on up to the lock auto-runs
   touchFloat: true,          // a touch low on the left is the stick, wherever it lands
-  forceLandscape: true       // phones: lock or turn the game sideways (orient.js); desktops ignore it
+  forceLandscape: true,      // phones: lock or turn the game sideways (orient.js); desktops ignore it
+  gyro: false,               // phones: aim by turning the phone (gyro.js)
+  gyroMode: "always",        // always | ads: only while aiming down sights
+  gyroX: 1.4, gyroY: 1.2,    // view turned per phone turned, across and up and down
+  gyroInvX: false, gyroInvY: false,
+  gyroDead: 1.5              // degrees a second of hand tremor ignored
 };
 
 const isNum = (v) => typeof v === "number" && isFinite(v);
@@ -45,6 +50,7 @@ function fresh() {
     settings: Object.assign({}, DEFAULT_SETTINGS, { keyModes: Object.assign({}, KEY_MODES), touchModes: Object.assign({}, TOUCH_MODES) }),
     binds: defaultBinds(),
     touch: freshTouch(),
+    touchHack: { landscape: {}, portrait: {} },     // where each hack button was put, by its label
     loadout: Object.assign({}, DEFAULT_LOADOUT),
     hacks: starterHacks(),
     solo: { mode: "ffa", bots: 5, diff: "normal", target: 25 },
@@ -75,7 +81,11 @@ function clean(raw) {
   S.sfx = clampN(s.sfx, 0, 1, S.sfx);
   S.voice = clampN(s.voice, 0, 1, S.voice);
   S.touchLook = clampN(s.touchLook, 0.2, 3, S.touchLook);
-  for (const k of ["invertY", "showSpeed", "showFps", "pauseEditing", "touchAutoSprint", "touchFloat", "fovFx", "forceLandscape"]) if (typeof s[k] === "boolean") S[k] = s[k];
+  S.gyroX = clampN(s.gyroX, 0.2, 5, S.gyroX);
+  S.gyroY = clampN(s.gyroY, 0.2, 5, S.gyroY);
+  S.gyroDead = clampN(s.gyroDead, 0, 8, S.gyroDead);
+  if (s.gyroMode === "always" || s.gyroMode === "ads") S.gyroMode = s.gyroMode;
+  for (const k of ["invertY", "showSpeed", "showFps", "pauseEditing", "touchAutoSprint", "touchFloat", "fovFx", "forceLandscape", "gyro", "gyroInvX", "gyroInvY"]) if (typeof s[k] === "boolean") S[k] = s[k];
   // v1 saved Force landscape off by default, so every v1 save holds a false nobody chose; v2 plays
   // phones sideways out of the box, and turns it on once for those saves. Turning it off afterwards sticks.
   if (!(raw.v >= 2)) S.forceLandscape = true;
@@ -106,6 +116,16 @@ function clean(raw) {
       d.touch[o][id] = { x: clampN(q.x, 0.03, 0.97, def.x), y: clampN(q.y, 0.03, 0.97, def.y), s: clampN(q.s, 32, 220, def.s), a: clampN(q.a, 0.25, 1, 1) };
     }
   }
+  // hack buttons: a few dozen at most, each under its label, never off the screen
+  const th = raw.touchHack || {};
+  for (const o of ["landscape", "portrait"]) {
+    const src = th[o] && typeof th[o] === "object" ? th[o] : {};
+    for (const label of Object.keys(src).slice(0, 32)) {
+      const q = src[label];
+      if (!q || typeof q !== "object" || label.length > 40) continue;
+      d.touchHack[o][label] = { x: clampN(q.x, 0.03, 0.97, 0.4), y: clampN(q.y, 0.03, 0.97, 0.3), s: clampN(q.s, 32, 220, 50), a: clampN(q.a, 0.25, 1, 1) };
+    }
+  }
   d.loadout = cleanLoadout(raw.loadout);
   if (Array.isArray(raw.hacks)) {
     const seen = new Set();
@@ -133,7 +153,7 @@ export const save = {
     try { localStorage.setItem(KEY, JSON.stringify(this.data)); return true; } catch (e) { return false; }
   },
   resetBinds() { this.data.binds = defaultBinds(); this.commit(); },
-  resetTouch(orient) { this.data.touch[orient] = freshTouch()[orient]; this.commit(); }
+  resetTouch(orient) { this.data.touch[orient] = freshTouch()[orient]; this.data.touchHack[orient] = {}; this.commit(); }
 };
 
 // A browser that is running out of room evicts the least-used origin first;

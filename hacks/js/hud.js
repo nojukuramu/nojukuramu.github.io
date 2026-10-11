@@ -6,21 +6,26 @@
  * it, your kills' medals (medals.js) — the big ones once more across the
  * middle.
  *
+ * Above your health, your shield: a bar in 50-point cells, coloured by its
+ * level (white, blue, purple, red), with a thin line under it filling
+ * towards the next level as you deal damage. A hit marker on somebody's
+ * shield is drawn in that shield's colour.
+ *
  * It only listens (state.js events) and reads S; nothing here changes the
  * match. Enemies get no name tags and no outlines — seeing through walls is
  * what hacks are for, and the hacks panel is one key away. */
 
 import { S, on } from "./state.js";
 import { save } from "./save.js";
-import { GUNS, MELEE, GRAPPLE, gunOf, spreadOf, zoomOf, boltOf, speedBonus, heldName } from "./weapons.js";
+import { GUNS, MELEE, UTILS, gunOf, spreadOf, zoomOf, boltOf, speedBonus, heldName, slotName, utilOut, grappleOut, utilCooldown } from "./weapons.js";
 import { LUNGE, HOOK, PM, lungeFactor, lookDir } from "./movement.js";
 import { MODES, TEAMS } from "./modes.js";
 import { icon } from "./icons.js";
 import { $, escHtml } from "./util.js";
 import { worldToScreen, view } from "./render.js";
-import { isEnemy } from "./game.js";
+import { isEnemy, SHIELD, SHIELD_COLORS, evoOf } from "./game.js";
 
-let hitT = 0, hitHead = false, hitKill = false, hurtT = 0, toastT = 0, fpsAcc = 0, fpsN = 0, fpsShow = 0;
+let hitT = 0, hitHead = false, hitKill = false, hitShield = 0, hurtT = 0, toastT = 0, fpsAcc = 0, fpsN = 0, fpsShow = 0;
 /* Your kills: one line under the crosshair with their medals, and the loudest of them across the middle. */
 let noteT = 0, medalT = 0;
 const dmgArcs = [];
@@ -67,6 +72,18 @@ export function update(dt) {
   const w = (hp / a.maxHp * 100).toFixed(1) + "%";
   if (f.style.width !== w) f.style.width = w;
   $("hpF").classList.toggle("low", hp < 35);
+  // the shield: cells of 50, the level's colour, and the way to the next level underneath
+  const sh = $("shBar");
+  const cells = Math.max(1, Math.round(a.shieldMax / SHIELD));
+  if (lastHud.shCells !== cells) { lastHud.shCells = cells; sh.style.setProperty("--cells", cells); }
+  const col = SHIELD_COLORS[Math.max(0, a.shieldLevel - 1)];
+  if (lastHud.shCol !== col) { lastHud.shCol = col; sh.style.setProperty("--sc", col); }
+  const sw = (Math.max(0, a.shield) / a.shieldMax * 100).toFixed(1) + "%";
+  if ($("shF").style.width !== sw) $("shF").style.width = sw;
+  const ew = (evoOf(a) * 100).toFixed(1) + "%";
+  if ($("shEvo").style.width !== ew) $("shEvo").style.width = ew;
+  sh.classList.toggle("charging", !!a.charging);
+  sh.classList.toggle("empty", a.shield <= 0.5);
   // speed
   const hs = Math.hypot(a.body.vx, a.body.vz);
   $("speedo").hidden = !save.settings.showSpeed;
@@ -78,12 +95,20 @@ export function update(dt) {
     set("ammoN", A.reloadT > 0 ? "···" : String(A.ammo[A.cur]));
     set("ammoMag", "/ " + g.mag);
     set("gunName", g.name);
-  } else { set("ammoN", ""); set("ammoMag", ""); set("gunName", heldName(A)); }
-  const slotsKey = A.slots.join() + A.melee + A.cur;
+  } else if (utilOut(A)) { set("ammoN", String(A.utilN)); set("ammoMag", "/ " + UTILS[A.util].charges); set("gunName", heldName(A)); }
+  else { set("ammoN", ""); set("ammoMag", ""); set("gunName", heldName(A)); }
+  const slotsKey = A.slots.join() + A.melee + A.util + A.utilN + A.cur;
   if (lastHud.slots !== slotsKey) {
     lastHud.slots = slotsKey;
-    $("slots").innerHTML = [GUNS[A.slots[0]].name, GUNS[A.slots[1]].name, MELEE[A.melee].name, GRAPPLE.name].map((n, i) => '<span class="' + (i === A.cur ? "on" : "") + '"><b>' + (i + 1) + "</b>" + escHtml(n) + "</span>").join("");
+    $("slots").innerHTML = [0, 1, 2, 3].map((i) => '<span class="' + (i === A.cur ? "on" : "") + (i === 3 && !A.utilN ? " out" : "") + '"><b>' + (i + 1) + "</b>" + escHtml(i === 3 ? UTILS[A.util].short + " ×" + A.utilN : slotName(A, i)) + "</span>").join("");
   }
+  // the utility in your pocket, wherever you are: how many charges, and the cooldown on the next
+  const uc = $("utilChip"), cd = utilCooldown(A);
+  set("utilN", "×" + A.utilN + (cd > 0 ? " · " + Math.ceil(cd) + "s" : ""));
+  const ur = cd > 0 ? (A.utilT / UTILS[A.util].cooldown * 100).toFixed(0) + "%" : "100%";
+  if (uc.style.getPropertyValue("--u") !== ur) uc.style.setProperty("--u", ur);
+  uc.classList.toggle("out", A.utilN <= 0);
+  if (uc.dataset.util !== A.util) { uc.dataset.util = A.util; $("utilIco").innerHTML = icon(A.util === "flash" ? "flash" : A.util === "frag" ? "grenade" : "mine"); }
   // crosshair: gap from spread
   const spread = g ? spreadOf(A, a.body) : 0.8;
   const px = Math.tan(spread * Math.PI / 180) / Math.tan((S.cam.fov || 70) * Math.PI / 360) * view.h / 2;
@@ -132,7 +157,7 @@ export function update(dt) {
   // a blade: how much harder it hits at this speed, and lines streaming past when you are flying with it
   const v3 = Math.hypot(hb.vx, hb.vy, hb.vz), bonus = speedBonus(v3);
   const mm = $("meleeMul");
-  const blade = a.arms.cur === 2;
+  const blade = a.arms.cur === 2 && !grappleOut(a.arms);
   mm.hidden = !a.alive || !blade || bonus < 1.05;
   if (!mm.hidden) { set("meleeMul", "×" + bonus.toFixed(1)); mm.classList.toggle("hot", bonus >= 2); }
   const rush = a.alive && blade ? Math.max(hb.lunge === LUNGE.DASH ? 0.75 : 0, Math.min(1, (v3 - 8) / 10)) : 0;
@@ -155,6 +180,8 @@ export function update(dt) {
   hm.style.opacity = hitT > 0 ? Math.min(1, hitT * 6) : 0;
   hm.classList.toggle("head", hitHead);
   hm.classList.toggle("kill", hitKill && hitT > 0);
+  hm.classList.toggle("sh", hitShield > 0 && !hitKill);
+  if (hitShield > 0) hm.style.setProperty("--hc", SHIELD_COLORS[hitShield - 1]);
   noteT = Math.max(0, noteT - dt);
   const kn = $("killNote");
   kn.classList.toggle("fade", noteT < 0.4);
@@ -256,7 +283,8 @@ function scoreboard() { const el = $("scoreboard"); const h = boardHtml(); if (e
    Listening
    --------------------------------------------------------------- */
 export function init() {
-  on("hit", (a, b, dmg, info) => { if (a === S.me) { hitT = 0.28; hitHead = info && info.part === "head"; hitKill = false; } });
+  on("hit", (a, b, dmg, info) => { if (a === S.me && b !== S.me) { hitT = 0.28; hitHead = info && info.part === "head"; hitKill = false; hitShield = info && info.sh ? info.sh : 0; } });
+  on("shieldUp", (a, lvl) => { if (a === S.me) toast("Shield level " + lvl, 1600); });
   on("hurt", (b, dmg, by) => {
     if (b !== S.me) return;
     hurtT = Math.min(0.5, hurtT + dmg / 120);
@@ -273,7 +301,7 @@ export function init() {
     const row = document.createElement("div");
     const mine = (k.killer && k.killer === S.me) || (k.victim && k.victim === S.me);
     row.className = "kf" + (mine ? " mine" : "");
-    const w = GUNS[k.weapon] ? GUNS[k.weapon].name : MELEE[k.weapon] ? MELEE[k.weapon].name : k.weapon === "fall" ? "fell" : "";
+    const w = GUNS[k.weapon] ? GUNS[k.weapon].name : MELEE[k.weapon] ? MELEE[k.weapon].name : UTILS[k.weapon] ? UTILS[k.weapon].name : k.weapon === "fall" ? "fell" : "";
     row.innerHTML = (k.killer && k.killer !== k.victim ? "<b>" + escHtml(k.killer.name) + "</b>" : "") +
       '<span class="kw">' + escHtml(w) + (k.head ? icon("head") : "") + (k.nut ? icon("nut") : "") + "</span><b>" + escHtml(k.victim ? k.victim.name : "?") + "</b>";
     feed.prepend(row);

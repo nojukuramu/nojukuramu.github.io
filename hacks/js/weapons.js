@@ -19,10 +19,22 @@
  *              lunges far and hard, and only hits what is in front of its tip.
  *              Either hits harder the faster you are going (speedBonus).
  *
- *   Grapple   The grappling gun, slot 4. It is a gun like the others: draw it
- *              and Fire sends the hook (game.js), held for as long as you want
- *              the rope. It deals no damage and has no magazine; what it
- *              costs is a draw, so you cannot shoot and swing at once.
+ *   Launcher  Cannon: a slow, falling ball that bursts where it lands. The blast
+ *              hurts and throws everyone near it — you too, by less — and the
+ *              nearer the harder, so a ball fired at your own feet is a rocket
+ *              jump (game.js explode).
+ *
+ *   Grapple   The grappling gun is carried in place of a gun, primary or
+ *              secondary: draw it and Fire sends the hook (game.js), held for
+ *              as long as you want the rope. It deals no damage and has no
+ *              magazine; what it costs is a gun.
+ *
+ *   Utility   Slot 4: a frag grenade, a flashbang, a tripmine or a gas mine, on
+ *              a cooldown the way an Apex ability is: a couple of charges,
+ *              and every throw starts the clock on another, for as long as
+ *              you live — there is no running out for good. Fire with it in
+ *              hand throws one; the quick-throw key throws without changing
+ *              what you hold. What they do once thrown is game.js's.
  *
  * Every round goes through a body into the next one if its gun can (pen:
  * how many bodies, and how much damage it keeps through each) — a collateral.
@@ -44,7 +56,9 @@ export const GUNS = {
   kestrel: { id: "kestrel", name: "Kestrel AR", cls: "Rifle",      hold: "rifle",  auto: true,  rpm: 620, dmg: 15, head: 1.75, limb: 0.9, mag: 28, reload: 2.0, spread: [1.4, 0.25], move: 1.0, air: 2.5, bloom: 0.12, recoil: [0.85, 0.35], range: [30, 70, 0.7], speedMul: 0.95, adsZoom: 1.5, adsTime: 0.18, swap: 0.35, pen: [1, 0.55] },
   mauler:  { id: "mauler",  name: "Mauler",     cls: "Shotgun",    hold: "rifle",  auto: false, rpm: 75,  dmg: 10, pellets: 10, head: 1.5, limb: 0.9, mag: 6, reload: 2.4, spread: [6.5, 5.0], move: 0.5, air: 1.0, bloom: 0, recoil: [5, 1], range: [6, 16, 0.25], speedMul: 0.97, adsZoom: 1.2, adsTime: 0.15, swap: 0.35, pen: [1, 0.2], pump: true },
   talon:   { id: "talon",   name: "Talon .338", cls: "Sniper",     hold: "rifle",  auto: false, rpm: 42,  dmg: 92, head: 2.2, limb: 0.8, mag: 5, reload: 2.8, spread: [6, 0.0], move: 3.0, air: 6.0, bloom: 0, recoil: [6, 1], range: [200, 300, 1], speedMul: 0.88, adsZoom: 4, adsTime: 0.3, swap: 0.45, projectile: { speed: 330, gravity: 9, instant: 40 }, pen: [2, 0.75], scope: true, bolt: 0.55 },
-  condor:  { id: "condor",  name: "Condor .50", cls: "Heavy sniper", hold: "rifle", auto: false, rpm: 32, dmg: 150, head: 2.0, limb: 0.75, mag: 4, reload: 3.6, spread: [9, 0.0], move: 4.0, air: 8.0, bloom: 0, recoil: [10, 2], range: [500, 600, 1], speedMul: 0.8, adsZoom: 5, adsTime: 0.42, swap: 0.6, projectile: { speed: 380, gravity: 7, instant: 50 }, pen: [3, 0.85], scope: true, bolt: 1 }
+  condor:  { id: "condor",  name: "Condor .50", cls: "Heavy sniper", hold: "rifle", auto: false, rpm: 32, dmg: 150, head: 2.0, limb: 0.75, mag: 4, reload: 3.6, spread: [9, 0.0], move: 4.0, air: 8.0, bloom: 0, recoil: [10, 2], range: [500, 600, 1], speedMul: 0.8, adsZoom: 5, adsTime: 0.42, swap: 0.6, projectile: { speed: 380, gravity: 7, instant: 50 }, pen: [3, 0.85], scope: true, bolt: 1 },
+  // the ball's own hit is small; the blast is the weapon. self: how much of it reaches you
+  cannon:  { id: "cannon",  name: "Cannon",     cls: "Launcher",   hold: "rifle",  auto: false, rpm: 58,  dmg: 25, head: 1, limb: 1, mag: 3, reload: 2.7, spread: [0.5, 0.1], move: 1.2, air: 2.0, bloom: 0, recoil: [7.5, 1.6], range: [999, 1000, 1], speedMul: 0.9, adsZoom: 1.3, adsTime: 0.2, swap: 0.45, projectile: { speed: 28, gravity: 8, instant: 0, life: 4, explode: { radius: 5.5, dmg: 105, force: 17, self: 0.4 } }, pen: [0, 0.5] }
 };
 /* A shot between the legs: more than the body, less than the head — and it is announced. */
 export const NUT = 1.6;
@@ -56,10 +70,27 @@ export const MELEE = {
 };
 export const MELEE_IDS = Object.keys(MELEE);
 
-/* The fourth slot. Not in GUNS, so nothing that walks the guns (bots picking one, the loadout
-   screen, damage) ever mistakes it for one; gunOf() is null for it, as for a blade. */
+/* Carried in a gun's slot, but not in GUNS, so nothing that walks the guns (bots picking one,
+   damage, recoil) ever mistakes it for one; gunOf() is null for it, as for a blade. */
 export const GRAPPLE = { id: "grapple", name: "Grappling gun", cls: "Grapple", hold: "pistol", swap: 0.15 };
-export const SLOT_GRAPPLE = 3;
+/** What may go in the primary or secondary slot: any gun, or the grapple. */
+export const SLOT_IDS = Object.keys(GUNS).concat([GRAPPLE.id]);
+export const isSlotItem = (id) => !!GUNS[id] || id === GRAPPLE.id;
+
+/* Slot 4, on a cooldown: charges is how many can be held (a life starts with them all); cooldown is the
+   seconds each spent one takes to come back, one at a time, for as long as you live.
+   speed is the throw's. A mine sticks where it lands and arms after `arm` seconds; a tripmine's
+   beam runs out along the surface's normal, a gas mine waits for an enemy within `trigger`. */
+export const UTILS = {
+  frag:  { id: "frag",  name: "Frag grenade", short: "Frag",  cls: "Grenade", charges: 2, cooldown: 10, speed: 17, fuse: 2.2, bounce: 0.38, explode: { radius: 6.5, dmg: 110, force: 14, self: 0.6 } },
+  flash: { id: "flash", name: "Flashbang",    short: "Flash", cls: "Grenade", charges: 2, cooldown: 9, speed: 18, fuse: 1.4, bounce: 0.35, flash: { range: 34 } },
+  trip:  { id: "trip",  name: "Tripmine",     short: "Trip",  cls: "Mine",    charges: 2, cooldown: 14, speed: 13, stick: true, arm: 1.0, beam: 9, life: 90, explode: { radius: 5, dmg: 125, force: 12, self: 0.6 } },
+  gas:   { id: "gas",   name: "Gas mine",     short: "Gas",   cls: "Mine",    charges: 2, cooldown: 14, speed: 13, stick: true, arm: 1.0, trigger: 3.4, life: 90, gas: { radius: 5, dps: 14, time: 8 } }
+};
+export const UTIL_IDS = Object.keys(UTILS);
+export const SLOT_UTIL = 3;
+/** Seconds until the next utility charge is back (0 when every charge is there). */
+export function utilCooldown(A) { const U = UTILS[A.util]; return A.utilN >= U.charges ? 0 : Math.max(0, U.cooldown - A.utilT); }
 
 /**
  * How much harder a blade hits for how fast you are going (m/s, all three
@@ -69,14 +100,18 @@ export const SLOT_GRAPPLE = 3;
  */
 export function speedBonus(speed) { return 1 + Math.max(0, Math.min(1.5, (speed - 6) / 12)); }
 
-export const DEFAULT_LOADOUT = { primary: "kestrel", secondary: "wasp", melee: "katana" };
+export const DEFAULT_LOADOUT = { primary: "kestrel", secondary: "wasp", melee: "katana", utility: "frag" };
 export function cleanLoadout(l) {
   l = l && typeof l === "object" ? l : {};
-  return {
-    primary: GUNS[l.primary] ? l.primary : DEFAULT_LOADOUT.primary,
-    secondary: GUNS[l.secondary] ? l.secondary : DEFAULT_LOADOUT.secondary,
-    melee: MELEE[l.melee] ? l.melee : DEFAULT_LOADOUT.melee
+  const out = {
+    primary: isSlotItem(l.primary) ? l.primary : DEFAULT_LOADOUT.primary,
+    secondary: isSlotItem(l.secondary) ? l.secondary : DEFAULT_LOADOUT.secondary,
+    melee: MELEE[l.melee] ? l.melee : DEFAULT_LOADOUT.melee,
+    utility: UTILS[l.utility] ? l.utility : DEFAULT_LOADOUT.utility
   };
+  // one grapple is all anybody needs: two would leave no gun at all
+  if (out.primary === GRAPPLE.id && out.secondary === GRAPPLE.id) out.secondary = DEFAULT_LOADOUT.secondary;
+  return out;
 }
 
 /** Damage at a distance, and on a body part. */
@@ -87,25 +122,49 @@ export function damageFor(gun, dist, part) {
   return gun.dmg * f * p;
 }
 
+const magOf = (id) => (GUNS[id] ? GUNS[id].mag : 0);
 export function newArms(loadout) {
   const l = cleanLoadout(loadout);
   return {
-    slots: [l.primary, l.secondary], melee: l.melee,
+    slots: [l.primary, l.secondary], melee: l.melee, util: l.utility,
+    utilN: UTILS[l.utility].charges, utilT: 0, utilCd: 0, utilHeld: false, throwT: 0,
     cur: 0, last: 1,
-    ammo: [GUNS[l.primary].mag, GUNS[l.secondary].mag],
+    ammo: [magOf(l.primary), magOf(l.secondary)],
     reloadT: 0, cool: 0, cycle: 1, swapT: 0, ads: 0, bloom: 0, zoom: 0, zoomHeld: false,
     trig: false, reloadHeld: false, meleeHeld: false, swingCd: 0, swingT: 0,
     lastKick: { pitch: 0, yaw: 0 }, shots: 0,
     ev: []
   };
 }
-export const gunOf = (A) => (A.cur < 2 ? GUNS[A.slots[A.cur]] : null);
+/** Put a new thing in one slot of somebody's hands (the buy menu, mid-life): full, as if just picked up. */
+export function equip(A, kind, id) {
+  if (kind === "primary" || kind === "secondary") {
+    const i = kind === "primary" ? 0 : 1;
+    if (!isSlotItem(id)) return false;
+    // the other slot's item: the two change places, each with its own ammunition
+    if (A.slots[1 - i] === id) { A.slots[1 - i] = A.slots[i]; const t = A.ammo[1 - i]; A.ammo[1 - i] = A.ammo[i]; A.ammo[i] = t; }
+    A.slots[i] = id; A.ammo[i] = magOf(id);
+    if (A.cur < 2) { A.reloadT = 0; A.zoom = 0; A.ads = 0; const h = A.slots[A.cur]; A.swapT = GUNS[h] ? GUNS[h].swap : GRAPPLE.swap; A.ev.push({ type: "swap", slot: A.cur }); }
+  } else if (kind === "melee" && MELEE[id]) { A.melee = id; if (A.cur === 2) A.swapT = 0.2; }
+  else if (kind === "utility" && UTILS[id]) { A.util = id; A.utilN = UTILS[id].charges; A.utilT = 0; }
+  else return false;
+  return true;
+}
+export const gunOf = (A) => (A.cur < 2 ? GUNS[A.slots[A.cur]] || null : null);
 export const meleeOf = (A) => MELEE[A.melee];
+export const utilOf = (A) => UTILS[A.util];
 export const bladeOut = (A) => A.cur === 2;
-export const grappleOut = (A) => A.cur === SLOT_GRAPPLE;
-export function holdOf(A) { const g = gunOf(A); return g ? g.hold : grappleOut(A) ? GRAPPLE.hold : meleeOf(A).hold; }
+export const grappleOut = (A) => A.cur < 2 && A.slots[A.cur] === GRAPPLE.id;
+export const utilOut = (A) => A.cur === SLOT_UTIL;
+/** Which slot (0 or 1) holds the grapple, or -1 when nobody packed one. */
+export const grappleSlot = (A) => A.slots.indexOf(GRAPPLE.id);
+export function holdOf(A) { const g = gunOf(A); return g ? g.hold : grappleOut(A) ? GRAPPLE.hold : utilOut(A) ? "throw" : meleeOf(A).hold; }
+/** The name of whatever is in one slot (0–3). */
+export function slotName(A, i) { return i < 2 ? (GUNS[A.slots[i]] || GRAPPLE).name : i === 2 ? meleeOf(A).name : utilOf(A).name; }
 /** What is in your hands, by name, whichever of the four it is. */
-export function heldName(A) { const g = gunOf(A); return g ? g.name : grappleOut(A) ? GRAPPLE.name : meleeOf(A).name; }
+export function heldName(A) { return slotName(A, A.cur); }
+/** Any slot item, gun or grapple, by id: its name and class, for menus. */
+export const itemOf = (id) => GUNS[id] || (id === GRAPPLE.id ? GRAPPLE : null);
 
 /** How far a scope (or the sights) magnifies right now: the gun's zoom, doubled on a scope's second step. */
 export function zoomOf(A) {
@@ -122,7 +181,7 @@ export function boltOf(A) {
 /** The mobility of what is in your hands, and while aiming. */
 export function speedMulOf(A) {
   const g = gunOf(A);
-  return (g ? g.speedMul : 1.05) * (1 - 0.35 * A.ads);
+  return (g ? g.speedMul : grappleOut(A) ? 1 : 1.05) * (1 - 0.35 * A.ads);
 }
 
 /** Current spread, in degrees, for the HUD's crosshair and for firing. */
@@ -136,28 +195,34 @@ export function spreadOf(A, body) {
 }
 
 function selectSlot(A, i) {
-  if (i === A.cur || i < 0 || i > SLOT_GRAPPLE) return;
+  if (i === A.cur || i < 0 || i > SLOT_UTIL) return;
   A.last = A.cur; A.cur = i;
   const g = gunOf(A);
-  A.swapT = g ? g.swap : grappleOut(A) ? GRAPPLE.swap : 0.2;
+  A.swapT = g ? g.swap : grappleOut(A) ? GRAPPLE.swap : utilOut(A) ? 0.25 : 0.2;
   A.reloadT = 0; A.zoom = 0;
   A.ev.push({ type: "swap", slot: i });
 }
 
 /**
  * One tick of whatever is in your hands. `cmd` carries buttons (movement.js's
- * B), and `slot` (1–4 picks, 4 being the grapple; -1 means the last one). Returns A.ev: fire,
- * dry, reload, reloaded, swap, swing.
+ * B), and `slot` (1–4 picks, 4 being the utility; -1 means the last one). Returns A.ev: fire,
+ * dry, reload, reloaded, swap, swing, throw.
  */
 export function armsTick(A, cmd, body, dt, rng, B) {
   A.ev.length = 0;
   const btn = cmd.buttons | 0;
   if (cmd.slot === -1) selectSlot(A, A.last);
-  else if (cmd.slot >= 1 && cmd.slot <= SLOT_GRAPPLE + 1) selectSlot(A, cmd.slot - 1);
+  else if (cmd.slot >= 1 && cmd.slot <= SLOT_UTIL + 1) selectSlot(A, cmd.slot - 1);
   A.cool = Math.max(0, A.cool - dt);
   A.swapT = Math.max(0, A.swapT - dt);
   A.swingCd = Math.max(0, A.swingCd - dt);
   A.swingT = Math.max(0, A.swingT - dt);
+  A.utilCd = Math.max(0, A.utilCd - dt);
+  A.throwT = Math.max(0, A.throwT - dt);
+  // the cooldown: a spent charge comes back after U.cooldown seconds, then the next one starts
+  const U = UTILS[A.util];
+  if (A.utilN < U.charges) { A.utilT += dt; if (A.utilT >= U.cooldown) { A.utilT = 0; A.utilN++; A.ev.push({ type: "restock", util: U.id }); } }
+  else A.utilT = 0;
   const g = gunOf(A);
   A.bloom = Math.max(0, A.bloom - dt * 5);
 
@@ -190,8 +255,20 @@ export function armsTick(A, cmd, body, dt, rng, B) {
     }
   } else if (bladeOut(A) && fire && !A.trig) swing(A);
   // (the grapple's trigger is game.js's: it fires a hook, not a round)
+  // a throw: Fire with the utility in hand, or the quick-throw button from anything
+  const quick = !!(B.UTIL && (btn & B.UTIL));
+  if (((utilOut(A) && fire && !A.trig && A.swapT <= 0) || (quick && !A.utilHeld)) && body.lunge === 0) throwUtil(A, quick);
+  A.utilHeld = quick;
   A.trig = fire;
   return A.ev;
+}
+function throwUtil(A, quick) {
+  if (A.utilN <= 0 || A.utilCd > 0) { if (!quick || A.utilN <= 0) A.ev.push({ type: "dry" }); return false; }
+  A.utilN--; A.utilCd = 0.8; A.throwT = 0.4;
+  // a quick throw drops whatever the other hand was doing with a magazine
+  if (quick) { A.reloadT = 0; A.ads = 0; A.zoom = 0; }
+  A.ev.push({ type: "throw", util: A.util, quick });
+  return true;
 }
 function startReload(A, g) { A.reloadT = g.reload; A.ads = 0; A.zoom = 0; A.ev.push({ type: "reload", time: g.reload, gun: g.id }); }
 export function swing(A) {
