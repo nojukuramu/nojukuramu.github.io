@@ -64,7 +64,8 @@ async function open(browser, base, opts, settings) {
   page.on("dialog", (d) => d.accept());
   await page.addInitScript((extra) => {
     localStorage.setItem("hacks:debug", "1");
-    if (!localStorage.getItem("hacks:v1")) localStorage.setItem("hacks:v1", JSON.stringify({ settings: Object.assign({ quality: "low", master: 0, sfx: 0 }, extra) }));
+    // v2: a record as this version writes it (an unversioned one is read as v1, which turns Force landscape back on)
+    if (!localStorage.getItem("hacks:v1")) localStorage.setItem("hacks:v1", JSON.stringify({ v: 2, settings: Object.assign({ quality: "low", master: 0, sfx: 0 }, extra) }));
   }, settings || {});
   await page.goto(base + "/index.html");
   await page.waitForFunction(() => window.HK_DEBUG && window.HK_DEBUG.S.mode === "title", null, { timeout: 60000 });
@@ -305,7 +306,7 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     console.log("\nMedals, the grapple, the scope and the death camera");
     await p.evaluate(() => { const { S, game } = window.HK_DEBUG; const e = S.actors.find((a) => a.kind === "bot" && a.alive); game.hitActor(e, 999, S.me, { weapon: "kestrel", part: "nut" }); });
     check("a nut shot kill is a medal under the crosshair, and across the middle", await soft(until(p, () => /Nut shot/.test(document.getElementById("killNote").textContent) && !document.getElementById("medal").hidden, null, 3000)));
-    await until(p, () => window.HK_DEBUG.S.me.alive, null, 8000);
+    await until(p, () => window.HK_DEBUG.S.me.alive, null, 20000);   // a respawn is game time, and game time runs slow at a few frames a second
     await p.evaluate(async () => {
       const { on } = await import("./js/state.js");
       window.__hookEv = []; window.__hookSeen = false;
@@ -344,7 +345,8 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     // (the state, not the distance: the last test may have left you facing a wall)
     check("auto-run runs with nothing held", await soft(until(p, async () => (await import("./js/input.js")).autoRunning() && window.HK_DEBUG.S.me.body.sprinting, null, 3000)));
     await p.keyboard.press("KeyW");
-    check("and a move key ends it", await p.evaluate(async () => !(await import("./js/input.js")).autoRunning()));
+    // the press is read at the next tick, which at a software renderer's frame rate may not have come yet
+    check("and a move key ends it", await soft(until(p, async () => !(await import("./js/input.js")).autoRunning(), null, 3000)));
     // aim held, and the zoom pressed once, through the game's own command hook
     await p.evaluate(async () => {
       const { S, game, hackapi } = window.HK_DEBUG; const input = await import("./js/input.js");
@@ -356,7 +358,7 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     await p.evaluate(() => { const { S, game } = window.HK_DEBUG; const e = S.actors.find((a) => a.kind === "bot" && a.alive); game.applyDamage(S.me, 999, e.id, { weapon: "kestrel", part: "body" }); });
     check("dying puts the scope away: the spectator's view is plain", await soft(until(p, () => document.getElementById("scope").hidden && window.HK_DEBUG.S.cam.zoom === 1 && !window.HK_DEBUG.S.me.alive, null, 3000)));
     await p.evaluate(async () => { const { game, hackapi } = window.HK_DEBUG; const input = await import("./js/input.js"); game.setLocalCmd(() => hackapi.patch(input.buildCmd())); });
-    await until(p, () => window.HK_DEBUG.S.me.alive, null, 8000);
+    await until(p, () => window.HK_DEBUG.S.me.alive, null, 20000);   // a respawn is game time, and game time runs slow at a few frames a second
 
     console.log("\nPause, and the end of a match");
     await p.keyboard.press("Escape");
