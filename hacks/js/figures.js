@@ -15,7 +15,8 @@ import * as THREE from "three";
 import { S, on } from "./state.js";
 import { BI } from "./skeleton.js";
 import { owns, renderPos } from "./game.js";
-import { GUNS, gunOf } from "./weapons.js";
+import { GUNS, gunOf, grappleOut, utilOut } from "./weapons.js";
+import { utilModel } from "./worldfx.js";
 import { LUNGE } from "./movement.js";
 import { humanCopy, gunCopy, paint, hasHuman, onModels } from "./models.js";
 import { makeRig, poseRig, rigPoint } from "./rig.js";
@@ -121,12 +122,12 @@ function localBone(a, i, out) {
 const GRIP_WRIST = new THREE.Vector3(0, -0.04, 0.075), SUPPORT_WRIST = new THREE.Vector3(-0.03, -0.055, 0.045);
 function holdFor(f, a) {
   const A = a.arms, g = gunOf(A);
-  // the grapple has no model of its own: an empty hand, held out like a pistol (holdOf)
-  const key = g ? g.id : A.cur === 3 ? "grapple" : A.melee;
+  // a grenade or a mine is held in the fingers: the model that flies, with no anchors to speak of
+  const key = g ? g.id : grappleOut(A) ? "grapple" : utilOut(A) ? "u:" + A.util : A.melee;
   const H = f.held;
   if (H.key !== key) {
     if (H.obj) H.obj.removeFromParent();
-    const c = gunCopy(key);
+    const c = key.startsWith("u:") ? { obj: utilModel(A.util).g, t: { muzzle: new THREE.Vector3(), support: null } } : gunCopy(key);
     H.key = key; H.obj = c ? c.obj : null; H.t = c ? c.t : null;
     if (H.obj) { H.obj.traverse((o) => { if (o.isMesh) o.castShadow = shadows; }); f.g.children[0].add(H.obj); }
   }
@@ -242,7 +243,7 @@ function poseMannequin(f, a) {
   }
   const rh = bone(bn, BI.r_hand, P[0]);
   const g = gunOf(a.arms);
-  const grapple = a.arms.cur === 3;
+  const grapple = grappleOut(a.arms);
   const long = g ? (g.hold === "pistol" ? 0.22 : g.id === "talon" ? 0.95 : g.id === "mauler" ? 0.7 : 0.6) : grapple ? 0.26 : a.arms.melee === "lancer" ? 1.7 : 0.95;
   const thick = g ? (g.hold === "pistol" ? 0.05 : 0.07) : grapple ? 0.06 : 0.025;
   vA.copy(rh).addScaledVector(look, long * 0.4);

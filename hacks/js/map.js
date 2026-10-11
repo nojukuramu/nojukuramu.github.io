@@ -12,7 +12,11 @@
  *   - a canopy: a slab on stilts, whose underside is a ceiling to lunge up
  *     and stick to;
  *   - a perch in the corner, climbable, with a ramp for the bots;
- *   - a jump pad that throws you onto the launch deck.
+ *   - a jump pad that throws you onto the launch deck;
+ *   - the slipway: a steep slide-in down beside a bright panel on the outer
+ *     wall, and an alley under the sniper's nest with a panel on each side —
+ *     slide fast along one and you ride it, jump and you kick off it, onto
+ *     the other.
  *
  * The middle is the Core: two climbable tiers with a ramp up each side.
  *
@@ -55,6 +59,7 @@ export const KINDS = {
   halo:   { color: 0xe0b84a, grid: 1 },
   kite:   { color: 0xff8a3d, grid: 1 },
   crate:  { color: 0xae8d5f, grid: 1 },
+  ride:   { color: 0x2fe0c8, grid: 1 },
   clip:   { color: 0x000000, grid: 0, invisible: true }
 };
 
@@ -99,6 +104,13 @@ function quarter() {
 
   // a jump pad that throws you onto the launch deck
   B.push(box(14, 0, 16, 17, 0.2, 19, { kind: "pad", push: [7.5, 18.5, -5.5] }));
+
+  // the slipway: a ramp steep enough to slide from a standstill drops you beside a panel on the outer
+  // wall, and the panel runs on into the alley under the nest, where the shaft's short wall has one too
+  B.push(box(54.5, 0, 0.5, 60.9, 2.4, 2.5, { kind: "slope" }));
+  B.push(prism([[2.5, 0], [2.5, 2.4], [11, 0]], "x", 54.5, 60.9, { kind: "slope" }));
+  B.push(box(60.9, 0, 0.5, 61.99, 4.2, 36, { kind: "ride" }));
+  B.push(box(56.6, 0, 22, 57.2, 4.2, 36, { kind: "ride" }));
 
   // cover
   B.push(box(10, 0, 40, 12.5, 1.25, 42.5, { kind: "crate" }));

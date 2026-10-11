@@ -146,7 +146,7 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
 
     console.log("\nLoadout");
     await p.click("#btnLoadout");
-    check("seven guns and two blades to choose from", (await p.$$("#loPrimary .card")).length === 7 && (await p.$$("#loMelee .card")).length === 2);
+    check("eight guns and the grapple, two blades and four utilities to choose from", (await p.$$("#loPrimary .card")).length === 9 && (await p.$$("#loMelee .card")).length === 2 && (await p.$$("#loUtility .card")).length === 4);
     await p.click('#loPrimary .card[data-id="mauler"]');
     await p.click('#loMelee .card[data-id="lancer"]');
     check("the choice is kept", await p.evaluate(() => { const l = window.HK_DEBUG.save.data.loadout; return l.primary === "mauler" && l.melee === "lancer"; }));
@@ -163,6 +163,16 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     check("the HUD is up", await p.isVisible("#hud") && await soft(until(p, () => /FFA/.test(document.getElementById("modeName").textContent), null, 5000)));
     check("the starter hack runs and draws", await soft(until(p, () => { const h = window.HK_DEBUG.hackapi; return h.running() === 1; }, null, 15000)));
     await alignment(p, "a computer");
+    // the buy menu: B, then 2 (secondary), then 9 (the grapple): in your hands at once, early in a life
+    await p.evaluate(() => { const { S, game } = window.HK_DEBUG; game.spawn(S.me); });
+    await p.keyboard.press("KeyB");
+    check("B opens the buy menu, over the game", await soft(until(p, () => !document.getElementById("buy").hidden && !window.HK_DEBUG.S.paused, null, 2000)));
+    await p.keyboard.press("Digit2");
+    check("2 opens the secondaries", /Secondary/i.test(await p.textContent("#buyTitle")));
+    await p.keyboard.press("Digit9");
+    check("9 buys the grapple, in your hands now and in your loadout", await soft(until(p, () => { const { S, save } = window.HK_DEBUG; return S.me.arms.slots[1] === "grapple" && save.data.loadout.secondary === "grapple"; }, null, 2000)));
+    await p.keyboard.press("KeyB");
+    check("and B closes it", await p.evaluate(() => document.getElementById("buy").hidden));
     check("the guns and the bodies load", await soft(until(p, async () => (await import("./js/models.js")).modelsReady(), null, 30000)));
     const body = await p.evaluate(async () => {
       const { S } = window.HK_DEBUG;
@@ -302,14 +312,14 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     });
     // the grapple is a gun: E draws it, and Fire (held, here as the touch layer holds it) sends the hook
     await p.keyboard.press("KeyE");
-    check("the grapple key draws the grappling gun", await soft(until(p, () => window.HK_DEBUG.S.me.arms.cur === 3 && /Grappling gun/.test(document.getElementById("gunName").textContent), null, 2000)));
+    check("the grapple key draws the grappling gun from its slot", await soft(until(p, () => window.HK_DEBUG.S.me.arms.cur === 1 && /Grappling gun/.test(document.getElementById("gunName").textContent), null, 2000)));
     await p.evaluate(async () => { const I = await import("./js/input.js"); I.touchState.held.add("fire"); I.touchPress("fire"); });
     await soft(until(p, () => window.__hookEv.some((e) => e !== "hookfire") && window.__hookSeen, null, 3000));
     await p.evaluate(async () => { window.HK_DEBUG.S.paused = false; const I = await import("./js/input.js"); I.touchState.held.delete("fire"); I.touchRelease("fire"); });
     const hookEv = await p.evaluate(() => window.__hookEv.join(",") + (window.__hookSeen ? " · shown" : ""));
     check("holding Fire with the grapple out fires the hook, it bites, and the HUD shows its pull", /hookfire/.test(hookEv) && /hookhit|hookgrab/.test(hookEv) && /shown/.test(hookEv), hookEv);
     await p.keyboard.press("KeyE");
-    check("and the key puts it away again", await soft(until(p, () => window.HK_DEBUG.S.me.arms.cur !== 3, null, 2000)));
+    check("and the key puts it away again", await soft(until(p, () => window.HK_DEBUG.S.me.arms.cur !== 1, null, 2000)));
     // the lunge is the blade's right click: with the blade out, Aim held charges a lunge
     await p.keyboard.press("Digit3");
     await until(p, () => window.HK_DEBUG.S.me.arms.cur === 2 && window.HK_DEBUG.S.me.arms.swapT <= 0, null, 2000);
@@ -379,7 +389,7 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
       await alignment(q, "this phone");
       const rects = await q.$$eval(".tbtn", (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.id, r.left, r.top, r.right, r.bottom]; }));
       const off = rects.filter((r) => r[1] < 0 || r[2] < 0 || r[3] > vw + 0.5 || r[4] > vh + 0.5);
-      check("all " + rects.length + " buttons are on screen, all the time", rects.length === 15 && off.length === 0, JSON.stringify(off));
+      check("all " + rects.length + " buttons are on screen, all the time", rects.length === 17 && off.length === 0, JSON.stringify(off));
       await q.waitForTimeout(400);
       const y0 = await q.evaluate(() => window.HK_DEBUG.S.me.body.y);
       const jb = await q.$('.tbtn[data-id="jump"]'), jr = await jb.boundingBox();
@@ -430,11 +440,26 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
         return fwd;
       });
       check("a floating stick: a touch low on the left moves you", fl > 0.3, fl);
-      // the grapple's button draws it, and Fire then shows the hook
+      // the grapple's button draws it (once one is carried), and Fire then shows the hook
+      await q.evaluate(() => { const { S, game } = window.HK_DEBUG; game.buy(S.me, "secondary", "grapple", true); });
       await q.evaluate(() => { const t = document.querySelector('.tbtn[data-id="hook"]'), r = t.getBoundingClientRect(); t.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 11, clientX: r.left + 5, clientY: r.top + 5, pointerType: "touch" })); dispatchEvent(new PointerEvent("pointerup", { pointerId: 11, pointerType: "touch" })); });
-      check("the grapple button draws the grapple, and Fire becomes its trigger", await soft(until(q, () => window.HK_DEBUG.S.me.arms.cur === 3 && document.querySelector('.tbtn[data-id="fire"]').dataset.icon === "hook", null, 3000)));
+      check("the grapple button draws the grapple, and Fire becomes its trigger", await soft(until(q, () => window.HK_DEBUG.S.me.arms.cur === 1 && document.querySelector('.tbtn[data-id="fire"]').dataset.icon === "hook", null, 3000)));
       await q.evaluate(() => { const t = document.querySelector('.tbtn[data-id="hook"]'), r = t.getBoundingClientRect(); t.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 11, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, pointerType: "touch" })); dispatchEvent(new PointerEvent("pointerup", { pointerId: 11, pointerType: "touch" })); });
-      await until(q, () => window.HK_DEBUG.S.me.arms.cur !== 3 && window.HK_DEBUG.S.me.arms.swapT <= 0, null, 3000);
+      await until(q, () => window.HK_DEBUG.S.me.arms.cur !== 1 && window.HK_DEBUG.S.me.arms.swapT <= 0, null, 3000);
+      // a hack that waits for a key gets a button of its own, which holds that key down
+      await q.evaluate(() => { const { save, hackapi } = window.HK_DEBUG; const h = { id: "keybtn01", name: "key test", code: 'const k = ui.key("Hold to fly", "KeyF"); on("tick", () => { globalThis.__down = k.down; });', on: false }; save.data.hacks.push(h); hackapi.run("keybtn01"); });
+      check("a running hack's ui.key gets a touch button of its own", await soft(until(q, () => !!document.querySelector('.tbtn.custom[data-id="h:Hold to fly"]'), null, 5000)));
+      const held = await q.evaluate(async () => {
+        const t = document.querySelector('.tbtn.custom'), r = t.getBoundingClientRect();
+        t.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 21, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, pointerType: "touch" }));
+        const I = await import("./js/input.js");
+        const during = I.heldCodes().includes("KeyF");
+        dispatchEvent(new PointerEvent("pointerup", { pointerId: 21, pointerType: "touch" }));
+        return [during, I.heldCodes().includes("KeyF")];
+      });
+      check("holding it holds the hack's key; letting go lets go", held[0] && !held[1], JSON.stringify(held));
+      await q.evaluate(() => { const { save, hackapi } = window.HK_DEBUG; hackapi.stop("keybtn01"); save.data.hacks = save.data.hacks.filter((h) => h.id !== "keybtn01"); });
+      check("and it goes when the hack stops", await soft(until(q, () => !document.querySelector(".tbtn.custom"), null, 3000)));
       // Aim starts as a toggle on touch: a tap latches it, lit, and the next tap lets go
       const tapBtn = (id) => q.evaluate((id) => {
         const t = document.querySelector('.tbtn[data-id="' + id + '"]'), r = t.getBoundingClientRect();
@@ -500,7 +525,7 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
       check("it draws a landscape picture, with the sideways layout", pic[0] === 844 && pic[1] === 390 && pic[2] === 150, JSON.stringify(pic));
       await alignment(q, "a phone forced sideways");
       const rects = await q.$$eval(".tbtn", (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.id, r.left, r.top, r.right, r.bottom]; }));
-      check("every button is on the screen", rects.length === 15 && rects.every((r) => r[1] >= -0.5 && r[2] >= -0.5 && r[3] <= 390.5 && r[4] <= 844.5), JSON.stringify(rects.filter((r) => r[3] > 390.5 || r[4] > 844.5)));
+      check("every button is on the screen", rects.length === 17 && rects.every((r) => r[1] >= -0.5 && r[2] >= -0.5 && r[3] <= 390.5 && r[4] <= 844.5), JSON.stringify(rects.filter((r) => r[3] > 390.5 || r[4] > 844.5)));
       await q.waitForTimeout(300);
       const y0 = await q.evaluate(() => window.HK_DEBUG.S.me.body.y);
       await q.evaluate(() => {

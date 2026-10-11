@@ -61,6 +61,15 @@ export const ICONS = {
   cycle: P("M4 13h11M4 13v3h11v-3M15 14.5h3l2-4M17 6a6 6 0 0 1 3 4.5"),
   wall: P("M4 4h16v16H4zM4 9.5h16M4 15h16M9 4v5.5M15 9.5V15M9 15v5"),
   surf: P("M3 18l9-12 9 12M7 18l5-6.5 5 6.5"),
+  // a frag: the body, the fuse on top, the lever down its side
+  grenade: C(11, 14, 6) + P("M9.5 8V5.5h4V8M13.5 5.5l3.5 2.5v5"),
+  // a mine stuck flat: the case, its lamp, the beam
+  mine: P("M4 17h16M6 17v-3h12v3") + C(12, 12, 1.2, 1) + P("M12 10V3"),
+  // a flashbang: a can with rays round it
+  flash: P("M9.5 9h5v10h-5zM10.5 9V7h3v2M4 7l2 1.5M20 7l-2 1.5M3.5 13H6M20.5 13H18"),
+  cart: P("M3 5h2.5l2 10h10l2-7H7") + C(9.5, 19, 1.3) + C(16.5, 19, 1.3),
+  shield: P("M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"),
+  phone: P("M8 3h8v18H8zM11 18h2"),
   bug: P("M8 9h8v6a4 4 0 0 1-8 0zM12 9v10M8 12H4M20 12h-4M8 16l-3 2M16 16l3 2M8.5 9L6 6.5M15.5 9L18 6.5M9.5 9a2.5 2.5 0 0 1 5 0")
 };
 

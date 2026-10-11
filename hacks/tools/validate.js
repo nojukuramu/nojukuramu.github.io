@@ -17,13 +17,16 @@
    2. Behaviour checks over the pure modules, imported straight into Node:
       the brush tracer, Source movement (bunny hop keeps speed, held jump
       does not, air strafing gains, surfing keeps speed, the slide, the
-      climb, the wall jump, the lunge, steep slopes slid down rather than
+      climb (from a jump press, held by forward), the mantle, the wall
+      ride, the wall jump, the lunge, steep slopes slid down rather than
       stuck on, the grapple's rope), the same result at 30, 60, 144 and
-      240 frames a second, the arena (with its Skyway and Halo) and its nav
-      graph, the weapons (penetration, the Condor, the scopes' zoom, blades
-      that hit harder at speed), the skeleton's hitboxes (the nut box among
+      240 frames a second, the arena (with its Skyway, Halo and slipways)
+      and its nav graph, the weapons (penetration, the Condor, the cannon,
+      the scopes' zoom, blades that hit harder at speed, the grapple in a
+      gun's slot, utilities), the skeleton's hitboxes (the nut box among
       them), a match played headless (collateral, nut shot, a hooked bot
-      pulled in), the match rules, the save record's cleaning, and
+      pulled in, a swing's step, shields, a rocket jump, grenades, mines,
+      gas, a flashbang), the match rules, the save record's cleaning, and
       the hack sandbox itself — run in a child process that stands in for a
       Web Worker — reading everything and writing only itself.
 
@@ -330,12 +333,36 @@ const allJs = jsFiles.map(read).join("\n");
     const yanked = settle();
     for (let i = 0; i < 64; i++) { yanked.yank = [0, 1, -20]; pmove(flat, yanked, idle(), TICK, {}); yanked.ev.length = 0; }
     check("a hook in a body pulls it towards whoever holds it, off its feet", yanked.z < -10 && hspeed(yanked) > 8, yanked.z.toFixed(1));
-    // climb
+    // climb: only from a jump press; then forward alone keeps it going, and letting go of forward lets go
     const cl = newBody(8, 0.02, 0, -Math.PI / 2);
     run(cl, 40, () => ({ fwd: 1, side: 0, yaw: -Math.PI / 2, pitch: 0, buttons: 0 }));
     let top = 0, climbed = false;
-    run(cl, 150, (i, q) => { top = Math.max(top, q.y); climbed = climbed || q.climbing; return { fwd: 1, side: 0, yaw: -Math.PI / 2, pitch: 0, buttons: B.JUMP }; });
-    check("jumping into a wall and holding climbs it", climbed && top > 3.5, top.toFixed(2));
+    run(cl, 150, (i, q) => { top = Math.max(top, q.y); climbed = climbed || q.climbing; return { fwd: 1, side: 0, yaw: -Math.PI / 2, pitch: 0, buttons: i < 2 ? B.JUMP : 0 }; });
+    check("a jump press into a wall, then forward alone, climbs it", climbed && top > 3.5, top.toFixed(2));
+    const noJump = newBody(8, 0.02, 0, -Math.PI / 2);
+    let leaned = false;
+    run(noJump, 200, (i, q) => { leaned = leaned || q.climbing; return { fwd: 1, side: 0, yaw: -Math.PI / 2, pitch: 0, buttons: 0 }; });
+    check("pushing into a wall without a jump press never climbs it", !leaned);
+    const letGo = newBody(8, 0.02, 0, -Math.PI / 2);
+    run(letGo, 40, () => ({ fwd: 1, side: 0, yaw: -Math.PI / 2, pitch: 0, buttons: 0 }));
+    let wasOn = false;
+    run(letGo, 50, (i, q) => { if (i === 25) wasOn = q.climbing; return { fwd: i < 25 ? 1 : 0, side: 0, yaw: -Math.PI / 2, pitch: 0, buttons: i < 2 ? B.JUMP : 0 }; });
+    check("letting go of forward lets go of the wall", wasOn && !letGo.climbing && letGo.y < 2);
+    // the mantle: a ledge in reach is climbed over by itself
+    const ledgeW = buildWorld([box(-50, -1, -50, 50, 0, 50), box(10, 0, -5, 12, 2.2, 5, { kind: "crate" })]);
+    const mt = newBody(8, 0.02, 0, -Math.PI / 2);
+    const mev = [];
+    run(mt, 40, () => ({ fwd: 1, side: 0, yaw: -Math.PI / 2, pitch: 0, buttons: 0 }), ledgeW);
+    for (let i = 0; i < 64; i++) { pmove(ledgeW, mt, { fwd: 1, side: 0, yaw: -Math.PI / 2, pitch: 0, buttons: i < 2 ? B.JUMP : 0 }, TICK, {}); mev.push(...mt.ev); mt.ev.length = 0; if (mev.includes("ledgeup")) break; }
+    check("a ledge in reach is mantled: up the face and over onto the top", mev.includes("mantle") && mev.includes("ledgeup") && mt.onGround && mt.y > 2.1 && mt.x > 10, mt.x.toFixed(2) + "," + mt.y.toFixed(2) + " " + mev.join(","));
+    // the wall ride: a fast slide beside a wall rides it, and jump kicks off it
+    const rideW = buildWorld([box(-50, -1, -100, 50, 0, 100), box(-40, 0, -100, -39, 6, 100, { kind: "ride" })]);
+    const slideBy = (x) => { const q = newBody(x, 0.02, 50, 0); run(q, 4, () => ({ fwd: 1, side: 0, yaw: 0, pitch: 0, buttons: B.SPRINT }), rideW); q.vz = -10; let r = 0; run(q, 90, (i, z) => { if (z.wallSlide) r++; return { fwd: 1, side: 0, yaw: 0, pitch: 0, buttons: B.CROUCH }; }, rideW); return { q, r }; };
+    const ride = slideBy(-38.55), open = slideBy(0);
+    check("a fast slide along a wall rides it, losing far less than one in the open", ride.r > 80 && hspeed(ride.q) > hspeed(open.q) + 2.5, hspeed(ride.q).toFixed(2) + " vs " + hspeed(open.q).toFixed(2));
+    const kev = [];
+    for (let i = 0; i < 3; i++) { pmove(rideW, ride.q, { fwd: 1, side: 0, yaw: 0, pitch: 0, buttons: B.CROUCH | (i === 1 ? B.JUMP : 0) }, TICK, {}); kev.push(...ride.q.ev); ride.q.ev.length = 0; }
+    check("jump off a ridden wall: out from it, up, keeping the speed along it", kev.includes("walljump") && ride.q.vx > 5 && ride.q.vy > 4 && ride.q.vz < -6, [ride.q.vx, ride.q.vy, ride.q.vz].map((v) => v.toFixed(1)).join(","));
     // wall jump: along a wall at 8 m/s, tap jump
     const wj = newBody(9.55, 2, -4, Math.PI); wj.vz = 8;
     const ev = [];
@@ -405,7 +432,14 @@ const allJs = jsFiles.map(read).join("\n");
     const W = MAP.buildMap();
     check("the arena is closed: a lid and four walls", W.brushes.some((b) => b.kind === "clip") && W.min[0] <= -64 && W.max[0] >= 64);
     check("every spawn point is somewhere a body fits", W.spawns.every((s) => MV.fits(W, s.x, s.y, s.z, false)), W.spawns.length);
-    check("every kind of place is there: surf, shaft, slope, canopy, pad, and the Skyway, the Halo and kites above them", ["surf", "shaft", "slope", "canopy", "pad", "bridge", "halo", "kite"].every((k) => W.brushes.some((b) => b.kind === k)));
+    check("every kind of place is there: surf, shaft, slope, canopy, pad, slipway, and the Skyway, the Halo and kites above them", ["surf", "shaft", "slope", "canopy", "pad", "ride", "bridge", "halo", "kite"].every((k) => W.brushes.some((b) => b.kind === k)));
+    {
+      // the slipway: a slide from its top, crouched, rides its panel down the run
+      const q = newBody(60.3, 2.42, 1.5, Math.PI);
+      let rode = 0;
+      for (let i = 0; i < 64 * 4; i++) { pmove(W, q, { fwd: i < 20 ? 1 : 0.2, side: 0, yaw: Math.PI, pitch: 0, buttons: i < 20 ? B.SPRINT : B.CROUCH }, TICK, {}); q.ev.length = 0; if (q.wallSlide) rode++; }
+      check("a slide down a slipway rides its panel along the run", rode > 120 && q.z > 30, rode + " ticks riding, to z " + q.z.toFixed(1));
+    }
     const surfFaces = W.brushes.filter((b) => b.kind === "surf").flatMap((b) => b.faces).filter((f) => f.n[1] > 0.1);
     check("the surf ridges are too steep to stand on", surfFaces.length > 0 && surfFaces.every((f) => f.n[1] < PM.walkable));
     const pad = W.brushes.find((b) => b.kind === "pad" && b.min[0] > 0 && b.min[2] > 0);
@@ -436,7 +470,8 @@ const allJs = jsFiles.map(read).join("\n");
     const g = Object.values(WP.GUNS);
     check("two handguns", g.filter((x) => x.hold === "pistol").length === 2);
     check("two full-auto guns", g.filter((x) => x.auto).length === 2);
-    check("one shotgun, two snipers — scoped bolt actions whose rounds fly", g.filter((x) => x.pellets > 1).length === 1 && g.filter((x) => x.projectile).length === 2 && g.filter((x) => x.projectile).every((x) => x.scope && x.bolt && x.projectile.instant > 0));
+    check("one shotgun, two snipers — scoped bolt actions whose rounds fly", g.filter((x) => x.pellets > 1).length === 1 && g.filter((x) => x.projectile && x.scope).length === 2 && g.filter((x) => x.projectile && x.scope).every((x) => x.bolt && x.projectile.instant > 0));
+    check("a cannon: a slow ball that falls, and a blast that reaches its firer by less", !!WP.GUNS.cannon && WP.GUNS.cannon.projectile.speed < 40 && WP.GUNS.cannon.projectile.gravity > 0 && WP.GUNS.cannon.projectile.explode.self < 1 && WP.GUNS.cannon.projectile.explode.force > 10);
     check("the Condor kills with one hit anywhere", ["head", "body", "nut", "arm", "leg"].every((p) => WP.damageFor(WP.GUNS.condor, 150, p) >= 100) && WP.GUNS.condor.adsTime > WP.GUNS.talon.adsTime && WP.GUNS.condor.speedMul < WP.GUNS.talon.speedMul);
     check("every gun's rounds go through bodies, losing damage each time, snipers furthest", g.every((x) => x.pen && x.pen[1] < 1) && WP.GUNS.condor.pen[0] >= 3 && WP.GUNS.talon.pen[0] > WP.GUNS.hornet.pen[0]);
     check("a nut shot does more than the body, less than the head", WP.damageFor(WP.GUNS.kestrel, 5, "nut") > WP.damageFor(WP.GUNS.kestrel, 5, "body") && WP.damageFor(WP.GUNS.kestrel, 5, "nut") < WP.damageFor(WP.GUNS.kestrel, 5, "head"));
@@ -458,7 +493,8 @@ const allJs = jsFiles.map(read).join("\n");
     check("two blades that both lunge, differently", WP.MELEE_IDS.length === 2 && WP.MELEE.katana.charge < WP.MELEE.lancer.charge && WP.MELEE.katana.speed < WP.MELEE.lancer.speed && WP.MELEE.katana.lungeCone > WP.MELEE.lancer.lungeCone);
     check("a headshot does more than a body shot, a limb less", WP.damageFor(WP.GUNS.kestrel, 5, "head") > WP.damageFor(WP.GUNS.kestrel, 5, "body") && WP.damageFor(WP.GUNS.kestrel, 5, "leg") < WP.damageFor(WP.GUNS.kestrel, 5, "body"));
     check("damage falls off with range", WP.damageFor(WP.GUNS.hornet, 50, "body") < WP.damageFor(WP.GUNS.hornet, 5, "body"));
-    check("a loadout from storage is cleaned", JSON.stringify(WP.cleanLoadout({ primary: "nope", secondary: "talon", melee: 3 })) === JSON.stringify({ primary: "kestrel", secondary: "talon", melee: "katana" }));
+    check("a loadout from storage is cleaned", JSON.stringify(WP.cleanLoadout({ primary: "nope", secondary: "talon", melee: 3, utility: "nuke" })) === JSON.stringify({ primary: "kestrel", secondary: "talon", melee: "katana", utility: "frag" }));
+    check("the grapple goes in a gun's slot, but never both", WP.cleanLoadout({ primary: "grapple", secondary: "wasp" }).primary === "grapple" && WP.cleanLoadout({ primary: "grapple", secondary: "grapple" }).secondary !== "grapple");
     const A = WP.newArms({ primary: "wasp", secondary: "talon", melee: "lancer" });
     const body = newBody(0, 0, 0, 0); body.onGround = true;
     let r = 0.5; const rng = () => (r = (r * 9301 + 49297) % 233280 / 233280);
@@ -473,13 +509,32 @@ const allJs = jsFiles.map(read).join("\n");
     const shot = WP.armsTick(A, { buttons: B.FIRE, slot: 0 }, body, TICK, rng, B).find((e) => e.type === "fire");
     check("the sniper fires a round that flies", shot && shot.proj && shot.proj.speed > 0);
     check("recoil lifts the view", shot && shot.kick.pitch > 0);
-    // slot 4: the grapple. Its trigger is game.js's; here it must neither shoot nor swing
-    WP.armsTick(A, { buttons: 0, slot: 4 }, body, TICK, rng, B);
+    // the grapple, carried as a secondary. Its trigger is game.js's; here it must neither shoot nor swing
+    const Gp = WP.newArms({ primary: "wasp", secondary: "grapple", melee: "lancer", utility: "frag" });
+    WP.armsTick(Gp, { buttons: 0, slot: 2 }, body, TICK, rng, B);
+    for (let i = 0; i < 20; i++) WP.armsTick(Gp, { buttons: 0, slot: 0 }, body, TICK, rng, B);
     const gEv = [];
-    for (let i = 0; i < 30; i++) gEv.push(...WP.armsTick(A, { buttons: i % 2 ? B.FIRE : 0, slot: 0 }, body, TICK, rng, B));
-    check("the grapple is slot 4, and Fire with it out neither shoots nor swings", A.cur === 3 && WP.grappleOut(A) && !gEv.some((e) => e.type === "fire" || e.type === "swing") && WP.holdOf(A) === "pistol", gEv.map((e) => e.type).join());
-    WP.armsTick(A, { buttons: 0, slot: -1 }, body, TICK, rng, B);
-    check("and the last weapon comes back from it", A.cur === 1, A.cur);
+    for (let i = 0; i < 30; i++) gEv.push(...WP.armsTick(Gp, { buttons: i % 2 ? B.FIRE : 0, slot: 0 }, body, TICK, rng, B));
+    check("a grapple carried as the secondary: Fire with it out neither shoots nor swings", Gp.cur === 1 && WP.grappleOut(Gp) && WP.grappleSlot(Gp) === 1 && !gEv.some((e) => e.type === "fire" || e.type === "swing") && WP.holdOf(Gp) === "pistol", gEv.map((e) => e.type).join());
+    WP.armsTick(Gp, { buttons: 0, slot: -1 }, body, TICK, rng, B);
+    check("and the last weapon comes back from it", Gp.cur === 0, Gp.cur);
+    // slot 4: the utility. Fire throws one; the quick throw throws from anything; they run out, and come back
+    WP.armsTick(Gp, { buttons: 0, slot: 4 }, body, TICK, rng, B);
+    for (let i = 0; i < 20; i++) WP.armsTick(Gp, { buttons: 0, slot: 0 }, body, TICK, rng, B);
+    const thr = [];
+    for (let i = 0; i < 160; i++) thr.push(...WP.armsTick(Gp, { buttons: i % 2 ? B.FIRE : 0, slot: 0 }, body, TICK, rng, B).filter((e) => e.type === "throw"));
+    check("slot 4 is the utility: Fire throws it, as many as it has charges", WP.utilOut(Gp) && thr.length === WP.UTILS.frag.charges && Gp.utilN === 0, thr.length + " thrown");
+    check("and the cooldown on the next one is running", Math.abs(WP.utilCooldown(Gp) - (WP.UTILS.frag.cooldown - Gp.utilT)) < 1e-9 && WP.utilCooldown(Gp) > 0, WP.utilCooldown(Gp).toFixed(2));
+    for (let i = 0; i < 64 * (WP.UTILS.frag.cooldown + 0.5); i++) WP.armsTick(Gp, { buttons: 0, slot: 0 }, body, TICK, rng, B);
+    WP.armsTick(Gp, { buttons: 0, slot: 1 }, body, TICK, rng, B);
+    const quick = WP.armsTick(Gp, { buttons: B.UTIL, slot: 0 }, body, TICK, rng, B).filter((e) => e.type === "throw");
+    check("a charge comes back when its cooldown is up, and the quick throw throws it from a gun", quick.length === 1 && quick[0].quick && Gp.cur === 0, quick.length);
+    for (let i = 0; i < 64 * (WP.UTILS.frag.cooldown * 2 + 1); i++) WP.armsTick(Gp, { buttons: 0, slot: 0 }, body, TICK, rng, B);
+    check("charges keep coming back for as long as you live, up to the most it holds", Gp.utilN === WP.UTILS.frag.charges && WP.utilCooldown(Gp) === 0, Gp.utilN);
+    // the buy menu: a gun already in the other slot swaps places with what is bought over it
+    const Bu = WP.newArms({ primary: "kestrel", secondary: "wasp" });
+    WP.equip(Bu, "primary", "wasp");
+    check("buying the other slot's gun swaps the two", Bu.slots[0] === "wasp" && Bu.slots[1] === "kestrel" && Bu.ammo[0] === WP.GUNS.wasp.mag, Bu.slots.join());
   }
 
   section("Behaviour: bones and hitboxes");
@@ -531,7 +586,8 @@ const allJs = jsFiles.map(read).join("\n");
 
   section("Behaviour: a match, headless");
   {
-    const WP_KATANA_SWING = (await imp("js/weapons.js")).MELEE.katana.swingDmg;
+    const WP = await imp("js/weapons.js");
+    const WP_KATANA_SWING = WP.MELEE.katana.swingDmg;
     // game.js is pure enough to play in Node: you and some dummies held still where the checks want them
     const ST = await imp("js/state.js"), G = await imp("js/game.js"), SK = await imp("js/skeleton.js");
     const { S } = ST;
@@ -544,9 +600,9 @@ const allJs = jsFiles.map(read).join("\n");
     const put = (a, x, z, yaw) => { const b = a.body; b.x = x; b.y = 0.02; b.z = z; b.vx = b.vy = b.vz = 0; b.yaw = a.aim.yaw = yaw || 0; };
     const aimAt = (p) => { const e = G.eyeOf(S.me); S.view.yaw = Math.atan2(-(p[0] - e[0]), -(p[2] - e[2])); S.view.pitch = Math.atan2(p[1] - e[1], Math.hypot(p[0] - e[0], p[2] - e[2])); };
     const chest = (a) => [a.bones[SK.BI.chest * 3], a.bones[SK.BI.chest * 3 + 1], a.bones[SK.BI.chest * 3 + 2]];
-    const match = (primary) => {
+    const match = (primary, secondary) => {
       S.net.role = "solo";
-      G.startMatch({ mode: "ffa", bots: 4, diff: "normal", target: 25, time: 0, hacks: "full" }, { me: { id: 1, name: "Me", loadout: { primary, secondary: "wasp", melee: "katana" } }, humans: 1 });
+      G.startMatch({ mode: "ffa", bots: 4, diff: "normal", target: 25, time: 0, hacks: "full" }, { me: { id: 1, name: "Me", loadout: { primary, secondary: secondary || "wasp", melee: "katana", utility: "frag" } }, humans: 1 });
       for (const b of S.actors) if (b.kind === "bot") b.passive = true;
       ticks(64);
       // dummies that do not even wander: a body with no speed stands where it is put, legs together
@@ -560,7 +616,7 @@ const allJs = jsFiles.map(read).join("\n");
     let nextDummy = 4000;
     const dummy = (x, z, hp) => {
       const a = G.addActor(G.makeActor({ id: nextDummy++, name: "Dummy", kind: "dummy" }));
-      a.alive = true; a.hp = hp || 100; put(a, x, z, Math.PI);
+      a.alive = true; a.hp = hp || 100; a.shield = 0; put(a, x, z, Math.PI);
       a.bones = SK.pose(G.poseState(a), "rifle", a.bones);
       return a;
     };
@@ -575,7 +631,7 @@ const allJs = jsFiles.map(read).join("\n");
     check("one sniper round goes through three bodies, killing each: a collateral", feed.filter((k) => k.killer === S.me).length === 3 && shots.size === 1 && mine.map((h) => h.i.through).join() === "0,1,2", mine.map((h) => h.d + " " + h.i.part).join(", "));
     G.quit(); feed.length = 0; hits.length = 0;
     // 2. a nut shot
-    bots = match("kestrel");
+    bots = match("kestrel", "grapple");
     const v = dummy(0, 30, 10);
     put(S.me, 0, 34); cmd.buttons = B.ADS; ticks(30);      // aimed: a hip shot's spread would land on a thigh as often as not
     aimAt(SK.nutPoint(v.bones)); cmd.buttons = B.ADS | B.FIRE; ticks(1); cmd.buttons = 0; ticks(3);
@@ -589,19 +645,96 @@ const allJs = jsFiles.map(read).join("\n");
     const ammo0 = S.me.arms.ammo[0];
     aimAt(chest(w)); cmd.buttons = B.HOOK; moves.length = 0; ticks(3);
     check("the grapple does nothing until it is drawn", !moves.includes("hookfire") && S.me.body.hook === 0, moves.join(","));
-    cmd.buttons = 0; cmd.slot = 4; ticks(1); cmd.slot = 0;
+    cmd.buttons = 0; cmd.slot = 2; ticks(1); cmd.slot = 0;
     aimAt(chest(w)); cmd.buttons = B.FIRE;
     const wz = w.body.z, mz = S.me.body.z;
     for (let i = 0; i < 64 * 2 && !moves.includes("hookdone"); i++) ticks(1);
     cmd.buttons = 0; ticks(1);
     check("a hook catches a body, and pulls you both together until it lets go", moves.includes("hookgrab") && moves.includes("hookdone") && w.body.z > wz + 2 && S.me.body.z < mz - 5, moves.join(",") + " · them " + (w.body.z - wz).toFixed(1) + " m, you " + (S.me.body.z - mz).toFixed(1) + " m");
-    check("the grapple is slot 4, and Fire was its trigger, not the rifle's", S.me.arms.cur === 3 && S.me.arms.ammo[0] === ammo0, S.me.arms.ammo[0] + " of " + ammo0);
+    check("the grapple, carried as the secondary, and Fire was its trigger, not the rifle's", S.me.arms.cur === 1 && S.me.arms.ammo[0] === ammo0, S.me.arms.ammo[0] + " of " + ammo0);
     // 4. a blade at speed
     cmd.slot = 3; ticks(1); cmd.slot = 0; ticks(30); hits.length = 0;
     put(S.me, 0, 34); put(w, 0, 32.6, Math.PI); w.hp = 100; ticks(1);
     S.view.yaw = 0; S.view.pitch = 0; S.me.body.vz = -16; cmd.buttons = B.MELEE; ticks(1); cmd.buttons = 0;
     const cut = hits.find((h) => h.by === S.me && h.i.melee);
     check("a blade swung at speed cuts deeper", cut && cut.d > WP_KATANA_SWING * 1.4 && cut.i.speedMul > 1.4, cut && cut.d);
+    // 5. a swing steps you into it
+    put(S.me, 0, 34); ticks(30); S.me.arms.swingCd = 0;
+    S.view.yaw = 0; cmd.buttons = B.MELEE; ticks(1); cmd.buttons = 0; ticks(1);
+    check("a swing from a standstill steps you forward", -S.me.body.vz > 1.5, S.me.body.vz.toFixed(2));
+    G.quit(); feed.length = 0; hits.length = 0;
+
+    // 6. shields: taken first, charged back, evolved by damage
+    bots = match("kestrel");
+    const shot = (a, d) => G.hitActor(a, d, null, { weapon: "test", part: "body" });
+    check("everyone starts on a 50 shield over 100 health", S.me.shield === G.SHIELD && S.me.shieldMax === G.SHIELD && S.me.hp === 100);
+    shot(S.me, 30);
+    check("a shield takes damage before health does", S.me.shield === 20 && S.me.hp === 100, S.me.shield + "/" + S.me.hp);
+    shot(S.me, 40);
+    check("and what gets through it comes off health", S.me.shield === 0 && S.me.hp === 80, S.me.shield + "/" + S.me.hp);
+    ticks(64 * 6);
+    check("left alone it charges back, before health does", S.me.shield === S.me.shieldMax && S.me.hp > 80, S.me.shield + "/" + S.me.hp.toFixed(0));
+    const foe = dummy(0, 10, 400); foe.hp = 400;
+    for (let i = 0; i < 6; i++) G.hitActor(foe, 20, S.me, { weapon: "kestrel", part: "body" });
+    check("damage dealt evolves your shield: a level up, 50 more, filled", S.me.shieldLevel === 2 && S.me.shieldMax === 100 && S.me.shield === 100, S.me.shieldLevel + " " + S.me.shield + "/" + S.me.shieldMax);
+    G.hitActor(S.me, 30, foe, { weapon: "gas", part: "body", gas: true });
+    check("gas goes straight through a shield", S.me.shield === 100 && S.me.hp < 100 - 29, S.me.shield + "/" + S.me.hp);
+    G.removeActor(foe); G.quit();
+
+    // 7. the cannon: a ball at your own feet is a rocket jump, and a blast throws an enemy near it
+    bots = match("cannon");
+    bots.forEach((b, i) => put(b, 50, -50 + i * 4));
+    put(S.me, 0, 34); ticks(40);
+    const hp0 = S.me.hp + S.me.shield;
+    S.view.pitch = -1.5; cmd.buttons = B.FIRE; ticks(1); cmd.buttons = 0;
+    let topV = 0, risen = 0;
+    for (let i = 0; i < 64; i++) { ticks(1); topV = Math.max(topV, S.me.body.vy); risen = Math.max(risen, S.me.body.y); }
+    check("a cannonball at your own feet throws you up: a rocket jump", topV > 8 && risen > 2, "up at " + topV.toFixed(1) + " m/s, to " + risen.toFixed(1) + " m");
+    check("and costs you some of it, less than an enemy would take", S.me.hp + S.me.shield < hp0 && hp0 - (S.me.hp + S.me.shield) < WP.GUNS.cannon.projectile.explode.dmg * 0.6, (hp0 - S.me.hp - S.me.shield).toFixed(1));
+    S.me.body.vx = S.me.body.vy = S.me.body.vz = 0; ticks(64);
+    const near = dummy(0, 24, 300);
+    near.body.speedScale = 0;
+    put(S.me, 0, 34); ticks(4);
+    G.explode(S.me, 0, 0.3, 25, WP.GUNS.cannon.projectile.explode, "cannon", true);
+    check("a blast hurts an enemy near it, and throws them away from it", near.hp < 300 && near.body.vz < -3 && near.body.vy > 1, near.hp.toFixed(0) + " hp, v " + near.body.vy.toFixed(1) + "," + near.body.vz.toFixed(1));
+    G.removeActor(near); G.quit();
+
+    // 8. utilities: a frag bounces and bursts; a tripmine arms and a beam crossed sets it off; gas hurts; a flashbang blinds
+    bots = match("kestrel");
+    bots.forEach((b, i) => put(b, 50, -50 + i * 4));
+    const booms = [];
+    ST.on("explosion", (e) => booms.push(e));
+    put(S.me, 0, 34); S.view.yaw = 0; S.view.pitch = 0.3; ticks(30);
+    cmd.buttons = B.UTIL; ticks(1); cmd.buttons = 0;
+    const frag = S.throwables[S.throwables.length - 1];
+    check("a quick throw puts a frag in the air", !!frag && frag.kind === "frag" && S.me.arms.utilN === 1, S.throwables.length);
+    ticks(Math.ceil(64 * (WP.UTILS.frag.fuse + 0.1)));
+    check("and it bursts when its fuse runs out, somewhere ahead", booms.some((e) => e.weapon === "frag" && e.z < 30), JSON.stringify(booms.map((e) => [e.weapon, e.z.toFixed(1)])));
+    G.quit();
+    bots = match("kestrel");
+    bots.forEach((b, i) => put(b, 50, -50 + i * 4));
+    S.me.loadout.utility = "trip"; S.me.arms.util = "trip"; S.me.arms.utilN = 2;
+    put(S.me, 0, 20); S.view.yaw = 0; S.view.pitch = -1.2; ticks(10);
+    cmd.buttons = B.UTIL; ticks(1); cmd.buttons = 0; ticks(64 * 2);
+    const trip = S.throwables.find((t) => t.kind === "trip");
+    check("a tripmine sticks where it lands and arms", !!trip && trip.stuck && trip.armed, trip && JSON.stringify({ stuck: trip.stuck, armed: trip.armed, y: trip.y.toFixed(2) }));
+    const walker = dummy(trip ? trip.x : 0, trip ? trip.z : 0, 300);
+    walker.body.speedScale = 0; walker.bones = SK.pose(G.poseState(walker), "rifle", walker.bones);
+    booms.length = 0; ticks(2);
+    check("an enemy crossing its beam sets it off", booms.some((e) => e.weapon === "trip") && walker.hp < 300, walker.hp.toFixed(0));
+    G.removeActor(walker);
+    S.clouds.push({ id: 9, owner: S.me.id, x: 0, y: 1, z: 10, r: 5, t: 1, life: 8, dps: 20, mine: true, acc: 0 });
+    const choker = dummy(0, 10, 300); choker.shield = 50;
+    ticks(64 * 2);
+    check("a gas cloud hurts an enemy in it, straight through a shield", choker.hp < 300 - 30 && choker.shield === 50, choker.hp.toFixed(0) + " hp, " + choker.shield + " shield");
+    G.removeActor(choker); S.clouds.length = 0;
+    const watcher = bots[0], blind = bots[1];
+    // in the open by the outer lane: one looking at where it goes off, one with its back to it
+    put(watcher, 0, 32, 0); watcher.aim.yaw = 0; watcher.aim.pitch = 0;
+    put(blind, 0, 22, 0); blind.aim.yaw = 0; blind.aim.pitch = 0;
+    watcher.brain.blindT = 0; blind.brain.blindT = 0;
+    G.goOff({ id: 77, owner: S.me.id, kind: "flash", x: 0, y: 1.6, z: 25, nx: 0, ny: 0, nz: 0, mine: true });
+    check("a flashbang blinds a bot looking at it, more than one with its back to it", watcher.brain.blindT > 2.5 && blind.brain.blindT < watcher.brain.blindT, watcher.brain.blindT.toFixed(2) + " vs " + blind.brain.blindT.toFixed(2));
     G.quit();
   }
 

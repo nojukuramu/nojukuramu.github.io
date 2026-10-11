@@ -83,7 +83,7 @@ function joint(root, target, l1, l2, hint) {
  * crouched, sliding, climbing, lunge (0 idle, 1 charging, 2 dashing), eye,
  * an animation phase `phase` (radians, advanced by whoever owns it), and the
  * grapple's state and hook point (hook, hx, hy, hz), which the left hand follows.
- * `hold` is "rifle", "pistol", "melee" or "lance". Writes 17 × 3 numbers.
+ * `hold` is "rifle", "pistol", "melee", "lance" or "throw". Writes 17 × 3 numbers.
  */
 export function pose(s, hold, out) {
   out = out || new Float32Array(BONES.length * 3);
@@ -141,6 +141,9 @@ export function pose(s, hold, out) {
     rH = up([0.28, 0.2, 0.18]); lH = up([-0.2, 0.3, -0.2]);
   } else if (hold === "pistol") {
     rH = aimAt([0.05, -0.02, -0.5]); lH = aimAt([-0.02, -0.05, -0.46]);
+  } else if (hold === "throw") {
+    // a grenade held ready by the shoulder, the other hand out for balance
+    rH = aimAt([0.24, 0.04, -0.22]); lH = aimAt([-0.12, -0.1, -0.36]);
   } else if (hold === "melee" || hold === "lance") {
     rH = aimAt([0.22, -0.2, -0.32]); lH = aimAt([0.02, -0.24, -0.26]);
   } else {

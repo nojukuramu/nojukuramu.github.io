@@ -23,7 +23,7 @@
  *     runs. Hacks are for this game; nothing a hack sees leaves the device.
  *
  * Inside a hack, these are globals: me, players, enemies, allies,
- * projectiles, world, input, draw, screen, view, keys, vec, physics, match,
+ * projectiles, throwables, clouds, world, input, draw, screen, view, keys, vec, physics, match,
  * time, dt, BONES, LINKS, and deg/rad/wrap/clamp/lerp. These are the hack's
  * own: on(event, fn), ui, log/print, and `hack` (its name and id).
  * The full reference is the API tab of the hacks panel (hackdocs.js). */
@@ -224,7 +224,7 @@ function need(level, what) {
   warn(what + " needs the room's hack rules to be " + (level === "full" ? "Full self" : "Assist") + " (they are " + rules + "); ignored.");
   return false;
 }
-const INPUT_FIELDS = { forward: "n", side: "n", yaw: "a", pitch: "a", jump: "b", crouch: "b", sprint: "b", fire: "b", aim: "b", reload: "b", lunge: "b", melee: "b", hook: "b", zoom: "b", slot: "i" };
+const INPUT_FIELDS = { forward: "n", side: "n", yaw: "a", pitch: "a", jump: "b", crouch: "b", sprint: "b", fire: "b", aim: "b", reload: "b", lunge: "b", melee: "b", hook: "b", zoom: "b", util: "b", slot: "i" };
 const input = {};
 for (const f in INPUT_FIELDS) {
   Object.defineProperty(input, f, {
@@ -233,7 +233,7 @@ for (const f in INPUT_FIELDS) {
     set(v) {
       if (!live("input." + f) || !need("assist", "input." + f)) return;
       const t = INPUT_FIELDS[f];
-      out.input[f] = t === "b" ? !!v : t === "i" ? clamp(Math.round(num(v)), -1, 3) : t === "a" ? num(v, cur.input[f]) : clamp(num(v), -1, 1);
+      out.input[f] = t === "b" ? !!v : t === "i" ? clamp(Math.round(num(v)), -1, 4) : t === "a" ? num(v, cur.input[f]) : clamp(num(v), -1, 1);
     }
   });
 }
@@ -294,6 +294,8 @@ function prepare(snap) {
   snap.enemiesArr = Object.freeze(list.filter((p) => p.enemy && p.alive));
   snap.alliesArr = Object.freeze(list.filter((p) => !p.enemy));
   snap.projArr = deepFreeze(snap.projectiles || []);
+  snap.throwArr = deepFreeze(snap.throwables || []);
+  snap.cloudArr = deepFreeze(snap.clouds || []);
   snap.matchObj = deepFreeze(snap.match || {});
   return snap;
 }
@@ -304,6 +306,8 @@ const GLOBALS = {
   enemies: () => (cur ? cur.enemiesArr : []),
   allies: () => (cur ? cur.alliesArr : []),
   projectiles: () => (cur ? cur.projArr : []),
+  throwables: () => (cur ? cur.throwArr : []),
+  clouds: () => (cur ? cur.cloudArr : []),
   match: () => (cur ? cur.matchObj : {}),
   time: () => (cur ? cur.time : 0),
   dt: () => (cur ? cur.dt : 0)
@@ -484,11 +488,14 @@ function placeholder() {
   const me = { id: 0, name: "you", team: 0, bot: false, alive: false, hp: 100, maxHp: 100, position: z, velocity: z, speed: 0, yaw: 0, pitch: 0, eye: { x: 0, y: 1.62, z: 0 },
     onGround: true, crouched: false, sliding: false, climbing: false, lunge: "idle", bones, kills: 0, deaths: 0, sprinting: false, groundKind: "", groundNormal: { x: 0, y: 1, z: 0 },
     jumpHeld: false, slideCooldown: 0, wallJumpReady: true, climbLeft: PM.climbTime, lungeCharge: 0, lungeStuck: false, lungeNormal: null, respawnIn: 0,
+    shield: 50, shieldMax: 50, shieldLevel: 1, shieldNext: 0, wallRiding: false, mantling: false, climbArmed: false, mantle: 0, blind: 0,
+    utility: { id: "frag", name: "Frag grenade", count: 2, max: 2, cooldown: 10, next: 0 },
     hook: { state: "idle", point: null, target: null, rope: 0, ready: true },
     weapon: { slot: 1, id: "", name: "", cls: "", melee: false, ammo: 0, mag: 0, reloading: false, ads: 0, auto: false, rpm: 0, spread: 0, projectile: null, lastKick: { pitch: 0, yaw: 0 }, shots: 0, damage: 0, pellets: 1 },
     loadout: {} };
   return prepare({ n: 0, time: 0, tick: 0, dt: 0, rules: "full", me, players: [], projectiles: [], cam: { vp: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], w: 1, h: 1, hfov: 90 },
-    input: { forward: 0, side: 0, yaw: 0, pitch: 0, jump: false, crouch: false, sprint: false, fire: false, aim: false, reload: false, lunge: false, melee: false, hook: false, zoom: false, slot: 1 },
+    input: { forward: 0, side: 0, yaw: 0, pitch: 0, jump: false, crouch: false, sprint: false, fire: false, aim: false, reload: false, lunge: false, melee: false, hook: false, zoom: false, util: false, slot: 1 },
+    throwables: [], clouds: [],
     keys: [], pressed: [], events: [], match: { mode: "", time: 0, timeLeft: 0, target: 0, rules: "full", over: false, score: { kills: {}, deaths: {}, teams: [0, 0] } } });
 }
 cur = placeholder();

@@ -30,13 +30,15 @@ import { KINDS } from "./map.js";
 import { world, renderPos } from "./game.js";
 import { gunOf, zoomOf, boltOf } from "./weapons.js";
 import { ray, newTrace } from "./brush.js";
-import { LUNGE, PM, HOOK } from "./movement.js";
+import { LUNGE, PM, HOOK, mantleOf } from "./movement.js";
 import { save } from "./save.js";
 import { clamp, damp } from "./util.js";
 import { loadModels } from "./models.js";
 import { initFigures, syncFigures, hideFigures, figureQuality, muzzleOf } from "./figures.js";
 import { vScene, vCam, updateViewmodel, vmVisible, vmScoped, muzzleWorld, hookHandWorld } from "./viewmodel.js";
-export { vmFire, vmSwing } from "./viewmodel.js";
+import { initWorldFx, updateWorldFx } from "./worldfx.js";
+import * as screenfx from "./fx.js";
+export { vmFire, vmSwing, vmThrow, vmHitStop, vmJump } from "./viewmodel.js";
 
 export const IS_TOUCH = typeof window !== "undefined" && (("ontouchstart" in window) || navigator.maxTouchPoints > 0);
 
@@ -222,7 +224,7 @@ function surface(kind) {
   };
   return { map: tex(c, true), normalMap: tex(nc, false) };
 }
-const CLASS = { floor: "concrete", wall: "concrete", block: "concrete", slope: "concrete", crate: "concrete", trim: "metal", shaft: "metal", core: "metal", canopy: "metal", surf: "surf", bridge: "metal", halo: "metal", kite: "metal" };
+const CLASS = { floor: "concrete", wall: "concrete", block: "concrete", slope: "concrete", crate: "concrete", trim: "metal", shaft: "metal", core: "metal", canopy: "metal", surf: "surf", bridge: "metal", halo: "metal", kite: "metal", ride: "metal" };
 
 let mapGroup = null;
 const pads = [];
@@ -367,7 +369,7 @@ const puffTex = (() => {
   return new THREE.CanvasTexture(c);
 })();
 const PUFFS = [];
-for (let i = 0; i < 48; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTex, transparent: true, depthWrite: false, opacity: 0 })); s.visible = false; scene.add(s); PUFFS.push({ s, t: 0, life: 1, grow: 1, vy: 0 }); }
+for (let i = 0; i < 96; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTex, transparent: true, depthWrite: false, opacity: 0 })); s.visible = false; scene.add(s); PUFFS.push({ s, t: 0, life: 1, grow: 1, vy: 0 }); }
 let puffI = 0;
 export function puff(x, y, z, color, size, life) {
   const P = PUFFS[puffI++ % PUFFS.length];
@@ -423,7 +425,10 @@ function updateEffects(dt) {
 }
 const rounds = [];
 const roundMat = new THREE.MeshBasicMaterial({ color: 0xfff1c0, fog: false });
+// a cannonball: dark iron with a hot glow at its fuse, trailing smoke
+const ballMat = new THREE.MeshStandardMaterial({ color: 0x23262b, roughness: 0.45, metalness: 0.7, emissive: 0xff5a1a, emissiveIntensity: 0.25 });
 const sph = new THREE.SphereGeometry(1, 8, 6);
+let trailAcc = 0;
 /* Ropes: a grapple's line from the hand to its hook, and the hook. Yours leaves your gun hand's launcher
    as your screen shows it; anybody else's, their left hand. */
 const ropeMat = new THREE.MeshBasicMaterial({ color: 0x1b1f26, fog: true });
@@ -456,21 +461,32 @@ function updateRopes() {
   }
   for (let i = n; i < ropes.length; i++) { ropes[i].line.visible = false; ropes[i].head.visible = false; }
 }
-function updateRounds() {
+function updateRounds(dt) {
   while (rounds.length < S.projectiles.length) { const m = new THREE.Mesh(sph, roundMat); m.scale.setScalar(0.05); scene.add(m); rounds.push(m); }
+  trailAcc += dt;
+  const trail = trailAcc > 0.03;
+  if (trail) trailAcc = 0;
   rounds.forEach((m, i) => {
     const p = S.projectiles[i];
     m.visible = !!p;
-    if (p) m.position.set(p.x, p.y, p.z);
+    if (!p) return;
+    m.position.set(p.x, p.y, p.z);
+    const ball = p.gun === "cannon";
+    m.material = ball ? ballMat : roundMat;
+    m.scale.setScalar(ball ? 0.16 : 0.05);
+    if (ball && trail) puff(p.x, p.y, p.z, 0x6c6660, 0.35, 0.7);
   });
 }
 
 /* ---------------------------------------------------------------
    The camera
    --------------------------------------------------------------- */
-const cam = { punch: 0, dip: 0, fovAdd: 0, slide: 0, slideKick: 0, spec: null, specYaw: 0, specPitch: 0, shakeX: 0, shakeY: 0 };
-export function landDip(v) { cam.dip = Math.min(0.25, cam.dip + v * 0.02); }
+const cam = { punch: 0, dip: 0, dipV: 0, fovAdd: 0, slide: 0, slideKick: 0, spec: null, specYaw: 0, specPitch: 0, shakeX: 0, shakeY: 0, trauma: 0, roll: 0, ride: 0 };
+/* A landing: the eye drops and springs back, overshooting a little, the harder the landing the deeper. */
+export function landDip(v) { cam.dipV += Math.min(3.2, v * 0.16); }
 export function punch(p) { cam.punch += p; }
+/** Shake the view, 0..1: a blast near you, a heavy hit. It adds up and dies away by itself. */
+export function shake(k) { cam.trauma = Math.min(1, cam.trauma + k); }
 /** A horizontal field of view, as Source measures it, for this screen's shape. */
 function vfov(hdeg) {
   const aspect = Math.max(1.25, camera.aspect);
@@ -490,9 +506,17 @@ function placeCamera(alpha, dt) {
   cam.spec = null;
   const p = renderPos(a, alpha);
   const b = a.body;
-  cam.dip = damp(cam.dip, 0, 9, dt);
+  // the landing spring: pushed down, pulled back up past level, settling
+  cam.dipV += (-cam.dip * 160 - cam.dipV * 14) * dt;
+  cam.dip = clamp(cam.dip + cam.dipV * dt, -0.08, 0.3);
   cam.punch = damp(cam.punch, 0, 12, dt);
-  const eye = p[1] + b.eye - cam.dip;
+  // trauma shake: squared, so a small knock barely moves and a blast at your feet rattles
+  cam.trauma = Math.max(0, cam.trauma - dt * 1.4);
+  const tr = cam.trauma * cam.trauma, tt = performance.now() / 1000;
+  const tx = tr * (Math.sin(tt * 47) * 0.6 + Math.sin(tt * 31.7) * 0.4) * 0.05, ty = tr * (Math.sin(tt * 41.3 + 2) * 0.6 + Math.sin(tt * 27.1) * 0.4) * 0.05, trz = tr * Math.sin(tt * 37.9 + 4) * 0.06;
+  // over a ledge: the head ducks towards the hands as you pull up, and comes back as you roll over
+  const mk = mantleOf(b), mantleDip = mk > 0 ? Math.sin(mk * Math.PI) : 0;
+  const eye = p[1] + b.eye - cam.dip - mantleDip * 0.12;
   const hs = Math.hypot(b.vx, b.vz);
   const yaw = S.view.yaw, pitch = S.view.pitch;
   const A = a.arms, g = gunOf(A);
@@ -502,7 +526,12 @@ function placeCamera(alpha, dt) {
   const t = performance.now() / 1000;
   cam.shakeX = shake * (Math.sin(t * 37) * 0.006 + Math.sin(t * 23) * 0.004);
   cam.shakeY = shake * (Math.sin(t * 31 + 1) * 0.006 + 0.004);
-  camera.rotation.set(pitch + cam.punch + cam.shakeY, yaw + cam.shakeX, damp(camera.rotation.z, b.sliding ? 0.06 : 0, 8, dt));
+  // a wall ride leans you away from the wall it rides, the way a body against it would sit
+  const r = [Math.cos(yaw), -Math.sin(yaw)];
+  const rideSide = b.wallSlide ? (b.wsnx * r[0] + b.wsnz * r[1] < 0 ? 1 : -1) : 0;
+  cam.ride = damp(cam.ride, rideSide, rideSide ? 9 : 5, dt);
+  cam.roll = damp(cam.roll, (b.sliding ? 0.06 : 0) + mantleDip * 0.05, 8, dt);
+  camera.rotation.set(pitch + cam.punch + cam.shakeY + ty - mantleDip * 0.16, yaw + cam.shakeX + tx, cam.roll + cam.ride * 0.17 + trz);
   if (hv.thirdPerson) {
     const f = [-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
     const T = camTrace(world(), p[0], eye, p[2], p[0] - f[0] * 3.2, eye - f[1] * 3.2 + 0.4, p[2] - f[2] * 3.2);
@@ -510,7 +539,7 @@ function placeCamera(alpha, dt) {
   } else camera.position.set(p[0], eye, p[2]);
   const base = hv.fov || save.settings.fov;
   const zoom = zoomOf(A);
-  cam.fovAdd = damp(cam.fovAdd, (b.sprinting ? 4 : 0) + clamp((hs - 8) * 0.7, 0, 12) + (b.lunge === LUNGE.DASH ? 6 : 0), 5, dt);
+  cam.fovAdd = damp(cam.fovAdd, (b.sprinting ? 4 : 0) + clamp((hs - 8) * 0.7, 0, 12) + (b.lunge === LUNGE.DASH ? 6 : 0) + (b.wallSlide ? 4 : 0), 5, dt);
   // a slide widens the view by how fast it is going: quickly in, slowly back out, with a kick as it starts
   const slideWant = b.sliding ? clamp(3 + (hs - PM.slideStart) * 1.2, 3, 16) : 0;
   cam.slide = damp(cam.slide, slideWant, slideWant > cam.slide ? 10 : 3, dt);
@@ -526,7 +555,7 @@ function spectate(a, alpha, dt) {
   const target = S.spectate && S.spectate.alive ? S.spectate : a;
   const p = renderPos(target, alpha), b = target.body;
   const fresh = cam.spec !== target;
-  if (fresh) { cam.spec = target; cam.specYaw = target === a ? S.view.yaw : b.yaw; cam.specPitch = -0.25; cam.fovAdd = 0; cam.slide = 0; cam.slideKick = 0; cam.punch = 0; cam.dip = 0; }
+  if (fresh) { cam.spec = target; cam.specYaw = target === a ? S.view.yaw : b.yaw; cam.specPitch = -0.25; cam.fovAdd = 0; cam.slide = 0; cam.slideKick = 0; cam.punch = 0; cam.dip = 0; cam.dipV = 0; cam.ride = 0; cam.roll = 0; }
   // their facing, softened, and a gentle look down at them: never their scope, never upside down
   if (target !== a) cam.specYaw += wrapA(b.yaw - cam.specYaw) * Math.min(1, dt * 3);
   cam.specPitch = damp(cam.specPitch, clamp(-0.22 - (b.pitch || 0) * 0.15, -0.45, -0.05), 3, dt);
@@ -582,6 +611,10 @@ function boot() {
   on("tracer", (a, o, h) => { if (h.world && h.nx !== undefined) { hole(h.x, h.y, h.z, h.nx, h.ny, h.nz); puff(h.x + h.nx * 0.05, h.y + h.ny * 0.05, h.z + h.nz * 0.05, 0xb9b2a6, 0.35, 0.45); } else if (h.actor) puff(h.x, h.y, h.z, 0xb3202a, 0.3, 0.35); });
   on("move", (a, ev) => { if (a === S.me && ev === "slide") cam.slideKick = 1; });
   on("impact", (p, h) => { if (h.world && h.nx !== undefined) hole(h.x, h.y, h.z, h.nx, h.ny, h.nz); puff(h.x, h.y, h.z, h.actor ? 0xb3202a : 0xb9b2a6, 0.6, 0.6); });
+  initWorldFx(scene, { burst, puff });
+  // a blast shakes you the more the nearer it is; your own cannon kicks
+  on("explosion", (e) => { const d = Math.hypot(e.x - camera.position.x, e.y - camera.position.y, e.z - camera.position.z); shake(clamp(1.15 - d / (e.r * 3.2), 0, 1) * 0.95); });
+  on("fired", (a, e) => { if (a === S.me && e.gun === "cannon") shake(0.28); });
 }
 export function frame(alpha, dt) {
   if (!booted) boot();
@@ -592,8 +625,9 @@ export function frame(alpha, dt) {
   syncFigures(alpha, dt);
   updateViewmodel(dt, camera.aspect, S.cam.zoom || 1);
   updateEffects(dt);
-  updateRounds();
+  updateRounds(dt);
   updateRopes();
+  updateWorldFx(dt, alpha);
   updatePads(clockT);
   sky.position.copy(camera.position);
   renderer.clear();
@@ -603,6 +637,8 @@ export function frame(alpha, dt) {
     renderer.render(vScene, vCam);
   }
   S.cam.scoped = vmScoped;
+  // the picture, while it is still in the drawing buffer: a flashbang burns it into your eyes (fx.js)
+  screenfx.afterRender(canvas, dt, camera);
 }
 /** Title screen: a slow orbit over the arena. */
 export function idle(t, dt) {
@@ -616,6 +652,7 @@ export function idle(t, dt) {
   hideFigures();
   for (const R of ropes) { R.line.visible = false; R.head.visible = false; }
   updateEffects(dt);
+  updateWorldFx(dt, 1);
   updatePads(clockT);
   sky.position.copy(camera.position);
   renderer.clear();

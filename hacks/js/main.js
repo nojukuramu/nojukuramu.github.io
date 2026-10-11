@@ -35,6 +35,8 @@ import * as net from "./net.js";
 import * as mpui from "./mpui.js";
 import * as lobby from "./lobby.js";
 import * as orient from "./orient.js";
+import * as buy from "./buy.js";
+import * as gyro from "./gyro.js";
 
 if (!cleanName(save.data.name)) { save.data.name = "Player " + Math.floor(100 + Math.random() * 900); save.commit(); }
 
@@ -48,6 +50,8 @@ hud.init();
 menus.init();
 hackui.init();
 mpui.init();
+buy.init();
+gyro.init();
 game.setLocalCmd(() => hackapi.patch(input.buildCmd()));
 
 /* ---------------------------------------------------------------
@@ -119,10 +123,17 @@ on("tracer", (a, o, h, gun) => {
 });
 on("impact", (p, h) => render.burst(h.x, h.y, h.z, h.actor ? 10 : 6, h.actor ? 0xff5f5f : 0xffe0a0, 4));
 on("fired", (a, e) => { if (a === S.me) render.vmFire(e); });
-on("arms", (a, e) => { if (a === S.me && e.type === "swing") render.vmSwing(); });
+on("arms", (a, e) => {
+  if (a !== S.me) return;
+  if (e.type === "swing") render.vmSwing();
+  else if (e.type === "throw") render.vmThrow(e.quick);
+});
+// a cut that lands at speed stops your hands dead for an instant and jars the view
+on("slash", (a, e) => { if (a === S.me && e.hit && e.speed > 8) { render.vmHitStop(e.mul); render.shake(0.32); } });
 on("move", (a, ev) => {
   if (a !== S.me) return;
   if (ev === "land") render.landDip(a.body.landSpeed);
+  if (ev === "jump" || ev === "walljump") render.vmJump();
   if (ev === "pad") render.burst(a.body.x, a.body.y, a.body.z, 20, 0x6dffa0, 6);
 });
 on("died", (b) => { if (b.alive === false) render.burst(b.body.x, b.body.y + 1, b.body.z, 24, 0xff5f5f, 5); });
