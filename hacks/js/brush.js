@@ -63,6 +63,28 @@ export function makeBrush(verts, faces, props) {
   // by the edge's plane pushed out into empty air.
   const axial = [[1, 0, 0, max[0]], [-1, 0, 0, -min[0]], [0, 1, 0, max[1]], [0, -1, 0, -min[1]], [0, 0, 1, max[2]], [0, 0, -1, -min[2]]];
   for (const a of axial) if (!planes.some((p) => p[0] * a[0] + p[1] * a[1] + p[2] * a[2] > 0.9999)) planes.push(a);
+  // Edge bevels, as q3map's AddBrushBevels adds them: for every slanted edge, each plane through it
+  // that is square to an axis and has the whole brush behind it. A box and a convex solid are apart
+  // exactly when one of the faces, an axis, or an edge-cross-axis plane separates them, so with these
+  // the pushed-out planes are exact. Without them a plane pushed out past a slanted edge reaches into
+  // the air beyond it, and where two pieces of a curve meet — the banks — a body sliding along one was
+  // stopped dead by the end face of the next, which it was nowhere near.
+  for (const f of outFaces) {
+    for (let i = 0; i < f.idx.length; i++) {
+      const a = verts[f.idx[i]], e = norm(sub(verts[f.idx[(i + 1) % f.idx.length]], a));
+      if (Math.abs(e[0]) > 0.9999 || Math.abs(e[1]) > 0.9999 || Math.abs(e[2]) > 0.9999) continue;
+      for (let k = 0; k < 3; k++) for (const s of [1, -1]) {
+        const ax = [0, 0, 0]; ax[k] = s;
+        let n = [e[1] * ax[2] - e[2] * ax[1], e[2] * ax[0] - e[0] * ax[2], e[0] * ax[1] - e[1] * ax[0]];
+        const l = Math.hypot(n[0], n[1], n[2]);
+        if (l < 0.5) continue;
+        n = [n[0] / l, n[1] / l, n[2] / l];
+        if (planes.some((p) => p[0] * n[0] + p[1] * n[1] + p[2] * n[2] > 0.9999)) continue;
+        const d = dot(n, a);
+        if (verts.every((v) => dot(n, v) - d < 0.01)) planes.push([n[0], n[1], n[2], d]);
+      }
+    }
+  }
   const P = new Float64Array(planes.length * 4);
   planes.forEach((p, i) => P.set(p, i * 4));
   return Object.assign({ kind: "wall" }, props || {}, { planes: P, np: planes.length, min, max, verts, faces: outFaces });

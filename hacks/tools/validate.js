@@ -363,6 +363,19 @@ const allJs = jsFiles.map(read).join("\n");
     const kev = [];
     for (let i = 0; i < 3; i++) { pmove(rideW, ride.q, { fwd: 1, side: 0, yaw: 0, pitch: 0, buttons: B.CROUCH | (i === 1 ? B.JUMP : 0) }, TICK, {}); kev.push(...ride.q.ev); ride.q.ev.length = 0; }
     check("jump off a ridden wall: out from it, up, keeping the speed along it", kev.includes("walljump") && ride.q.vx > 5 && ride.q.vy > 4 && ride.q.vz < -6, [ride.q.vx, ride.q.vy, ride.q.vz].map((v) => v.toFixed(1)).join(","));
+    // the wall ride off the ground: crouched along a wall in the air, the wall holds you up, more the faster
+    const airW = buildWorld([box(-50, -1, -100, 50, 0, 100), box(-40, 0, -100, -39, 40, 100, { kind: "ride" })]);
+    const airRide = (sp, btn, vy) => { const q = newBody(-38.55, 30, 50, 0); q.vz = -sp; q.vy = vy || 0; let r = 0, top = 30; run(q, 64, (i, z) => { if (z.wallSlide) r++; top = Math.max(top, z.y); return { fwd: 0, side: 0, yaw: 0, pitch: 0, buttons: btn }; }, airW); return { q, r, fell: 30 - q.y, top }; };
+    const held = airRide(8, B.CROUCH), loose = airRide(8, 0);
+    check("crouched along a wall in the air, you ride it and fall far slower", held.r > 60 && held.fell < loose.fell * 0.5, held.fell.toFixed(2) + " m vs " + loose.fell.toFixed(2) + " m in a second");
+    check("without a crouch the wall does not catch you", loose.r === 0);
+    const fast = airRide(16, B.CROUCH), slow = airRide(7, B.CROUCH);
+    check("the faster the ride, the slower the fall", fast.fell < slow.fell * 0.4, fast.fell.toFixed(2) + " m at 16 m/s, " + slow.fell.toFixed(2) + " m at 7");
+    const upRide = airRide(14, B.CROUCH, 6), upOpen = (() => { const q = newBody(0, 30, 50, 0); q.vz = -14; q.vy = 6; let top = 30; run(q, 64, (i, z) => { top = Math.max(top, z.y); return { fwd: 0, side: 0, yaw: 0, pitch: 0, buttons: B.CROUCH }; }, airW); return top; })();
+    check("a ride going up is not held up: it is never a way to climb", Math.abs(upRide.top - upOpen) < 0.05, upRide.top.toFixed(2) + " vs " + upOpen.toFixed(2));
+    const aev = [];
+    for (let i = 0; i < 3; i++) { pmove(airW, held.q, { fwd: 0, side: 0, yaw: 0, pitch: 0, buttons: B.CROUCH | (i === 1 ? B.JUMP : 0) }, TICK, {}); aev.push(...held.q.ev); held.q.ev.length = 0; }
+    check("jump off a wall ridden in the air: out from it and up", aev.includes("walljump") && held.q.vx > 5 && held.q.vy > 4, [held.q.vx, held.q.vy, held.q.vz].map((v) => v.toFixed(1)).join(","));
     // wall jump: along a wall at 8 m/s, tap jump
     const wj = newBody(9.55, 2, -4, Math.PI); wj.vz = 8;
     const ev = [];
@@ -432,13 +445,27 @@ const allJs = jsFiles.map(read).join("\n");
     const W = MAP.buildMap();
     check("the arena is closed: a lid and four walls", W.brushes.some((b) => b.kind === "clip") && W.min[0] <= -64 && W.max[0] >= 64);
     check("every spawn point is somewhere a body fits", W.spawns.every((s) => MV.fits(W, s.x, s.y, s.z, false)), W.spawns.length);
-    check("every kind of place is there: surf, shaft, slope, canopy, pad, slipway, and the Skyway, the Halo and kites above them", ["surf", "shaft", "slope", "canopy", "pad", "ride", "bridge", "halo", "kite"].every((k) => W.brushes.some((b) => b.kind === k)));
+    check("every kind of place is there: surf, shaft, slope, canopy, pad, slipway, bank, and the Skyway, the Halo and kites above them", ["surf", "shaft", "slope", "canopy", "pad", "ride", "bank", "bridge", "halo", "kite"].every((k) => W.brushes.some((b) => b.kind === k)));
     {
       // the slipway: a slide from its top, crouched, rides its panel down the run
       const q = newBody(60.3, 2.42, 1.5, Math.PI);
       let rode = 0;
       for (let i = 0; i < 64 * 4; i++) { pmove(W, q, { fwd: i < 20 ? 1 : 0.2, side: 0, yaw: Math.PI, pitch: 0, buttons: i < 20 ? B.SPRINT : B.CROUCH }, TICK, {}); q.ev.length = 0; if (q.wallSlide) rode++; }
       check("a slide down a slipway rides its panel along the run", rode > 120 && q.z > 30, rode + " ticks riding, to z " + q.z.toFixed(1));
+    }
+    {
+      // the bank: ground at its foot, surf up its middle, a wall to ride at its top
+      const up = W.brushes.filter((b) => b.kind === "bank").flatMap((b) => b.faces).map((f) => f.n[1]).filter((ny) => ny > 0.01 && ny < 0.999);
+      check("a bank turns from ground, through surf, into wall", up.some((ny) => ny >= PM.walkable) && up.some((ny) => ny < PM.walkable && ny > 0.35) && up.some((ny) => ny < 0.35));
+      // out of the alley at a slide, crouched, and nothing else pressed: the bank carries you round the corner
+      const q = newBody(60.4, 0.02, 30, 0); q.vz = 14;
+      run(q, 128, () => ({ fwd: 0, side: 0, yaw: 0, pitch: 0, buttons: B.CROUCH }), W);
+      check("a slide out of the alley is carried round the bank and out along the perch", q.x < 56 && q.z > 44 && q.vx < -4, q.x.toFixed(1) + "," + q.z.toFixed(1) + " at " + hspeed(q).toFixed(1) + " m/s");
+      // fast and high: up the bank, round, and onto the perch's side as a ride, never stopped by a seam
+      const hi = newBody(60.4, 0.02, 30, 0); hi.vz = 18;
+      let low = Infinity;
+      run(hi, 120, (i, z) => { if (i > 10) low = Math.min(low, hspeed(z)); return { fwd: 0, side: 0, yaw: Math.atan2(-z.vx, -z.vz), pitch: 0, buttons: B.CROUCH }; }, W);
+      check("taken fast, the bank lifts you round it without catching on a seam", low > 9 && hi.x < 52, "slowest " + low.toFixed(1) + " m/s, to x " + hi.x.toFixed(1));
     }
     const surfFaces = W.brushes.filter((b) => b.kind === "surf").flatMap((b) => b.faces).filter((f) => f.n[1] > 0.1);
     check("the surf ridges are too steep to stand on", surfFaces.length > 0 && surfFaces.every((f) => f.n[1] < PM.walkable));
@@ -476,6 +503,11 @@ const allJs = jsFiles.map(read).join("\n");
     check("every gun's rounds go through bodies, losing damage each time, snipers furthest", g.every((x) => x.pen && x.pen[1] < 1) && WP.GUNS.condor.pen[0] >= 3 && WP.GUNS.talon.pen[0] > WP.GUNS.hornet.pen[0]);
     check("a nut shot does more than the body, less than the head", WP.damageFor(WP.GUNS.kestrel, 5, "nut") > WP.damageFor(WP.GUNS.kestrel, 5, "body") && WP.damageFor(WP.GUNS.kestrel, 5, "nut") < WP.damageFor(WP.GUNS.kestrel, 5, "head"));
     check("a blade hits harder the faster you go: nothing extra at a run, twice at 18 m/s", WP.speedBonus(5) === 1 && Math.abs(WP.speedBonus(18) - 2) < 1e-9 && WP.speedBonus(40) === 2.5);
+    {
+      const all = WP.MELEE_IDS.flatMap((id) => [WP.MELEE[id].swingDmg, WP.MELEE[id].lungeDmg]);
+      check("at ×1.5 any blade hit does 200 — a full red shield, or full health under a full blue one", all.every((d) => Math.abs(WP.bladeDamage(d, 1.5) - 200) < 1e-9) && WP.BLADE_FAST === 200);
+      check("at a run a blade does its own damage, and more speed is always more", all.every((d) => WP.bladeDamage(d, 1) === d && WP.bladeDamage(d, 1.2) < WP.bladeDamage(d, 1.4) && WP.bladeDamage(d, 1.5) < WP.bladeDamage(d, 2.5)));
+    }
     {
       const S2 = WP.newArms({ primary: "talon", secondary: "wasp", melee: "katana" });
       const b2 = newBody(0, 0, 0, 0); b2.onGround = true;
@@ -657,11 +689,18 @@ const allJs = jsFiles.map(read).join("\n");
     put(S.me, 0, 34); put(w, 0, 32.6, Math.PI); w.hp = 100; ticks(1);
     S.view.yaw = 0; S.view.pitch = 0; S.me.body.vz = -16; cmd.buttons = B.MELEE; ticks(1); cmd.buttons = 0;
     const cut = hits.find((h) => h.by === S.me && h.i.melee);
-    check("a blade swung at speed cuts deeper", cut && cut.d > WP_KATANA_SWING * 1.4 && cut.i.speedMul > 1.4, cut && cut.d);
+    check("a blade swung at speed cuts deeper", cut && cut.d > WP_KATANA_SWING * 1.4 && cut.i.speedMul > 1.4 && Math.abs(cut.d - Math.round(WP.bladeDamage(WP_KATANA_SWING, cut.i.speedMul) * 10) / 10) < 0.11, cut && cut.d);
     // 5. a swing steps you into it
     put(S.me, 0, 34); ticks(30); S.me.arms.swingCd = 0;
     S.view.yaw = 0; cmd.buttons = B.MELEE; ticks(1); cmd.buttons = 0; ticks(1);
     check("a swing from a standstill steps you forward", -S.me.body.vz > 1.5, S.me.body.vz.toFixed(2));
+    // 5b. a lunge at ×1.5 takes a full blue shield and the body under it, passing beside them
+    G.spawn(w); put(S.me, 0, 34); put(w, 0.9, 29, Math.PI); ticks(30);
+    w.hp = 100; w.shieldLevel = 2; w.shieldMax = w.shield = 100; S.me.lungeHits.clear(); hits.length = 0; feed.length = 0;
+    Object.assign(S.me.body, { lunge: MV.LUNGE.DASH, lungeT: 0.5, lungeDir: [0, 0, -1], vx: 0, vy: 0, vz: -12 });
+    S.view.yaw = 0; S.view.pitch = 0; ticks(32);
+    const stab = hits.find((h) => h.by === S.me && h.i.lunge);
+    check("a lunge at ×1.5 kills through a full blue shield, passing beside its target", !!stab && Math.abs(stab.i.speedMul - 1.5) < 0.08 && stab.d >= 190 && !w.alive, stab ? stab.d + " at ×" + stab.i.speedMul.toFixed(2) + (w.alive ? ", still alive" : ", dead") : "no hit");
     G.quit(); feed.length = 0; hits.length = 0;
 
     // 6. shields: taken first, charged back, evolved by damage
@@ -744,6 +783,7 @@ const allJs = jsFiles.map(read).join("\n");
     const defs = C.ACTIONS.flatMap((a) => a.def.filter(Boolean));
     check("no key is bound twice by default", new Set(defs).size === defs.length, defs.filter((d, i) => defs.indexOf(d) !== i).join(","));
     check("jump can be the wheel, as Source players bhop", C.ACTIONS.find((a) => a.id === "jump").def.includes("WheelDown"));
+    check("the grapple has no key or button of its own: it is a weapon, drawn like one", !C.ACTIONS.some((a) => a.id === "hook") && !C.TOUCH.some((t) => t.action === "hook") && !/edges\.has\("hook"\)/.test(read("js/input.js")));
     check("Escape can never be bound", !C.validCode("Escape") && C.validCode("KeyG"));
     for (const o of ["landscape", "portrait"]) {
       const L = C.TOUCH_LAYOUTS[o];
