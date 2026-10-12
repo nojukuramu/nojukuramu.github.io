@@ -28,7 +28,8 @@
  * speeds it up), wall climb (jump into a wall, then keep pushing forward; a
  * ledge within reach is grabbed and climbed over by itself — the mantle),
  * wall jump (tap jump beside a wall; your speed along the wall is kept), the
- * wall ride (slide fast along a wall and you ride it; jump to kick away), the melee lunge
+ * wall ride (slide fast along a wall and you ride it, on the ground or off it —
+ * in the air it holds you up, the faster the more; jump to kick away), the melee lunge
  * (hold to stick to whatever surface you touch, release to launch where you
  * look — harder the more squarely you face away from the surface), and the
  * grapple's rope (hold to be reeled in, steer to swing; it lets go when the
@@ -88,6 +89,13 @@ export const PM = {
   wallSlideDrag: 0.3,
   wallSlideStick: 3,      // m/s² into the wall, so a ride along a slightly curving run keeps its contact
   wallSlideKick: 6.5,     // the jump off a ridden wall: out from it, on top of the speed along it
+  wallAirMin: 5.5,        // in the air, crouched along a wall at least this fast grips it
+  wallAirFull: 15,        // and by this speed the grip is all it will ever be
+  wallAirHold: 0.45,      // the share of gravity a slow ride cancels while falling …
+  wallAirHoldFull: 0.88,  // … and a fast one
+  wallAirFall: 7,         // the fastest a slow ride lets you sink, m/s …
+  wallAirFallFull: 1.2,   // … and a fast one
+  wallAirStick: 9,        // m/s² into the wall, three times the ground's: in the air nothing else holds you there
   wallPush: 5.5,
   wallUp: 6.0,
   wallCooldown: 0.18,
@@ -514,6 +522,41 @@ function wallRide(W, p) {
   p.wsnx = nx; p.wsnz = nz;
   return true;
 }
+/* Off the ground the ride goes on, and can start: crouched, fast, along a wall. Nothing under you
+   carries you any more, so the wall has to — it pulls you in harder than on the ground, and it
+   holds you up, more the faster you go along it: at a jog you sink, at a sprint-slide you barely
+   do. Only the fall is held up; a ride going up still slows as any jump does, so it is never a
+   way to climb. Kept to a crouch so a wall jump, a climb or a swing past a wall is not caught. */
+function airRide(W, p, crouch, dt) {
+  const s = hspeed(p);
+  if (!crouch || p.climbing || p.lunge !== L_IDLE || p.hook === H_ON || s < (p.wallSlide ? PM.wallAirMin - 1.5 : PM.wallAirMin)) return endRide(p);
+  const n = wallBeside(W, p);
+  if (!n) return endRide(p);
+  const hl = Math.hypot(n[0], n[2]) || 1, nx = n[0] / hl, nz = n[2] / hl;
+  const vn = p.vx * nx + p.vz * nz;
+  if (Math.abs(vn) > s * 0.5) return endRide(p);
+  if (!p.wallSlide) { p.wallSlide = true; p.ev.push("wallslide"); }
+  p.wsnx = nx; p.wsnz = nz;
+  // the wall's light touch, as on the ground: it barely slows you
+  const ns = Math.max(0, s - (s * PM.wallSlideFriction + PM.wallSlideDrag) * dt) / s;
+  p.vx *= ns; p.vz *= ns;
+  // stuck to it: drifting away from the wall is damped, and you are drawn in
+  const out = Math.max(0, p.vx * nx + p.vz * nz) * Math.min(1, dt * 10) + PM.wallAirStick * dt;
+  p.vx -= nx * out; p.vz -= nz * out;
+  // and a fall already faster than this ride allows is caught, over a few ticks rather than at once
+  if (p.vy < 0) {
+    const cap = PM.wallAirFall + (PM.wallAirFallFull - PM.wallAirFall) * rideGrip(p);
+    if (p.vy < -cap) p.vy += (-cap - p.vy) * Math.min(1, dt * 8);
+  }
+  return true;
+}
+/** How hard a ride in the air holds on, 0..1, by the speed along the wall. */
+function rideGrip(p) { return Math.max(0, Math.min(1, (hspeed(p) - PM.wallAirMin) / (PM.wallAirFull - PM.wallAirMin))); }
+/** The share of gravity that reaches a body: all of it, except falling on a ridden wall. */
+function rideFall(p) {
+  if (!p.wallSlide || p.onGround || p.vy > 0) return 1;
+  return 1 - (PM.wallAirHold + (PM.wallAirHoldFull - PM.wallAirHold) * rideGrip(p));
+}
 function endRide(p) { if (p.wallSlide) { p.wallSlide = false; p.ev.push("wallslideend"); } return false; }
 function rideKick(p) {
   const nx = p.wsnx, nz = p.wsnz, vn = p.vx * nx + p.vz * nz;
@@ -760,11 +803,11 @@ export function pmove(W, p, cmd, dt, o) {
 
   const dash = p.lunge === L_DASH;
   const gk = dash ? 0.3 : p.hook === H_ON ? PM.hookGravity : 1;
-  if (!p.onGround && !p.climbing) p.vy -= g * gk * 0.5 * dt;
+  if (!p.onGround && !p.climbing) p.vy -= g * gk * rideFall(p) * 0.5 * dt;
 
   // Jump: off the ground, off a wall, or held for a landing one tick away.
   if (p.jumpBuf > 0 && p.lunge !== L_CHARGE) {
-    if (p.onGround && p.wallSlide) { rideKick(p); p.jumpBuf = 0; }
+    if (p.wallSlide && (p.onGround || p.jumpBuf === PM.jumpBuffer)) { rideKick(p); p.jumpBuf = 0; }
     else if (p.onGround) {
       p.vy = PM.jump * p.jumpScale;
       p.onGround = false; p.groundTicks = -1;
@@ -814,7 +857,7 @@ export function pmove(W, p, cmd, dt, o) {
     else { endRide(p); if (!dash && p.groundTicks > 0) friction(p, dt); }
     walkMove(W, p, cmd, dt, o);
   } else {
-    endRide(p);
+    airRide(W, p, crouch, dt);
     if (!p.climbing) {
       const w = wish(p, cmd, maxSpeed(p, o));
       if (w[2] > 0) airAccelerate(p, w[0], w[1], w[2], PM.airaccelerate, dt);
@@ -824,7 +867,7 @@ export function pmove(W, p, cmd, dt, o) {
 
   const wasGround = p.onGround;
   categorize(W, p);
-  if (!p.onGround && !p.climbing) p.vy -= g * gk * 0.5 * dt;
+  if (!p.onGround && !p.climbing) p.vy -= g * gk * rideFall(p) * 0.5 * dt;
   if (p.onGround && !wasGround && crouch && !p.sliding) { if (!p.crouched) duck(W, p, true); startSlide(p, false); }
   if (!p.onGround && p.sliding) p.sliding = false;
 

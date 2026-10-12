@@ -41,7 +41,8 @@ const TOPICS = {
       "<p><b>Slide.</b> Crouch while sprinting. Downhill, a slide speeds up; jump out of it to keep the speed. On a ramp, crouching slides you down it from a standstill.</p>" +
       "<p><b>Wall climb.</b> Press jump into a wall, then keep pushing forward: you climb for as long as you hold " + k("W") + " (jump need not be held), and letting go lets go of the wall. Press jump while climbing to kick off backwards.</p>" +
       "<p><b>Mantle.</b> A ledge within reach of your hands is caught and climbed over by itself, Apex-style: jump at a crate holding " + k("W") + " and you are on it.</p>" +
-      "<p><b>Wall ride.</b> Slide fast along a wall and you ride it, barely slowing; the view leans off the wall. Jump to kick off it, keeping your speed along it. The teal slipways in each corner are made for it.</p>" +
+      "<p><b>Wall ride.</b> Slide fast along a wall and you ride it, barely slowing; the view leans off the wall. In the air too: hold crouch along a wall and it holds you — the faster you go, the slower you fall. Jump to kick off it, keeping your speed along it. The teal slipways in each corner are made for it.</p>" +
+      "<p><b>Banks.</b> Where each alley comes out, the floor curves up into the wall and round the corner, like a race track's turn. Come in fast and it carries you round; the faster, the higher you ride, up to the wall at its top.</p>" +
       "<p><b>Wall jump.</b> Beside a wall in the air, tap jump. You keep your speed along the wall. The red shafts are made for it.</p>" +
       "<p><b>Lunge.</b> With the blade out (" + k("3") + "), hold " + k("Mouse 2") + " on any surface — floor, wall, ceiling — and you stick to it and charge. Let go to launch where you look. " +
       "Facing straight away from the surface is the strongest launch.</p>" +

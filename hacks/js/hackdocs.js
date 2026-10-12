@@ -438,7 +438,7 @@ export const API = [
     ["alive, hp, maxHp, team, id, name, kills, deaths, respawnIn", ""],
     ["shield, shieldMax, shieldLevel, shieldNext", "Your shield: on top of hp, taken first; its level (1–4, 50 a level); how far the next level is (0–1)."],
     ["utility", "Slot 4: { id, name, count, max, cooldown, next } — next is the seconds until a spent charge is back."],
-    ["wallRiding, mantling, mantle, climbArmed, blind", "Riding a wall; climbing over a ledge, and how far (0–1); a jump press is still making a climb possible; how flashed you are (0–1)."],
+    ["wallRiding, mantling, mantle, climbArmed, blind", "Riding a wall (on the ground or in the air); climbing over a ledge, and how far (0–1); a jump press is still making a climb possible; how flashed you are (0–1)."],
     ["onGround, crouched, sliding, climbing, sprinting, groundKind, groundNormal", "What your body is doing, and what it stands on."],
     ["lunge, lungeCharge, lungeStuck, lungeNormal", "\"idle\" / \"charging\" / \"dashing\"; 0–1; stuck to a surface; that surface's outward normal."],
     ["slideCooldown, wallJumpReady, climbLeft, jumpHeld", "Movement timers and state."],

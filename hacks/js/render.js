@@ -224,7 +224,7 @@ function surface(kind) {
   };
   return { map: tex(c, true), normalMap: tex(nc, false) };
 }
-const CLASS = { floor: "concrete", wall: "concrete", block: "concrete", slope: "concrete", crate: "concrete", trim: "metal", shaft: "metal", core: "metal", canopy: "metal", surf: "surf", bridge: "metal", halo: "metal", kite: "metal", ride: "metal" };
+const CLASS = { floor: "concrete", wall: "concrete", block: "concrete", slope: "concrete", crate: "concrete", trim: "metal", shaft: "metal", core: "metal", canopy: "metal", surf: "surf", bridge: "metal", halo: "metal", kite: "metal", ride: "metal", bank: "concrete" };
 
 let mapGroup = null;
 const pads = [];

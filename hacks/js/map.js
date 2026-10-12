@@ -16,7 +16,11 @@
  *   - the slipway: a steep slide-in down beside a bright panel on the outer
  *     wall, and an alley under the sniper's nest with a panel on each side —
  *     slide fast along one and you ride it, jump and you kick off it, onto
- *     the other.
+ *     the other;
+ *   - the bank: where the alley comes out, the floor curves up into the
+ *     outer wall and round the corner into the perch's face, like the turn
+ *     of a race track — so a ride out of the alley can be carried round and
+ *     out along the perch at speed instead of stopping at the wall.
  *
  * The middle is the Core: two climbable tiers with a ramp up each side.
  *
@@ -60,8 +64,76 @@ export const KINDS = {
   kite:   { color: 0xff8a3d, grid: 1 },
   crate:  { color: 0xae8d5f, grid: 1 },
   ride:   { color: 0x2fe0c8, grid: 1 },
+  bank:   { color: 0xd8608e, grid: 1 },
   clip:   { color: 0x000000, grid: 0, invisible: true }
 };
+
+/* ---------------------------------------------------------------
+   Banks
+   --------------------------------------------------------------- */
+/*
+ * A bank's cross-section is a quarter circle of radius BANK_R: flat at its
+ * foot, vertical where it meets its wall. A curve cannot be a brush, so it is
+ * cut into BANK_STEPS slabs, each a convex solid from one chord of the circle
+ * back into the wall — stacked, they are the curve. Every slab has its own
+ * flat face, and what that face's angle is decides what it is: the lower ones
+ * are ground to run up, the middle ones too steep to stand on (you surf them),
+ * and the top ones steep enough to count as a wall, so a crouch there is a
+ * wall ride. None of that is special-cased; it is the same rules as anywhere.
+ *
+ * `at(e, w, h)` places a point of the cross-section in the world: end e (0 or
+ * 1) of the piece, w metres out in front of the wall line, h up. Writing the
+ * pieces that way lets the straight runs and the slices of a turn share one
+ * slab, and lets a straight run taper (see below).
+ */
+const BANK_R = 4, BANK_STEPS = 8, BANK_TOP = 6;
+/* The cross-section for a radius of one metre: [w, h] from the foot to the top of the wall. Scaling
+   it scales about the wall's base, which is what keeps a tapering run's faces flat (see bankRun). */
+const BANK_PROFILE = (() => {
+  const out = [];
+  for (let k = 0; k <= BANK_STEPS; k++) { const t = (k / BANK_STEPS) * Math.PI / 2; out.push([1 - Math.sin(t), 1 - Math.cos(t)]); }
+  return out;
+})();
+/* One slab: between profile points a and b (metres; a[e] and b[e] at end e), back into the wall. */
+function bankSlab(at, a, b, back) {
+  const v = [];
+  for (const e of [0, 1]) v.push(at(e, a[e][0], a[e][1]), at(e, b[e][0], b[e][1]), at(e, -back, b[e][1]), at(e, -back, a[e][1]));
+  return makeBrush(v, [[0, 1, 2, 3], [4, 5, 6, 7], [0, 4, 5, 1], [1, 5, 6, 2], [2, 6, 7, 3], [3, 7, 4, 0]], { kind: "bank" });
+}
+/* A straight run along a wall: the wall line from p0 to p1 (plan [x, z]), n the way the bank faces,
+   its radius going from r0 at p0 to r1 at p1. An open end at full size would be a quarter-circle face
+   as tall as the bank, a wall to run into, so an open end tapers away to a lip low enough to step
+   over: the bank rises out of the floor under whatever arrives along the wall. Each slab's corners at
+   both ends are the same profile point scaled, so its faces are still flat and it is still convex. */
+function bankRun(p0, p1, n, r0, r1) {
+  const len = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), d = [(p1[0] - p0[0]) / len, (p1[1] - p0[1]) / len];
+  const at = (e, w, h) => { const s = e ? len : 0; return [p0[0] + d[0] * s + n[0] * w, h, p0[1] + d[1] * s + n[1] * w]; };
+  const P = (k) => [[BANK_PROFILE[k][0] * r0, BANK_PROFILE[k][1] * r0], [BANK_PROFILE[k][0] * r1, BANK_PROFILE[k][1] * r1]];
+  const out = [];
+  for (let k = 0; k < BANK_STEPS; k++) out.push(bankSlab(at, P(k), P(k + 1), 0.5));
+  return out;
+}
+/* A turn: the wall line a quarter circle of radius R about c, from angle a0 to a1, in `slices`
+   pieces. Its outside is filled back to the square corner it sits in (corner, plan [x, z]), and it
+   goes on up past the bank's own height to BANK_TOP, so the turn ends in a wall, not a ledge. */
+function bankTurn(c, R, a0, a1, slices, corner) {
+  const out = [];
+  const prof = BANK_PROFILE.map(([w, h]) => [w * BANK_R, h * BANK_R]).concat([[0, BANK_TOP]]);
+  for (let i = 0; i < slices; i++) {
+    const f0 = a0 + ((a1 - a0) * i) / slices, f1 = a0 + ((a1 - a0) * (i + 1)) / slices;
+    const ang = [f0, f1];
+    const at = (e, w, h) => { const ca = Math.cos(ang[e]), sa = Math.sin(ang[e]); return [c[0] + ca * (R - w), h, c[1] + sa * (R - w)]; };
+    // back far enough that the chord at the back covers the corner: the farthest the square's sides
+    // (or its corner, if this slice faces it) are from c, inside this slice
+    const hit = (f) => Math.min(Math.abs((corner[0] - c[0]) / (Math.cos(f) || 1e-9)), Math.abs((corner[1] - c[1]) / (Math.sin(f) || 1e-9)));
+    let far = Math.max(hit(f0), hit(f1));
+    const fc = Math.atan2(corner[1] - c[1], corner[0] - c[0]);
+    if (fc > Math.min(f0, f1) && fc < Math.max(f0, f1)) far = Math.max(far, Math.hypot(corner[0] - c[0], corner[1] - c[1]));
+    const back = far / Math.cos(Math.abs(f1 - f0) / 2) - R + 0.05;
+    for (let k = 0; k < prof.length - 1; k++) out.push(bankSlab(at, [prof[k], prof[k]], [prof[k + 1], prof[k + 1]], back));
+  }
+  return out;
+}
 
 /* One quarter: x and z both from 0 to 64. */
 function quarter() {
@@ -111,6 +183,15 @@ function quarter() {
   B.push(prism([[2.5, 0], [2.5, 2.4], [11, 0]], "x", 54.5, 60.9, { kind: "slope" }));
   B.push(box(60.9, 0, 0.5, 61.99, 4.2, 36, { kind: "ride" }));
   B.push(box(56.6, 0, 22, 57.2, 4.2, 36, { kind: "ride" }));
+
+  // the bank: out of the alley, the floor curves up into the outer wall, round the corner, and along
+  // the perch's face. Both open ends rise out of the floor, so the alley's ride runs straight onto it.
+  {
+    const C = [55, 41], R = 7;
+    B.push(...bankRun([62, 36], [62, C[1]], [-1, 0], 0.3, BANK_R));
+    B.push(...bankTurn(C, R, 0, Math.PI / 2, 6, [62, 48]));
+    B.push(...bankRun([C[0], 48], [48, 48], [0, -1], BANK_R, 0.3));
+  }
 
   // cover
   B.push(box(10, 0, 40, 12.5, 1.25, 42.5, { kind: "crate" }));
@@ -181,7 +262,7 @@ export function buildMap() {
 
 /* Spawn points: four a quarter, facing the middle. */
 function spawns() {
-  const one = [[6, 49], [36, 3], [56, 12], [30, 56], [58, 42], [3, 18]];
+  const one = [[6, 49], [36, 3], [56, 12], [30, 56], [50, 40], [3, 18]];
   const out = [];
   for (let q = 0; q < 4; q++) for (const [x0, z0] of one) {
     let x = x0, z = z0;

@@ -363,6 +363,19 @@ const allJs = jsFiles.map(read).join("\n");
     const kev = [];
     for (let i = 0; i < 3; i++) { pmove(rideW, ride.q, { fwd: 1, side: 0, yaw: 0, pitch: 0, buttons: B.CROUCH | (i === 1 ? B.JUMP : 0) }, TICK, {}); kev.push(...ride.q.ev); ride.q.ev.length = 0; }
     check("jump off a ridden wall: out from it, up, keeping the speed along it", kev.includes("walljump") && ride.q.vx > 5 && ride.q.vy > 4 && ride.q.vz < -6, [ride.q.vx, ride.q.vy, ride.q.vz].map((v) => v.toFixed(1)).join(","));
+    // the wall ride off the ground: crouched along a wall in the air, the wall holds you up, more the faster
+    const airW = buildWorld([box(-50, -1, -100, 50, 0, 100), box(-40, 0, -100, -39, 40, 100, { kind: "ride" })]);
+    const airRide = (sp, btn, vy) => { const q = newBody(-38.55, 30, 50, 0); q.vz = -sp; q.vy = vy || 0; let r = 0, top = 30; run(q, 64, (i, z) => { if (z.wallSlide) r++; top = Math.max(top, z.y); return { fwd: 0, side: 0, yaw: 0, pitch: 0, buttons: btn }; }, airW); return { q, r, fell: 30 - q.y, top }; };
+    const held = airRide(8, B.CROUCH), loose = airRide(8, 0);
+    check("crouched along a wall in the air, you ride it and fall far slower", held.r > 60 && held.fell < loose.fell * 0.5, held.fell.toFixed(2) + " m vs " + loose.fell.toFixed(2) + " m in a second");
+    check("without a crouch the wall does not catch you", loose.r === 0);
+    const fast = airRide(16, B.CROUCH), slow = airRide(7, B.CROUCH);
+    check("the faster the ride, the slower the fall", fast.fell < slow.fell * 0.4, fast.fell.toFixed(2) + " m at 16 m/s, " + slow.fell.toFixed(2) + " m at 7");
+    const upRide = airRide(14, B.CROUCH, 6), upOpen = (() => { const q = newBody(0, 30, 50, 0); q.vz = -14; q.vy = 6; let top = 30; run(q, 64, (i, z) => { top = Math.max(top, z.y); return { fwd: 0, side: 0, yaw: 0, pitch: 0, buttons: B.CROUCH }; }, airW); return top; })();
+    check("a ride going up is not held up: it is never a way to climb", Math.abs(upRide.top - upOpen) < 0.05, upRide.top.toFixed(2) + " vs " + upOpen.toFixed(2));
+    const aev = [];
+    for (let i = 0; i < 3; i++) { pmove(airW, held.q, { fwd: 0, side: 0, yaw: 0, pitch: 0, buttons: B.CROUCH | (i === 1 ? B.JUMP : 0) }, TICK, {}); aev.push(...held.q.ev); held.q.ev.length = 0; }
+    check("jump off a wall ridden in the air: out from it and up", aev.includes("walljump") && held.q.vx > 5 && held.q.vy > 4, [held.q.vx, held.q.vy, held.q.vz].map((v) => v.toFixed(1)).join(","));
     // wall jump: along a wall at 8 m/s, tap jump
     const wj = newBody(9.55, 2, -4, Math.PI); wj.vz = 8;
     const ev = [];
@@ -432,13 +445,27 @@ const allJs = jsFiles.map(read).join("\n");
     const W = MAP.buildMap();
     check("the arena is closed: a lid and four walls", W.brushes.some((b) => b.kind === "clip") && W.min[0] <= -64 && W.max[0] >= 64);
     check("every spawn point is somewhere a body fits", W.spawns.every((s) => MV.fits(W, s.x, s.y, s.z, false)), W.spawns.length);
-    check("every kind of place is there: surf, shaft, slope, canopy, pad, slipway, and the Skyway, the Halo and kites above them", ["surf", "shaft", "slope", "canopy", "pad", "ride", "bridge", "halo", "kite"].every((k) => W.brushes.some((b) => b.kind === k)));
+    check("every kind of place is there: surf, shaft, slope, canopy, pad, slipway, bank, and the Skyway, the Halo and kites above them", ["surf", "shaft", "slope", "canopy", "pad", "ride", "bank", "bridge", "halo", "kite"].every((k) => W.brushes.some((b) => b.kind === k)));
     {
       // the slipway: a slide from its top, crouched, rides its panel down the run
       const q = newBody(60.3, 2.42, 1.5, Math.PI);
       let rode = 0;
       for (let i = 0; i < 64 * 4; i++) { pmove(W, q, { fwd: i < 20 ? 1 : 0.2, side: 0, yaw: Math.PI, pitch: 0, buttons: i < 20 ? B.SPRINT : B.CROUCH }, TICK, {}); q.ev.length = 0; if (q.wallSlide) rode++; }
       check("a slide down a slipway rides its panel along the run", rode > 120 && q.z > 30, rode + " ticks riding, to z " + q.z.toFixed(1));
+    }
+    {
+      // the bank: ground at its foot, surf up its middle, a wall to ride at its top
+      const up = W.brushes.filter((b) => b.kind === "bank").flatMap((b) => b.faces).map((f) => f.n[1]).filter((ny) => ny > 0.01 && ny < 0.999);
+      check("a bank turns from ground, through surf, into wall", up.some((ny) => ny >= PM.walkable) && up.some((ny) => ny < PM.walkable && ny > 0.35) && up.some((ny) => ny < 0.35));
+      // out of the alley at a slide, crouched, and nothing else pressed: the bank carries you round the corner
+      const q = newBody(60.4, 0.02, 30, 0); q.vz = 14;
+      run(q, 128, () => ({ fwd: 0, side: 0, yaw: 0, pitch: 0, buttons: B.CROUCH }), W);
+      check("a slide out of the alley is carried round the bank and out along the perch", q.x < 56 && q.z > 44 && q.vx < -4, q.x.toFixed(1) + "," + q.z.toFixed(1) + " at " + hspeed(q).toFixed(1) + " m/s");
+      // fast and high: up the bank, round, and onto the perch's side as a ride, never stopped by a seam
+      const hi = newBody(60.4, 0.02, 30, 0); hi.vz = 18;
+      let low = Infinity;
+      run(hi, 120, (i, z) => { if (i > 10) low = Math.min(low, hspeed(z)); return { fwd: 0, side: 0, yaw: Math.atan2(-z.vx, -z.vz), pitch: 0, buttons: B.CROUCH }; }, W);
+      check("taken fast, the bank lifts you round it without catching on a seam", low > 9 && hi.x < 52, "slowest " + low.toFixed(1) + " m/s, to x " + hi.x.toFixed(1));
     }
     const surfFaces = W.brushes.filter((b) => b.kind === "surf").flatMap((b) => b.faces).filter((f) => f.n[1] > 0.1);
     check("the surf ridges are too steep to stand on", surfFaces.length > 0 && surfFaces.every((f) => f.n[1] < PM.walkable));

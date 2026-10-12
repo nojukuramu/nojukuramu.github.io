@@ -26,7 +26,8 @@ ground. None of the techniques are coded; they are what that code does when play
 | Sprint, slide | Crouch at a sprint to slide, with a boost on a cooldown; a slide while it recharges, or out of a landing, still gets a smaller push (never past 12 m/s, and tapping crouch builds nothing). The view widens with the slide's speed. Downhill, gravity along the slope speeds a slide up — and on a ramp steeper than about 12°, crouching slides you down it from a standstill. Jump out of it to keep the speed. |
 | Wall climb | Press jump into a wall, then keep pushing forward: you climb while W is held (jump need not be), and letting go of W lets go of the wall. Jump while climbing to kick off it backwards. |
 | Mantle | A ledge within reach of your hands (about 2.4 m above your feet) is caught and climbed over by itself, up the face and then onto the top, the way Apex does it — jump at a crate holding W and you are on it. |
-| Wall ride | Slide fast (over ~7 m/s) along a wall and you ride it: the wall carries you, so it barely slows you, and the view leans off it. Jump to kick off it, keeping your speed along it. Each corner has a slipway — a steep slide-in beside a teal panel, then an alley with a panel on either side to kick between. |
+| Wall ride | Slide fast (over ~7 m/s) along a wall and you ride it: the wall carries you, so it barely slows you, and the view leans off it. Off the ground it goes on, and can start: hold crouch moving along a wall in the air (over ~5.5 m/s) and the wall pulls you in and holds you up — the faster you go along it, the less you sink, from about half of gravity at a jog to barely falling at 15 m/s. Only a fall is held up, so a ride is never a way to climb. Jump to kick off it, keeping your speed along it. Each corner has a slipway — a steep slide-in beside a teal panel, then an alley with a panel on either side to kick between. |
+| Banks | Where each alley comes out, the floor curves up into the outer wall, round the corner and along the perch's face, like the turn of a race track. A slide out of the alley is carried round it with nothing pressed; come in faster and you ride higher, through the part too steep to stand on (a surf) to the top, steep enough to wall ride. Both open ends rise out of the floor, so nothing arriving along the wall runs into them. |
 | Wall jump | Tap jump beside a wall. Your speed along the wall is kept; the same wall twice in a row does not count. The red shafts are made for it. |
 | Lunge | With the blade out, hold Aim (right click; the Aim button on a phone) on any surface — floor, wall, ceiling — and you stick to it and charge. Release to launch where you look; the more squarely you face away from the surface, the harder. A tap is a quick swing. |
 | Grapple | Carried in place of a gun, primary or secondary: its key (E) draws it and puts it away. Hold Fire and the hook flies where you look; where it bites, the rope reels you in, and lets go by itself when you arrive. The rope never lengthens, so moving away from the hook becomes going round it: steer with the move keys to swing. Hook a player and you are each pulled towards the other. Let go to stop; a wall between you and the hook cuts it. |
@@ -34,6 +35,11 @@ ground. None of the techniques are coded; they are what that code does when play
 Steep slopes used to stop a body dead halfway down: against a slanted face a rounding error made the
 same plane count twice, and the crease between a plane and itself has no direction. The slide-move now
 nudges off a plane it meets again, as Quake III's `PM_SlideMove` does.
+
+The banks are curves cut into slabs, and where two slabs met a fast body was stopped dead by the end
+face of the next one, which it was not touching: a plane pushed out by a box's reach over-reaches past a
+slanted edge. Every brush now also gets q3map's edge bevels — each plane through a slanted edge that is
+square to an axis and has the whole brush behind it — which make the pushed-out planes exact.
 
 The simulation runs in fixed 64 Hz ticks paid out of real elapsed time (`js/clock.js`) and the
 screen is drawn between them, so 30, 60, 144 and 240 fps give the same result — the validator
@@ -93,7 +99,8 @@ axis (`js/viewmodel.js`). The Talon looks through a scope instead.
 ## The arena
 
 Relay, one quarter drawn by hand and turned four ways, so no corner is a worse place to spawn: a surf
-ridge, a wall-jump shaft to a sniper's nest, a slide hill, a canopy to lunge up to, a perch, a jump pad,
+ridge, a wall-jump shaft to a sniper's nest, a slide hill, a canopy to lunge up to, a perch with a banked turn
+in front of it, a jump pad,
 and the Core in the middle. Above that is a second map, for fighting in the air:
 
 - **the Skyway**: a ring of bridges twelve metres up, all the way round, with an on-ramp and a pad in
