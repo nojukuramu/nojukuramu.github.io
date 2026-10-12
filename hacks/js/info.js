@@ -32,7 +32,7 @@ const TOPICS = {
     body:
       "<p><b>Keys</b> (all rebindable): " + k("W A S D") + " move · " + k("Space") + " or the wheel jump · " + k("Ctrl") + " crouch / slide · " +
       k("Shift") + " sprint · " + k("=") + " auto-run · " + k("Mouse 1") + " fire · " + k("Mouse 2") + " aim, or lunge with the blade · " + k("R") + " reload · " +
-      k("V") + " quick melee · " + k("E") + " grappling gun · " + k("G") + " quick throw · " + k("Z") + " sniper zoom · " + k("1") + k("2") + k("3") + k("4") + " weapons and utility · " + k("B") + " buy · " + k("Tab") + " scores · " + k("H") + " hacks · " + k("Esc") + " menu.</p>" +
+      k("V") + " quick melee · " + k("G") + " quick throw · " + k("Z") + " sniper zoom · " + k("1") + k("2") + k("3") + k("4") + " weapons and utility · " + k("B") + " buy · " + k("Tab") + " scores · " + k("H") + " hacks · " + k("Esc") + " menu.</p>" +
       "<p>Sprinting stands you up out of a crouch; aiming or firing ends a sprint.</p>" +
       "<p><b>Bunny hop.</b> Friction only happens on the ground. Press jump the moment you land — not before, not held — and you keep all your speed.</p>" +
       "<p><b>Air strafe.</b> In the air, hold " + k("A") + " or " + k("D") + " (not " + k("W") + ") and turn the mouse the same way, smoothly. " +
@@ -46,7 +46,7 @@ const TOPICS = {
       "<p><b>Wall jump.</b> Beside a wall in the air, tap jump. You keep your speed along the wall. The red shafts are made for it.</p>" +
       "<p><b>Lunge.</b> With the blade out (" + k("3") + "), hold " + k("Mouse 2") + " on any surface — floor, wall, ceiling — and you stick to it and charge. Let go to launch where you look. " +
       "Facing straight away from the surface is the strongest launch.</p>" +
-      "<p><b>Grapple.</b> Carried instead of a gun (Loadout). " + k("E") + " draws it (and puts it away), then hold " + k("Mouse 1") + ": the hook flies where you look and reels you in, and lets go by itself when you arrive. Steer with " + k("W A S D") + " to swing. " +
+      "<p><b>Grapple.</b> Carried instead of a gun (Loadout), and drawn like one, by its slot's number. Hold " + k("Mouse 1") + ": the hook flies where you look and reels you in, and lets go by itself when you arrive. Steer with " + k("W A S D") + " to swing. " +
       "Hook a player and you are both pulled together — have your blade or shotgun ready. Let go to stop. The rope cannot pass through walls.</p>"
   },
   bots: {

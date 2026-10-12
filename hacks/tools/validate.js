@@ -504,6 +504,11 @@ const allJs = jsFiles.map(read).join("\n");
     check("a nut shot does more than the body, less than the head", WP.damageFor(WP.GUNS.kestrel, 5, "nut") > WP.damageFor(WP.GUNS.kestrel, 5, "body") && WP.damageFor(WP.GUNS.kestrel, 5, "nut") < WP.damageFor(WP.GUNS.kestrel, 5, "head"));
     check("a blade hits harder the faster you go: nothing extra at a run, twice at 18 m/s", WP.speedBonus(5) === 1 && Math.abs(WP.speedBonus(18) - 2) < 1e-9 && WP.speedBonus(40) === 2.5);
     {
+      const all = WP.MELEE_IDS.flatMap((id) => [WP.MELEE[id].swingDmg, WP.MELEE[id].lungeDmg]);
+      check("at ×1.5 any blade hit does 200 — a full red shield, or full health under a full blue one", all.every((d) => Math.abs(WP.bladeDamage(d, 1.5) - 200) < 1e-9) && WP.BLADE_FAST === 200);
+      check("at a run a blade does its own damage, and more speed is always more", all.every((d) => WP.bladeDamage(d, 1) === d && WP.bladeDamage(d, 1.2) < WP.bladeDamage(d, 1.4) && WP.bladeDamage(d, 1.5) < WP.bladeDamage(d, 2.5)));
+    }
+    {
       const S2 = WP.newArms({ primary: "talon", secondary: "wasp", melee: "katana" });
       const b2 = newBody(0, 0, 0, 0); b2.onGround = true;
       for (let i = 0; i < 40; i++) WP.armsTick(S2, { buttons: B.ADS, slot: 0 }, b2, TICK, Math.random, B);
@@ -684,11 +689,18 @@ const allJs = jsFiles.map(read).join("\n");
     put(S.me, 0, 34); put(w, 0, 32.6, Math.PI); w.hp = 100; ticks(1);
     S.view.yaw = 0; S.view.pitch = 0; S.me.body.vz = -16; cmd.buttons = B.MELEE; ticks(1); cmd.buttons = 0;
     const cut = hits.find((h) => h.by === S.me && h.i.melee);
-    check("a blade swung at speed cuts deeper", cut && cut.d > WP_KATANA_SWING * 1.4 && cut.i.speedMul > 1.4, cut && cut.d);
+    check("a blade swung at speed cuts deeper", cut && cut.d > WP_KATANA_SWING * 1.4 && cut.i.speedMul > 1.4 && Math.abs(cut.d - Math.round(WP.bladeDamage(WP_KATANA_SWING, cut.i.speedMul) * 10) / 10) < 0.11, cut && cut.d);
     // 5. a swing steps you into it
     put(S.me, 0, 34); ticks(30); S.me.arms.swingCd = 0;
     S.view.yaw = 0; cmd.buttons = B.MELEE; ticks(1); cmd.buttons = 0; ticks(1);
     check("a swing from a standstill steps you forward", -S.me.body.vz > 1.5, S.me.body.vz.toFixed(2));
+    // 5b. a lunge at ×1.5 takes a full blue shield and the body under it, passing beside them
+    G.spawn(w); put(S.me, 0, 34); put(w, 0.9, 29, Math.PI); ticks(30);
+    w.hp = 100; w.shieldLevel = 2; w.shieldMax = w.shield = 100; S.me.lungeHits.clear(); hits.length = 0; feed.length = 0;
+    Object.assign(S.me.body, { lunge: MV.LUNGE.DASH, lungeT: 0.5, lungeDir: [0, 0, -1], vx: 0, vy: 0, vz: -12 });
+    S.view.yaw = 0; S.view.pitch = 0; ticks(32);
+    const stab = hits.find((h) => h.by === S.me && h.i.lunge);
+    check("a lunge at ×1.5 kills through a full blue shield, passing beside its target", !!stab && Math.abs(stab.i.speedMul - 1.5) < 0.08 && stab.d >= 190 && !w.alive, stab ? stab.d + " at ×" + stab.i.speedMul.toFixed(2) + (w.alive ? ", still alive" : ", dead") : "no hit");
     G.quit(); feed.length = 0; hits.length = 0;
 
     // 6. shields: taken first, charged back, evolved by damage
@@ -771,6 +783,7 @@ const allJs = jsFiles.map(read).join("\n");
     const defs = C.ACTIONS.flatMap((a) => a.def.filter(Boolean));
     check("no key is bound twice by default", new Set(defs).size === defs.length, defs.filter((d, i) => defs.indexOf(d) !== i).join(","));
     check("jump can be the wheel, as Source players bhop", C.ACTIONS.find((a) => a.id === "jump").def.includes("WheelDown"));
+    check("the grapple has no key or button of its own: it is a weapon, drawn like one", !C.ACTIONS.some((a) => a.id === "hook") && !C.TOUCH.some((t) => t.action === "hook") && !/edges\.has\("hook"\)/.test(read("js/input.js")));
     check("Escape can never be bound", !C.validCode("Escape") && C.validCode("KeyG"));
     for (const o of ["landscape", "portrait"]) {
       const L = C.TOUCH_LAYOUTS[o];

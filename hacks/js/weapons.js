@@ -17,7 +17,8 @@
  *              a surface and charge, release to launch. The Katana charges
  *              fast, lunges short and cuts wide; the Lancer charges slowly,
  *              lunges far and hard, and only hits what is in front of its tip.
- *              Either hits harder the faster you are going (speedBonus).
+ *              Either hits harder the faster you are going (speedBonus,
+ *              bladeDamage): at ×1.5, 200, whichever blade and however it lands.
  *
  *   Launcher  Cannon: a slow, falling ball that bursts where it lands. The blast
  *              hurts and throws everyone near it — you too, by less — and the
@@ -99,6 +100,20 @@ export function utilCooldown(A) { const U = UTILS[A.util]; return A.utilN >= U.c
  * readout and the hack API, so all three agree.
  */
 export function speedBonus(speed) { return 1 + Math.max(0, Math.min(1.5, (speed - 6) / 12)); }
+/**
+ * What a blade hit does at a speed bonus `k`: its own damage at a run, then
+ * climbing to BLADE_FAST by ×1.5 whatever the blade or the move, and on in
+ * proportion past that. ×1.5 is a slide or a hop at 12 m/s, and BLADE_FAST is a
+ * full red shield, or a full-health body under a full blue one — so a blade
+ * that arrives moving is a kill on anyone short of the top shield, not a roll
+ * of whether the charge was full and the angle square. Below ×1.5 the blade
+ * keeps its own character; standing still a quick melee stays a poke.
+ */
+export const BLADE_FAST = 200;
+export function bladeDamage(base, k) {
+  if (k >= 1.5) return BLADE_FAST * k / 1.5;
+  return base + (BLADE_FAST - base) * Math.max(0, k - 1) / 0.5;
+}
 
 export const DEFAULT_LOADOUT = { primary: "kestrel", secondary: "wasp", melee: "katana", utility: "frag" };
 export function cleanLoadout(l) {

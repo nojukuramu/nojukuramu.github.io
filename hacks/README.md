@@ -30,7 +30,7 @@ ground. None of the techniques are coded; they are what that code does when play
 | Banks | Where each alley comes out, the floor curves up into the outer wall, round the corner and along the perch's face, like the turn of a race track. A slide out of the alley is carried round it with nothing pressed; come in faster and you ride higher, through the part too steep to stand on (a surf) to the top, steep enough to wall ride. Both open ends rise out of the floor, so nothing arriving along the wall runs into them. |
 | Wall jump | Tap jump beside a wall. Your speed along the wall is kept; the same wall twice in a row does not count. The red shafts are made for it. |
 | Lunge | With the blade out, hold Aim (right click; the Aim button on a phone) on any surface — floor, wall, ceiling — and you stick to it and charge. Release to launch where you look; the more squarely you face away from the surface, the harder. A tap is a quick swing. |
-| Grapple | Carried in place of a gun, primary or secondary: its key (E) draws it and puts it away. Hold Fire and the hook flies where you look; where it bites, the rope reels you in, and lets go by itself when you arrive. The rope never lengthens, so moving away from the hook becomes going round it: steer with the move keys to swing. Hook a player and you are each pulled towards the other. Let go to stop; a wall between you and the hook cuts it. |
+| Grapple | Carried in place of a gun, primary or secondary, and drawn like one — by its slot's number (1 or 2), Last or Next weapon; it has no key of its own. Hold Fire and the hook flies where you look; where it bites, the rope reels you in, and lets go by itself when you arrive. The rope never lengthens, so moving away from the hook becomes going round it: steer with the move keys to swing. Hook a player and you are each pulled towards the other. Let go to stop; a wall between you and the hook cuts it. |
 
 Steep slopes used to stop a body dead halfway down: against a slanted face a rounding error made the
 same plane count twice, and the crease between a plane and itself has no direction. The slide-move now
@@ -88,9 +88,12 @@ quiet seconds, before health does. A hit marker on a shield is drawn in that shi
 A swing steps you into it. At speed a cut leaves an arc across the view — a cold streak when it cuts air, a
 hot one with a jolt of red and an instant of hit-stop when it lands.
 
-Blades hit harder the faster you are going when they land (speed in all three axes, so a dive counts):
-nothing extra at a run, twice as hard at 18 m/s, two and a half times past 24. The multiplier shows
-by the crosshair, and carried at speed the blade is held low and forward with lines streaming past.
+Blades hit harder the faster you are going when they land (speed in all three axes, so a dive counts).
+The multiplier by the crosshair runs from ×1 at a run to ×2.5 past 24 m/s, and at ×1.5 (12 m/s — a slide
+or a hop) any blade hit, swing or lunge, Katana or Lancer, does 200: a full red shield, or a full-health
+body under a full blue one. Below that each blade climbs from its own damage; above it the hit grows on in
+proportion. A lunge hits whoever it passes through, checked along the whole stretch it travelled each
+tick, so a fast one no longer slips past a target between two checks. Carried at speed the blade is held low and forward with lines streaming past.
 
 Aiming puts the gun's own sights in the middle of the screen, exactly where the shot goes, on any
 screen shape: every model's sight line is level, and the aimed pose puts it on the gun camera's

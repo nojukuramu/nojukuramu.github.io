@@ -23,7 +23,7 @@
  *
  * The buttons say what they do with what is in your hands: Fire shows the
  * hook with the grapple out and the blade with the blade, and Aim becomes the
- * lunge; the grapple's button is dimmed when you are not carrying one.
+ * lunge.
  *
  * Hack buttons. A phone has no keys, so a hack that waits for one — every
  * ui.key(…) a running hack made, "Hold to fly" and the like — gets a button
@@ -39,7 +39,7 @@ import { TOUCH } from "./controls.js";
 import { icon } from "./icons.js";
 import { touchState, touchPress, touchRelease, look, latched, setAutoRun, autoRunning, virtualDown, virtualUp } from "./input.js";
 import { keyButtons } from "./hackapi.js";
-import { grappleSlot, grappleOut, bladeOut, utilOut } from "./weapons.js";
+import { grappleOut, bladeOut, utilOut } from "./weapons.js";
 import { clamp } from "./util.js";
 import { appSize, toApp, appRect } from "./orient.js";
 
@@ -209,8 +209,7 @@ export function sync() {
   for (const t of TOUCH) {
     const el = els.get(t.id);
     if (!el) continue;
-    el.classList.toggle("latched", t.action === "hook" ? !!A && grappleOut(A) : latched(t.action));
-    if (t.action === "hook") el.classList.toggle("na", !!A && grappleSlot(A) < 0);
+    el.classList.toggle("latched", latched(t.action));
     if (t.action === "util") el.classList.toggle("na", !!A && A.utilN <= 0);
     if (t.id === "stick") continue;
     const ic = iconFor(t);

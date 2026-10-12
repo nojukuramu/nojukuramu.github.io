@@ -27,7 +27,7 @@
  * keeps you going forward until you touch a move key or the stick.
  *
  * Slot 4 is the utility, and the quick-throw key throws it from anything.
- * The grapple's key draws whichever slot carries the grapple, if one does.
+ * The grapple is a weapon like any other: drawn by its slot's number, not a key of its own.
  * B opens the buy menu; while it is open the number keys are its (buy.js).
  * Touch buttons a hack asked for (touch.js) press their key here as a key
  * would, and the gyro (gyro.js) turns the view through turn(). */
@@ -36,7 +36,7 @@ import { S, emit, on } from "./state.js";
 import { save } from "./save.js";
 import { ACTIONS, MODAL_IDS, MIXED_HOLD } from "./controls.js";
 import { B } from "./movement.js";
-import { SLOT_UTIL, grappleOut, grappleSlot, gunOf } from "./weapons.js";
+import { SLOT_UTIL, grappleOut, gunOf } from "./weapons.js";
 import * as buy from "./buy.js";
 import { clamp } from "./util.js";
 
@@ -233,8 +233,6 @@ export function buildCmd() {
   else if (edges.has("slot2")) slot = 2;
   else if (edges.has("slot3")) slot = 3;
   else if (edges.has("slot4")) slot = SLOT_UTIL + 1;
-  // the grapple's key draws whichever slot carries it, and puts it away again
-  else if (edges.has("hook") && A && grappleSlot(A) >= 0) slot = grapple ? -1 : grappleSlot(A) + 1;
   else if (edges.has("last")) slot = -1;
   else if (edges.has("next") && A) slot = ((A.cur + 1) % 4) + 1;
   // a new weapon comes up unaimed

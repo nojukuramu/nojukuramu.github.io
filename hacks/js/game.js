@@ -24,7 +24,7 @@
 
 import { S, emit } from "./state.js";
 import { newBody, pmove, TICK, B, LUNGE, HOOK, PM, lookDir, forward, right, placeBody } from "./movement.js";
-import { newArms, armsTick, GUNS, MELEE, UTILS, damageFor, speedMulOf, holdOf, cleanLoadout, speedBonus, bladeOut, grappleOut, equip } from "./weapons.js";
+import { newArms, armsTick, GUNS, MELEE, UTILS, damageFor, speedMulOf, holdOf, cleanLoadout, speedBonus, bladeDamage, bladeOut, grappleOut, equip } from "./weapons.js";
 import { pose, stepPhase, rayBones, BONES, BI } from "./skeleton.js";
 import { ray, trace, newTrace } from "./brush.js";
 import { buildMap } from "./map.js";
@@ -816,7 +816,7 @@ function swingHit(a) {
   let hits = 0;
   for (const b of S.actors) {
     if (b === a || !b.alive || !isEnemy(a, b)) continue;
-    if (inCone(a, b, dir, m.swingReach, m.swingCone)) { hits++; hitActor(b, m.swingDmg * k, a, { weapon: m.id, part: "body", melee: true, speedMul: k, air: airborne(b) }); }
+    if (inCone(a, b, dir, m.swingReach, m.swingCone)) { hits++; hitActor(b, bladeDamage(m.swingDmg, k), a, { weapon: m.id, part: "body", melee: true, speedMul: k, air: airborne(b) }); }
   }
   swingPush(a);
   emit("slash", a, { hit: hits > 0, speed: speedOf(a), mul: k, melee: m.id });
@@ -833,16 +833,28 @@ function swingPush(a) {
   const add = Math.min(SWING_PUSH * k, cap - along);
   b.vx += f[0] * add; b.vz += f[2] * add;
 }
+/* A lunge hits whoever it passes, not only whoever is in its cone on the tick it is checked: at 25 m/s
+   a body covers 0.4 m a tick, and a target crossed between two checks used to be missed clean. So
+   the test is against the stretch the eye travelled this tick — the nearest it came to the target —
+   and anyone it came within a body's width of is hit whatever the cone says. The damage is the
+   blade's at this speed (bladeDamage); how squarely the launch faced away from its surface already
+   decided that speed, so it is not counted a second time. */
 function lungeHit(a) {
   const m = MELEE[a.arms.melee];
-  const body = a.body;
+  const body = a.body, e = eyeOf(a), d = body.lungeDir;
+  const sx = e[0] - body.vx * TICK, sy = e[1] - body.vy * TICK, sz = e[2] - body.vz * TICK;
+  const ux = e[0] - sx, uy = e[1] - sy, uz = e[2] - sz, ul = ux * ux + uy * uy + uz * uz;
   for (const b of S.actors) {
     if (b === a || !b.alive || a.lungeHits.has(b.id) || !isEnemy(a, b)) continue;
-    if (inCone(a, b, body.lungeDir, m.lungeReach, m.lungeCone)) {
-      a.lungeHits.add(b.id);
-      const k = speedBonus(speedOf(a));
-      hitActor(b, m.lungeDmg * (0.4 + 0.6 * Math.min(1, body.lungePower / 0.8)) * k, a, { weapon: m.id, part: "body", melee: true, lunge: true, speedMul: k, air: airborne(b) });
-    }
+    const tx = b.body.x, ty = b.body.y + 1.1, tz = b.body.z;
+    const t = ul > 1e-9 ? Math.max(0, Math.min(1, ((tx - sx) * ux + (ty - sy) * uy + (tz - sz) * uz) / ul)) : 1;
+    const cx = tx - (sx + ux * t), cy = ty - (sy + uy * t), cz = tz - (sz + uz * t);
+    const dist = Math.hypot(cx, cy, cz);
+    if (dist > m.lungeReach + 0.4) continue;
+    if (dist > 1.2 && (cx * d[0] + cy * d[1] + cz * d[2]) / dist < Math.cos(m.lungeCone * Math.PI / 180)) continue;
+    a.lungeHits.add(b.id);
+    const k = speedBonus(speedOf(a));
+    hitActor(b, bladeDamage(m.lungeDmg, k), a, { weapon: m.id, part: "body", melee: true, lunge: true, speedMul: k, air: airborne(b) });
   }
 }
 
