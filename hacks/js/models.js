@@ -25,10 +25,13 @@ const GUN_FILES = ["kestrel", "hornet", "wasp", "brick", "mauler", "talon", "kat
    rifle grown to a .50 — its anchors scale with it, so its scope still sits on the axis when aimed. */
 const DERIVED = { condor: { from: "talon", scale: 1.16, tint: 0x5a5e52 } };
 const M = { guns: {}, human: null };
-let started = false, loaded = 0;
+let started = false, loaded = 0, settled = 0;
 const listeners = [];
 
 export const modelsReady = () => loaded === GUN_FILES.length + 1;
+/* Arrived or given up on: what the loading screen waits for (loader.js), so a model that never comes
+   (offline before the first install finished) holds nothing up — the boxes stand in, as above. */
+export const modelsProgress = () => settled / (GUN_FILES.length + 1);
 export function onModels(fn) { listeners.push(fn); }
 
 /** One template per file: the scene, and the anchors as plain vectors. */
@@ -46,14 +49,15 @@ export function loadModels() {
   if (started) return;
   started = true;
   const loader = new GLTFLoader();
-  const done = () => { loaded++; if (modelsReady()) listeners.forEach((f) => f()); };
+  const done = () => { loaded++; settled++; if (modelsReady()) listeners.forEach((f) => f()); };
+  const failed = () => { settled++; };
   for (const id of GUN_FILES) {
-    loader.load("assets/models/" + id + ".glb", (g) => { M.guns[id] = template(id, g.scene); derive(id); done(); }, undefined, () => { /* keep the boxes */ });
+    loader.load("assets/models/" + id + ".glb", (g) => { M.guns[id] = template(id, g.scene); derive(id); done(); }, undefined, failed /* keep the boxes */);
   }
   loader.load("assets/models/human.glb", (g) => {
     const body = g.scene.getObjectByName("Body");
-    if (body) { M.human = g.scene; done(); }
-  }, undefined, () => { /* keep the mannequins */ });
+    if (body) { M.human = g.scene; done(); } else failed();
+  }, undefined, failed /* keep the mannequins */);
 }
 
 function derive(from) {

@@ -37,6 +37,8 @@ import * as lobby from "./lobby.js";
 import * as orient from "./orient.js";
 import * as buy from "./buy.js";
 import * as gyro from "./gyro.js";
+import * as loader from "./loader.js";
+import { modelsProgress } from "./models.js";
 
 if (!cleanName(save.data.name)) { save.data.name = "Player " + Math.floor(100 + Math.random() * 900); save.commit(); }
 
@@ -58,6 +60,8 @@ game.setLocalCmd(() => hackapi.patch(input.buildCmd()));
    Starting and leaving a match
    --------------------------------------------------------------- */
 function enterMatch() {
+  // the match is built at once, under the cover; its first frames compile the bodies and the gun out of sight
+  loader.cover(S.net.role === "solo" ? "loading arena" : "joining match");
   orient.lock();            // a solo start is a tap, so the real lock may be granted; otherwise the game turns
   menus.leaveTitle();
   hud.show(true);
@@ -94,9 +98,12 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.25, Math.max(0, (now - last) / 1000));
   last = now;
+  if (loader.skipFrame()) return;
   if (S.mode === "play" && S.match) {
     hackapi.beforeTicks();
-    if (!S.paused) alpha = clock.advance(dt, game.tick);
+    // alone, the world waits for you behind the cover; in a room it is other people's match too, and goes on
+    const held = loader.covering() && S.net.role === "solo";
+    if (!S.paused && !held) alpha = clock.advance(dt, game.tick);
     net.update(dt);
     audio.tickSteps(dt);
     render.frame(alpha, dt);
@@ -107,7 +114,11 @@ function frame(now) {
   } else {
     render.idle(now / 1000, dt);
   }
+  loader.afterFrame();
 }
+// The first visit: the cover is in the page from the first paint and lifts once the arena has been drawn
+// and every model has arrived or failed, so nothing on the title pops in. A dead network gives up waiting.
+loader.cover("loading", { progress: modelsProgress, ready: () => modelsProgress() >= 1, min: 0, max: 15000 });
 requestAnimationFrame(frame);
 
 /* ---------------------------------------------------------------

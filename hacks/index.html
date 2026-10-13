@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Hacks">
 <link rel="stylesheet" href="css/game.css">
 <!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
-<script>window.HK_VERSION = "9";</script>
+<script>window.HK_VERSION = "10";</script>
 <script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
 </head>
 <body class="atTitle">
@@ -301,6 +301,14 @@
   <button id="update-later" class="iconBtn" aria-label="Later"><i data-icon="close"></i></button>
 </div>
 
+<!-- ============ loading (loader.js): up from the first paint, and again for every match ============ -->
+<div id="loading" role="status" aria-live="polite">
+  <div class="logo" aria-hidden="true"><span class="prompt">&gt;</span>HACKS<span class="cursor"></span></div>
+  <div class="lbar"><i id="loadBar"></i></div>
+  <p id="loadText" class="mono">loading</p>
+  <noscript><p>Hacks needs JavaScript. That is rather the point.</p></noscript>
+</div>
+
 </div>
 
 <!-- ============ the hacks panel ============ -->
@@ -346,7 +354,6 @@
 <!-- ============ key capture ============ -->
 <div id="bindCapture" hidden><div class="panel"><b id="bindWhat"></b><p>Press a key or a mouse button, or scroll.</p><small class="muted">Escape cancels · Backspace clears</small></div></div>
 
-<noscript><p class="noscript">Hacks needs JavaScript. That is rather the point.</p></noscript>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>
