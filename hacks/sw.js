@@ -6,7 +6,7 @@
    answers "skip-waiting" when the page asks, and CACHE carries the same
    number as window.HK_VERSION in index.html — tools/validate.js refuses to
    let the two drift. Bumping it is what publishes an update. */
-var CACHE = "hacks-v9";
+var CACHE = "hacks-v10";
 var SHELL = [
   "./",
   "./index.html",
@@ -55,6 +55,7 @@ var SHELL = [
   "./js/fx.js",
   "./js/buy.js",
   "./js/gyro.js",
+  "./js/loader.js",
   "./vendor/build/three.module.min.js",
   "./vendor/jsm/loaders/GLTFLoader.js",
   "./vendor/jsm/utils/BufferGeometryUtils.js",

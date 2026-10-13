@@ -125,6 +125,8 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     const D = await open(browser, base); pages.push(D);
     const p = D.page;
     check("the title screen is up", await p.isVisible("#scr-title"));
+    check("the loading screen lifts once the arena is drawn and the models are in", await soft(until(p, () => document.getElementById("loading").hidden, null, 30000)) &&
+      await p.evaluate(async () => (await import("./js/models.js")).modelsProgress() === 1));
     check("the version line says which version", /Version \d/.test(await p.textContent("#verLine")));
     await shot(p, "01-title");
 
@@ -158,6 +160,11 @@ const fastForward = (page, seconds) => page.evaluate((s) => { const { game } = w
     await p.evaluate(() => { const r = document.getElementById("spBots"); r.value = 5; r.dispatchEvent(new Event("input")); });
     await p.click('#spDiff [data-v="hard"]');
     await p.click("#btnPlayGo");
+    check("starting a match covers the screen while it is built", await p.evaluate(() => !document.getElementById("loading").hidden && /arena/.test(document.getElementById("loadText").textContent)));
+    await shot(p, "01-loading");
+    const t0 = await p.evaluate(() => window.HK_DEBUG.S.tick);
+    check("and the world waits behind the cover", await p.evaluate(async (t) => { const L = await import("./js/loader.js"); return !L.covering() || window.HK_DEBUG.S.tick === t; }, t0));
+    check("then the cover lifts", await soft(until(p, () => document.getElementById("loading").hidden, null, 15000)));
     await until(p, () => window.HK_DEBUG.S.mode === "play" && window.HK_DEBUG.S.me && window.HK_DEBUG.S.me.alive);
     check("the match starts with you and five bots", await p.evaluate(() => window.HK_DEBUG.S.actors.length === 6 && window.HK_DEBUG.S.actors.filter((a) => a.kind === "bot").length === 5));
     check("your loadout is in your hands", await p.evaluate(() => window.HK_DEBUG.S.me.arms.slots[0] === "mauler" && window.HK_DEBUG.S.me.arms.melee === "lancer"));
