@@ -252,14 +252,17 @@ Live at <https://nojukuramu.github.io/routecast/>.
   by the next fix, because those are decisions, not stray pans.
 - **Motorcycles avoid expressways, four ways.** Riders are barred from NLEX, SLEX,
   CAVITEX, Skyway and most Philippine expressways.
-  1. **An exclusion ladder, strictest first.** OSRM's stock car profile declares three
-     excludable classes and accepts them combined, so the first request sends
-     `exclude=motorway,toll`. Every PH expressway a motorcycle is barred from is also
-     tolled, and a few of them are tagged `trunk` rather than `motorway` in OSM, so the
-     combined exclusion catches roads the plain one leaves in the line. It is also the
-     request most likely to be refused — which is why it is a rung and not the only
-     one: a refusal drops to plain `exclude=motorway`, and a refusal of *that* drops to
-     no exclusion, each rung tried in turn and the first the server honours winning.
+  1. **A router that can actually avoid them.** The OSRM demo server refuses *every*
+     `exclude` value ("Exclude flag combination is not supported"), so asking it was a
+     ladder whose every rung failed and every motorcycle route was the expressway route.
+     When expressways must be avoided, RouteCast asks FOSSGIS's public
+     [Valhalla](https://valhalla1.openstreetmap.de) instead — the router openstreetmap.org
+     itself uses, free and key-less — with its `motorcycle` costing and both
+     `exclude_highways` and `exclude_tolls` (every barred PH expressway is tolled, and a
+     few are tagged `trunk` rather than `motorway`). Valhalla reports per route whether it
+     still touches a motorway or a toll, and a line it says does is not presented as
+     avoided. If Valhalla is busy, unreachable or finds nothing legal, the route falls back
+     to plain OSRM and the panel says plainly that it may use expressways.
   2. **Alternatives, ranked by legality.** Every routing request asks for three lines
      rather than one, and for a rider they are sorted by metres spent on an expressway
      before they are sorted by time — with a 200 m dead band so a shared on-ramp never
@@ -269,7 +272,7 @@ Live at <https://nojukuramu.github.io/routecast/>.
      comes back named after the surface road it parallels, with the expressway only in
      OSRM's `ref` field: reading the instruction alone missed NLEX entirely. Both are
      checked, on every route, excluded or not.
-  4. **One second opinion.** If the exclusion was honoured and the winning line *still*
+  4. **One second opinion.** If the avoidance was honoured and the winning line *still*
      spends more than 800 m on something named like an expressway, RouteCast spends one
      more request with alternatives to see whether a clean line exists, and takes it
      only if it is genuinely cleaner. The panel names the metres and the road either
@@ -303,6 +306,7 @@ with no backend to hide a secret in.
 | Vector rendering | [MapLibre GL JS](https://maplibre.org/) | vendored, and only downloaded when a vector map is picked |
 | Place search | [Nominatim](https://nominatim.org/) | throttled to 1 request/second, as their usage policy requires |
 | Routing | [OSRM demo server](https://project-osrm.org/) | `driving` profile, with alternatives |
+| Routing, expressway-free | [Valhalla (FOSSGIS)](https://valhalla1.openstreetmap.de) | `motorcycle` costing with expressways and tolls excluded; only asked when they must be avoided |
 | Forecast | [Open-Meteo](https://open-meteo.com/) | hourly, up to 16 days, batched by location; the same request carries wind direction and each day's sunrise and sunset |
 | Voice | the browser's own speech synthesis | on the phone, no request at all |
 | Terrain | [Open-Meteo elevation](https://open-meteo.com/en/docs/elevation-api) | Copernicus DEM GLO-90, up to 100 points per request |
@@ -879,9 +883,9 @@ publishes an update.
 
 ## Honest limitations
 
-- **OSRM has no motorcycle profile.** Motorcycle routes are the driving profile with
-  motorways excluded and a speed factor applied — a reasonable approximation of filtering through traffic, not a
-  simulation of it. Treat the ETA as a good guess, not a promise.
+- **Motorcycle routes come from Valhalla's motorcycle costing** with expressways and tolls
+  excluded and a speed factor applied — a reasonable approximation of filtering through traffic, not a
+  simulation of it. When Valhalla cannot be reached they come from OSRM's driving profile, with a warning. Treat the ETA as a good guess, not a promise.
 - **ETAs assume you keep moving.** Fuel, food and photo stops shift every downstream
   checkpoint. Add them as stops if they matter.
 - **A forecast is a forecast.** Ten hours out it is a strong hint; three days out it is a
@@ -961,7 +965,7 @@ publishes an update.
   still the only way to insist.
 - **The expressway check reads names.** It is a heuristic over free text: it can miss an unnamed
   motorway segment and be fooled by an unusual one. It is a second opinion on top of
-  `exclude=motorway`, never a substitute for reading the signs.
+  Valhalla's exclusion, never a substitute for reading the signs.
 - **A free ride teaches roads, not timings.** There was no estimate for it to be right
   or wrong about, so it is recorded as roads travelled and nothing else. Its elevation
   comes from the phone's GPS altitude with a three-metre deadband rather than from the
@@ -1036,7 +1040,7 @@ routecast/
     routes.js               RC.routes   — saved routes, kept as points rather than geometry
     marks.js                RC.marks    — saved marks: coordinates you named yourself
     geocode.js              RC.geocode  — Nominatim search + reverse, throttled and cached
-    router.js               RC.router   — OSRM routing, cumulative arrays, expressway detection
+    router.js               RC.router   — OSRM + Valhalla routing, cumulative arrays, expressway detection
     sampler.js              RC.sampler  — walks the route, emits checkpoints with ETAs
     weather.js              RC.weather  — Open-Meteo batching, hourly interpolation, WMO codes
     elevation.js            RC.elevation— Open-Meteo DEM profile, climb/descent, grade at a point

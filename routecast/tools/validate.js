@@ -1077,11 +1077,58 @@ section("Behaviour: expressway detection reads refs too");
         RC.router.expresswayNames(route).length === 1);
   check("the metres are counted from the ref as well",
         RC.router.expresswayMeters(route) === 9000, String(RC.router.expresswayMeters(route)));
-  check("the motorcycle exclusion is a ladder, strictest first",
-        RC.router.VEHICLE.motorcycle.exclude[0] === "motorway,toll" &&
-        RC.router.VEHICLE.motorcycle.exclude[1] === "motorway" &&
-        RC.router.VEHICLE.motorcycle.exclude[2] === null,
-        JSON.stringify(RC.router.VEHICLE.motorcycle.exclude));
+  // The OSRM demo refuses every `exclude` value, so asking it was a ladder
+  // whose every rung failed. Avoidance must go to a router that honours it.
+  check("expressway avoidance asks Valhalla first, plain OSRM only as a fallback",
+        RC.router.AVOID_LADDER[0] === "valhalla" && RC.router.AVOID_LADDER[1] === null &&
+        RC.router.AVOID_LADDER.length === 2,
+        JSON.stringify(RC.router.AVOID_LADDER));
+  check("the motorcycle is costed as a motorcycle",
+        RC.router.VEHICLE.motorcycle.costing === "motorcycle" && RC.router.VEHICLE.car.costing === "auto");
+})();
+
+section("Behaviour: a Valhalla trip reads like an OSRM route");
+(function () {
+  var RC = sandbox().RC;
+  check("polyline6 decodes", JSON.stringify(RC.router._decodePolyline6("_izlhA~rlgdF_{geC~ywl@")) ===
+        JSON.stringify([[38.5, -120.2], [40.7, -120.95]]),
+        JSON.stringify(RC.router._decodePolyline6("_izlhA~rlgdF_{geC~ywl@")));
+  // Two legs sharing their boundary point; shape [A,B,C] then [C,D].
+  function enc(pts) {
+    var out = "", pl = 0, pn = 0;
+    function one(v) { v = v < 0 ? ~(v << 1) : (v << 1); var s = ""; while (v >= 0x20) { s += String.fromCharCode((0x20 | (v & 0x1f)) + 63); v >>= 5; } return s + String.fromCharCode(v + 63); }
+    pts.forEach(function (p) { var a = Math.round(p[0] * 1e6), b = Math.round(p[1] * 1e6); out += one(a - pl) + one(b - pn); pl = a; pn = b; });
+    return out;
+  }
+  var trip = {
+    summary: { length: 3, time: 300, has_highway: false, has_toll: false },
+    legs: [
+      { shape: enc([[14.50, 121.00], [14.51, 121.00], [14.52, 121.00]]),
+        summary: { length: 2, time: 200 },
+        maneuvers: [
+          { type: 2, street_names: ["EDSA", "1", "AH26"], length: 2, time: 200, begin_shape_index: 0, end_shape_index: 2 },
+          { type: 5, length: 0, time: 0, begin_shape_index: 2, end_shape_index: 2 }
+        ] },
+      { shape: enc([[14.52, 121.00], [14.53, 121.00]]),
+        summary: { length: 1, time: 100 },
+        maneuvers: [
+          { type: 26, street_names: ["Anda Circle"], roundabout_exit_count: 2, length: 1, time: 100, begin_shape_index: 0, end_shape_index: 1 },
+          { type: 4, length: 0, time: 0, begin_shape_index: 1, end_shape_index: 1 }
+        ] }
+    ]
+  };
+  var r = RC.router._parseValhalla(trip, 1);
+  check("legs share their boundary point once", r.coords.length === 4, String(r.coords.length));
+  check("cumulative arrays cover every point", r.cumDist.length === 4 && r.cumDur.length === 4);
+  check("cumulative distance ends at the trip's length", Math.abs(r.cumDist[3] - 3000) < 1e-6, String(r.cumDist[3]));
+  check("cumulative time ends at the trip's time", Math.abs(r.cumDur[3] - 300) < 1e-6, String(r.cumDur[3]));
+  check("names and refs are told apart", r.steps[0].name === "EDSA" && r.steps[0].ref === "1; AH26",
+        JSON.stringify(r.steps[0]));
+  check("manoeuvres speak OSRM's vocabulary", r.steps[0].type === "depart" && r.steps[1].type === "arrive" &&
+        r.steps[2].type === "roundabout" && r.steps[2].exit === 2, JSON.stringify(r.steps.map(function (s) { return s.type; })));
+  check("a roundabout names its exit", r.steps[2].text === "At the roundabout, take the 2nd exit onto Anda Circle",
+        r.steps[2].text);
+  check("Valhalla's own expressway verdict is carried", r.hasHighway === false && r.hasToll === false);
 })();
 
 section("Behaviour: free driving odometer");
