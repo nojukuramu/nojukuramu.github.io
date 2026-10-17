@@ -446,6 +446,27 @@
       }
       c.fillStyle = "rgba(255,243,226,.85)"; c.fillRect(cx - 3, base - 16, 6, 10);
       c.fillStyle = a; c.fillRect(cx - 10, base - 7, 20, 8);
+    },
+    /* three reels rolling past a payline, stopping left to right on 7-7-7 */
+    reels: function (c, w, h, p, a) {
+      var rw = w * 0.2, gap = w * 0.04, x0 = (w - rw * 3 - gap * 2) / 2, top = h * 0.16, rh = h * 0.68, cell = rh / 3;
+      var loop = p % 4, mid = top + rh / 2;
+      c.font = "800 " + Math.round(cell * 0.62) + "px serif"; c.textAlign = "center"; c.textBaseline = "middle";
+      for (var r = 0; r < 3; r++) {
+        var x = x0 + r * (rw + gap), stop = 1.2 + r * 0.5, spinning = loop < stop;
+        c.fillStyle = "rgba(255,243,226,.06)"; c.fillRect(x, top, rw, rh);
+        c.save(); c.beginPath(); c.rect(x, top, rw, rh); c.clip();
+        var off = spinning ? (loop * 9 + r) % 1 * cell : 0;
+        for (var k = -1; k < 4; k++) {
+          var y = top + (k + 0.5) * cell + off, seven = !spinning && k === 1;
+          c.fillStyle = seven ? a : "rgba(255,243,226," + (spinning ? 0.35 : 0.55) + ")";
+          c.fillText(seven ? "7" : (k + r) % 2 ? "\u2666" : "\u2663", x + rw / 2, y);
+        }
+        c.restore();
+      }
+      var hit = loop > 2.2 && loop < 3.8;
+      c.strokeStyle = hit ? a : "rgba(255,243,226,.3)"; c.lineWidth = hit ? 2 : 1;
+      c.beginPath(); c.moveTo(x0 - gap, mid); c.lineTo(x0 + rw * 3 + gap * 3, mid); c.stroke();
     }
   };
 
@@ -524,6 +545,10 @@
       desc: "The cannon game from the ads, in 3D, except you can actually play it.",
       hi: ["Steer a stream of balls through gates that multiply it", "Perks, Fever, bosses, a shop, Endless and a Daily", "No ads — the free revive and the bonus wheel are free"],
       tags: ["Three.js", "arcade", "offline"] },
+    { name: "Velvet Room", href: "casino/", badge: "Casino", accent: "#D9A441", kind: "games", motif: "reels",
+      desc: "A casino for play money: spin for chips, not cash.",
+      hi: ["Three slots, roulette, blackjack and Gem Mines", "1,000 free chips every hour, nothing to buy or cash out", "Slots tuned to pay back about 96%, dealt by a secure RNG"],
+      tags: ["slots", "cards", "play money"] },
     { name: "ARCO", href: "arco/", badge: "Instrument", accent: "#E0A24C", kind: "sound", motif: "strings",
       desc: "A guitar for a phone held sideways.",
       hi: ["A six-string neck that hammers, pulls, slides and bends", "Tap frets to play, or pick, strum and palm-mute the body", "Power chords under one thumb, in any tuning"],
