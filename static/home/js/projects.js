@@ -430,6 +430,22 @@
       var bx = w * (0.5 + Math.sin(p * 0.7) * 0.36);
       c.strokeStyle = "rgba(255,243,226,.5)"; c.lineWidth = 2;
       c.beginPath(); c.moveTo(bx - 10, h * 0.16); c.lineTo(bx + 10, h * 0.86); c.stroke();
+    },
+    /* a cannon swaying under a ×3 gate: one ball goes in, three come out */
+    gates: function (c, w, h, p, a) {
+      var gy = h * 0.48, cx = w / 2 + Math.sin(p * 0.9) * w * 0.12, base = h * 0.86;
+      c.globalAlpha = 0.3; c.fillStyle = "#2fd67a"; c.fillRect(w * 0.26, gy - 7, w * 0.48, 14);
+      c.globalAlpha = 1; c.strokeStyle = "#2fd67a"; c.lineWidth = 1.5; c.strokeRect(w * 0.26, gy - 7, w * 0.48, 14);
+      c.fillStyle = "#FFF3E2"; c.font = "800 " + Math.round(h * 0.09) + "px sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
+      c.fillText("\u00d73", w / 2, gy + 1);
+      for (var i = 0; i < 7; i++) {
+        var t = (p * 0.8 + i / 7) % 1, y = base - 16 - t * (base - 16 - h * 0.06);
+        var x = cx - (cx - w / 2) * t * 0.3;
+        if (y > gy) { c.fillStyle = "#FFF3E2"; c.beginPath(); c.arc(x, y, 2.4, 0, 6.283); c.fill(); continue; }
+        for (var k = -1; k <= 1; k++) { c.fillStyle = k ? a : "#FFF3E2"; c.beginPath(); c.arc(x + k * (gy - y) * 0.35, y, 2.4, 0, 6.283); c.fill(); }
+      }
+      c.fillStyle = "rgba(255,243,226,.85)"; c.fillRect(cx - 3, base - 16, 6, 10);
+      c.fillStyle = a; c.fillRect(cx - 10, base - 7, 20, 8);
     }
   };
 
@@ -504,6 +520,10 @@
       desc: "Glowing contraptions on an endless grey world, bringing it back to life.",
       hi: ["Every unit of Glow is a mote you can watch roll, fuse and sell", "Tinkers, Ghosts and Directives automate the automation", "Three reset layers, from Seasons to Planets, and no ceiling anywhere"],
       tags: ["Three.js", "idle", "offline"] },
+    { name: "Ballzooka", href: "ballzooka/", badge: "Arcade", accent: "#FF5D8F", kind: "games", motif: "gates",
+      desc: "The cannon game from the ads, except you can actually play it.",
+      hi: ["Steer a stream of balls through gates that multiply it", "Perks, Fever, bosses, a shop, Endless and a Daily", "No ads — the free revive and the bonus wheel are free"],
+      tags: ["canvas", "arcade", "offline"] },
     { name: "ARCO", href: "arco/", badge: "Instrument", accent: "#E0A24C", kind: "sound", motif: "strings",
       desc: "A guitar for a phone held sideways.",
       hi: ["A six-string neck that hammers, pulls, slides and bends", "Tap frets to play, or pick, strum and palm-mute the body", "Power chords under one thumb, in any tuning"],
