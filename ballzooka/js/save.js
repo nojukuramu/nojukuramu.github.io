@@ -15,7 +15,7 @@ function defaults() {
     ach: {}, stars: {},
     best: { endless: 0, endlessWave: 0, daily: {} },
     stats: { kills: 0, fired: 0, bosses: 0, plays: 0, peak: 0 },
-    set: { sound: true, music: true, haptics: true, motion: true },
+    set: { sound: true, music: true, haptics: true, motion: true, fx: true },
     seenHelp: false
   };
 }

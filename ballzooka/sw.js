@@ -8,7 +8,7 @@
    window.BZ_VERSION in index.html — tools/validate.js refuses to let the two
    drift. Bumping it is what publishes an update. Progress lives in
    localStorage, not here, so an update never touches it. */
-var CACHE = "ballzooka-v1";
+var CACHE = "ballzooka-v2";
 var SHELL = [
   "./",
   "./index.html",
@@ -26,6 +26,17 @@ var SHELL = [
   "./js/topics.js",
   "./js/ui.js",
   "./js/update.js",
+  "./vendor/build/three.module.min.js",
+  "./vendor/jsm/postprocessing/EffectComposer.js",
+  "./vendor/jsm/postprocessing/MaskPass.js",
+  "./vendor/jsm/postprocessing/OutputPass.js",
+  "./vendor/jsm/postprocessing/Pass.js",
+  "./vendor/jsm/postprocessing/RenderPass.js",
+  "./vendor/jsm/postprocessing/ShaderPass.js",
+  "./vendor/jsm/postprocessing/UnrealBloomPass.js",
+  "./vendor/jsm/shaders/CopyShader.js",
+  "./vendor/jsm/shaders/LuminosityHighPassShader.js",
+  "./vendor/jsm/shaders/OutputShader.js",
   "./icons/icon.svg",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

@@ -122,6 +122,11 @@ function play(sim, o, maxT) {
     const need = jsFiles.concat(["css/ballzooka.css", "manifest.webmanifest", "index.html"]);
     const absent = need.filter((f) => !shell.includes(f));
     check("every script, the stylesheet and the manifest are in the shell", !absent.length, absent.join(", "));
+    const vendor = [];
+    (function walk(d) { for (const f of fs.readdirSync(path.join(ROOT, d))) { const rel = d + "/" + f; if (fs.statSync(path.join(ROOT, rel)).isDirectory()) walk(rel); else if (rel.endsWith(".js")) vendor.push(rel); } })("vendor");
+    const unvendored = vendor.filter((f) => !shell.includes(f));
+    check("every vendored script is in the shell (" + vendor.length + ")", vendor.length && !unvendored.length, unvendored.join(", "));
+    check("index.html maps \"three\" to the vendored build", /"three":"\.\/vendor\/build\/three\.module\.min\.js"/.test(html));
     const man = JSON.parse(read("manifest.webmanifest"));
     const icons = man.icons.map((i) => i.src).filter((s) => !exists(s));
     check("every manifest icon exists", !icons.length, icons.join(", "));
@@ -183,6 +188,7 @@ function play(sim, o, maxT) {
     check("js/icons.js names bloomworks/js/icons.js", /bloomworks\/js\/icons\.js/.test(read("js/icons.js")));
     check("js/audio.js names bloomworks/js/audio.js", /bloomworks\/js\/audio\.js/.test(read("js/audio.js")));
     check("sw.js names bloomworks/sw.js", /bloomworks\/sw\.js/.test(sw));
+    check("js/render.js names bloomworks/js/render.js", /bloomworks\/js\/render\.js/.test(read("js/render.js")));
     check("sim.js never calls Math.random() except to pick a seed", (read("js/sim.js").replace(/\/\*[\s\S]*?\*\//g, "").match(/Math\.random\(\)/g) || []).length === 1);
   }
 

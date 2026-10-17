@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Ballzooka — the cannon game from the ads, for real</title>
-<meta name="description" content="The game from those ads, except real: drag a cannon, fire a stream of balls through gates that multiply them, and pop a horde before it reaches the line. Perks, Fever, bosses, a shop, a Daily and Endless. No ads. Plays offline.">
+<meta name="description" content="The game from those ads, except real and in 3D: drag a cannon, fire a stream of balls through gates that multiply them, and pop a horde before it reaches the line. Perks, Fever, bosses, a shop, a Daily and Endless. No ads. Plays offline.">
 <meta name="theme-color" content="#1a1238">
 <meta name="color-scheme" content="dark">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
@@ -15,11 +15,13 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ballzooka">
 <link rel="stylesheet" href="css/ballzooka.css">
+<script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
 <!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
-<script>window.BZ_VERSION = "1";</script>
+<script>window.BZ_VERSION = "2";</script>
 </head>
 <body>
 <canvas id="view" aria-label="The field"></canvas>
+<canvas id="overlay" aria-hidden="true"></canvas>
 
 <div id="hud" hidden>
   <div class="hud-top">

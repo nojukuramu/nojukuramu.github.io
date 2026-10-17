@@ -20,7 +20,7 @@ import { hydrateIcons } from "./icons.js";
 load();
 hydrateIcons();
 info.init();
-render.init(document.getElementById("view"));
+render.init(document.getElementById("view"), document.getElementById("overlay"));
 
 let g = null, paused = false, lastT = performance.now(), idleT = 0, seen = null;
 const keys = { left: false, right: false };
@@ -30,6 +30,7 @@ function applySettings() {
   audio.setSound(S.set.sound);
   audio.setMusic(S.set.music);
   render.setMotion(S.set.motion);
+  render.setQuality(S.set.fx);
 }
 function skins() { render.setSkins(S.cannon, S.ball); }
 applySettings(); skins();

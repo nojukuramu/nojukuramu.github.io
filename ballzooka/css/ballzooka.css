@@ -10,6 +10,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 15px/1.35 var(--font); overflow: hidden; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
 #view { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+#overlay { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
 [hidden] { display: none !important; }
 button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
 a { color: var(--pri); }

@@ -4,7 +4,7 @@
    `node tools/e2e.js [--shots <dir>]`
 
    The shape is Bloomworks' tools/e2e.js: serve the folder, open it in
-   Chromium, play it the way a person would, and fail on anything a person
+   Chromium (WebGL through SwiftShader), play it the way a person would, and fail on anything a person
    would notice — including any error in the console.
 
    On a phone (touch): the title is up; Level 1 starts; a drag moves the
@@ -64,7 +64,8 @@ function forward(p, secs) {
 (async () => {
   await new Promise((res) => server.listen(0, res));
   const url = "http://localhost:" + server.address().port + "/";
-  const browser = await chromium.launch();
+  // WebGL through SwiftShader, so it runs headless
+  const browser = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   const errors = [];
   const watch = (p) => { p.on("pageerror", (e) => errors.push(e.message)); p.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); }); };
   const shot = async (p, name) => { if (shotsAt) { fs.mkdirSync(shotsAt, { recursive: true }); await p.screenshot({ path: path.join(shotsAt, name + ".png") }); } };

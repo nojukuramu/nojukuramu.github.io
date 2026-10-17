@@ -155,7 +155,7 @@ const VIEWS = {
     const tg = (k, label, ico) => '<div class="item"><span class="ic">' + icon(ico) + '</span><div class="txt"><b>' + label + '</b></div><button class="switch' + (S.set[k] ? " on" : "") + '" data-act="toggle" data-arg="' + k + '" role="switch" aria-checked="' + !!S.set[k] + '" aria-label="' + label + '"><i></i></button></div>';
     const u = upd.state();
     return '<div class="panel">' + head("Settings", true) + '<div class="list">' +
-      tg("sound", "Sound", "sound") + tg("music", "Music", "music") + tg("haptics", "Vibration", "vibrate") + tg("motion", "Screen shake and trails", "motion") +
+      tg("sound", "Sound", "sound") + tg("music", "Music", "music") + tg("haptics", "Vibration", "vibrate") + tg("motion", "Screen shake and trails", "motion") + tg("fx", "Glow and shadows", "bolt") +
       "</div><h3>Version " + info("update") + '</h3><div class="list"><div class="item"><div class="txt"><b>Ballzooka ' + esc(u.version) + '</b><small id="updState">' + (u.ready ? "A new version is ready." : u.supported ? "Checked every 30 minutes." : "Updates need the installed app.") + "</small></div>" +
       btn(u.ready ? "updApply" : "updCheck", null, u.ready ? "Reload" : "Check for updates", "small") + "</div></div>" +
       "<h3>Progress " + info("privacy") + '</h3><div class="list"><div class="item"><div class="txt"><b>Start over</b><small>Erases coins, upgrades, skins and trophies.</small></div>' + btn("wipe", null, "Erase", "small danger", "trash") + "</div></div>" +

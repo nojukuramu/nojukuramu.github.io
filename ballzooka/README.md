@@ -4,7 +4,9 @@ You have seen the ad: a cannon at the bottom, a stream of balls, a green gate th
 stream turning into a flood. The game behind the ad is usually something else. This one is the ad,
 made into a game you can actually play — and then given everything else a fun arcade game needs.
 
-Canvas 2D, synthesised sound, plain ES modules. No build step, no assets but four icons, no ads.
+In 3D with Three.js: the camera sits low behind the cannon and looks down the lane the way the ads
+film it, the gates stand across the lane like glass doorways, and the horde hops toward you out of
+the distance. Synthesised sound, plain ES modules, no build step, no models or audio files, no ads.
 Plays offline once installed.
 
 ## Running it
@@ -13,8 +15,8 @@ Serve the folder (`npx http-server ballzooka` or any static server) and open it.
 
 | Check | Command |
 |-------|---------|
-| Static and behaviour checks (67) | `node tools/validate.js` |
-| The game in a real browser (26) | `node tools/e2e.js [--shots dir]` |
+| Static and behaviour checks (70) | `node tools/validate.js` |
+| The game in a real browser, WebGL included (26) | `node tools/e2e.js [--shots dir]` |
 
 `validate.js` ends by letting a simple autopilot play the campaign and printing how far it gets
 with an empty shop, a little spent, and a lot spent: about levels 1–3, 1–10 and 1–28.
@@ -81,13 +83,24 @@ of it.
 |------|------------|
 | [`js/sim.js`](js/sim.js) | the game: cannon, balls, gates, panels, the horde, bosses, perks, Fever. Pure — no DOM — so the validator imports it into Node and plays whole levels |
 | [`js/data.js`](js/data.js) | every table: enemies, bosses, gates, panels, drops, perks, the shop, skins, worlds, Daily twists, trophies |
-| [`js/render.js`](js/render.js) | the field on one canvas, and all the juice |
+| [`js/render.js`](js/render.js) | the field in 3D (Three.js), a 2D overlay for numbers and banners, and all the juice |
 | [`js/audio.js`](js/audio.js) | every sound and the music, synthesised |
 | [`js/ui.js`](js/ui.js) | the HUD and every screen between runs |
 | [`js/main.js`](js/main.js) | input, the frame loop, starting and ending runs, trophies, the service worker |
 | [`js/topics.js`](js/topics.js) | the long explanations behind each (i) |
 | [`js/save.js`](js/save.js) | progress in this browser's localStorage |
-| `js/update.js`, `js/info.js`, `js/rng.js`, `js/icons.js`, `sw.js` | lifted from Bloomworks — see below |
+| `js/update.js`, `js/info.js`, `js/rng.js`, `js/icons.js`, `sw.js`, `vendor/` | lifted from Bloomworks — see below |
+
+**3D over a flat game.** `sim.js` is a flat 400 × 720 field and knows nothing of the camera;
+`render.js` maps it onto the ground (sim x is world X, sim y is world Z, squeezed a little so the far
+end of the lane is not lost to perspective on an upright phone). The camera backs off until the
+whole lane fits and slides the picture down so the cannon sits at the foot of the screen, so a tall
+phone and a wide monitor both see every inch of the lane. Balls and sparks are InstancedMeshes, one
+draw call each however many there are; balls stretch along their flight. Gate and panel numbers are
+canvas textures on the glass; health, damage numbers and banners are drawn on a 2D canvas over the
+3D one, projected from the world, so they stay crisp. A drag is read by casting the finger onto the
+ground. Settings has a "Glow and shadows" switch that drops the bloom pass and shadow maps on a slow
+phone.
 
 **The ball cap.** A phone cannot draw a hundred thousand balls, and the ad's whole joke is that the
 number gets absurd. So there are never more than 600 ball objects; past that, a gate makes the
@@ -100,7 +113,9 @@ same run (checked), and the Daily is the same level for everybody.
 
 **Reused, not rewritten** (CLAUDE.md). `update.js`, `info.js` and `sw.js` are Bloomworks' — which
 are Aeons', Hacks' and RouteCast's — with the version name and the reload question changed.
-`rng.js` is Bloomworks' mulberry32 without the noise functions. `icons.js` keeps Bloomworks' shape
+`rng.js` is Bloomworks' mulberry32 without the noise functions. `vendor/` is Bloomworks' vendored
+three r160 and the bloom post-processing passes, and `render.js` keeps its renderer setup (ACES
+tone mapping, one shadowing sun, UnrealBloomPass, a quality switch). `icons.js` keeps Bloomworks' shape
 and its general glyphs, and adds the game's own. `audio.js` keeps Bloomworks' structure (one
 context on the first tap, rate-limited tones, a look-ahead music scheduler) with this game's sounds.
 
