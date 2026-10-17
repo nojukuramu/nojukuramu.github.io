@@ -1,0 +1,22 @@
+{
+  "name": "Ballzooka — the cannon game from the ads, for real",
+  "short_name": "Ballzooka",
+  "description": "Drag a cannon, fire balls through gates that multiply them, and pop the horde before it reaches the line. No ads. Plays offline.",
+  "id": "/ballzooka/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#1a1238",
+  "theme_color": "#1a1238",
+  "categories": ["games", "entertainment"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

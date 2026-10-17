@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Ballzooka — the cannon game from the ads, for real</title>
+<meta name="description" content="The game from those ads, except real and in 3D: drag a cannon, fire a stream of balls through gates that multiply them, and pop a horde before it reaches the line. Perks, Fever, bosses, a shop, a Daily and Endless. No ads. Plays offline.">
+<meta name="theme-color" content="#1a1238">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ballzooka">
+<link rel="stylesheet" href="css/ballzooka.css">
+<script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
+<!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
+<script>window.BZ_VERSION = "2";</script>
+</head>
+<body>
+<canvas id="view" aria-label="The field"></canvas>
+<canvas id="overlay" aria-hidden="true"></canvas>
+
+<div id="hud" hidden>
+  <div class="hud-top">
+    <button id="pauseBtn" class="ibtn" aria-label="Pause"><i data-icon="pause"></i></button>
+    <div class="lvl">
+      <span id="lvlTxt"></span>
+      <div id="progWrap" class="prog"><i id="progFill"></i><span class="skull"><i data-icon="skull"></i></span></div>
+    </div>
+    <span class="chip coin"><i data-icon="coin"></i><b id="coinTxt">0</b></span>
+  </div>
+  <div class="hud-row"><span id="hearts"></span><span id="scoreTxt"></span></div>
+  <div id="buffs"></div>
+  <div class="hud-bot">
+    <div class="balls"><b id="ballTxt">0</b><small>balls</small></div>
+    <div class="meters">
+      <div class="fever"><i id="feverFill"></i><span>FEVER</span></div>
+      <div class="xp"><i id="xpFill"></i></div>
+    </div>
+  </div>
+</div>
+
+<div id="screen" hidden></div>
+<div id="toast" hidden aria-live="polite"></div>
+
+<div id="info-scrim" hidden></div>
+<div id="info-sheet" role="dialog" aria-modal="true" aria-labelledby="info-title" hidden>
+  <div class="sheet-head"><h2 id="info-title"></h2><button id="info-close" class="ibtn" aria-label="Close"><i data-icon="close"></i></button></div>
+  <div id="info-body"></div>
+</div>
+
+<div id="update-bar" hidden>
+  <span>A new version of Ballzooka is ready.</span>
+  <button id="update-go" class="btn primary small">Reload</button>
+  <button id="update-later" class="ibtn small" aria-label="Later"><i data-icon="close"></i></button>
+</div>
+
+<noscript><p class="noscript">Ballzooka is a game, and games need JavaScript.</p></noscript>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
