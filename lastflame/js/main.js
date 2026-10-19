@@ -14,6 +14,7 @@ import * as ui from "./ui.js";
 import * as info from "./info.js";
 import * as upd from "./update.js";
 import { S, load, save } from "./save.js";
+import { FEAR } from "./game.js";
 import { hydrateIcons } from "./icons.js";
 import { sees } from "./nav.js";
 
@@ -38,6 +39,8 @@ function apply() {
   audio.setScares(s.scares);
   ui.setCaptions(!!s.captions);
   input.configure({ sens: s.sens, invert: s.invert, crouchToggle: s.crouchToggle });
+  // how afraid, and what being caught means, apply to the night already under way
+  if (g) { g.fear = s.fear; g.tune = FEAR[s.fear] || FEAR.normal; g.mode = s.mode; }
 }
 apply();
 audio.setCaptions((text, dir, quiet) => ui.caption(text, dir, quiet));
@@ -72,7 +75,7 @@ function end() {
 }
 
 function pause() {
-  if (!g || paused || g.state !== "play") return;
+  if (!g || paused || (g.state !== "play" && g.state !== "caught")) return;
   paused = true;
   input.setEnabled(false);
   input.unlock();
@@ -126,8 +129,10 @@ function handle(evs) {
     switch (e.type) {
       case "hint": ui.hint(e.text, input.touchMode()); break;
       case "note": ui.note(e.id); break;
-      case "closetIn": case "closetOut": input.setLook(g.player.yaw, 0); break;
-      case "respawn": input.setLook(g.player.yaw, 0); break;
+      case "respawn":
+        // woken without the mouse (Escape during the catch): the night waits
+        if (!input.touchMode() && !input.isLocked()) pause();
+        break;
       case "lampLit": S.stats.lampsLit++; break;
     }
   }
@@ -142,7 +147,7 @@ function frame(now) {
   if (frozen) { requestAnimationFrame(frame); return; }
   if (g) {
     if (!paused) {
-      const inp = input.read();
+      const inp = input.read(dt);
       if (inp.pause && g.state === "play") { pause(); }
       else {
         if (g.player.hiding >= 0) { const c = g.L.closets[g.player.hiding]; input.clampYaw(c.rot, 0.65); const lk = input.getLook(); inp.yaw = lk.yaw; inp.pitch = Math.max(-0.5, Math.min(0.4, lk.pitch)); }
@@ -153,6 +158,11 @@ function frame(now) {
           const h = Math.min(1 / 60, left);
           game.step(g, h, inp);
           all.push(...g.events);
+          // waking, or stepping into or out of a closet, turns you: the rest of
+          // this frame's slices must not turn you back
+          if (g.events.some((e) => e.type === "respawn" || e.type === "closetIn" || e.type === "closetOut")) {
+            inp.yaw = g.player.yaw; inp.pitch = 0; input.setLook(g.player.yaw, 0);
+          }
           // presses happen once, not once per slice
           inp.usePress = false; inp.lanternPress = false;
           left -= h;

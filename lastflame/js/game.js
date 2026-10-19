@@ -179,7 +179,7 @@ function director(g, dt) {
   if (P.nudge > 0) {
     d.nudgeT -= dt;
     if (d.nudgeT <= 0) {
-      d.nudgeT = P.nudge * g.tune.nudge * (0.8 + g.r() * 0.4) - d.T;
+      d.nudgeT = Math.max(12, P.nudge * g.tune.nudge * (0.8 + g.r() * 0.4) - d.T);
       if (h.state === "patrol" || h.state === "investigate") { d.advance = true; ev(g, { type: "nudge" }); if (h.state === "patrol") { h.path = null; h.wait = 0; } }
     }
   }
@@ -320,11 +320,17 @@ function leaveCloset(g) {
   g.noise(c.x, c.z, NOISE.closet, "closet");
 }
 
+/* A window whose inside is within a relit lamp's light is no way in. */
+function nearLight(g, w) {
+  const x = w.x - w.n[0] * 0.9, z = w.z - w.n[1] * 0.9;
+  return g.L.lamps.some((l) => l.lit && Math.hypot(l.x - x, l.z - z) < POOL_R + 1);
+}
+
 /* The hunter's first entrance: through a window in a room away from you. */
 function arrive(g) {
   const pr = Math.max(0, roomAt(g.L, g.player.x, g.player.z));
   const hops = g.L.graph.hops[pr];
-  const wins = g.L.windows.filter((w) => hops[w.room] >= 2 && hops[w.room] < Infinity).sort((a, b) => hops[b.room] - hops[a.room]);
+  const wins = g.L.windows.filter((w) => hops[w.room] >= 2 && hops[w.room] < Infinity && !nearLight(g, w)).sort((a, b) => hops[b.room] - hops[a.room]);
   const w = wins.length ? wins[Math.floor(g.r() * Math.min(3, wins.length))] : g.L.windows[0];
   hunt.enter(g, w);
   relax(g, 20);
@@ -336,7 +342,7 @@ function startPass(g) {
   const L = g.L, p = g.player;
   const pr = Math.max(0, roomAt(L, p.x, p.z));
   const hops = L.graph.hops[pr];
-  const wins = L.windows.filter((w) => hops[w.room] === 1 || hops[w.room] === 2);
+  const wins = L.windows.filter((w) => (hops[w.room] === 1 || hops[w.room] === 2) && !nearLight(g, w));
   if (!wins.length) { arrive(g); g.flags.passDone = true; setPhase(g, "unease"); return; }
   const win = wins[Math.floor(g.r() * wins.length)];
   // it walks to the doorway of your room, looks in, and leaves the way it came
@@ -577,7 +583,7 @@ export function prompt(g) {
   if (!t) return null;
   const L = g.L, p = g.player;
   switch (t.kind) {
-    case "lamp": return { verb: p.lantern && p.oil > 0 ? "Hold to light the lamp" : "Your lantern is out", hold: true, progress: g.act ? g.actT / LIGHT_TIME : 0 };
+    case "lamp": return { verb: p.lantern && p.oil > 0 ? "Hold to light the lamp" : p.oil > 0 ? "Turn your wick up first" : "Your lantern is out", hold: true, progress: g.act ? g.actT / LIGHT_TIME : 0 };
     case "borrow": return { verb: "Hold to light your lantern", hold: true, progress: g.act ? g.actT / LIGHT_TIME : 0 };
     case "closet": return { verb: "Hide" };
     case "closetOut": return { verb: "Step out" };

@@ -36,6 +36,8 @@ export function init(o) {
     turn(e.movementX, e.movementY, 0.0022);
   });
   canvas.addEventListener("mousedown", (e) => {
+    // a mouse after a touch (a touchscreen laptop): back to the mouse's ways
+    isTouch = false;
     if (!enabled) return;
     if (document.pointerLockElement !== canvas) { lock(); return; }
     if (e.button === 2) raise = true;
@@ -43,6 +45,8 @@ export function init(o) {
   });
   window.addEventListener("mouseup", (e) => { if (e.button === 2) raise = false; if (e.button === 0) held.mouseUse = false; });
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+  // a lock refused (too soon after Escape): the night waits on the pause screen
+  document.addEventListener("pointerlockerror", () => { if (enabled && !isTouch && onPause) onPause(); });
   document.addEventListener("pointerlockchange", () => {
     const locked = document.pointerLockElement === canvas;
     if (onLock) onLock(locked);
@@ -115,11 +119,11 @@ export function button(name, down) {
   if (name === "use") { if (down) edges.add("use"); held.use = down; }
   else if (name === "breath") held.breath = down;
   else if (name === "lantern" && down) edges.add("lantern");
-  else if (name === "crouch" && down) edges.add("crouch");
+  else if (name === "crouch") { if (down) edges.add("crouch"); held.crouch = down; }
   else if (name === "raise") raise = down;
 }
 
-function readPad() {
+function readPad(dt) {
   if (pad === null || !navigator.getGamepads) return null;
   const gp = navigator.getGamepads()[pad];
   if (!gp) return null;
@@ -128,13 +132,15 @@ function readPad() {
   for (const k in now) if (now[k] && !padPrev[k]) edges.add({ a: "use", x: "lantern", b: "crouch", start: "pause" }[k] || "_");
   padPrev = now;
   const dz = (v) => (Math.abs(v) < 0.15 ? 0 : v);
-  turn(dz(gp.axes[2]) * 14, dz(gp.axes[3]) * 10, 0.0055);
-  return { mx: dz(gp.axes[0]), my: dz(gp.axes[1]), use: now.a, breath: now.lt, run: now.rt || now.l3, raise: now.y };
+  // radians a second, not a frame, so a fast screen turns no faster
+  const k = (dt || 1 / 60) * 60;
+  turn(dz(gp.axes[2]) * 14 * k, dz(gp.axes[3]) * 10 * k, 0.0055);
+  return { mx: dz(gp.axes[0]), my: dz(gp.axes[1]), use: now.a, breath: now.lt, run: now.rt || now.l3, raise: now.y, crouch: now.b };
 }
 
 /** This step's input for game.step(). Edges are consumed. */
-export function read() {
-  const gp = readPad();
+export function read(dt) {
+  const gp = readPad(dt);
   let fwd = (keys.has("fwd") ? 1 : 0) - (keys.has("back") ? 1 : 0);
   let side = (keys.has("right") ? 1 : 0) - (keys.has("left") ? 1 : 0);
   let run = keys.has("run");
@@ -146,7 +152,7 @@ export function read() {
   }
   if (gp) { if (gp.mx || gp.my) { fwd = -gp.my; side = gp.mx; } run = run || gp.run; }
   if (edges.has("crouch")) crouched = !crouched;
-  const crouch = crouchToggle ? crouched || keys.has("crouchHold") : keys.has("crouch") || keys.has("crouchHold");
+  const crouch = crouchToggle ? crouched || keys.has("crouchHold") : keys.has("crouch") || keys.has("crouchHold") || held.crouch || !!(gp && gp.crouch);
   if (run) crouched = false;
   const out = {
     fwd, side, run, crouch, yaw, pitch,
@@ -161,7 +167,7 @@ export function read() {
   return out;
 }
 
-export function setEnabled(v) { enabled = v; if (!v) { keys.clear(); edges.clear(); held.use = held.breath = held.mouseUse = false; raise = false; stick.id = look.id = null; showStick(false); } }
+export function setEnabled(v) { enabled = v; if (!v) { keys.clear(); edges.clear(); held.use = held.breath = held.mouseUse = held.crouch = false; raise = false; stick.id = look.id = null; showStick(false); } }
 export function setLook(y, p) { yaw = y; pitch = p || 0; }
 export function getLook() { return { yaw, pitch }; }
 export function clampYaw(center, half) {

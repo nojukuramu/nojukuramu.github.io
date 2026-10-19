@@ -835,7 +835,7 @@ export function draw(g, dt, view) {
   for (const d of g.L.doors) {
     const hd = H.doors[d.id];
     if (!hd) continue;
-    const target = d.sealed ? 0 : d.kind === "front" ? (d.locked ? 0 : 0.12 + (g.state === "won" ? 0.9 : 0)) : d.open;
+    const target = d.sealed ? 0 : d.kind === "front" ? (d.locked ? 0 : 0.22 + (g.state === "won" ? 0.8 : 0)) : d.open;
     hd.a += (target - hd.a) * Math.min(1, dt * (d.open > 0.5 && h.state === "chase" ? 14 : 5));
     for (const lf of hd.leaves) lf.pivot.rotation.y = lf.base + lf.dir * hd.a * 1.65;
   }

@@ -229,6 +229,7 @@ export function feed(events, g) {
         caption("the closet doors rattle", c.x, c.z);
         break;
       }
+      case "spotted": play(pickOf("growl", 6), { x: g.hunter.x, z: g.hunter.z, y: 1.6, vol: 1.1, rate: 1.1 }); play("sting3", { vol: 0.35, rate: 0.8 }); break;
       case "closetRip": { const c = g.L.closets[e.id]; play("door_slam", { x: c.x, z: c.z, vol: 1.4 }); break; }
       case "lightStart": play("click", { vol: 0.25, bus: "ui" }); break;
       case "lampLit": { const l = g.L.lamps[e.id]; play("ignite", { x: l.x, z: l.z, y: l.y + 0.3, vol: 0.9 }); if (e.n < 5) play("sting3", { vol: 0.12, rate: 1.4, delay: 0.4 }); break; }
@@ -281,7 +282,6 @@ export function feed(events, g) {
       case "won": bedGain("drone1", 0, 0.5); bedGain("drone2", 0, 0.5); play("exhale", { vol: 0.8, delay: 0.6 }); break;
       case "turnAway": play(pickOf("growl", 6), { x: g.hunter.x, z: g.hunter.z, y: 1.7, vol: 0.6, rate: 0.7 }); break;
     }
-    if (e.type === "hold" && !p.holding) play("exhale", { vol: 0.5 });
   }
 }
 let lastScares = "full";

@@ -124,7 +124,7 @@ function playNight(M, o, maxT) {
   const g = M.game.newRun(o);
   const mem = {};
   const dt = 1 / 30;
-  const track = { maxStep: 0, chases: 0, poolBreach: 0, tele: 0 };
+  const track = { maxStep: 0, chases: 0, poolBreach: 0, tele: 0, burns: 0, farRips: 0 };
   let last = { x: g.hunter.x, z: g.hunter.z, active: g.hunter.active };
   while (g.t < (maxT || 1500) && g.state !== "won" && g.state !== "dead") {
     const inp = g.state === "play" ? pilot(M, g, mem, dt) : {};
@@ -133,6 +133,9 @@ function playNight(M, o, maxT) {
     let jumped = false;
     for (const e of g.events) {
       if (e.type === "chase") track.chases++;
+      if (e.type === "burned") track.burns++;
+      // a closet is torn open by something standing at it
+      if (e.type === "kill" && e.how === "closet") { const c = g.L.closets[g.player.hiding >= 0 ? g.player.hiding : 0]; if (Math.hypot(c.front.x - h.x, c.front.z - h.z) > 1.3) track.farRips++; }
       if (e.type === "enter" || e.type === "respawn") jumped = true;
     }
     if (h.active && last.active && !jumped) {
@@ -449,7 +452,7 @@ function playNight(M, o, maxT) {
   section("Behaviour: whole nights, played by the autopilot");
   {
     const N = 24;
-    let won = 0, deaths = 0, maxStep = 0, breaches = 0, chases = 0;
+    let won = 0, deaths = 0, maxStep = 0, breaches = 0, chases = 0, burns = 0, farRips = 0;
     const times = [];
     for (let s = 0; s < N; s++) {
       const { g, track } = playNight(M, { seed: 7000 + s * 13, mode: "lola" }, 1500);
@@ -458,6 +461,8 @@ function playNight(M, o, maxT) {
       maxStep = Math.max(maxStep, track.maxStep);
       breaches += track.poolBreach;
       chases += track.chases;
+      burns += track.burns;
+      farRips += track.farRips;
     }
     times.sort((a, b) => a - b);
     const med = times.length ? times[Math.floor(times.length / 2)] : 0;
@@ -465,6 +470,8 @@ function playNight(M, o, maxT) {
     check("it never moves faster than it can run (" + maxStep.toFixed(2) + " m/s)", maxStep <= game.FEAR.normal.vmax + 0.05);
     check("before the end, it never walks into a relit lamp's light", breaches === 0, breaches + " frames");
     check("a night has chases in it (" + (chases / N).toFixed(1) + " a night)", chases / N >= 0.5);
+    check("it is rarely caught in a lamp's light, and never stuck there (" + (burns / N).toFixed(2) + " burns a night)", burns / N < 1);
+    check("a closet is only ever torn open by something standing at it", farRips === 0, farRips + " from a distance");
     process.stdout.write("    autopilot: " + won + "/" + N + " escaped, " + (deaths / N).toFixed(1) + " deaths a night, median " + Math.round(med) + " s\n");
     // the same seed and the same hands: the same night
     const a = playNight(M, { seed: 4242 }, 400).g, b = playNight(M, { seed: 4242 }, 400).g;

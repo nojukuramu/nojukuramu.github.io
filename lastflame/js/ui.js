@@ -35,7 +35,7 @@ export function init(actions) {
     save(); A.apply();
   });
   $("note").addEventListener("click", () => hideNote());
-  upd.onChange(() => { if (current === "settings") show("settings"); });
+  upd.onChange(() => { if (current === "settings") show("settings", $("screen").dataset.back); });
 }
 
 const info = (key) => '<button class="info" data-info="' + key + '" aria-label="More about this">' + icon("info") + "</button>";

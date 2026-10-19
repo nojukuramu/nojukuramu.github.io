@@ -53,9 +53,17 @@ const tune = (g) => g.tune;
 
 function goTo(g, x, z, then) {
   const h = g.hunter;
-  const p = findPath(g.G, h.x, h.z, x, z, avoidOf(g), 1.2);
+  // out of a lamp's light (or out of a pocket the light walls off), any way it can
+  let p = h.burnedT > 0 ? null : findPath(g.G, h.x, h.z, x, z, avoidOf(g), 1.2);
+  if (!p && (h.burnedT > 0 || inPool(g, h.x, h.z))) p = findPath(g.G, h.x, h.z, x, z, null, 1.2);
   h.path = p; h.pi = 0; h.goal = p ? { x: p[p.length - 1].x, z: p[p.length - 1].z } : null; h.onArrive = then || null;
   return !!p;
+}
+
+function inPool(g, x, z) {
+  if (g.flipped) return false;
+  for (const l of g.L.lamps) if (l.lit && Math.hypot(l.x - x, l.z - z) < POOL_R + 0.3) return true;
+  return false;
 }
 
 /* A free spot somewhere in a room, out of any lamp's light before the end. */
@@ -206,6 +214,7 @@ function setState(g, s) {
 export function investigate(g, x, z, radius) {
   const h = g.hunter;
   setState(g, "investigate");
+  h.beacon = false;
   h.search = { x, z, r: radius || 3.5, passes: 3, at: null };
   h.wait = 0;
   goTo(g, x, z, () => searchNext(g));
@@ -245,14 +254,14 @@ export function retreat(g) {
   setState(g, "retreat");
   const pr = roomAt(g.L, g.player.x, g.player.z);
   const hops = g.L.graph.hops[pr >= 0 ? pr : 0];
-  let best = -1, bs = -1;
-  for (const rm of g.L.rooms) {
-    const s = hops[rm.id] + g.r() * 0.8 + (rm.id === h.room ? -0.5 : 0);
-    if (hops[rm.id] < Infinity && s > bs) { bs = s; best = rm.id; }
-  }
-  const s = spotIn(g, best, g.r);
+  const order = g.L.rooms.filter((rm) => hops[rm.id] < Infinity).map((rm) => ({ id: rm.id, s: hops[rm.id] + g.r() * 0.8 + (rm.id === h.room ? -0.5 : 0) })).sort((a, b) => b.s - a.s);
   h.wait = 0;
-  if (!s || !goTo(g, s.x, s.z, () => { h.wait = 3; })) h.wait = 2;
+  // the furthest room it can actually walk to
+  for (const o of order) {
+    const s = spotIn(g, o.id, g.r);
+    if (s && goTo(g, s.x, s.z, () => { h.wait = 3; })) return;
+  }
+  h.wait = 2;
 }
 
 export function chase(g) {
@@ -284,7 +293,7 @@ export function step(g, dt) {
 
   // a lamp lit right where it stands burns it: it shrieks and backs off
   if (!g.flipped && h.burnedT <= 0) {
-    for (const l of g.L.lamps) if (l.lit && Math.hypot(l.x - h.x, l.z - h.z) < POOL_R) {
+    for (const l of g.L.lamps) if (l.lit && Math.hypot(l.x - h.x, l.z - h.z) < POOL_R - 0.3) {
       h.burnedT = 6; ev(g, { type: "burned", x: h.x, z: h.z });
       h.aware = 0; retreat(g); break;
     }
@@ -349,8 +358,9 @@ export function step(g, dt) {
       break;
     }
     case "rip": {
-      const c = g.L.closets[h.sawHide];
       if (h.ripT > 0) {
+        // the closet it is at, not whichever one you are in now
+        const c = g.L.closets[h.ripId];
         h.ripT -= dt;
         turn(h, Math.atan2(c.x - h.x, c.z - h.z), dt * 6);
         if (h.ripT <= 0) {
@@ -361,11 +371,18 @@ export function step(g, dt) {
         }
         break;
       }
-      if (!h.path || h.goalCloset !== c.id) { goTo(g, c.front.x, c.front.z); h.goalCloset = c.id; }
-      if (walk(g, dt, Math.max(SPEED.investigate, h.chaseV || 0))) {
+      const c = g.L.closets[h.sawHide];
+      if (!h.path || h.goalCloset !== c.id) {
+        h.goalCloset = c.id;
+        // it cannot get to it (a lamp's light is in the way): it gives up on it
+        if (!goTo(g, c.front.x, c.front.z)) { h.sawHide = -1; investigate(g, c.front.x, c.front.z, 3); break; }
+      }
+      walk(g, dt, Math.max(SPEED.investigate, h.chaseV || 0));
+      if (Math.hypot(c.front.x - h.x, c.front.z - h.z) < 1.0) {
+        h.path = null; h.ripId = c.id;
         h.ripT = 1.6 + g.r() * 0.7;
         ev(g, { type: "closetRattle", id: c.id });
-      }
+      } else if (!h.path) h.goalCloset = -1;
       break;
     }
     case "stare": {
@@ -469,9 +486,10 @@ export function placeFar(g) {
   const pr = roomAt(g.L, g.player.x, g.player.z);
   const hops = g.L.graph.hops[pr >= 0 ? pr : 0];
   let best = 0, bs = -1;
-  for (const rm of g.L.rooms) if (hops[rm.id] < Infinity && hops[rm.id] + g.r() > bs) { bs = hops[rm.id] + g.r(); best = rm.id; }
+  for (const rm of g.L.rooms) { const sc = hops[rm.id] + g.r(); if (hops[rm.id] < Infinity && sc > bs) { bs = sc; best = rm.id; } }
   const s = spotIn(g, best, g.r) || { x: g.L.rooms[best].cx, z: g.L.rooms[best].cz };
   h.x = s.x; h.z = s.z; h.path = null; h.aware = 0; h.sawHide = -1; h.chaseV = 0; h.wait = 3;
+  h.doorT = 0; h.doorId = -1; h.ripT = 0; h.burnedT = 0;
   setState(g, "retreat");
 }
 

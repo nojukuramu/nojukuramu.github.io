@@ -241,7 +241,11 @@ export function findPath(G, x0, z0, x1, z1, avoid, doorCost) {
     out.push(pts[b]);
     a = b;
   }
-  if (out.length) { out[out.length - 1] = { x: x1, z: z1, c: e }; if (G.solid[cellOf(G, x1, z1)]) out[out.length - 1] = pts[pts.length - 1]; }
+  if (out.length) {
+    // end at the asked-for point itself, unless it is in a wall or in light it may not enter
+    const tc = cellOf(G, x1, z1);
+    out[out.length - 1] = G.solid[tc] || (avoid && avoid(tc) === Infinity) ? pts[pts.length - 1] : { x: x1, z: z1, c: e };
+  }
   return out;
 }
 const DI = [1, -1, 0, 0, 1, 1, -1, -1], DJ = [0, 0, 1, -1, 1, -1, 1, -1];
