@@ -49,6 +49,7 @@ export function unlock() {
   loadAll();
 }
 export const ready = () => !!ac;
+export const loadedCount = () => Object.keys(buf).length;
 export function setVolume(v) { vol = v; if (master) master.gain.setTargetAtTime(v, ac.currentTime, 0.05); }
 export function setCaptions(fn) { captions = fn; }
 export function setOccluder(fn) { occludes = fn; }

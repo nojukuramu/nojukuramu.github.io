@@ -97,6 +97,8 @@ const standAt = (p, at, look) => p.evaluate(([at, look]) => {
   await p.click('[data-act="begin"]');
   check("Begin starts a night", await until(p, () => window.__lf.g && window.__lf.g.state === "play", null, 20000));
   check("the screen goes, the night's hint comes", await until(p, () => document.getElementById("screen").hidden && document.getElementById("hint").classList.contains("in"), null, 20000));
+  const nSounds = await p.evaluate(() => window.__lf.audio.SOUNDS.length);
+  check("every recording loads and decodes (" + nSounds + ")", await until(p, (n) => window.__lf.audio.loadedCount() >= n, nSounds, 40000), await p.evaluate(() => window.__lf.audio.loadedCount()) + " loaded");
   const b = await brightness(p);
   check("the house is drawn, and it is not black (" + b.toFixed(1) + ")", b > 4);
   await shot(p, "night");

@@ -16,7 +16,7 @@ Serve the folder (`npx http-server lastflame` or any static server) and open it.
 | Check | Command |
 |-------|---------|
 | Static and behaviour checks (98) | `node tools/validate.js` |
-| The game in a real browser, WebGL included (29) | `node tools/e2e.js [--shots dir]` |
+| The game in a real browser, WebGL included (30) | `node tools/e2e.js [--shots dir]` |
 
 `validate.js` builds 250 houses and walks every one, then lets an autopilot play two dozen whole
 nights and prints how it did — it gets out of most of them, and dies four or five times a night
