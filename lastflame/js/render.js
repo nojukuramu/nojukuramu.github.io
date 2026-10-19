@@ -44,7 +44,7 @@ let world = null, wallGroup = null;
 const M = {};            // materials
 const tpl = {};          // loaded model templates
 let loaded = 0, total = 0, ready = false;
-let lanternVM, lanternFlame, lanternGlow, lanternLight, hemi, lightning, dust;
+let lanternVM, lanternFlame, lanternGlow, lanternLight, hemi, lightning, dust, moon;
 const lampLights = [];
 let creature = null;
 let H = null;            // the handles of the house being drawn: doors, closets, lamps...
@@ -78,6 +78,11 @@ export function init(canvas, onProgress) {
   Object.assign(lightning.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 70 });
   lightning.shadow.bias = -0.002;
   scene.add(lightning, lightning.target);
+  // the front door, at the end: cold light where the way out is. Made now and
+  // left dark, so the number of lights never changes (a change recompiles
+  // every shader, and that would land on the night's biggest moment)
+  moon = new THREE.PointLight("#9fb6ff", 0, 8, 2);
+  scene.add(moon);
   for (let i = 0; i < 3; i++) {
     const l = new THREE.PointLight("#ff9a4e", 0, 9, 2);
     l.castShadow = false;
@@ -688,7 +693,7 @@ export function feed(events, g) {
     }
   }
 }
-let lanternFlick = 0;
+let lanternFlick = 0, flashNow = 0;
 
 /* ------------------------------------------------------------------ */
 /* The frame                                                          */
@@ -730,7 +735,7 @@ export function draw(g, dt, view) {
   const home = lanternVM.userData.home || new THREE.Vector3(0.24, -0.3, -0.52);
   raise += ((view.raise ? 1 : 0) + (g.act ? 0.7 : 0) - raise) * Math.min(1, dt * 6);
   const sway = motion ? Math.sin(bob) * 0.02 * bobAmp : 0;
-  lanternVM.visible = !hiding || lit;
+  lanternVM.visible = (!hiding || lit) && !view.title;
   lanternVM.position.set(home.x - raise * 0.12 + sway, home.y + raise * 0.14 + bobY * 0.5 + (hiding ? -0.12 : 0), home.z + raise * 0.08);
   lanternVM.rotation.set(0, 0.25 - raise * 0.2, -sway * 2);
   if (tpl.lantern && !lanternVM.userData.model) {
@@ -788,6 +793,13 @@ export function draw(g, dt, view) {
     L.color.set(g.flipped ? "#ff7a3a" : "#ff9a4e");
   }
 
+  // --- the way out, once it is open ---
+  const fd = g.L.doors.find((d) => d.kind === "front");
+  if (fd && !fd.locked) {
+    moon.position.set(fd.x, 1.6, fd.z + 0.9);
+    moon.intensity += ((2.2 + flashNow * 6) - moon.intensity) * Math.min(1, dt * 2);
+  } else moon.intensity = 0;
+
   // --- the dark, and eyes getting used to it ---
   const dark = !lit && !(g.inPool && !g.flipped);
   adapt += ((dark ? 1 : 0) - adapt) * Math.min(1, dt * (dark ? 0.12 : 1.5));
@@ -805,6 +817,7 @@ export function draw(g, dt, view) {
     if (f.t > 0.8) flashes.splice(i, 1);
   }
   lightning.intensity = flash * (quality === "high" ? 4 : 1.6);
+  flashNow = flash;
   if (flash > 0.02 && quality === "high") lightning.shadow.needsUpdate = true;
   M.capiz.emissiveIntensity = flash * 1.6 + 0.015;
 

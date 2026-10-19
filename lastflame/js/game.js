@@ -491,7 +491,7 @@ export function step(g, dt, input) {
       const kind = p.running ? "run" : p.crouch ? "crouch" : "walk";
       ev(g, { type: "step", who: "player", x: p.x, z: p.z, kind, tiles: g.L.rooms[Math.max(0, roomAt(g.L, p.x, p.z))].floor === "tiles" });
       g.noise(p.x, p.z, NOISE[kind], "step");
-      if (p.running && h.active && h.state !== "retreat") hint(g, "run", "Running is loud. Hold [crouch] to creep.", 6);
+      if (p.running && h.active && h.state !== "retreat") hint(g, "run", "Running is loud. [crouch] to crouch and creep.", 6);
     }
     // boards that creak
     p.creakT = Math.max(0, p.creakT - dt);

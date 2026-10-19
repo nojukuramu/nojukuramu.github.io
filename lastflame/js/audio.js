@@ -30,7 +30,7 @@ const buf = {};
 const last = {};
 let loading = false;
 const bed = {};
-let heartNext = 0, ambT = { creak: 12, howl: 50, tuko: 30, whisper: 8 }, lastG = null;
+let heartNext = 0, ambT = { creak: 12, howl: 50, tuko: 30, whisper: 8, door: 3 }, lastG = null;
 
 export function unlock() {
   if (ac) { if (ac.state === "suspended") ac.resume(); return; }
@@ -366,6 +366,13 @@ export function update(g, dt, cam) {
   }
   if (ambT.howl <= 0) { ambT.howl = 70 + Math.random() * 80; play("howl", { vol: 0.22, lp: 2500, x: p.x + 30, z: p.z - 20 }); }
   if (ambT.tuko <= 0) { ambT.tuko = 40 + Math.random() * 60; play("tuko", { vol: 0.28, x: p.x - 12, z: p.z + 8, y: 3, occluded: true }); }
+  // at the end the front door stands open and creaks in the wind: the one
+  // sound in the house that is the way out, to steer by in the dark
+  if (peak && ambT.door <= 0) {
+    ambT.door = 6 + Math.random() * 3;
+    const fd = g.L.doors.find((d) => d.kind === "front");
+    if (fd) { play("door_creak_long", { x: fd.x, z: fd.z - 0.2, y: 1.4, vol: 0.9, rate: 0.75 + Math.random() * 0.15, ref: 2.5, rolloff: 0.8 }); caption("the front door, creaking in the wind", fd.x, fd.z, true); }
+  }
   // at the end it whispers when it is near
   if (peak && h.active && g.hunterDist < 9) {
     if (ambT.whisper <= 0) { ambT.whisper = 2.5 + Math.random() * 3; play(pickOf("whisper", 5), { x: h.x, z: h.z, y: 1.8, vol: 1.2 * (1 - g.hunterDist / 9) + 0.3, rate: 0.85 }); caption("whispering", h.x, h.z); }

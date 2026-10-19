@@ -12,7 +12,7 @@ function defaults() {
   return {
     v: 1,
     set: {
-      fear: "normal", mode: "lola", scares: "full", motion: true, quality: "high",
+      fear: "normal", mode: "lola", scares: "full", motion: true, quality: "auto",
       sens: 1, invert: false, fov: 72, bright: 0.5, volume: 0.85, captions: false, crouchToggle: true
     },
     stats: { nights: 0, escaped: 0, deaths: 0, best: 0, lampsLit: 0 },

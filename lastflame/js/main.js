@@ -25,9 +25,11 @@ render.init(canvas, (p) => ui.progress(p));
 
 let g = null, paused = false, frozen = false, lastT = performance.now(), seenState = null, view = { raise: false };
 
+/* Auto: a phone gets the fast renderer, anything with a mouse gets shadows. */
+const quality = (q) => (q === "auto" ? (matchMedia("(pointer: coarse)").matches ? "low" : "high") : q);
 function apply() {
   const s = S.set;
-  render.setQuality(s.quality);
+  render.setQuality(quality(s.quality));
   render.setMotion(s.motion);
   render.setScares(s.scares);
   render.setFov(s.fov);
@@ -45,6 +47,7 @@ audio.setOccluder((x, z) => (g ? !sees(g.G, g.player.x, g.player.z, x, z) : fals
 
 function begin(seed) {
   audio.unlock();
+  titleG = null;
   g = game.newRun({ seed, mode: S.set.mode, fear: S.set.fear });
   render.build(g);
   input.setLook(g.player.yaw, 0);
@@ -170,7 +173,8 @@ function frame(now) {
     if (!paused) audio.update(g, dt, render.three().camera.position);
     ui.frame(g, view);
   } else {
-    render.drawIdle(dt);
+    if (!titleG && render.isReady()) titleScene();
+    if (titleG) titleFrame(dt); else render.drawIdle(dt);
   }
   requestAnimationFrame(frame);
 }
@@ -187,6 +191,45 @@ function dead() {
   S.stats.deaths += g.stats.deaths;
   save();
   setTimeout(() => { if (g && g.state === "dead") { end(); ui.show("dead", { lit: g.lit }); } }, 400);
+}
+
+/* The title: the caida of one particular house, its first lamp lit, the
+   lantern on the floor, the storm outside. Now and then, in a flash of
+   lightning, something stands in a doorway. */
+const TITLE_SEED = 20261031;
+let titleG = null, titleT = 0, titleSeen = 0;
+function titleScene() {
+  titleG = game.newRun({ seed: TITLE_SEED });
+  const L = titleG.L, l = L.lamps[0], p = titleG.player;
+  l.lit = true;
+  const n = [l.front.x - l.x, l.front.z - l.z], nl = Math.hypot(n[0], n[1]) || 1;
+  p.x = l.x + (n[0] / nl) * 3.2; p.z = l.z + (n[1] / nl) * 3.2;
+  p.yaw = Math.atan2(l.x - p.x, l.z - p.z); p.pitch = -0.12; p.eye = 1.45;
+  p.lantern = false; titleG.lanternPower = 0;
+  titleG.base = p.yaw;
+  render.build(titleG);
+}
+function titleFrame(dt) {
+  titleT += dt;
+  const p = titleG.player, h = titleG.hunter;
+  p.yaw = titleG.base + Math.sin(titleT * 0.11) * 0.12;
+  titleG.lightning -= dt;
+  const evs = [];
+  if (titleG.lightning <= 0) {
+    titleG.lightning = 14 + Math.random() * 18;
+    evs.push({ type: "lightning", power: 0.6 + Math.random() * 0.4, thunder: 0.8 + Math.random() * 2 });
+    // one flash in three, it is there: in a doorway you can see, for as long as the flash lasts
+    const doors = titleG.L.doors.filter((d) => d.b >= 0 && Math.hypot(d.x - p.x, d.z - p.z) > 3 && Math.hypot(d.x - p.x, d.z - p.z) < 9 && Math.cos(Math.atan2(d.x - p.x, d.z - p.z) - p.yaw) > 0.88);
+    if (doors.length && Math.random() < 0.34) {
+      const d = doors[Math.floor(Math.random() * doors.length)];
+      Object.assign(h, { active: true, state: "stare", x: d.x, z: d.z, yaw: Math.atan2(p.x - d.x, p.z - d.z), stareT: 99, moving: false, speed: 0 });
+      titleSeen = 0.7;
+    }
+  }
+  if (titleSeen > 0) { titleSeen -= dt; if (titleSeen <= 0) { h.active = false; h.state = "absent"; } }
+  render.feed(evs, titleG);
+  audio.feed(evs, titleG);
+  render.draw(titleG, dt, { title: true });
 }
 
 ui.show("title");

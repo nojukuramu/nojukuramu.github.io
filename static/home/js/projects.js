@@ -447,6 +447,26 @@
       c.fillStyle = "rgba(255,243,226,.85)"; c.fillRect(cx - 3, base - 16, 6, 10);
       c.fillStyle = a; c.fillRect(cx - 10, base - 7, 20, 8);
     },
+    /* an oil lamp in the dark, its flame guttering, and now and then two
+       points of eyeshine where the light does not reach */
+    lamp: function (c, w, h, p, a) {
+      var cx = w * 0.42, base = h * 0.82, fy = h * 0.5, fl = 1 + Math.sin(p * 11) * 0.06 + Math.sin(p * 23.7) * 0.05;
+      var g = c.createRadialGradient(cx, fy, 2, cx, fy, h * 0.55 * fl);
+      g.addColorStop(0, "rgba(255,170,90,.38)"); g.addColorStop(1, "rgba(255,120,40,0)");
+      c.fillStyle = g; c.fillRect(0, 0, w, h);
+      c.strokeStyle = "rgba(255,243,226,.55)"; c.lineWidth = 1.3;
+      c.beginPath(); c.ellipse(cx, base - h * 0.08, w * 0.07, h * 0.07, 0, 0, 6.283); c.stroke();
+      c.beginPath(); c.moveTo(cx - w * 0.09, base); c.lineTo(cx + w * 0.09, base); c.stroke();
+      c.beginPath(); c.moveTo(cx - w * 0.035, base - h * 0.15); c.quadraticCurveTo(cx - w * 0.06, fy, cx - w * 0.02, fy - h * 0.12);
+      c.moveTo(cx + w * 0.035, base - h * 0.15); c.quadraticCurveTo(cx + w * 0.06, fy, cx + w * 0.02, fy - h * 0.12); c.stroke();
+      c.fillStyle = a; c.beginPath();
+      c.moveTo(cx, fy - h * 0.13 * fl); c.quadraticCurveTo(cx + w * 0.03, fy - h * 0.02, cx, fy + h * 0.03); c.quadraticCurveTo(cx - w * 0.03, fy - h * 0.02, cx, fy - h * 0.13 * fl); c.fill();
+      var e = p % 7;
+      if (e > 4.2 && e < 5.1) {
+        c.fillStyle = "rgba(255,226,160," + (0.9 - Math.abs(e - 4.65) * 1.6) + ")";
+        c.beginPath(); c.arc(w * 0.8, h * 0.36, 1.8, 0, 6.283); c.arc(w * 0.84, h * 0.37, 1.8, 0, 6.283); c.fill();
+      }
+    },
     /* three reels rolling past a payline, stopping left to right on 7-7-7 */
     reels: function (c, w, h, p, a) {
       var rw = w * 0.2, gap = w * 0.04, x0 = (w - rw * 3 - gap * 2) / 2, top = h * 0.16, rh = h * 0.68, cell = rh / 3;
@@ -549,6 +569,10 @@
       desc: "A casino for play money: spin for chips, not cash.",
       hi: ["Three slots, roulette, blackjack and Gem Mines", "1,000 free chips every hour, nothing to buy or cash out", "Slots tuned to pay back about 96%, dealt by a secure RNG"],
       tags: ["slots", "cards", "play money"] },
+    { name: "Last Flame", href: "lastflame/", badge: "Horror", accent: "#FF9A4E", kind: "games", motif: "lamp",
+      desc: "Lola's house, a typhoon, a brownout, and five lamps to relight before it finds you.",
+      hi: ["A bahay na bato built fresh every night, and one aswang you mostly only hear", "Light keeps you safe until the fifth lamp, then it gives you away", "Hide, hold your breath, and listen: the tiktik is loudest when it is far"],
+      tags: ["Three.js", "horror", "offline"] },
     { name: "ARCO", href: "arco/", badge: "Instrument", accent: "#E0A24C", kind: "sound", motif: "strings",
       desc: "A guitar for a phone held sideways.",
       hi: ["A six-string neck that hammers, pulls, slides and bends", "Tap frets to play, or pick, strum and palm-mute the body", "Power chords under one thumb, in any tuning"],

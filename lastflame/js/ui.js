@@ -92,7 +92,7 @@ export function show(name, data) {
         ${range("fov", "Field of view", 60, 95, 1)}
         ${range("bright", "Brightness", 0, 1, 0.05)}
         ${range("volume", "Volume", 0, 1, 0.05)}
-        ${seg("quality", { label: "Graphics", items: [["high", "Shadows"], ["low", "Fast"]] })}
+        ${seg("quality", { label: "Graphics", items: [["auto", "Auto"], ["high", "Shadows"], ["low", "Fast"]] }, "quality")}
         <h3>Version ${info("update")}</h3>
         <div class="row"><div class="lbl">Last Flame ${u.version}<small id="updState">${u.ready ? "A new version is ready." : u.supported ? "Checked every 30 minutes." : "Updates need the installed app."}</small></div>
         ${u.ready ? btn("updApply", null, "Reload", "small primary") : btn("updCheck", null, "Check for updates", "small")}</div>

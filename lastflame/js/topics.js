@@ -82,6 +82,10 @@ export const TOPICS = {
     title: "Sound captions",
     body: `<p>Writes the sounds that matter at the bottom of the screen — its footsteps, a door, the tiktik — with which side they came from. For playing without sound, or without hearing.</p>`
   },
+  quality: {
+    title: "Graphics",
+    body: `<p><b>Shadows</b> lets your lantern throw moving shadows and the lightning come in through the windows, with a glow round every flame. <b>Fast</b> leaves those out and draws fewer pixels, for a phone or an older computer. <b>Auto</b> picks Fast on a phone and Shadows elsewhere.</p>`
+  },
   update: {
     title: "Updates",
     body: `<p>Last Flame keeps itself on your device so it opens offline. When a new version is published it downloads quietly and waits; it never swaps itself in during a night. Reload when you are ready.</p>`

@@ -116,7 +116,7 @@ export function makeCreature(T) {
   const skin = new THREE.MeshStandardMaterial({ color: "#55544c", map: T.skin(), roughness: 0.34, metalness: 0 });
   const dark = new THREE.MeshStandardMaterial({ color: "#2a2724", roughness: 0.8 });
   const clothMat = new THREE.MeshStandardMaterial({ map: T.cloth(), color: "#6a645a", alphaMap: T.clothAlpha(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.95 });
-  const faceMat = new THREE.MeshStandardMaterial({ map: T.face(), roughness: 0.45 });
+  const faceMat = new THREE.MeshStandardMaterial({ map: T.face(), color: "#a9a89f", roughness: 0.72 });
   const eyeMat = new THREE.MeshBasicMaterial({ color: "#ffe9b0", transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
 
   // a limb: a tapered cylinder from 0 to 1 along y, stretched between joints
@@ -249,15 +249,23 @@ export function makeCreature(T) {
     const P = pose({ mode, ph: phase, amp, t });
 
     // where it stands; at the kill, right in front of you
-    let gx = h.x, gz = h.z, gyaw = h.yaw;
+    let gx = h.x, gz = h.z, gy = 0, gyaw = h.yaw;
     if (mode === "kill" && ctx.scares === "full") {
+      // the face comes at you: placed so the head lands in front of the eyes,
+      // rushing in from a metre to a hand's breadth in the first fifth of a second
       const cam = ctx.camera, fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
       fwd.y = 0; fwd.normalize();
-      const k = Math.min(1, ctx.kill / 0.18);
-      gx = cam.position.x + fwd.x * (1.1 - k * 0.55); gz = cam.position.z + fwd.z * (1.1 - k * 0.55);
+      // (not closer than the lantern in your hand, or the face is lit from behind)
+      const k = Math.min(1, ctx.kill / 0.2), dist = 1.15 - k * 0.5;
       gyaw = Math.atan2(-fwd.x, -fwd.z);
+      const s0 = Math.sin(gyaw), c0 = Math.cos(gyaw);
+      const hx = P.head[0] * c0 + P.head[2] * s0, hz = -P.head[0] * s0 + P.head[2] * c0;
+      gx = cam.position.x + fwd.x * dist - hx; gz = cam.position.z + fwd.z * dist - hz;
+      gy = cam.position.y - 0.06 - P.head[1];
     } else if (mode === "kill") { group.visible = false; hair.visible = false; return; }
-    group.position.set(gx, 0, gz);
+    // at the kill the hair over the face parts
+    curtains[1].m.visible = curtains[2].m.visible = mode !== "kill";
+    group.position.set(gx, gy, gz);
     group.rotation.y = gyaw;
     group.updateMatrixWorld(true);
 
@@ -306,7 +314,8 @@ export function makeCreature(T) {
     const dist = toCam.length();
     const shine = Math.max(0, facing) * Math.max(0, 1 - dist / 14) * (0.25 + ctx.lanternPower) + ctx.flash * 0.8;
     eyeK += (shine - eyeK) * Math.min(1, dt * 10);
-    for (const e of eyes) { e.material.opacity = Math.min(1, eyeK * 1.4); e.scale.setScalar(0.035 + eyeK * 0.03); }
+    // up close they are pinpoints, deep in the sockets
+    for (const e of eyes) { e.material.opacity = Math.min(1, eyeK * 1.4); e.scale.setScalar(mode === "kill" ? 0.012 : 0.035 + eyeK * 0.03); }
 
     // the dress: rings from the chest down past the knees
     const pos = dressGeo.attributes.position;
