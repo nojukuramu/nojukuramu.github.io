@@ -94,6 +94,7 @@ next time that app is touched — reusing `routecast/static/js/update.js` or
 | `burst_dump` | yes | yes |
 | `bloomworks` | yes | yes |
 | `ballzooka` | yes | yes |
+| `lastflame` | yes | yes |
 | `task-notes` | yes | **no** — the worker waits for a handover nobody ever asks for |
 | `pwg` | **no** — `skipWaiting()` in `install` | partial |
 | `3dtd`, `antiafk`, `citybuilder`, `magic_circles` | **no** | **no** |

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Last Flame — a horror night in Lola's house</title>
+<meta name="description" content="A first-person horror game in a Filipino ancestral house during a typhoon brownout. Relight five oil lamps with a lantern that is running dry, hide from the aswang you can hear but rarely see, then find the front door when the light turns against you. Plays offline.">
+<meta name="theme-color" content="#050403">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Last Flame">
+<link rel="stylesheet" href="css/lastflame.css">
+<script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
+<!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
+<script>window.LF_VERSION = "1";</script>
+</head>
+<body>
+<canvas id="view" aria-label="Lola's house"></canvas>
+
+<div id="hud" hidden>
+  <div id="hint" aria-live="polite"></div>
+  <div id="crosshair"></div>
+  <div id="prompt" hidden><span id="prompt-ring"></span><span id="prompt-verb"></span></div>
+  <div id="oilword"></div>
+  <div id="captions" aria-live="polite"></div>
+  <button id="btn-pause" class="ibtn" aria-label="Pause"><i data-icon="pause"></i></button>
+  <div id="touch" hidden>
+    <div id="stick" hidden><i id="stick-knob"></i></div>
+    <button id="use" class="tbtn big" aria-label="Act"><i data-icon="hand"></i></button>
+    <button id="btn-lantern" class="tbtn" aria-label="Lantern"><i data-icon="lantern"></i></button>
+    <button id="btn-crouch" class="tbtn" aria-label="Crouch"><i data-icon="crouch"></i></button>
+    <button id="btn-breath" class="tbtn" aria-label="Hold your breath"><i data-icon="breath"></i></button>
+    <button id="btn-raise" class="tbtn small" aria-label="Look at the lantern"><i data-icon="flame"></i></button>
+  </div>
+</div>
+
+<div id="note" hidden role="dialog" aria-labelledby="note-title">
+  <div class="paper"><h3 id="note-title"></h3><div id="note-body"></div><small>tap to put it down</small></div>
+</div>
+
+<div id="screen" hidden></div>
+
+<div id="info-scrim" hidden></div>
+<div id="info-sheet" role="dialog" aria-modal="true" aria-labelledby="info-title" hidden>
+  <div class="sheet-head"><h2 id="info-title"></h2><button id="info-close" class="ibtn" aria-label="Close"><i data-icon="close"></i></button></div>
+  <div id="info-body"></div>
+</div>
+
+<div id="update-bar" hidden>
+  <span>A new version of Last Flame is ready.</span>
+  <button id="update-go" class="btn primary small">Reload</button>
+  <button id="update-later" class="ibtn small" aria-label="Later"><i data-icon="close"></i></button>
+</div>
+
+<noscript><p class="noscript">Last Flame is a game, and games need JavaScript.</p></noscript>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "Last Flame — a horror night in Lola's house",
+  "short_name": "Last Flame",
+  "description": "Relight five oil lamps in a dark ancestral house during a typhoon brownout, hide from what hunts you, and find the front door. Plays offline.",
+  "id": "/lastflame/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#050403",
+  "theme_color": "#050403",
+  "categories": ["games", "entertainment"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
