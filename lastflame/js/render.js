@@ -68,7 +68,7 @@ export function init(canvas, onProgress) {
   camera.rotation.order = "YXZ";
   scene.add(camera);
 
-  hemi = new THREE.HemisphereLight("#6f86b0", "#1a120c", 0.04);
+  hemi = new THREE.HemisphereLight("#a8bde0", "#3a332c", 0.04);
   scene.add(hemi);
   // lightning: a cold light from outside, through the capiz
   lightning = new THREE.DirectionalLight("#c4d2ff", 0);
@@ -389,6 +389,11 @@ export function build(g) {
     H.notes[n.id] = o;
   }
   creature.reset();
+  // the moon, and every flash of lightning, come from one side of the house,
+  // low enough to fall through the capiz onto the floor
+  lightning.position.set(L.W / 2 + 24, 12, L.D / 2 + 17);
+  lightning.target.position.set(L.W / 2, 0, L.D / 2);
+  lightning.target.updateMatrixWorld();
   lightning.shadow.needsUpdate = true;
   killT = -1; fadeIn = 1;
   // compile every shader now, the creature's included, so its first
@@ -588,10 +593,11 @@ function closetGeometry() {
   frame.box(0, dh - 0.08, -0.012, dw, dh, 0.012, 1);
   frame.box(0, dh * 0.48, -0.012, dw, dh * 0.48 + 0.06, 0.012, 1);
   door.push(frame.geo());
-  for (let y = 0.11; y < dh - 0.1; y += 0.07) {
+  // slats far enough apart, and flat enough, that an eye pressed to them sees the room
+  for (let y = 0.11; y < dh - 0.1; y += 0.085) {
     if (Math.abs(y - dh * 0.5) < 0.05) continue;
-    const s = new THREE.BoxGeometry(dw - 0.12, 0.05, 0.008);
-    s.rotateX(-0.75);
+    const s = new THREE.BoxGeometry(dw - 0.12, 0.045, 0.008);
+    s.rotateX(-0.5);
     s.translate(dw / 2, y, 0);
     door.push(s);
   }
@@ -788,7 +794,7 @@ export function draw(g, dt, view) {
     const L = lampLights[i], q = litLamps[i];
     if (!q) { L.intensity = 0; continue; }
     L.position.set(q.l.x, q.l.y + H.lamps[q.l.id].fy + 0.05, q.l.z);
-    L.intensity = 5 * q.f * q.big * (g.flipped ? 1.3 : 1);
+    L.intensity = 8 * q.f * q.big * (g.flipped ? 1.3 : 1);
     L.distance = POOL_R * 3.2;
     L.color.set(g.flipped ? "#ff7a3a" : "#ff9a4e");
   }
@@ -803,7 +809,9 @@ export function draw(g, dt, view) {
   // --- the dark, and eyes getting used to it ---
   const dark = !lit && !(g.inPool && !g.flipped);
   adapt += ((dark ? 1 : 0) - adapt) * Math.min(1, dt * (dark ? 0.12 : 1.5));
-  hemi.intensity = 0.035 + adapt * (g.flipped ? 0.42 : 0.3);
+  // grey and colourless (the post pass takes the colour out as you adapt),
+  // but enough to make out a doorway, a table, a shape standing still
+  hemi.intensity = 0.04 + adapt * (g.flipped ? 2.3 : 1.7);
 
   // --- lightning ---
   let flash = 0;
@@ -813,13 +821,15 @@ export function draw(g, dt, view) {
     // a double stroke: a flash, a gap, a brighter one, a fade
     const k = f.t < 0.06 ? f.t / 0.06 : f.t < 0.12 ? 0.25 : f.t < 0.18 ? 1 : Math.max(0, 1 - (f.t - 0.18) / 0.5);
     flash = Math.max(flash, k * f.pow);
-    if (!f.placed) { f.placed = true; const a = f.side * Math.PI * 2; lightning.position.set(g.L.W / 2 + Math.sin(a) * 30, 22, g.L.D / 2 + Math.cos(a) * 30); lightning.target.position.set(g.L.W / 2, 0, g.L.D / 2); }
     if (f.t > 0.8) flashes.splice(i, 1);
   }
-  lightning.intensity = flash * (quality === "high" ? 4 : 1.6);
+  // between flashes the same light is the moon through the capiz: it only
+  // gets in where the windows let it (with shadows), so it stays faint without them
+  const moonBase = quality === "high" ? 0.35 : 0.05;
+  lightning.intensity = moonBase + flash * (quality === "high" ? 4 : 1.6);
   flashNow = flash;
   if (flash > 0.02 && quality === "high") lightning.shadow.needsUpdate = true;
-  M.capiz.emissiveIntensity = flash * 1.6 + 0.015;
+  M.capiz.emissiveIntensity = flash * 1.6 + 0.04 + adapt * 0.08;
 
   // --- doors, closets, kicked things ---
   for (const d of g.L.doors) {

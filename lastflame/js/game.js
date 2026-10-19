@@ -125,7 +125,11 @@ function pickRoom(g) {
   const hops = L.graph.hops[pr];
   if (d.advance) {
     d.advance = false;
-    const near = L.rooms.filter((x) => hops[x.id] <= 1 && x.id !== h.room);
+    // early on, an advance is one room nearer than where it stands; from the
+    // third lamp, it is next door to you
+    const close = g.phase === "pressure" || g.phase === "dread" || g.phase === "peak";
+    const hh = h.room >= 0 ? hops[h.room] : 9;
+    const near = L.rooms.filter((x) => x.id !== h.room && (close ? hops[x.id] <= 1 : hops[x.id] === Math.max(1, hh - 1)));
     if (near.length) return near[Math.floor(r() * near.length)].id;
   }
   const close = g.phase === "pressure" || g.phase === "dread" || g.phase === "peak";
@@ -302,8 +306,9 @@ function enterCloset(g, c) {
   g.stats.hides++;
   ev(g, { type: "closetIn", id: c.id });
   g.noise(c.x, c.z, NOISE.closet, "closet");
-  // rule 7: if it saw you go in, it knows
-  if (h.active && (h.sees || (h.state === "chase" && g.hunterDist < 9 && h.lostT < 0.8))) { h.sawHide = c.id; ev(g, { type: "spotted" }); }
+  // rule 7: if it saw you go in, it knows (the scripted first visit only looks)
+  if (h.active && h.state !== "pass" && (h.sees || (h.state === "chase" && g.hunterDist < 9 && h.lostT < 0.8))) { h.sawHide = c.id; ev(g, { type: "spotted" }); }
+  if (p.lantern && p.oil > 0) hint(g, "closetlight", "Your light shows through the slats. [lantern]", 5);
 }
 
 function leaveCloset(g) {

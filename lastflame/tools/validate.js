@@ -416,6 +416,36 @@ function playNight(M, o, maxT) {
     check("a lit lantern at the end is a beacon it knows", gf.hunter.lastSeen && gf.hunter.lastSeen.beacon);
   }
 
+  section("Behaviour: the first visit is a lesson, not a trap");
+  {
+    // light the first lamp, then either hide (lantern still lit — nobody has said not to yet)
+    // or stand in plain sight; either way the first visit must end with you alive
+    const intro = (seed, hide) => {
+      const g = game.newRun({ seed });
+      const p = g.player, L = g.L, l0 = L.lamps[0], cl = L.closets.find((c) => L.rooms[c.room].type === "caida");
+      p.x = l0.front.x; p.z = l0.front.z;
+      let hidden = false, sawPass = false;
+      for (let i = 0; i < 30 * 70 && g.state === "play"; i++) {
+        const inp = { yaw: p.yaw };
+        if (!l0.lit) { inp.yaw = Math.atan2(l0.x - p.x, l0.z - p.z); inp.use = true; }
+        else if (g.hints.hide && hide && !hidden) { p.x = cl.front.x; p.z = cl.front.z; inp.yaw = Math.atan2(cl.x - p.x, cl.z - p.z); inp.usePress = true; hidden = true; }
+        else if (!hide && g.hunter.active) inp.yaw = Math.atan2(g.hunter.x - p.x, g.hunter.z - p.z);
+        game.step(g, 1 / 30, inp);
+        if (g.hunter.state === "pass") sawPass = true;
+        if (g.flags.passDone && g.t > 50) break;
+      }
+      return { g, sawPass };
+    };
+    let fine = 0, passed = 0, n = 0;
+    for (let s = 1; s <= 12; s++) for (const hide of [true, false]) {
+      const { g, sawPass } = intro(s * 101, hide);
+      n++; if (sawPass) passed++;
+      if (g.stats.deaths === 0 && g.flags.passDone) fine++;
+    }
+    check("it comes in for the first visit every time (" + passed + "/" + n + ")", passed === n);
+    check("and leaves you alive, hidden with a lit lantern or standing in its sight (" + fine + "/" + n + ")", fine === n);
+  }
+
   section("Behaviour: whole nights, played by the autopilot");
   {
     const N = 24;

@@ -159,11 +159,13 @@ function perceive(g, dt) {
     } else h.aware = Math.max(0, h.aware - 0.3 * dt);
   } else if (p.hiding >= 0) {
     h.aware = Math.max(0, h.aware - 0.3 * dt);
-    // a lantern left burning in a closet shines out through the slats
+    // a lantern left burning in a closet shines out through the slats: it
+    // takes a moment of looking to make that out, and the first visit is a
+    // lesson, not a trap
     const c = g.L.closets[p.hiding];
-    if (p.lantern && p.oil > 0 && d < 14 && h.sawHide < 0 && sees(g.G, h.x, h.z, c.front.x, c.front.z)) {
-      h.sawHide = c.id; ev(g, { type: "notice", why: "glow" });
-    }
+    const glowing = p.lantern && p.oil > 0 && d < 9 && h.sawHide < 0 && h.state !== "pass" && h.state !== "stare" && h.state !== "retreat" && sees(g.G, h.x, h.z, c.front.x, c.front.z);
+    h.glowT = glowing ? (h.glowT || 0) + dt : 0;
+    if (h.glowT > 1.2) { h.sawHide = c.id; h.glowT = 0; ev(g, { type: "notice", why: "glow" }); }
   }
   // the end: a lit lantern is a beacon it always knows
   if (g.flipped && p.lantern && p.oil > 0 && p.hiding < 0 && g.litT > 1.2) h.lastSeen = { x: p.x, z: p.z, t: g.t, beacon: true };
@@ -327,6 +329,8 @@ export function step(g, dt) {
 
   switch (h.state) {
     case "chase": {
+      // it saw you get into that closet: straight there
+      if (h.sawHide >= 0) { setState(g, "rip"); h.path = null; h.goalCloset = -1; break; }
       if (h.sees) { h.lostT = 0; h.chaseV = Math.min(tune(g).vmax, h.chaseV + 0.42 * dt); }
       else { h.lostT += dt; h.chaseV = Math.max(SPEED.chase0, h.chaseV - 0.6 * dt); }
       if (inLight) { stare(g, 2.5 + g.r() * 1.5); break; }
@@ -387,6 +391,9 @@ export function step(g, dt) {
       break;
     }
     default: {
+      // a closet it knows about is the first thing it goes to — unless it is
+      // walking away for its Relax, and then it has let you go
+      if (h.sawHide >= 0 && h.state === "retreat") h.sawHide = -1;
       if (h.sawHide >= 0 && h.state !== "rip") { setState(g, "rip"); h.path = null; h.goalCloset = -1; break; }
       if (h.wait > 0) {
         h.wait -= dt; h.moving = false;
