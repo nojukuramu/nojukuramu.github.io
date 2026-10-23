@@ -11,6 +11,8 @@
    4. The shell has every file it needs
    5. Every id the scripts reach for is in index.html
    6. Every (i) names a topic
+   7. Behaviour: the cube model, the 2x2 solver, scrambles, averages and
+      typed times, run in a bare VM context
 
    No dependencies, no build step.
    ============================================================ */
@@ -99,6 +101,97 @@ section("Static: ids and topics");
   for (const src of jsFiles.map(read).concat([html])) for (const m of src.matchAll(/data-info="([^"]+)"/g)) used.add(m[1]);
   const noTopic = [...used].filter((k) => !topics.has(k));
   check("every (i) names a topic", !noTopic.length, noTopic.join(", "));
+}
+
+section("Static: every script the page loads exists, at the shell's version");
+{
+  const assetV = (sw.match(/var ASSET_V\s*=\s*"([^"]+)"/) || [])[1];
+  const srcs = [...html.matchAll(/<script src="([^"?]+)\?v=([^"]+)"/g)];
+  check("every <script src> exists", srcs.every((m) => exists(m[1])), srcs.filter((m) => !exists(m[1])).map((m) => m[1]).join(", "));
+  check("every module in js/ is loaded by index.html", jsFiles.every((f) => srcs.some((m) => m[1] === f)), jsFiles.filter((f) => !srcs.some((m) => m[1] === f)).join(", "));
+  const links = [...html.matchAll(/(?:src|href)="[^"]+\?v=([^"]+)"/g)].map((m) => m[1]);
+  check("every ?v= in index.html matches the worker's ASSET_V", links.length && links.every((v) => v === assetV), [...new Set(links)].join(",") + " vs " + assetV);
+}
+
+section("Behaviour");
+{
+  const vm = require("vm");
+  const noop = () => {};
+  const ctx = vm.createContext({
+    console, Math, JSON, Date, Int8Array, setTimeout, clearTimeout,
+    performance: { now: () => Date.now() },
+    requestAnimationFrame: noop, cancelAnimationFrame: noop,
+    document: { addEventListener: noop }, window: {}, navigator: {}
+  });
+  for (const f of ["cube", "solver222", "scramble", "stats", "store", "app"]) vm.runInContext(read("js/" + f + ".js"), ctx, { filename: f + ".js" });
+  const RK = vm.runInContext("RK", ctx);
+  const C = RK.cube;
+
+  /* Any face turned four times is home: catches a wrong rotation axis. */
+  let bad = [];
+  for (const n of [2, 3, 4, 5, 6, 7]) for (const m of ["U", "D", "R", "L", "F", "B", "Rw", "Uw", "3Fw"]) {
+    const mv = C.parse(m);
+    if (mv.depth > n / 2 && n > 2) continue;
+    if (!C.isSolved(C.apply(C.solved(n), [m, m, m, m].join(" ")))) bad.push(n + ":" + m);
+  }
+  check("every turn, four times, is the identity on 2x2 to 7x7", !bad.length, bad.join(" "));
+  check("(R U R' U') x6 is the identity, x1 is not", C.isSolved(C.apply(C.solved(3), "R U R' U' ".repeat(6))) && !C.isSolved(C.apply(C.solved(3), "R U R' U'")));
+  const f = C.faces(C.apply(C.solved(3), "R"));
+  check("R takes the front's right column to the top (white on top, green in front)", f.U.every((row) => row[2] === "F") && f.F.every((row) => row[2] === "D"));
+
+  /* Every NxN scramble parses, and undoing it lands on solved. */
+  const inv = (t) => t.endsWith("2") ? t : t.endsWith("'") ? t.slice(0, -1) : t + "'";
+  bad = [];
+  for (const e of RK.scramble.EVENTS) {
+    for (let k = 0; k < 5; k++) {
+      const moves = RK.scramble.format(RK.scramble.generate(e.id)).split(/\s+/);
+      if (!moves.length || moves.some((m) => !m)) { bad.push(e.id + ": empty move"); break; }
+      if (!e.n) continue;
+      if (moves.some((m) => !C.parse(m))) { bad.push(e.id + ": " + moves.find((m) => !C.parse(m))); break; }
+      const back = moves.slice().reverse().map(inv).join(" ");
+      if (!C.isSolved(C.apply(C.apply(C.solved(e.n), moves.join(" ")), back))) { bad.push(e.id + ": inverse"); break; }
+    }
+  }
+  check("every event scrambles, and cube scrambles parse and invert", !bad.length, bad.join("; "));
+  const third = RK.scramble.format(RK.scramble.generate("3x3")).split(" ");
+  const AX = { U: 0, D: 0, R: 1, L: 1, F: 2, B: 2 };
+  let redundant = 0;
+  for (let i = 1; i < third.length; i++) if (third[i][0] === third[i - 1][0]) redundant++;
+  for (let i = 2; i < third.length; i++) if (third[i][0] === third[i - 2][0] && AX[third[i][0]] === AX[third[i - 1][0]]) redundant++;
+  check("3x3 scrambles never turn a face twice in a row, or R L R", !redundant, third.join(" "));
+
+  /* The 2x2 solver's cubie tables agree with the sticker model. */
+  bad = 0;
+  const FS = ["U", "R", "F"], PW = ["", "2", "'"];
+  for (let i = 0; i < 60; i++) {
+    const mv = [];
+    for (let k = 0; k < 14; k++) mv.push(FS[Math.floor(Math.random() * 3)] + PW[Math.floor(Math.random() * 3)]);
+    const st = RK.solver222.stateOf(mv), sol = RK.solver222.solve(st.p, st.o);
+    if (sol.length > 11 || !C.isSolved(C.apply(C.solved(2), mv.concat(sol).join(" ")))) bad++;
+  }
+  check("2x2 solver solutions solve the sticker model (60 random states)", !bad, bad + " failed");
+  const s2 = RK.solver222.scramble();
+  check("2x2 random-state scrambles are 4 to 11 moves", s2.length >= 4 && s2.length <= 11, s2.join(" "));
+
+  /* Averages, against hand-worked values. */
+  const T = RK.stats, sv = (t, p) => ({ time: t, penalty: p || null, date: 0 });
+  check("Ao5 drops best and worst", T.average([sv(10000), sv(11000), sv(12000), sv(13000), sv(14000)]) === 12000);
+  check("Ao5 survives one DNF and not two", T.average([sv(10000), sv(11000), sv(12000), sv(1, "DNF"), sv(14000)]) === 12333 && T.average([sv(10000), sv(1, "DNF"), sv(12000), sv(1, "DNF"), sv(14000)]) === Infinity);
+  check("Mo3 trims nothing; +2 counts", T.average([sv(10000), sv(9000, "+2"), sv(12000)]) === 11000 && T.average([sv(1), sv(1, "DNF"), sv(1)]) === Infinity);
+  const hundred = Array.from({ length: 100 }, (_, i) => sv(10000 + i * 100));
+  check("Ao100 drops five each side", T.average(hundred) === Math.round(hundred.slice(5, 95).reduce((a, s) => a + s.time, 0) / 90));
+  const mix = Array.from({ length: 300 }, (_, i) => sv(5000 + ((i * 7919) % 9000), i % 17 === 0 ? "DNF" : i % 23 === 0 ? "+2" : null));
+  bad = 0;
+  for (const n of T.WINDOWS) { const r = T.rolling(mix, n); for (let i = 1; i <= mix.length; i++) if (r[i - 1] !== T.aoN(mix, n, i)) bad++; }
+  check("the sliding rolling average equals the slice-and-sort one", !bad, bad + " differ");
+  check("times truncate, as the WCA does", T.formatTime(12349) === "12.34" && T.formatTime(65432) === "1:05.43" && T.formatTime(65432, 3) === "1:05.432" && T.formatTime(Infinity) === "DNF");
+
+  /* Typed times: csTimer's rules. */
+  const P = RK.app.parseTyped, eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  check("typed times read the way csTimer reads them",
+    eq(P("1234"), { time: 12340, penalty: null }) && eq(P("12345"), { time: 83450, penalty: null }) &&
+    eq(P("12.34"), { time: 12340, penalty: null }) && eq(P("1:02.5"), { time: 62500, penalty: null }) &&
+    eq(P("9.87+"), { time: 9870, penalty: "+2" }) && eq(P("dnf"), { time: 0, penalty: "DNF" }) && P("abc") === null && P("") === null);
 }
 
 process.stdout.write("\n" + (checks - failures.length) + "/" + checks + " checks passed\n");

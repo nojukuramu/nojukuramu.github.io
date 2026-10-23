@@ -5,8 +5,8 @@
  * never takes over by itself; the page asks with "skip-waiting". */
 "use strict";
 
-var VERSION = "rubiks-v1";
-var ASSET_V = "1";
+var VERSION = "rubiks-v2";
+var ASSET_V = "2";
 var SHELL = VERSION + "-shell";
 
 var SHELL_FILES = [
@@ -15,12 +15,19 @@ var SHELL_FILES = [
   "./manifest.webmanifest?v=" + ASSET_V,
   "./css/rubiks.css?v=" + ASSET_V,
   "./js/icons.js?v=" + ASSET_V,
+  "./js/cube.js?v=" + ASSET_V,
+  "./js/solver222.js?v=" + ASSET_V,
   "./js/scramble.js?v=" + ASSET_V,
   "./js/store.js?v=" + ASSET_V,
   "./js/stats.js?v=" + ASSET_V,
   "./js/timer.js?v=" + ASSET_V,
+  "./js/sound.js?v=" + ASSET_V,
+  "./js/wake.js?v=" + ASSET_V,
+  "./js/chart.js?v=" + ASSET_V,
   "./js/info.js?v=" + ASSET_V,
   "./js/update.js?v=" + ASSET_V,
+  "./js/sheets.js?v=" + ASSET_V,
+  "./js/panels.js?v=" + ASSET_V,
   "./js/app.js?v=" + ASSET_V,
   "./icons/icon.svg",
   "./icons/icon-192.png",
