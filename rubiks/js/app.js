@@ -30,6 +30,7 @@ RK.app = (function () {
 
     RK.sheets.init();
     RK.panels.init();
+    RK.follow.init();
     applySettings();
     setupTimer();
     setupKeys();
@@ -92,6 +93,7 @@ RK.app = (function () {
 
   function updatePreview() {
     var p = $("preview"), n = ev().n;
+    $("btn-follow").hidden = !n;
     if (!S.settings.preview || !n) { p.hidden = true; p.innerHTML = ""; return; }
     p.hidden = false;
     p.innerHTML = RK.cube.svg(n, S.scramble);
@@ -416,10 +418,9 @@ RK.app = (function () {
     $("btn-stats-top").addEventListener("click", RK.panels.openStats);
     $("btn-settings").addEventListener("click", RK.panels.openSettings);
     $("session-peek").addEventListener("click", RK.sheets.openSide);
-    $("preview").addEventListener("click", function () {
-      $("preview-big").innerHTML = RK.cube.svg(ev().n, S.scramble);
-      RK.sheets.open("preview");
-    });
+    function follow() { RK.follow.open(S.scramble, ev().n); }
+    $("preview").addEventListener("click", follow);
+    $("btn-follow").addEventListener("click", follow);
 
     $("last-actions").addEventListener("click", function (e) {
       var b = e.target.closest("[data-last]");

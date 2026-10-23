@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Rubiks — cube timer</title>
-<meta name="description" content="Speedcubing timer: WCA inspection, random-state 2x2 and scrambles for ten events, scramble preview, averages, trends and history. Works offline, nothing leaves the device." />
+<meta name="description" content="Speedcubing timer: WCA inspection, random-state 2x2 and scrambles for ten events, a 3D cube to follow each scramble, averages, trends and history. Works offline, nothing leaves the device." />
 <meta name="theme-color" content="#0d0f14" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#f4f2ee" media="(prefers-color-scheme: light)" />
 <meta name="color-scheme" content="light dark" />
@@ -12,13 +12,15 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="mobile-web-app-capable" content="yes" />
 
-<link rel="manifest" href="manifest.webmanifest?v=2" />
+<link rel="manifest" href="manifest.webmanifest?v=3" />
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icons/apple-touch.png" />
 
-<link rel="stylesheet" href="css/rubiks.css?v=2" />
+<link rel="stylesheet" href="css/rubiks.css?v=3" />
 <!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. -->
-<script>window.RK_VERSION = "2";</script>
+<script>window.RK_VERSION = "3";</script>
+<!-- Three.js, lifted from ballzooka/vendor. Mapped here, imported only when the 3D view first opens. -->
+<script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
 <!-- The theme is applied before the stylesheet paints, so a light-mode choice never flashes dark. -->
 <script>try { var t = JSON.parse(localStorage.getItem("rk.settings") || "{}").theme; if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 </head>
@@ -87,6 +89,9 @@
     <section class="scramble-card" aria-label="Scramble">
       <div id="scramble" class="scramble-text"></div>
       <div class="scramble-tools">
+        <button id="btn-follow" class="icon-btn" title="Follow in 3D" aria-label="Follow the scramble in 3D">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        </button>
         <button id="btn-new-scramble" class="icon-btn" title="New scramble" aria-label="New scramble">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 4v5h-5"/></svg>
         </button>
@@ -127,7 +132,7 @@
         <span class="peek-item"><small>Solves</small><strong id="peek-count">0</strong></span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
       </button>
-      <button id="preview" class="preview" title="Scramble preview" aria-label="Enlarge scramble preview"></button>
+      <button id="preview" class="preview" title="Follow in 3D" aria-label="Follow the scramble in 3D"></button>
     </footer>
   </main>
 </div>
@@ -149,9 +154,21 @@
   <div id="solve-body" class="solve-body"></div>
 </section>
 
-<section id="sheet-preview" class="sheet" role="dialog" aria-modal="true" aria-label="Scramble preview" hidden>
-  <div class="sheet-head"><h3>Scramble preview</h3><button class="icon-btn" data-info="preview" aria-label="About the preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></button><button class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
-  <div id="preview-big" class="preview-big"></div>
+<section id="sheet-follow" class="sheet sheet-follow" role="dialog" aria-modal="true" aria-labelledby="sheet-follow-title" hidden>
+  <div class="sheet-head"><h3 id="sheet-follow-title">Follow the scramble</h3><span id="follow-progress" class="follow-progress"></span><button class="icon-btn" data-info="follow" aria-label="About following the scramble"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></button><button class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
+  <div id="follow-stage" class="follow-stage">
+    <button id="follow-view" class="follow-view" title="Reset the view" aria-label="Reset the view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1015.5-6.2"/><path d="M21 3v6h-6"/></svg></button>
+  </div>
+  <div id="follow-caption" class="follow-caption" aria-live="polite"></div>
+  <div id="follow-moves" class="follow-moves" aria-label="Moves; tap one to jump there"></div>
+  <div class="follow-controls">
+    <button id="follow-start" class="icon-btn" title="Back to solved (Home)" aria-label="Back to solved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 5v14M18 6l-8 6 8 6z"/></svg></button>
+    <button id="follow-prev" class="icon-btn" title="Previous move (Left arrow)" aria-label="Previous move"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <button id="follow-play" class="follow-play" aria-label="Play"><svg class="i-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg><svg class="i-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/></svg></button>
+    <button id="follow-next" class="icon-btn" title="Next move (Right arrow)" aria-label="Next move"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button id="follow-end" class="icon-btn" title="Jump to scrambled (End)" aria-label="Jump to scrambled"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 5v14M6 6l8 6-8 6z"/></svg></button>
+    <div id="follow-speed" class="seg follow-speed" aria-label="Speed"><button value="slow">Slow</button><button value="normal">Normal</button><button value="fast">Fast</button></div>
+  </div>
 </section>
 
 <section id="sheet-settings" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-settings-title" hidden>
@@ -225,20 +242,22 @@
   </div>
 </noscript>
 
-<script src="js/icons.js?v=2"></script>
-<script src="js/cube.js?v=2"></script>
-<script src="js/solver222.js?v=2"></script>
-<script src="js/scramble.js?v=2"></script>
-<script src="js/store.js?v=2"></script>
-<script src="js/stats.js?v=2"></script>
-<script src="js/timer.js?v=2"></script>
-<script src="js/sound.js?v=2"></script>
-<script src="js/wake.js?v=2"></script>
-<script src="js/chart.js?v=2"></script>
-<script src="js/info.js?v=2"></script>
-<script src="js/update.js?v=2"></script>
-<script src="js/sheets.js?v=2"></script>
-<script src="js/panels.js?v=2"></script>
-<script src="js/app.js?v=2"></script>
+<script src="js/icons.js?v=3"></script>
+<script src="js/cube.js?v=3"></script>
+<script src="js/solver222.js?v=3"></script>
+<script src="js/scramble.js?v=3"></script>
+<script src="js/store.js?v=3"></script>
+<script src="js/stats.js?v=3"></script>
+<script src="js/timer.js?v=3"></script>
+<script src="js/sound.js?v=3"></script>
+<script src="js/wake.js?v=3"></script>
+<script src="js/chart.js?v=3"></script>
+<script src="js/cube3d.js?v=3"></script>
+<script src="js/follow.js?v=3"></script>
+<script src="js/info.js?v=3"></script>
+<script src="js/update.js?v=3"></script>
+<script src="js/sheets.js?v=3"></script>
+<script src="js/panels.js?v=3"></script>
+<script src="js/app.js?v=3"></script>
 </body>
 </html>

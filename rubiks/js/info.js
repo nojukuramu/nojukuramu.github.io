@@ -17,11 +17,11 @@ RK.info = (function () {
     },
     scramble: {
       title: "Scrambles",
-      body: "<p>Hold the cube with <strong>white on top and green in front</strong>, then turn it left to right. A letter alone is a clockwise quarter turn of that face as you look at it; <strong>'</strong> is anticlockwise, <strong>2</strong> is a half turn.</p><p><strong>Rw</strong> turns the outer two layers together; <strong>3Rw</strong> turns three.</p><p>2x2 scrambles are <strong>random-state</strong>, the way the WCA makes them: a position is picked uniformly and solved backwards, so every position is equally likely. Larger cubes use random moves at the lengths csTimer uses.</p><p>The preview shows what the cube should look like once scrambled, so you can check before you start.</p>"
+      body: "<p>Hold the cube with <strong>white on top and green in front</strong>, then turn it left to right. A letter alone is a clockwise quarter turn of that face as you look at it; <strong>'</strong> is anticlockwise, <strong>2</strong> is a half turn.</p><p><strong>Rw</strong> turns the outer two layers together; <strong>3Rw</strong> turns three.</p><p>2x2 scrambles are <strong>random-state</strong>, the way the WCA makes them: a position is picked uniformly and solved backwards, so every position is equally likely. Larger cubes use random moves at the lengths csTimer uses.</p><p>The small picture shows what the cube should look like once scrambled. Tap it, or the cube button, to <strong>follow the scramble in 3D</strong> one move at a time.</p>"
     },
-    preview: {
-      title: "Scramble preview",
-      body: "<p>The cube unfolded after the scramble: top face above, then left, front, right and back in a row, bottom face below. White on top and green in front, as you hold it.</p><p>If your cube does not match, a move went wrong. Fix it before you start; a solve on a different scramble is not comparable.</p><p>Previews are drawn for the cubes. Pyraminx, Skewb and Megaminx have scrambles but no preview.</p>"
+    follow: {
+      title: "Follow the scramble",
+      body: "<p>A solved cube that turns through the scramble one move at a time, so you can copy it with yours. Hold your cube <strong>white on top, green in front</strong>, like the one on screen.</p><p>Step with the arrows (or the arrow keys), press play to run it at the speed you choose, or tap any move to jump there. The line under the cube names the next move in words.</p><p><strong>Drag</strong> the cube to look at its other sides; <strong>double-tap</strong> or the reset button turns it back. Your cube does not move when you look round it, so neither does the notation.</p><p>The small picture beside the timer is where you should end up. Pyraminx, Skewb and Megaminx have scrambles but no cube to follow.</p>"
     },
     inspection: {
       title: "WCA inspection",

@@ -58,11 +58,19 @@ RK.cube = (function () {
     return { face: m[2], depth: depth, turns: m[4] === "2" ? 2 : m[4] === "'" ? 3 : 1 };
   }
 
+  /* Is a point (sticker or cubie centre, same coordinates) in the layers
+     this move turns? The 3D view asks the same question, so the two can
+     never disagree about which pieces move. */
+  function inLayer(n, p, mv) {
+    var a = AXIS[mv.face];
+    return a[0] * p[0] + a[1] * p[1] + a[2] * p[2] >= n + 1 - 2 * mv.depth;
+  }
+
   function turn(cube, mv) {
-    var a = AXIS[mv.face], thr = cube.n + 1 - 2 * mv.depth;
     for (var i = 0; i < cube.st.length; i++) {
       var s = cube.st[i], p = s.p;
-      if (a[0] * p[0] + a[1] * p[1] + a[2] * p[2] < thr) continue;
+      if (!inLayer(cube.n, p, mv)) continue;
+      var a = AXIS[mv.face];
       for (var k = 0; k < mv.turns; k++) p = rot(p, a);
       s.p = p;
     }
@@ -121,5 +129,5 @@ RK.cube = (function () {
     return '<svg viewBox="0 0 4 3" role="img" aria-label="Scrambled cube, unfolded">' + h + "</svg>";
   }
 
-  return { solved: solved, apply: apply, parse: parse, faces: faces, isSolved: isSolved, svg: svg, COLOR: COLOR };
+  return { solved: solved, apply: apply, parse: parse, turn: turn, inLayer: inLayer, faces: faces, isSolved: isSolved, svg: svg, COLOR: COLOR, AXIS: AXIS };
 })();

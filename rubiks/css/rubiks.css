@@ -1021,6 +1021,107 @@ body.busy { cursor: pointer; }
   .preview { width: 96px; }
 }
 
+/* ============================================================
+   Follow the scramble (3D)
+   ============================================================ */
+.sheet-follow { width: min(600px, calc(100vw - 32px)); }
+.follow-progress { font-family: var(--mono); font-size: .8rem; color: var(--fg-3); margin-right: 6px; font-variant-numeric: tabular-nums; }
+.follow-stage {
+  position: relative;
+  height: min(46dvh, 400px);
+  min-height: 220px;
+  border-radius: 16px;
+  background: radial-gradient(circle at 50% 40%, var(--surface-2), var(--surface) 70%);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  cursor: grab;
+}
+.follow-stage:active { cursor: grabbing; }
+.follow-stage canvas { display: block; }
+.follow-stage.loading::after {
+  content: "";
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 28px; height: 28px;
+  margin: -14px 0 0 -14px;
+  border-radius: 50%;
+  border: 3px solid var(--line-2);
+  border-top-color: var(--accent);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.follow-stage.flat { cursor: default; display: flex; align-items: center; justify-content: center; }
+.follow-flat { width: min(380px, 90%); }
+.follow-flat svg { width: 100%; height: auto; }
+.follow-stage.flat .follow-view { display: none; }
+.follow-view {
+  position: absolute;
+  z-index: 1;
+  top: 8px; right: 8px;
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  color: var(--fg-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.follow-view:hover { color: var(--fg); }
+.follow-view svg { width: 16px; height: 16px; }
+.follow-caption {
+  min-height: 1.5em;
+  margin: 14px 2px 10px;
+  font-size: .95rem;
+  color: var(--fg-2);
+}
+.follow-caption strong { font-family: var(--mono); color: var(--fg); font-size: 1.05rem; margin-right: 8px; }
+.follow-moves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 104px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.follow-moves button {
+  min-width: 38px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--fg-2);
+  background: var(--surface-2);
+  transition: background .12s, color .12s;
+}
+.follow-moves button.done { color: var(--fg-3); background: transparent; }
+.follow-moves button.next { color: var(--accent-ink); background: var(--accent); }
+.follow-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+.follow-controls .icon-btn:disabled { opacity: .35; }
+.follow-play {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 6px 18px rgba(255,122,46,.28);
+}
+.follow-play svg { width: 22px; height: 22px; }
+.follow-play .i-pause, .follow-play.on .i-play { display: none; }
+.follow-play.on .i-pause { display: block; }
+.follow-speed { margin-left: 8px; }
+@media (max-width: 899px) {
+  .sheet-follow { width: auto; }
+  .follow-stage { height: 42dvh; }
+  .follow-speed { margin: 4px 0 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

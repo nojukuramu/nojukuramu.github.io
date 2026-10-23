@@ -112,7 +112,8 @@ RK.panels = (function () {
         return '<button value="' + p + '"' + (on ? ' class="on"' : "") + ">" + (p === "ok" ? "No penalty" : p) + "</button>";
       }).join("") + "</div>" +
       '<div class="kv"><span>Ao5 here</span><strong>' + fmt(sum.roll[5][idx]) + '</strong><span>Ao12 here</span><strong>' + fmt(sum.roll[12][idx]) + "</strong></div>" +
-      '<div class="block-head">Scramble <button class="link-btn" data-copy="' + esc(x.scramble) + '">Copy</button></div>' +
+      '<div class="block-head">Scramble <button class="link-btn" data-copy="' + esc(x.scramble) + '">Copy</button>' +
+      (ev.n && x.scramble ? '<button class="link-btn" data-follow="' + idx + '">Follow in 3D</button>' : "") + "</div>" +
       '<div class="scramble-mini">' + esc(x.scramble) + "</div>" +
       (ev.n && x.scramble ? '<div class="preview-inline">' + RK.cube.svg(ev.n, x.scramble) + "</div>" : "") +
       '<div class="block-head">Note</div>' +
@@ -302,7 +303,12 @@ RK.panels = (function () {
       var del = e.target.closest("[data-del]");
       if (del) { RK.sheets.close(); RK.app.deleteSolve(+del.getAttribute("data-del")); return; }
       var row = e.target.closest(".avg-row");
-      if (row) openSolve(+row.getAttribute("data-idx"));
+      if (row) { openSolve(+row.getAttribute("data-idx")); return; }
+      var fol = e.target.closest("[data-follow]");
+      if (fol) {
+        var s = st(), sv = s.solves[+fol.getAttribute("data-follow")];
+        if (sv) RK.follow.open(sv.scramble, RK.scramble.event(s.event).n);
+      }
     });
     $("solve-body").addEventListener("change", function (e) {
       if (e.target.matches("[data-note]")) RK.app.setComment(+e.target.getAttribute("data-note"), e.target.value.trim());

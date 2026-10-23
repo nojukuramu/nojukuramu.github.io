@@ -5,8 +5,8 @@
  * never takes over by itself; the page asks with "skip-waiting". */
 "use strict";
 
-var VERSION = "rubiks-v2";
-var ASSET_V = "2";
+var VERSION = "rubiks-v3";
+var ASSET_V = "3";
 var SHELL = VERSION + "-shell";
 
 var SHELL_FILES = [
@@ -24,11 +24,15 @@ var SHELL_FILES = [
   "./js/sound.js?v=" + ASSET_V,
   "./js/wake.js?v=" + ASSET_V,
   "./js/chart.js?v=" + ASSET_V,
+  "./js/cube3d.js?v=" + ASSET_V,
+  "./js/follow.js?v=" + ASSET_V,
   "./js/info.js?v=" + ASSET_V,
   "./js/update.js?v=" + ASSET_V,
   "./js/sheets.js?v=" + ASSET_V,
   "./js/panels.js?v=" + ASSET_V,
   "./js/app.js?v=" + ASSET_V,
+  /* 650 KB, fetched once at install so the 3D view works offline. */
+  "./vendor/build/three.module.min.js",
   "./icons/icon.svg",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
