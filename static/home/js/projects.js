@@ -575,7 +575,7 @@
       tags: ["WebRTC", "P2P", "35 roles"] },
     { name: "Rubiks", href: "rubiks/", badge: "Speedcubing", accent: "#FF7A2E", kind: "tools", motif: "cube",
       desc: "A speedcubing timer: hold Space, or the screen, and go.",
-      hi: ["WCA inspection with the 8 and 12 second calls, ten events", "Random-state 2x2 scrambles and a preview of every cube scramble", "Ao5 to Ao100, trends, spread and PBs, all kept on the device"],
+      hi: ["WCA inspection with the 8 and 12 second calls, ten events", "Random-state 2x2 scrambles, and a 3D cube that walks you through each one", "Ao5 to Ao100, trends, spread and PBs, all kept on the device"],
       tags: ["PWA", "offline", "WCA"] },
     { name: "RouteCast", href: "routecast/", badge: "Navigation", accent: "#5C93B8", kind: "tools", motif: "route",
       desc: "Plan a drive, then see the weather waiting along it.",

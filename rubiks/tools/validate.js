@@ -113,6 +113,21 @@ section("Static: every script the page loads exists, at the shell's version");
   check("every ?v= in index.html matches the worker's ASSET_V", links.length && links.every((v) => v === assetV), [...new Set(links)].join(",") + " vs " + assetV);
 }
 
+section("Static: the 3D view and its Three.js");
+{
+  const map = (html.match(/<script type="importmap">([^<]+)<\/script>/) || [])[1];
+  let three = null;
+  try { three = JSON.parse(map).imports.three.replace(/^\.\//, ""); } catch (e) {}
+  check("index.html maps \"three\" to a vendored file that exists", !!three && exists(three), three);
+  check("the vendored Three.js is in the worker's shell, so 3D works offline", !!three && sw.includes('"./' + three + '"'));
+  const crypto = require("crypto"), hash = (f) => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
+  const src = path.join(ROOT, "..", "ballzooka", "vendor", "build", "three.module.min.js");
+  check("it is the same build the other apps vendor (lifted, not a second version)", !fs.existsSync(src) || (!!three && hash(src) === hash(path.join(ROOT, three))));
+  check("Three.js's licence travels with it", exists("vendor/LICENSE-three.txt"));
+  const c3 = read("js/cube3d.js");
+  check("cube3d.js imports Three.js only on demand, never on page load", /import\("three"\)/.test(c3) && !/^\s*import\s/m.test(c3) && !/<script[^>]+type="module"/.test(html));
+}
+
 section("Behaviour");
 {
   const vm = require("vm");
@@ -123,7 +138,7 @@ section("Behaviour");
     requestAnimationFrame: noop, cancelAnimationFrame: noop,
     document: { addEventListener: noop }, window: {}, navigator: {}
   });
-  for (const f of ["cube", "solver222", "scramble", "stats", "store", "app"]) vm.runInContext(read("js/" + f + ".js"), ctx, { filename: f + ".js" });
+  for (const f of ["cube", "solver222", "scramble", "stats", "store", "app", "follow"]) vm.runInContext(read("js/" + f + ".js"), ctx, { filename: f + ".js" });
   const RK = vm.runInContext("RK", ctx);
   const C = RK.cube;
 
@@ -185,6 +200,20 @@ section("Behaviour");
   for (const n of T.WINDOWS) { const r = T.rolling(mix, n); for (let i = 1; i <= mix.length; i++) if (r[i - 1] !== T.aoN(mix, n, i)) bad++; }
   check("the sliding rolling average equals the slice-and-sort one", !bad, bad + " differ");
   check("times truncate, as the WCA does", T.formatTime(12349) === "12.34" && T.formatTime(65432) === "1:05.43" && T.formatTime(65432, 3) === "1:05.432" && T.formatTime(Infinity) === "DNF");
+
+  /* The layer test the 3D view uses picks out exactly the pieces turn() moves. */
+  bad = [];
+  for (const n of [2, 3, 4, 5, 6, 7]) for (const tok of ["U", "R'", "Fw2", "3Bw", "Dw'"]) {
+    const mv = C.parse(tok);
+    if (mv.depth > Math.floor(n / 2) && !(n <= 3 && mv.depth === 1)) continue;
+    const cube = C.solved(n), before = cube.st.map((s) => s.p.join(","));
+    const flagged = cube.st.map((s) => C.inLayer(n, s.p, mv));
+    C.turn(cube, mv);
+    cube.st.forEach((s, i) => { if ((s.p.join(",") !== before[i]) && !flagged[i]) bad.push(n + ":" + tok); });
+  }
+  check("every sticker turn() moves is one inLayer() picked for the 3D pivot", !bad.length, [...new Set(bad)].join(" "));
+  const D = RK.follow.describe;
+  check("the follow caption names moves in words", D("R") === "Right face, clockwise" && D("U'") === "Top face, anticlockwise" && D("Rw2") === "Right two layers, half turn" && D("3Fw'") === "Front three layers, anticlockwise");
 
   /* Typed times: csTimer's rules. */
   const P = RK.app.parseTyped, eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
