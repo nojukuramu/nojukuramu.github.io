@@ -487,6 +487,34 @@
       var hit = loop > 2.2 && loop < 3.8;
       c.strokeStyle = hit ? a : "rgba(255,243,226,.3)"; c.lineWidth = hit ? 2 : 1;
       c.beginPath(); c.moveTo(x0 - gap, mid); c.lineTo(x0 + rw * 3 + gap * 3, mid); c.stroke();
+    },
+    /* a cube in three-quarter view, its top layer handing stickers round
+       every two seconds, and the clock running underneath it */
+    cube: function (c, w, h, p, a) {
+      var s = h * 0.1, ox = w / 2, oy = h * 0.14;
+      var R = [s * 0.866, s * 0.5], L = [-s * 0.866, s * 0.5], D = [0, s];
+      var turns = Math.floor(p / 2), t = clamp(((p % 2) - 1.4) / 0.5, 0, 1);
+      function sticker(bx, by, u, v, shade) {
+        var g = 0.08;
+        var x = bx + u[0] * g + v[0] * g, y = by + u[1] * g + v[1] * g, k = 1 - 2 * g;
+        c.globalAlpha = shade;
+        c.beginPath(); c.moveTo(x, y); c.lineTo(x + u[0] * k, y + u[1] * k);
+        c.lineTo(x + u[0] * k + v[0] * k, y + u[1] * k + v[1] * k); c.lineTo(x + v[0] * k, y + v[1] * k); c.closePath(); c.fill();
+      }
+      c.fillStyle = a;
+      var SH = [1, 0.62, 0.34];
+      for (var i = 0; i < 3; i++) for (var j = 0; j < 3; j++) {
+        sticker(ox + i * R[0] + j * L[0], oy + i * R[1] + j * L[1], R, L, SH[(i * 2 + j + turns) % 3] * 0.95);
+        /* the top row of each side is the turning layer: it fades into the next shade */
+        var top = j === 0, sh = top ? SH[(i + turns + (t > 0.5 ? 1 : 0)) % 3] * (1 - Math.sin(t * Math.PI) * 0.6) : SH[(i + j * 2) % 3];
+        sticker(ox + 3 * L[0] + i * R[0] + j * D[0], oy + 3 * L[1] + i * R[1] + j * D[1], R, D, sh * 0.75);
+        sticker(ox + 3 * R[0] + i * L[0] + j * D[0], oy + 3 * R[1] + i * L[1] + j * D[1], L, D, (top ? sh : SH[(i + j + 1) % 3]) * 0.55);
+      }
+      c.globalAlpha = 0.85; c.fillStyle = "#FFF3E2";
+      c.font = "600 " + Math.round(h * 0.11) + "px ui-monospace, monospace"; c.textAlign = "center"; c.textBaseline = "middle";
+      var secs = p % 20;
+      c.fillText(Math.floor(secs) + "." + ("0" + Math.floor((secs % 1) * 100)).slice(-2), w / 2, h * 0.88);
+      c.globalAlpha = 1;
     }
   };
 
@@ -545,6 +573,10 @@
       desc: "Werewolf for a room full of phones.",
       hi: ["The night runs for everyone at once, first come first served", "Pick a house, then decide what to do at its door", "35 roles, peer-to-peer over WebRTC"],
       tags: ["WebRTC", "P2P", "35 roles"] },
+    { name: "Rubiks", href: "rubiks/", badge: "Speedcubing", accent: "#FF7A2E", kind: "tools", motif: "cube",
+      desc: "A speedcubing timer: hold Space, or the screen, and go.",
+      hi: ["WCA inspection with the 8 and 12 second calls, ten events", "Random-state 2x2 scrambles and a preview of every cube scramble", "Ao5 to Ao100, trends, spread and PBs, all kept on the device"],
+      tags: ["PWA", "offline", "WCA"] },
     { name: "RouteCast", href: "routecast/", badge: "Navigation", accent: "#5C93B8", kind: "tools", motif: "route",
       desc: "Plan a drive, then see the weather waiting along it.",
       hi: ["Every checkpoint forecast for the hour you arrive there", "Gear advice for a bike, not just a temperature", "Tells you if leaving an hour later dodges the rain"],
@@ -588,10 +620,12 @@
   ];
 
   /* Spelled out, because the heading that counts them is written in words.
-     Past twenty it can have digits; that is a nice problem to have. */
+     Past thirty it can have digits; that is a nice problem to have. */
   var WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
                "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen",
-               "Eighteen", "Nineteen", "Twenty"];
+               "Eighteen", "Nineteen", "Twenty", "Twenty-one", "Twenty-two", "Twenty-three",
+               "Twenty-four", "Twenty-five", "Twenty-six", "Twenty-seven", "Twenty-eight",
+               "Twenty-nine", "Thirty"];
   function inWords(n) { return WORDS[n] || String(n); }
 
   function esc(s) {

@@ -1,0 +1,22 @@
+{
+  "name": "Rubiks — cube timer",
+  "short_name": "Rubiks",
+  "description": "Speedcubing timer: WCA inspection, scrambles and previews for ten events, averages, trends and history. Works offline, nothing leaves the device.",
+  "id": "/rubiks/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "browser"],
+  "orientation": "portrait-primary",
+  "background_color": "#0d0f14",
+  "theme_color": "#0d0f14",
+  "categories": ["utilities", "productivity"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/apple-touch.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}
