@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0c0c0e"/>
+  <g transform="translate(256,256)">
+    <!-- Cube face: top -->
+    <path d="M0-120 L120-50 L0 20 L-120-50 Z" fill="#f26522" stroke="#0c0c0e" stroke-width="4"/>
+    <!-- Cube face: left -->
+    <path d="M-120-50 L0 20 L0 160 L-120 90 Z" fill="#e55a15" stroke="#0c0c0e" stroke-width="4"/>
+    <!-- Cube face: right -->
+    <path d="M120-50 L0 20 L0 160 L120 90 Z" fill="#c04a12" stroke="#0c0c0e" stroke-width="4"/>
+    <!-- Grid lines top -->
+    <line x1="-40" y1="-83" x2="80" y2="-17" stroke="#0c0c0e" stroke-width="3"/>
+    <line x1="40" y1="-83" x2="-80" y2="-17" stroke="#0c0c0e" stroke-width="3"/>
+    <!-- Grid lines left -->
+    <line x1="-80" y1="-3" x2="-80" y2="137" stroke="#0c0c0e" stroke-width="3" transform="translate(20,-23)"/>
+    <line x1="-120" y1="20" x2="0" y2="90" stroke="#0c0c0e" stroke-width="3"/>
+    <!-- Grid lines right -->
+    <line x1="80" y1="-3" x2="80" y2="137" stroke="#0c0c0e" stroke-width="3" transform="translate(-20,-23)"/>
+    <line x1="120" y1="20" x2="0" y2="90" stroke="#0c0c0e" stroke-width="3"/>
+  </g>
+</svg>
