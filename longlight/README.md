@@ -16,12 +16,12 @@ Serve the folder (`npx http-server longlight` or any static server) and open it.
 | Check | Command |
 |-------|---------|
 | Static and behaviour checks (117) | `node tools/validate.js` (`--quick` for two coasts instead of eight) |
-| The game in a real browser, WebGL included | `node tools/e2e.js [--shots dir]` |
+| The game in a real browser, WebGL included (47) | `node tools/e2e.js [--shots dir]` |
 
 `validate.js` builds eight coasts and walks the route of every one, checks the sun, the meters and
 each difficulty's rules, then lets an autopilot walk six whole journeys, base to East Cape, on
-Easy, Normal and Hard, and prints how it did: about fifty minutes and nine kilometres each, every
-beacon lit.
+Easy, Normal and Hard, and prints how it did: about fifty minutes and nine kilometres each, and
+the beacons at the base, every camp and the station lit.
 
 ## The design, and what came of it
 
