@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>The Long Light — a quiet walk across Antarctica</title>
+<meta name="description" content="A quiet open-world walk across a generated stretch of Antarctic coast in the last weeks of summer. The sun goes round instead of setting and sinks toward the polar night; you walk the flagged route from camp to camp, keeping warm and fed, lighting beacons for survivors who may not exist. Plays offline.">
+<meta name="theme-color" content="#04070c">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Long Light">
+<link rel="stylesheet" href="css/longlight.css">
+<script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
+<!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
+<script>window.LL_VERSION = "1";</script>
+</head>
+<body>
+<canvas id="view" aria-label="The coast"></canvas>
+
+<div id="hud" hidden>
+  <div id="hint" aria-live="polite"></div>
+  <div id="crosshair"></div>
+  <div id="prompt" hidden><span id="prompt-ring"></span><span id="prompt-verb"></span></div>
+  <div id="check" aria-live="polite">
+    <div id="compass" hidden><div id="compass-strip"><span>S</span><span>SW</span><span>W</span><span>NW</span><span>N</span><span>NE</span><span>E</span><span>SE</span><span>S</span><span>SW</span><span>W</span><span>NW</span><span>N</span><span>NE</span><span>E</span><span>SE</span><span>S</span></div></div>
+    <div id="check-words"></div>
+  </div>
+  <div id="captions" aria-live="polite"></div>
+  <button id="btn-pause" class="ibtn" aria-label="Pause"><i data-icon="pause"></i></button>
+  <div id="touch" hidden>
+    <div id="stick" hidden><i id="stick-knob"></i></div>
+    <button id="use" class="tbtn big" aria-label="Act"><i data-icon="hand"></i></button>
+    <button id="btn-lantern" class="tbtn" aria-label="Lantern"><i data-icon="lantern"></i></button>
+    <button id="btn-check" class="tbtn" aria-label="Check yourself"><i data-icon="body"></i></button>
+    <button id="btn-pack" class="tbtn" aria-label="Pack"><i data-icon="pack"></i></button>
+    <button id="btn-map" class="tbtn" aria-label="Map"><i data-icon="map"></i></button>
+  </div>
+</div>
+
+<div id="note" hidden role="dialog" aria-labelledby="note-title">
+  <div class="paper"><h3 id="note-title"></h3><div id="note-body"></div><small>tap to put it down</small></div>
+</div>
+
+<div id="screen" hidden></div>
+
+<div id="info-scrim" hidden></div>
+<div id="info-sheet" role="dialog" aria-modal="true" aria-labelledby="info-title" hidden>
+  <div class="sheet-head"><h2 id="info-title"></h2><button id="info-close" class="ibtn" aria-label="Close"><i data-icon="close"></i></button></div>
+  <div id="info-body"></div>
+</div>
+
+<div id="update-bar" hidden>
+  <span>A new version of The Long Light is ready.</span>
+  <button id="update-go" class="btn primary small">Reload</button>
+  <button id="update-later" class="ibtn small" aria-label="Later"><i data-icon="close"></i></button>
+</div>
+
+<noscript><p class="noscript">The Long Light is a game, and games need JavaScript.</p></noscript>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
