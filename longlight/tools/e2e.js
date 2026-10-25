@@ -225,7 +225,8 @@ async function settle(p) {
   // the end, the real way: the station's beacon lit, and the light answers
   const st = await p.evaluate(() => { const g = window.__ll.g, b = g.W.beacons.find((x) => x.big), s = g.W.sites[g.W.sites.length - 1]; const dx = s.x - b.x, dz = s.z - b.z, d = Math.hypot(dx, dz) || 1; return { id: b.id, at: { x: b.x + (dx / d) * 2.2, z: b.z + (dz / d) * 2.2, inside: -1 }, look: { x: b.x, y: b.y + 1.6, z: b.z } }; });
   await standAt(p, st.at, st.look);
-  await p.evaluate(() => { const g = window.__ll.g; g.p.fuel = Math.max(g.p.fuel, g.D.beacon); for (let i = 0; i < g.lit.length; i++) g.lit[i] = true; });
+  // every beacon on the way lit, but not this one
+  await p.evaluate((id) => { const g = window.__ll.g; g.p.fuel = Math.max(g.p.fuel, g.D.beacon); for (let i = 0; i < g.lit.length; i++) g.lit[i] = i !== id; }, st.id);
   await until(p, () => { const c = window.__ll.terrain.coverage(); return c.pending === 0 && c.queued === 0; }, null, 120000);
   await settle(p);
   check("at the station, the last beacon waits", await until(p, () => /light the beacon/i.test(document.getElementById("prompt-verb").textContent), null, 20000), await p.evaluate(() => document.getElementById("prompt-verb").textContent));
