@@ -552,10 +552,10 @@
 
   /* ---------- the projects themselves ---------- */
   var PROJECTS = [
-    { name: "Magic Circles", href: "magic_circles/", badge: "RPG", accent: "#F5A83C", kind: "games", motif: "circles",
-      desc: "A magic-based RPG where spells are drawn, not picked from a menu.",
-      hi: ["Trace polygons into elements and wrap them in circles", "Layers stack, so a spell is a drawing you invent", "Runs on Phaser, saves to your own browser"],
-      tags: ["Phaser", "canvas", "procedural"] },
+    { name: "Magic Circles", href: "magic_circles/", badge: "2.5D RPG", accent: "#F5A83C", kind: "games", motif: "circles",
+      desc: "Draw your own spells and walk a seeded world that never ends.",
+      hi: ["Glyphs are elements, a seal's size is its spectrum, layers are payloads", "Roads, waystones, ruins and Wardens grown from a seed", "Phone, computer or gamepad, and it plays offline"],
+      tags: ["Three.js", "procedural", "offline"] },
     { name: "Magic Sandbox", href: "magic_sandbox/", badge: "3D roguelite", accent: "#C1613F", kind: "games", motif: "tower",
       desc: "The Loom Tower — draw your own spells and climb ten floating islands, alone or with friends.",
       hi: ["Shapes are elements, circles are shots, runes aim them", "Co-op climbs, Wipe Out, deathmatches — rooms over WebRTC", "Phone, computer or gamepad, and it plays offline"],

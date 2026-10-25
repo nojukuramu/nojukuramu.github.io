@@ -122,7 +122,7 @@ every installable PWA gets an update path, and keep the interface quiet — are 
 
 | Path | Project | Description |
 |------|---------|-------------|
-| [`/magic_circles/`](magic_circles/) | **Magic Circles — A Certain RPG Game** | A magic-based RPG prototype where spells are *drawn*, not picked from a menu. Includes a canvas build, a Phaser.js edition, and a world-chunk editor. |
+| [`/magic_circles/`](magic_circles/) | **Magic Circles — A Certain RPG** | A 2.5D RPG where spells are *drawn*, not picked from a menu, in a world that never ends. Trace elemental glyphs on a ring of twelve dots, wrap them in seals whose size against the page's power picks one of ten spectra (Needle to Nova), stack pages into payloads you release on the trigger, and mind the predator cycle (Water ▸ Fire ▸ Earth ▸ Air). Walk a seeded, endless land of twelve biomes built from hand-drawn 8 × 8 presets, roads with a waystone at every crossing, and nine kinds of multi-chunk structure; the four great ones are held by Wardens whose Sigils raise your circle rank. Kenney's CC0 models in three.js, a day that turns, offline, no build step. See [`magic_circles/README.md`](magic_circles/README.md). |
 | [`/task-notes/`](task-notes/) | **Task Notes** | A notebook with a real alarm clock inside it — markdown notes, repeating alarms that ring until answered, notebooks, tags, five views, and offline background notifications. All data saved locally in the browser. See [`task-notes/README.md`](task-notes/README.md). |
 | [`/3dtd/`](3dtd/) | **VELL** | A procedurally generated 3D tower defense on a drowned moor — free camera, walkable traps, endless promotions, day/night cycle, synthesised audio. See [`3dtd/README.md`](3dtd/README.md). |
 | [`/the-wolf-game/`](the-wolf-game/) | **The Wolf Game** | Werewolf for a room full of phones. The night runs for everyone at once, first come first served: you pick a *house* and are then offered what your role can do at its door — so a Bodyguard who arrives after the pack finds a body instead of a charge, and a revived player gets the same night back. 35 roles, a phase clock the room's colour tracks from night to dawn to dusk, and rooms over WebRTC with no backend. A refactor of the old pass-the-phone build. See [`the-wolf-game/README.md`](the-wolf-game/README.md). |
@@ -146,15 +146,16 @@ every installable PWA gets an update path, and keep the interface quiet — are 
 
 ### Magic Circles
 
-A static port of the `a_certain_rpg_game` prototype (originally a Flask blueprint served at
-`/rpg`). Its highlight is the **magic-circle creation system**: trace polygons on a 12-node
-ring to forge elements (3 sides = Air, 4 = Fire, 5 = Earth, 6 = Water), wrap them in circles,
-stack layers into combos, and cast.
+Began as a static port of the `a_certain_rpg_game` prototype (a Flask blueprint, then a
+Phaser build); now a 2.5D three.js game. Its highlight is still the **magic-circle creation
+system**: trace polygons on a 12-node ring to forge elements (3 sides = Air, 4 = Fire,
+5 = Earth, 6 = Water), wrap them in seals, stack layers into payloads, and cast — out into a
+seeded world with no edge.
 
-- **Hub / launcher:** [`magic_circles/index.html`](magic_circles/index.html)
-- **Full documentation:** [`magic_circles/README.md`](magic_circles/README.md) — explains the
-  magic system end to end (nodes, elements, runes, layers, power, the spell *spectrum*, and the
-  casting pipeline) plus the Flask → static conversion notes.
+- **The game:** [`magic_circles/index.html`](magic_circles/index.html)
+- **Full documentation:** [`magic_circles/README.md`](magic_circles/README.md) — the magic
+  system end to end (glyphs, predators, the spectrum, tiers, payloads), the world (biomes,
+  presets, roads and waystones, structures and Wardens), and what was reused from where.
 
 ### Task Notes
 
@@ -184,13 +185,13 @@ A local-first notes app with alarms that actually ring, installable as a PWA. Hi
 ```
 .
 ├── README.md          # You are here
-├── magic_circles/     # A Certain RPG Game — static build (see its README)
-│   ├── index.html     # Section hub
-│   ├── play.html      # Canvas prototype
-│   ├── phaser.html    # Phaser.js edition
-│   ├── editor.html    # Chunk editor
-│   ├── README.md      # Magic-circle system documentation
-│   └── static/        # css / js / assets (game logic from source + minor bug-fixes)
+├── magic_circles/     # Magic Circles — 2.5D spell-drawing RPG (see its README)
+│   ├── index.html     # The game
+│   ├── phaser.html    # Sends old installs of the Phaser build to the game
+│   ├── README.md      # The magic-circle system and the world
+│   ├── js/ css/       # ES modules and one stylesheet, no build step
+│   ├── assets/        # Kenney's CC0 models and their manifest
+│   └── tools/         # validate.js, e2e.js, manifest.js
 └── task-notes/        # Task Notes — notes-with-alarms PWA (see its README)
     ├── index.html     # App shell
     ├── manifest.webmanifest
