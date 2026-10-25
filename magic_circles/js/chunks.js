@@ -23,7 +23,7 @@
 
 import * as THREE from "three";
 import { S, emit } from "./state.js";
-import { scene } from "./gfx.js";
+import { scene, tierSpec } from "./gfx.js";
 import { CHUNK, CELL, GRID, KINDS, key, rnd } from "./world.js";
 import { buildChunkGround, scatterDecor } from "./terrain.js";
 import { place, size, single, has } from "./assets.js";
@@ -31,8 +31,9 @@ import * as phys from "./physics.js";
 import { glowTexture } from "./textures.js";
 import * as fx from "./fx.js";
 
-export const LOAD_R = 3;      // chunks round you that are built
-const UNLOAD_R = 4;
+/* How many chunks round you are built is the graphics tier's (gfx.js):
+   2 on Fast, 3 on Normal, 4 on Unrestrained; one more before any is taken down. */
+const loadR = () => tierSpec().load;
 const live = new Map();
 const queue = [];
 let lastCx = null, lastCz = null;
@@ -300,7 +301,8 @@ function unloadChunk(L) {
 /** Load everything in reach at once (behind the curtain at the start of a journey). */
 export function loadAround(x, z) {
   const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
-  for (let r = 0; r <= LOAD_R; r++) for (let i = cx - r; i <= cx + r; i++) for (let j = cz - r; j <= cz + r; j++) {
+  const R = loadR();
+  for (let r = 0; r <= R; r++) for (let i = cx - r; i <= cx + r; i++) for (let j = cz - r; j <= cz + r; j++) {
     if (Math.max(Math.abs(i - cx), Math.abs(j - cz)) !== r || live.has(key(i, j))) continue;
     buildChunk(i, j);
   }
@@ -312,9 +314,10 @@ export function update(x, z, dt) {
   const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
   if (cx !== lastCx || cz !== lastCz) {
     lastCx = cx; lastCz = cz;
-    for (const L of [...live.values()]) if (Math.max(Math.abs(L.C.cx - cx), Math.abs(L.C.cz - cz)) > UNLOAD_R) unloadChunk(L);
+    const R = loadR();
+    for (const L of [...live.values()]) if (Math.max(Math.abs(L.C.cx - cx), Math.abs(L.C.cz - cz)) > R + 1) unloadChunk(L);
     queue.length = 0;
-    for (let i = cx - LOAD_R; i <= cx + LOAD_R; i++) for (let j = cz - LOAD_R; j <= cz + LOAD_R; j++) if (!live.has(key(i, j))) queue.push([i, j]);
+    for (let i = cx - R; i <= cx + R; i++) for (let j = cz - R; j <= cz + R; j++) if (!live.has(key(i, j))) queue.push([i, j]);
     queue.sort((a, b) => Math.hypot(b[0] - cx, b[1] - cz) - Math.hypot(a[0] - cx, a[1] - cz));
   }
   for (let n = 0; n < 2 && queue.length; n++) { const [i, j] = queue.pop(); if (!live.has(key(i, j))) buildChunk(i, j); }
@@ -331,6 +334,16 @@ export function update(x, z, dt) {
     o.flash -= dt;
     if (o.flash <= 0) { flashing.delete(o); if (o.handle) o.handle.tint(1, 1, 1); }
   }
+}
+
+/** The graphics tier changed: take every chunk down and build it again with
+ *  the new reach and ground cover. What you broke or pushed stays so. */
+export function rebuild(x, z) {
+  if (!S.world || !live.size) return;
+  for (const L of [...live.values()]) unloadChunk(L);
+  lastCx = lastCz = null;
+  queue.length = 0;
+  loadAround(x, z);
 }
 
 export function clear() {

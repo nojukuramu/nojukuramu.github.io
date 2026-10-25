@@ -113,12 +113,10 @@ export const TOPICS = {
   },
   quality: {
     title: "Graphics",
-    body: `<ul>
-<li><b>Low</b> — no shadows, no glow, fewer pixels. For older phones.</li>
-<li><b>Medium</b> — soft shadows from the sun.</li>
-<li><b>High</b> — shadows and glow, so spells and lanterns light up.</li>
-</ul>
-<p><b>Auto</b> starts at Medium on a phone and High elsewhere, and steps down once by itself if the game cannot keep up.</p>`
+    body: `<p><b>Fast</b> is for a phone: hard-edged shadows close round you, no glow, the world built about forty metres out, and half the grass and flowers.</p>
+<p><b>Normal</b> is for a computer: soft shadows, spells and lanterns that glow, the world built about fifty-five metres out with everything growing in it.</p>
+<p><b>Unrestrained</b> holds nothing back: every pixel the screen has, shadows four times as fine reaching across the whole view, edges smoothed four times over, textures sharp at any angle, the world built seventy metres out under a thinner fog, and half again as much growing in it.</p>
+<p>A first visit starts at Fast on a phone and Normal elsewhere, and steps down to Fast once by itself if the game cannot keep up. Once you choose, it is left as you chose it.</p>`
   },
   update: {
     title: "Updates",

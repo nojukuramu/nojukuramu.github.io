@@ -48,13 +48,19 @@ export const size = (k) => (PROTOS[k] ? PROTOS[k].size : [1, 1, 1]);
    key is the kit (the folder a model sits in), not the texture: the loader
    hands back image bitmaps, which carry no address to tell them apart. */
 const sharedMats = new Map();
+let aniso = 4;
+/** Texture sharpness at a grazing angle, from the graphics tier. */
+export function setAnisotropy(n) {
+  aniso = n;
+  for (const m of sharedMats.values()) if (m.map && m.map.anisotropy !== n) { m.map.anisotropy = n; m.map.needsUpdate = true; }
+}
 function shareMaterial(m, kit) {
   const k = kit + ":" + (m.map ? "atlas" : m.color.getHexString()) + (m.transparent ? ":t" : "") + (m.vertexColors ? ":v" : "");
   let s = sharedMats.get(k);
   if (!s) {
     s = m;
     s.metalness = 0; s.roughness = Math.max(0.7, s.roughness || 1);
-    if (s.map) { s.map.anisotropy = 4; }
+    if (s.map) { s.map.anisotropy = aniso; }
     sharedMats.set(k, s);
   }
   return s;

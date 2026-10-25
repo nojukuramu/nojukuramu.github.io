@@ -18,7 +18,7 @@ const KEY = "mcircles:v1";
 export { SLOTS };
 
 export const DEFAULT_SETTINGS = {
-  quality: "auto",     // auto | low | medium | high
+  quality: "auto",     // auto (the device's pick) | fast | normal | unrestrained
   master: 0.8, music: 0.5, sfx: 0.8,
   shake: true, numbers: true, flashes: true, autoAim: true
 };
@@ -68,7 +68,9 @@ function clean(raw) {
   const d = fresh();
   if (!raw || typeof raw !== "object") return d;
   const s = raw.settings || {};
-  if (["auto", "low", "medium", "high"].includes(s.quality)) d.settings.quality = s.quality;
+  // the first release of this build said low / medium / high
+  const q = { low: "fast", medium: "normal", high: "normal" }[s.quality] || s.quality;
+  if (["auto", "fast", "normal", "unrestrained"].includes(q)) d.settings.quality = q;
   for (const k of ["master", "music", "sfx"]) if (isNum(s[k])) d.settings[k] = Math.min(1, Math.max(0, s[k]));
   for (const k of ["shake", "numbers", "flashes", "autoAim"]) if (typeof s[k] === "boolean") d.settings[k] = s[k];
   if (Array.isArray(raw.spells)) for (let i = 0; i < SLOTS; i++) if (raw.spells[i]) d.spells[i] = normalizeDesign(raw.spells[i]);

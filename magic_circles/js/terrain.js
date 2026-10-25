@@ -25,6 +25,7 @@ import * as THREE from "three";
 import { CELL, GRID, CHUNK, BIOMES, DIR, rnd, fbm } from "./world.js";
 import { groundDetail, pathTexture, floorTexture } from "./textures.js";
 import { place } from "./assets.js";
+import { tierSpec } from "./gfx.js";
 
 const SEG = 16;                 // vertices per side - 1: a metre each
 export const WATER_Y = -0.16;
@@ -73,8 +74,14 @@ function waterAt(world, x, z) {
   return w / n;
 }
 
+/** Texture sharpness at a grazing angle, from the graphics tier. */
+export function setAnisotropy(n) {
+  const all = [detail, ...Object.values(pathMats).map((m) => m.map), ...Object.values(floorMats).map((m) => m.map)];
+  for (const t of all) if (t && t.anisotropy !== n) { t.anisotropy = n; t.needsUpdate = true; }
+}
+
 export function buildChunkGround(world, C) {
-  if (!detail) { detail = groundDetail(); groundMat.map = detail; groundMat.needsUpdate = true; }
+  if (!detail) { detail = groundDetail(); detail.anisotropy = tierSpec().aniso; groundMat.map = detail; groundMat.needsUpdate = true; }
   const group = new THREE.Group();
   const seed = world.seed;
 
@@ -227,7 +234,10 @@ export function scatterDecor(world, C, occupied) {
   const list = DECOR[C.biome] || DECOR.Plains;
   const seed = world.seed;
   let salt = 800;
-  for (const [key, per, size] of list) {
+  const dense = tierSpec().decor;   // the graphics tier's: half on Fast, half again on Unrestrained
+  for (const [key, per0, size] of list) {
+    // built things (statues, gravestones, tents) are the land's, not the tier's
+    const per = SOLID_DECOR.test(key) ? per0 : per0 * dense;
     let n = Math.floor(per) + (rnd(seed, C.cx, C.cz, salt) < per % 1 ? 1 : 0);
     salt++;
     for (let k = 0; k < n; k++, salt++) {

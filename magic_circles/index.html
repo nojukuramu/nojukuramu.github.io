@@ -211,9 +211,12 @@
 <section id="scr-settings" class="screen" hidden>
   <div class="panel">
     <h2>Settings</h2>
-    <div class="setrow">
-      <label for="setQuality">Graphics <button class="info" data-info="quality" aria-label="About graphics"><i data-icon="info"></i></button></label>
-      <span><select id="setQuality"><option value="auto">Auto</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select> <small id="qualityNow" class="muted"></small></span>
+    <div class="field">
+      <label>Graphics <button class="info" data-info="quality" aria-label="About graphics"><i data-icon="info"></i></button></label>
+      <div id="setQuality" class="seg" role="radiogroup" aria-label="Graphics">
+        <button data-q="fast" role="radio">Fast</button><button data-q="normal" role="radio">Normal</button><button data-q="unrestrained" role="radio">Unrestrained</button>
+      </div>
+      <small id="qualityNow"></small>
     </div>
     <div class="setrow"><label for="set_master">Volume</label><input type="range" id="set_master" min="0" max="100"></div>
     <div class="setrow"><label for="set_music">Music</label><input type="range" id="set_music" min="0" max="100"></div>

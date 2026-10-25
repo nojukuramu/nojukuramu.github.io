@@ -478,3 +478,8 @@ table.keys th { color: var(--dim); font-weight: 600; font-size: 11px; text-trans
   .slot .thumb canvas { width: 30px; height: 30px; }
   #place { display: none; }
 }
+
+/* a three-way switch (Graphics) */
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(255,255,255,.05); box-shadow: inset 0 0 0 1px var(--line); }
+.seg button { min-height: 40px; padding: 0 8px; border-radius: 9px; font-weight: 600; font-size: 14px; color: var(--dim); }
+.seg button.on { background: var(--panel2); color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }

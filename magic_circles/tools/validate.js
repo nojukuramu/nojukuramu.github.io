@@ -197,6 +197,19 @@ const allJs = jsFiles.map(read).join("\n");
     check("every icon is balanced markup", unbalanced.length === 0, unbalanced.join(", "));
   }
 
+  section("Static: graphics");
+  {
+    const offered = [...html.matchAll(/data-q="(\w+)"/g)].map((m) => m[1]);
+    check("Settings offers Fast, Normal and Unrestrained, in that order", offered.join() === "fast,normal,unrestrained", offered.join());
+    const labels = [...html.matchAll(/data-q="\w+" role="radio">([^<]+)</g)].map((m) => m[1]);
+    check("labelled as The Long Light labels them", labels.join() === "Fast,Normal,Unrestrained", labels.join());
+    const gfx = read("js/gfx.js");
+    check("gfx.js defines exactly those tiers", /TIER_IDS = \["fast", "normal", "unrestrained"\]/.test(gfx) && ["fast:", "normal:", "unrestrained:"].every((k) => gfx.includes("  " + k)));
+    const { TOPICS } = await load("js/topics.js");
+    check("the (i) sheet explains all three", ["Fast", "Normal", "Unrestrained"].every((n) => TOPICS.quality.body.includes("<b>" + n + "</b>")));
+    check("each tier reaches further than the one below it", /fast:[^\n]*load: 2[^\n]*\n\s*normal:[^\n]*load: 3[^\n]*\n\s*unrestrained:[^\n]*load: 4/.test(gfx));
+  }
+
   section("Static: lifted files say where they came from");
   {
     const LIFTED = {
@@ -364,6 +377,8 @@ const allJs = jsFiles.map(read).join("\n");
 
   section("Behaviour: what comes back from storage");
   {
+    const sv = read("js/save.js");
+    check("a saved low / medium / high from the first release becomes Fast / Normal", /low: "fast", medium: "normal", high: "normal"/.test(sv));
     const junk = S.normalizeDesign({ name: "<b>x</b>\u0007", layers: [{ power: 99, glyphs: [{ nodes: [0, 0, 1] }, { nodes: [0, 3, 6, 9] }, { nodes: [0, 1] }, "x"], seals: [{ x: 9e9, y: 0, r: 2, runes: [] }, { x: 0, y: 0, r: 40, runes: [NaN, 1] }] }, { power: 7, glyphs: [], seals: [] }] });
     check("a glyph with repeated, too few or junk nodes is dropped", junk.layers[0].glyphs.length === 1);
     check("a seal too small is raised to the smallest, a far one pulled back onto the page", junk.layers[0].seals[0].r === S.SEAL_MIN_R && junk.layers[0].seals[0].x === S.PAGE_R);

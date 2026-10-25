@@ -14,7 +14,7 @@ import * as forge from "./forge.js";
 import * as map from "./map.js";
 import * as info from "./info.js";
 import * as update from "./update.js";
-import { setQuality, setShakeEnabled, currentTier } from "./gfx.js";
+import { setQuality, setShakeEnabled, currentTier, TIER_NAMES, IS_TOUCH } from "./gfx.js";
 import { setFlashesEnabled, setNumbersEnabled } from "./fx.js";
 import { applyVolumes } from "./audio.js";
 import { resetInput } from "./input.js";
@@ -154,8 +154,9 @@ export function toggleMap() {
    --------------------------------------------------------------- */
 function renderSettings() {
   const s = save.settings;
-  $("setQuality").value = s.quality;
-  $("qualityNow").textContent = s.quality === "auto" ? "now " + currentTier() : "";
+  const now = currentTier();
+  $("setQuality").querySelectorAll("[data-q]").forEach((b) => { const on = b.dataset.q === now; b.classList.toggle("on", on); b.setAttribute("aria-checked", on ? "true" : "false"); });
+  $("qualityNow").textContent = s.quality === "auto" ? "Chosen for this " + (IS_TOUCH ? "phone" : "computer") + "; it steps down if it has to" : "";
   for (const k of ["master", "music", "sfx"]) $("set_" + k).value = Math.round(s[k] * 100);
   for (const k of ["shake", "numbers", "flashes", "autoAim"]) $("set_" + k).checked = s[k];
   $("setVersion").textContent = "Version " + update.version();
@@ -208,7 +209,10 @@ export function init() {
   click("btnPause", () => togglePause());
   click("btnBook", () => toggleBook());
   click("btnMap", () => toggleMap());
-  $("setQuality").addEventListener("change", (e) => { save.settings.quality = e.target.value; save.commit(); applySettings(); renderSettings(); });
+  $("setQuality").querySelectorAll("[data-q]").forEach((b) => b.addEventListener("click", () => {
+    emit("ui");
+    save.settings.quality = b.dataset.q; save.commit(); applySettings(); renderSettings();
+  }));
   for (const k of ["master", "music", "sfx"]) $("set_" + k).addEventListener("input", (e) => { save.settings[k] = +e.target.value / 100; save.commit(); applyVolumes(); });
   for (const k of ["shake", "numbers", "flashes", "autoAim"]) $("set_" + k).addEventListener("change", (e) => { save.settings[k] = e.target.checked; save.commit(); applySettings(); });
   click("btnCheckUpdate", async () => {

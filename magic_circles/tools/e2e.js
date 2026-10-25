@@ -70,7 +70,7 @@ async function open(browser, base, opts, keep) {
   page.on("request", (r) => { if (!r.url().startsWith(base) && !r.url().startsWith("data:") && !r.url().startsWith("blob:")) errors.push("unexpected request " + r.url()); });
   await page.addInitScript(() => {
     localStorage.setItem("mcircles:debug", "1");
-    if (!localStorage.getItem("mcircles:v1")) localStorage.setItem("mcircles:v1", JSON.stringify({ settings: { quality: "low", music: 0, sfx: 0 } }));
+    if (!localStorage.getItem("mcircles:v1")) localStorage.setItem("mcircles:v1", JSON.stringify({ settings: { quality: "fast", music: 0, sfx: 0 } }));
   });
   await page.goto(base + "/index.html");
   await page.waitForFunction(() => window.MC && window.MC.S.mode === "title" && !document.getElementById("loading"), null, { timeout: 90000 });
@@ -98,7 +98,7 @@ async function shot(page, name) { if (SHOT_DIR) await page.screenshot({ path: pa
     await page.click("#btnNewGo");
     check("the journey starts at the waystone", await until(page, () => { const S = window.MC.S; return S.mode === "play" && S.player && Math.hypot(S.player.x, S.player.z) < 5; }));
     check("the HUD is up with eight scrolls", await page.evaluate(() => !document.getElementById("hud").hidden && document.querySelectorAll("#spellbar .slot").length === 8));
-    check("the world round you is loaded", await until(page, () => window.MC.chunks.loadedCount() >= 49 && window.MC.chunks.pending() === 0));
+    check("the world round you is loaded", await until(page, () => window.MC.chunks.loadedCount() >= 25 && window.MC.chunks.pending() === 0));
     const props = await page.evaluate(() => window.MC.S.world.chunk(0, 0).waystone !== null);
     check("a waystone stands at the start", props);
     await shot(page, "02-start");
@@ -154,6 +154,26 @@ async function shot(page, name) { if (SHOT_DIR) await page.screenshot({ path: pa
     await page.click("#toolUndo");
     await page.click("#bookClose");
     check("Done closes the book and resumes", await until(page, () => document.getElementById("book").hidden && !window.MC.S.paused));
+
+    console.log("\nDesktop: graphics");
+    await page.keyboard.press("Escape");
+    await until(page, () => !document.getElementById("scr-pause").hidden);
+    await page.click("#btnPauseSettings");
+    const tiers = await page.evaluate(() => [...document.querySelectorAll("#setQuality [data-q]")].map((b) => b.textContent));
+    check("Settings offers Fast, Normal and Unrestrained", tiers.join() === "Fast,Normal,Unrestrained", tiers.join());
+    check("Fast is the one lit", await page.evaluate(() => document.querySelector('#setQuality [data-q="fast"]').classList.contains("on")));
+    const fastChunks = await page.evaluate(() => window.MC.chunks.loadedCount());
+    await page.click('#setQuality [data-q="unrestrained"]');
+    check("Unrestrained builds the world further out", await until(page, () => window.MC.chunks.loadedCount() === 81, null, 30000), await page.evaluate(() => window.MC.chunks.loadedCount()));
+    check("with shadows four times as fine", await page.evaluate(() => window.MC.gfx.sun.shadow.mapSize.x === 4096));
+    await page.click('#setQuality [data-q="normal"]');
+    check("Normal builds it to 7 × 7", await until(page, () => window.MC.chunks.loadedCount() === 49, null, 30000));
+    await page.click('#setQuality [data-q="fast"]');
+    check("Fast pulls it back in to 5 × 5 (was " + fastChunks + ")", await until(page, () => window.MC.chunks.loadedCount() === 25, null, 30000));
+    check("the choice is saved", await page.evaluate(() => window.MC.save.settings.quality === "fast"));
+    await page.click("#btnSettingsBack");
+    await page.keyboard.press("Escape");
+    check("and the journey resumes", await until(page, () => !window.MC.S.paused));
 
     console.log("\nDesktop: the map and a waystone");
     await page.keyboard.press("KeyN");

@@ -10,7 +10,7 @@
 import { S, on } from "./state.js";
 import * as gfx from "./gfx.js";
 import * as fx from "./fx.js";
-import { loadAssets } from "./assets.js";
+import { loadAssets, setAnisotropy as modelAniso } from "./assets.js";
 import * as game from "./game.js";
 import * as chunks from "./chunks.js";
 import * as phys from "./physics.js";
@@ -21,7 +21,7 @@ import * as menus from "./menus.js";
 import * as info from "./info.js";
 import * as update from "./update.js";
 import * as audio from "./audio.js";
-import { tickWater } from "./terrain.js";
+import { tickWater, setAnisotropy as groundAniso } from "./terrain.js";
 import { initInput, poll, device } from "./input.js";
 import { save } from "./save.js";
 import { randomSeedText } from "./world.js";
@@ -74,8 +74,17 @@ function frame(now) {
 }
 
 async function boot() {
+  // A new tier reaches past the renderer: the world round you is built again
+  // to its reach and ground cover, and every texture takes its sharpness.
+  gfx.onTier(() => {
+    const a = gfx.tierSpec().aniso;
+    modelAniso(a); groundAniso(a);
+    const P = S.player;
+    if (S.mode === "play" && P) chunks.rebuild(P.x, P.z);
+    else if (S.mode === "title") chunks.rebuild(gfx.camState.x, gfx.camState.z);
+  });
   gfx.setQuality(save.settings.quality);
-  gfx.watchPerformance((tier) => { if (S.mode !== "title") hud.toast("Lowered graphics to " + tier + " to keep things smooth", "gear"); });
+  gfx.watchPerformance((tier) => { if (S.mode !== "title") hud.toast("Graphics lowered to " + gfx.TIER_NAMES[tier] + " to keep things smooth", "gear"); });
   info.init();
   hud.init();
   forge.init();
