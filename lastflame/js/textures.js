@@ -45,6 +45,18 @@ export function capiz() {
   return tex(c, true);
 }
 
+/* The capiz window's lattice alone, as a shadow: white where the wood is,
+   black where a shell lets the light through. Same grid as capiz(), so the
+   lightning lays the window's squares across the floor. */
+export function capizLattice() {
+  const W = 256, H = 512, c = canvas(W, H), x = c.getContext("2d");
+  x.fillStyle = "#fff"; x.fillRect(0, 0, W, H);
+  const n = 4, m = 8, cw = W / n, ch = H / m, pad = 5;
+  x.fillStyle = "#000";
+  for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) x.fillRect(i * cw + pad, j * ch + pad, cw - pad * 2, ch - pad * 2);
+  return tex(c, false);
+}
+
 /* Calado: a pierced fretwork band. Alpha is the pattern (white = wood). */
 export function calado() {
   const W = 512, H = 128, c = canvas(W, H), x = c.getContext("2d");
@@ -88,33 +100,64 @@ export function paper() {
 
 /* The head, wrapped round a sphere: a face on the front (u = 0.25 is where
    three's sphere faces +z), dark scalp everywhere else. Pale, too long, the
-   eyes two holes, and a mouth that runs further than a mouth should. */
-export function face() {
+   eyes two holes, and a mouth that runs further than a mouth should.
+   `scream`: the same face with the mouth hung open past the chin, for the
+   moment it is on you. `ghost`: the dead out of the lamps — paler, smoother,
+   the eyes deep black pits, the mouth a long dark O. */
+export function face(o) {
+  o = o || {};
   const W = 512, H = 256, c = canvas(W, H), x = c.getContext("2d"), r = rng(13);
-  x.fillStyle = "#1a1917"; x.fillRect(0, 0, W, H);
+  x.fillStyle = o.ghost ? "#3a3d42" : "#1a1917"; x.fillRect(0, 0, W, H);
   const fx = W * 0.25;
   const g = x.createRadialGradient(fx, H * 0.55, 6, fx, H * 0.58, W * 0.2);
-  g.addColorStop(0, "#9c9b90"); g.addColorStop(0.55, "#6f6e65"); g.addColorStop(1, "rgba(26,25,23,1)");
+  if (o.ghost) { g.addColorStop(0, "#e9ecef"); g.addColorStop(0.6, "#b9bfc7"); g.addColorStop(1, "rgba(58,61,66,1)"); }
+  else { g.addColorStop(0, "#9c9b90"); g.addColorStop(0.55, "#6f6e65"); g.addColorStop(1, "rgba(26,25,23,1)"); }
   x.fillStyle = g; x.beginPath(); x.ellipse(fx, H * 0.58, W * 0.16, H * 0.36, 0, 0, Math.PI * 2); x.fill();
-  // veins
-  x.strokeStyle = "rgba(40,50,70,0.35)"; x.lineWidth = 1;
+  // veins; hers are faint, under skin like wax
+  x.strokeStyle = o.ghost ? "rgba(70,90,130,0.18)" : "rgba(40,50,70,0.35)"; x.lineWidth = 1;
   for (let k = 0; k < 18; k++) { x.beginPath(); let px = fx + (r() - 0.5) * 120, py = H * (0.3 + r() * 0.5); x.moveTo(px, py); for (let s = 0; s < 5; s++) { px += (r() - 0.5) * 16; py += (r() - 0.3) * 12; x.lineTo(px, py); } x.stroke(); }
+  // sunken cheeks
+  for (const sgn of [-1, 1]) {
+    const cg = x.createRadialGradient(fx + sgn * 40, H * 0.66, 2, fx + sgn * 40, H * 0.66, 30);
+    cg.addColorStop(0, "rgba(10,10,12,0.45)"); cg.addColorStop(1, "rgba(10,10,12,0)");
+    x.fillStyle = cg; x.beginPath(); x.ellipse(fx + sgn * 40, H * 0.66, 22, 30, 0, 0, Math.PI * 2); x.fill();
+  }
   // eyes: deep sockets, then the holes
   for (const sgn of [-1, 1]) {
     const ex = fx + sgn * 30, ey = H * 0.47;
-    const sg = x.createRadialGradient(ex, ey, 2, ex, ey, 26);
+    const sg = x.createRadialGradient(ex, ey, 2, ex, ey, o.ghost ? 30 : 26);
     sg.addColorStop(0, "rgba(0,0,0,1)"); sg.addColorStop(0.5, "rgba(8,6,6,0.95)"); sg.addColorStop(1, "rgba(30,25,25,0)");
-    x.fillStyle = sg; x.beginPath(); x.ellipse(ex, ey, 26, 20, sgn * 0.2, 0, Math.PI * 2); x.fill();
-    x.fillStyle = "#000"; x.beginPath(); x.ellipse(ex, ey + 1, 10, 13, 0, 0, Math.PI * 2); x.fill();
+    x.fillStyle = sg; x.beginPath(); x.ellipse(ex, ey, o.ghost ? 30 : 26, o.ghost ? 24 : 20, sgn * 0.2, 0, Math.PI * 2); x.fill();
+    x.fillStyle = "#000"; x.beginPath(); x.ellipse(ex, ey + 1, o.scream ? 12 : 10, o.scream ? 16 : 13, 0, 0, Math.PI * 2); x.fill();
+    // black tears down from them
+    if (o.ghost || o.scream) { x.strokeStyle = "rgba(5,5,8,0.7)"; x.lineWidth = 2.5; x.beginPath(); x.moveTo(ex + sgn * 3, ey + 12); x.bezierCurveTo(ex + sgn * 5, ey + 30, ex + sgn * 2, ey + 45, ex + sgn * 6, ey + 70); x.stroke(); }
   }
-  // the mouth, slit wide past where the cheeks are, teeth like splinters
   const my = H * 0.72;
-  x.fillStyle = "#0e0605";
-  x.beginPath(); x.moveTo(fx - 62, my - 8); x.quadraticCurveTo(fx, my + 26, fx + 62, my - 8); x.quadraticCurveTo(fx, my + 4, fx - 62, my - 8); x.fill();
-  x.fillStyle = "#bdb498";
-  for (let k = 0; k < 16; k++) { const tx = fx - 46 + k * 6; x.beginPath(); x.moveTo(tx, my + 2); x.lineTo(tx + 2, my + 9 + r() * 6); x.lineTo(tx + 4, my + 2); x.fill(); }
+  if (o.scream || o.ghost) {
+    // the jaw hung open: a long dark hole, teeth like splinters round its rim
+    const mh = o.scream ? 46 : 30, mw = o.scream ? 30 : 18;
+    const mg = x.createRadialGradient(fx, my + mh * 0.3, 2, fx, my + mh * 0.3, mh);
+    mg.addColorStop(0, "#000"); mg.addColorStop(0.7, "#070303"); mg.addColorStop(1, "rgba(20,8,6,0.9)");
+    x.fillStyle = mg; x.beginPath(); x.ellipse(fx, my + mh * 0.25, mw, mh, 0, 0, Math.PI * 2); x.fill();
+    if (o.scream) {
+      x.fillStyle = "#c9c0a4";
+      for (let k = 0; k < 9; k++) { const tx = fx - mw * 0.8 + k * (mw * 1.6 / 8); x.beginPath(); x.moveTo(tx - 2, my - mh * 0.7); x.lineTo(tx, my - mh * 0.7 + 8 + r() * 9); x.lineTo(tx + 2, my - mh * 0.7); x.fill(); }
+      for (let k = 0; k < 8; k++) { const tx = fx - mw * 0.7 + k * (mw * 1.4 / 7); x.beginPath(); x.moveTo(tx - 2, my + mh * 1.2); x.lineTo(tx, my + mh * 1.2 - 7 - r() * 8); x.lineTo(tx + 2, my + mh * 1.2); x.fill(); }
+      // and the corners split up the cheeks
+      x.strokeStyle = "#0e0605"; x.lineWidth = 3;
+      for (const sgn of [-1, 1]) { x.beginPath(); x.moveTo(fx + sgn * mw * 0.9, my - mh * 0.2); x.quadraticCurveTo(fx + sgn * (mw + 22), my - 12, fx + sgn * (mw + 34), my - 30); x.stroke(); }
+    }
+  } else {
+    // the mouth, slit wide past where the cheeks are, teeth like splinters
+    x.fillStyle = "#0e0605";
+    x.beginPath(); x.moveTo(fx - 62, my - 8); x.quadraticCurveTo(fx, my + 26, fx + 62, my - 8); x.quadraticCurveTo(fx, my + 4, fx - 62, my - 8); x.fill();
+    x.fillStyle = "#bdb498";
+    for (let k = 0; k < 16; k++) { const tx = fx - 46 + k * 6; x.beginPath(); x.moveTo(tx, my + 2); x.lineTo(tx + 2, my + 9 + r() * 6); x.lineTo(tx + 4, my + 2); x.fill(); }
+  }
   return tex(c, true);
 }
+export const faceScream = () => face({ scream: true });
+export const ghostFace = () => face({ ghost: true });
 
 /* Hair: long black strands, some lighter where the lantern would catch
    them; the alpha thins them out into separate locks at the tips. */

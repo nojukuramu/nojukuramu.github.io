@@ -8,7 +8,11 @@ Each was cut to the one event the game plays (the cut points are listed, in seco
 source file), mixed to mono, peak-normalised, faded at its ends and encoded as a small MP3. The
 growls are pitched down 18%, the gasp is an inhale sped up and pitched up, the furniture drag is a
 chair on tile pitched down and dulled toward wood. Until a file has loaded the game plays its own
-synthesised version (`js/audio.js`), and the tiktik call is always synthesised.
+synthesised version (`js/audio.js`), and the tiktik call is always synthesised. The two loops
+(`rainglass`, `whistle`) have their last second crossfaded over their first, so they never seam;
+the toms are pitched down into something nearer a taiko. The room the house rings with, and the
+whole of the score at the end — the low strings, the stabs, the endless climb — are made in
+`js/audio.js`, not recorded.
 
 | File | Source and cut | Author | Licence |
 |------|----------------|--------|---------|
@@ -20,6 +24,8 @@ synthesised version (`js/audio.js`), and the tiktik call is always synthesised.
 | `click.mp3` | metalClick.ogg, 0.00–0.45 s | [Kenney](https://kenney.nl/assets/rpg-audio) | CC0 1.0 |
 | `closet_close.mp3` | cupboard-s0046.wav, 1.34–1.70 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/cupboard-s0046.html) | CC0 1.0 |
 | `closet_open.mp3` | cupboard-s0046.wav, 0.33–0.54 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/cupboard-s0046.html) | CC0 1.0 |
+| `crack1.mp3` | thunder-6-s3179.wav, 0.20–9.00 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/thunder-6-s3179.html) | CC0 1.0 |
+| `crack2.mp3` | thunder-7-s3180.wav, 0.00–10.00 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/thunder-7-s3180.html) | CC0 1.0 |
 | `creak1.mp3` | squeaking-parquet-1-s3051.wav, 0.23–1.01 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/squeaking-parquet-1-s3051.html) | CC0 1.0 |
 | `creak2.mp3` | squeaking-parquet-2-s3052.wav, 0.20–1.20 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/squeaking-parquet-2-s3052.html) | CC0 1.0 |
 | `creak3.mp3` | squeaking-parquet-3-s3053.wav, 0.26–0.79 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/squeaking-parquet-3-s3053.html) | CC0 1.0 |
@@ -31,6 +37,9 @@ synthesised version (`js/audio.js`), and the tiktik call is always synthesised.
 | `door_open.mp3` | creaking-door-8-s3211.wav, 0.00–2.40 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/creaking-door-8-s3211.html) | CC0 1.0 |
 | `door_slam.mp3` | door-slamming-3-s1339.wav, 0.00–0.76 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/door-slamming-3-s1339.html) | CC0 1.0 |
 | `drag.mp3` | chair-s0666.wav, 30.98–31.89 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/chair-s0666.html) | CC0 1.0 |
+| `drip1.mp3` | drops-of-water-1-s1384.wav, 0.08–0.90 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/drops-of-water-1-s1384.html) | CC0 1.0 |
+| `drip2.mp3` | drops-of-water-1-s1384.wav, 1.50–2.30 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/drops-of-water-1-s1384.html) | CC0 1.0 |
+| `drip3.mp3` | drops-of-water-1-s1384.wav, 2.94–3.70 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/drops-of-water-1-s1384.html) | CC0 1.0 |
 | `drone1.mp3` | atmoseerie01.mp3.flac, 0.00–19.50 s | [qubodup](https://opengameart.org/content/4-atmospheric-ghostly-loops) | CC0 1.0 |
 | `drone2.mp3` | atmoseerie02.mp3.flac, 0.00–19.50 s | [qubodup](https://opengameart.org/content/4-atmospheric-ghostly-loops) | CC0 1.0 |
 | `exhale.mp3` | sigh-by-the-mouth-s1405.wav, 0.42–2.63 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/sigh-by-the-mouth-s1405.html) | CC0 1.0 |
@@ -50,6 +59,7 @@ synthesised version (`js/audio.js`), and the tiktik call is always synthesised.
 | `pant.mp3` | breathless-man-s1103.wav, 0.49–7.00 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/breathless-man-s1103.html) | CC0 1.0 |
 | `paper.mp3` | bookFlip1.ogg, 0.00–0.77 s | [Kenney](https://kenney.nl/assets/rpg-audio) | CC0 1.0 |
 | `rain.mp3` | rain-gutter-loop_0.mp3, 1.99–38.00 s | [Ogrebane](https://opengameart.org/content/rain-gutter-loop) | CC0 1.0 |
+| `rainglass.mp3` | rain-on-car-windshield-2-s1297.wav, 10.00–23.00 s, looped | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/rain-on-car-windshield-2-s1297.html) | CC0 1.0 |
 | `shriek.mp3` | scaryhighpitchedghost_0.ogg, 10.59–13.00 s | [Fupi](https://opengameart.org/content/scary-high-pitched-ghost) | CC0 1.0 |
 | `sneak1.mp3` | feet-slipper-on-floor-s0373.wav, 0.85–1.28 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/feet-slipper-on-floor-s0373.html) | CC0 1.0 |
 | `sneak2.mp3` | feet-slipper-on-floor-s0373.wav, 1.48–1.99 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/feet-slipper-on-floor-s0373.html) | CC0 1.0 |
@@ -68,12 +78,18 @@ synthesised version (`js/audio.js`), and the tiktik call is always synthesised.
 | `thunder2.mp3` | thunder-3-s3114.wav, 0.00–9.00 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/thunder-3-s3114.html) | CC0 1.0 |
 | `thunder3.mp3` | thunder-4-s3115.wav, 0.41–9.42 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/thunder-4-s3115.html) | CC0 1.0 |
 | `tick.mp3` | grandfather-clock-ticking-s1567.wav, 0.99–9.00 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/grandfather-clock-ticking-s1567.html) | CC0 1.0 |
+| `tom1.mp3` | bass-tom-1-s2338.wav, 0.00–1.70 s, pitched down 30% | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/bass-tom-1-s2338.html) | CC0 1.0 |
+| `tom2.mp3` | bass-tom-3-s2340.wav, 0.00–1.90 s, pitched down 38% | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/bass-tom-3-s2340.html) | CC0 1.0 |
 | `tuko.mp3` | Mating_call_of_a_male_Tokay_gecko_(Gekko_gecko).ogg, 7.09–12.30 s | [Richard Ling](https://commons.wikimedia.org/wiki/File:Mating_call_of_a_male_Tokay_gecko_(Gekko_gecko).ogg) | Public domain |
+| `wail1.mp3` | ghost-2-s2047.wav, 0.00–7.50 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/ghost-2-s2047.html) | CC0 1.0 |
+| `wail2.mp3` | ghost-5-s2050.wav, 0.00–6.50 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/ghost-5-s2050.html) | CC0 1.0 |
+| `wail3.mp3` | ghost-8-s2053.wav, 0.00–7.00 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/ghost-8-s2053.html) | CC0 1.0 |
 | `whisper1.mp3` | whisper-1-s3255.wav, 0.59–1.55 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/whisper-1-s3255.html) | CC0 1.0 |
 | `whisper2.mp3` | whisper-1-s3255.wav, 2.54–3.50 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/whisper-1-s3255.html) | CC0 1.0 |
 | `whisper3.mp3` | whisper-1-s3255.wav, 8.19–10.80 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/whisper-1-s3255.html) | CC0 1.0 |
 | `whisper4.mp3` | whisper-1-s3255.wav, 15.89–17.40 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/whisper-1-s3255.html) | CC0 1.0 |
 | `whisper5.mp3` | whisper-1-s3255.wav, 19.99–21.00 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/whisper-1-s3255.html) | CC0 1.0 |
+| `whistle.mp3` | whistling-of-the-wind-2-s0155.wav, 3.00–16.00 s, looped | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/whistling-of-the-wind-2-s0155.html) | CC0 1.0 |
 | `wind.mp3` | wind-from-inside-1-s1714.ogg, 29.99–66.00 s | [Joseph SARDIN — BigSoundBank](https://bigsoundbank.com/wind-from-inside-1-s1714.html) | CC0 1.0 |
 
 The night outside: the frogs are *palakang bukid* recorded in a field in Biñan, Laguna, after

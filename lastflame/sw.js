@@ -9,7 +9,7 @@
    drift. Bumping it is what publishes an update. Changed: the shell, which
    is this game's, and holds the house's models, surfaces and sounds too, so a
    night offline sounds and looks like a night online. */
-var CACHE = "lastflame-v1";
+var CACHE = "lastflame-v2";
 var SHELL = [
   "./",
   "./index.html",
@@ -18,6 +18,7 @@ var SHELL = [
   "./js/audio.js",
   "./js/creature.js",
   "./js/game.js",
+  "./js/ghosts.js",
   "./js/house.js",
   "./js/hunter.js",
   "./js/icons.js",
@@ -108,6 +109,8 @@ var SHELL = [
   "./assets/sounds/click.mp3",
   "./assets/sounds/closet_close.mp3",
   "./assets/sounds/closet_open.mp3",
+  "./assets/sounds/crack1.mp3",
+  "./assets/sounds/crack2.mp3",
   "./assets/sounds/creak1.mp3",
   "./assets/sounds/creak2.mp3",
   "./assets/sounds/creak3.mp3",
@@ -119,6 +122,9 @@ var SHELL = [
   "./assets/sounds/door_open.mp3",
   "./assets/sounds/door_slam.mp3",
   "./assets/sounds/drag.mp3",
+  "./assets/sounds/drip1.mp3",
+  "./assets/sounds/drip2.mp3",
+  "./assets/sounds/drip3.mp3",
   "./assets/sounds/drone1.mp3",
   "./assets/sounds/drone2.mp3",
   "./assets/sounds/exhale.mp3",
@@ -138,6 +144,7 @@ var SHELL = [
   "./assets/sounds/pant.mp3",
   "./assets/sounds/paper.mp3",
   "./assets/sounds/rain.mp3",
+  "./assets/sounds/rainglass.mp3",
   "./assets/sounds/shriek.mp3",
   "./assets/sounds/sneak1.mp3",
   "./assets/sounds/sneak2.mp3",
@@ -156,12 +163,18 @@ var SHELL = [
   "./assets/sounds/thunder2.mp3",
   "./assets/sounds/thunder3.mp3",
   "./assets/sounds/tick.mp3",
+  "./assets/sounds/tom1.mp3",
+  "./assets/sounds/tom2.mp3",
   "./assets/sounds/tuko.mp3",
+  "./assets/sounds/wail1.mp3",
+  "./assets/sounds/wail2.mp3",
+  "./assets/sounds/wail3.mp3",
   "./assets/sounds/whisper1.mp3",
   "./assets/sounds/whisper2.mp3",
   "./assets/sounds/whisper3.mp3",
   "./assets/sounds/whisper4.mp3",
   "./assets/sounds/whisper5.mp3",
+  "./assets/sounds/whistle.mp3",
   "./assets/sounds/wind.mp3",
   "./icons/icon.svg",
   "./icons/icon-192.png",

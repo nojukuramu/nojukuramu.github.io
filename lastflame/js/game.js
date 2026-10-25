@@ -28,6 +28,7 @@
 import { generate, doorBox, roomAt, alter, POOL_R, PROPS } from "./house.js";
 import { buildGrid, rebuild, move, sees, nearestFree, cx, cz } from "./nav.js";
 import * as hunt from "./hunter.js";
+import * as ghosts from "./ghosts.js";
 import { rng } from "./rng.js";
 
 export const PLAYER_R = 0.28;
@@ -52,7 +53,8 @@ export const PHASES = {
   unease: { relax: 45, nudge: 0, label: "Unease" },
   pressure: { relax: 38, nudge: 85, label: "Pressure" },
   dread: { relax: 30, nudge: 65, label: "Dread" },
-  breather: { relax: 40, nudge: 0, label: "Breather" },
+  // short: the clock strikes, the rain stops, and then it all comes at once
+  breather: { relax: 14, nudge: 0, label: "Breather" },
   peak: { relax: 16, nudge: 30, label: "Peak" }
 };
 
@@ -71,6 +73,7 @@ export function newRun(o) {
       exert: 0, winded: false, dread: 0, stepD: 0, moving: false, speed: 0, lastCreak: -1, creakT: 0, pantT: 0, breatheT: 3
     },
     hunter: hunt.newHunter(),
+    ghosts: [], ghostDist: 99,
     dir: { stress: 0, relaxT: 0, nudgeT: 70, rollT: 7, T: 0, wantRelax: false, advance: false },
     events: [], hints: {}, hint: null, flags: {}, inPool: false, lanternPower: 1, hunterDist: 99, litT: 0,
     act: null, actT: 0, lightning: 18 + r() * 20, kicked: {}, caughtT: 0, respawnAt: null, lastLamp: 0,
@@ -87,7 +90,7 @@ export function newRun(o) {
 function bind(g) {
   g.noise = (x, z, rad, kind, fromHunter) => { if (!fromHunter) hunt.hear(g, x, z, rad, kind); g.events.push({ type: "noise", x, z, r: rad, kind }); };
   g.pickRoom = () => pickRoom(g);
-  g.caught = (how) => caught(g, how);
+  g.caught = (how, who) => caught(g, how, who);
   g.relax = () => relax(g);
   g.passDone = () => { g.flags.passDone = true; relax(g, 30); if (g.phase === "intro") setPhase(g, "unease"); hint(g, "after", "It hunts by sound and by light. [lantern] turns your wick down.", 7); };
 }
@@ -256,6 +259,7 @@ function interact(g, t, held, pressed, dt) {
   else if (t.kind === "door") {
     const d = L.doors[t.id];
     d.open = d.open > 0.5 ? 0 : 1;
+    d.touchedAt = g.t;   // the hunter notices a door that is not as it left it
     ev(g, { type: "door", id: d.id, open: d.open > 0.5, who: "player" });
     g.noise(d.x, d.z, NOISE.door, "door");
     // a door shut on yourself pushes you out of the doorway
@@ -355,13 +359,15 @@ function startPass(g) {
   hint(g, "hide", "Something is coming. Hide in the aparador. [interact]", 8);
 }
 
-function caught(g, how) {
+/* `who`: a ghost, when it was one of them; otherwise the hunter. */
+function caught(g, how, who) {
   if (g.state !== "play") return;
   g.state = "caught";
   g.caughtT = 0;
   g.stats.deaths++;
   g.player.vx = g.player.vz = 0;
-  ev(g, { type: "kill", how, x: g.hunter.x, z: g.hunter.z });
+  const by = who || g.hunter;
+  ev(g, { type: "kill", how, x: by.x, z: by.z, ghost: who ? who.id : -1 });
 }
 
 /* Lola's Rules: you wake by the last lamp you lit, and it has gone far away. */
@@ -379,11 +385,13 @@ function respawn(g) {
   p.oil = Math.max(p.oil, 0.5); p.lantern = !g.flipped; p.dread = 0.3; p.exert = 0; p.breath = 1; p.crouch = false;
   g.state = "play";
   hunt.placeFar(g);
+  ghosts.placeFar(g);
   g.dir.stress = 0; g.dir.relaxT = 30 * g.tune.relax;
   ev(g, { type: "respawn" });
 }
 
-/* The fifth lamp's breather is over: the house turns on you. */
+/* The fifth lamp's breather is over: the house turns on you, and what was
+   waiting in the lamps comes out of them (ghosts.js). */
 function flip(g) {
   g.flipped = true;
   setPhase(g, "peak");
@@ -397,11 +405,12 @@ function flip(g) {
   fd.locked = false;
   ev(g, { type: "flip", changes, door: fd.id });
   ev(g, { type: "lightning", power: 1, thunder: 0.15, scripted: true });
-  hint(g, "flip", "It was waiting for the light. Put yours out, and find the front door.", 9);
+  hint(g, "flip", "Something is coming out of the lamps. Find the front door.", 9);
   g.dir.relaxT = 0;
   g.dir.nudgeT = 20;
   hunt.patrolNext(g);
   ev(g, { type: "scream", x: g.hunter.x, z: g.hunter.z });
+  ghosts.spawn(g);
 }
 
 function escape(g) {
@@ -547,6 +556,7 @@ export function step(g, dt, input) {
   let dd = dark ? (g.flipped ? 0.006 : 0.012) : -0.03;
   if (p.hiding >= 0) dd += 0.018;
   if (h.active && g.hunterDist < 7) dd += 0.05 * (1 - g.hunterDist / 7) + (h.sees ? 0.05 : 0);
+  if (g.ghostDist < 7) dd += 0.04 * (1 - g.ghostDist / 7);
   if (h.state === "chase") dd += 0.06;
   p.dread = Math.max(0, Math.min(1, p.dread + dd * dt));
 
@@ -566,6 +576,7 @@ export function step(g, dt, input) {
 
   director(g, dt);
   hunt.step(g, dt);
+  if (g.state === "play") ghosts.step(g, dt);
 
   // weather: lightning, and its thunder a moment later
   g.lightning -= dt;

@@ -120,6 +120,7 @@ body:not(.touch) #btn-pause { display: none; }
 #info-body p, #info-body li { color: #ddd2c0; line-height: 1.55; }
 #info-body ul { padding-left: 18px; }
 #info-body b { color: #ffd2a0; font-weight: 600; }
+#info-body .about { margin: 0; font-size: inherit; color: #ffd2a0; }
 #update-bar { position: fixed; top: calc(10px + var(--safeT)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; background: #140e0a; border: 1px solid rgba(255, 177, 92, .5); border-radius: 999px; padding: 6px 8px 6px 16px; z-index: 50; font: 14px var(--sans); max-width: calc(100vw - 16px); }
 
 @media (max-width: 420px) {
