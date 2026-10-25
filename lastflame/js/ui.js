@@ -40,7 +40,7 @@ export function init(actions) {
 
 const info = (key) => '<button class="info" data-info="' + key + '" aria-label="More about this">' + icon("info") + "</button>";
 const btn = (act, arg, label, cls, ico, disabled) => '<button class="btn ' + (cls || "") + '" data-act="' + act + '"' + (arg !== null && arg !== undefined ? ' data-arg="' + arg + '"' : "") + (disabled ? " disabled" : "") + ">" + (ico ? icon(ico) : "") + "<span>" + label + "</span></button>";
-const seg = (key, opts, topic) => '<div class="row"><div class="lbl">' + opts.label + (topic ? info(topic) : "") + '</div><div class="seg">' +
+const seg = (key, opts, topic) => '<div class="row"><div class="lbl">' + opts.label + (topic ? info(topic) : "") + (opts.note !== undefined ? '<small id="' + opts.noteId + '">' + opts.note + "</small>" : "") + '</div><div class="seg">' +
   opts.items.map(([v, l]) => '<button data-act="set" data-arg="' + key + ":" + v + '" class="' + (String(S.set[key]) === String(v) ? "on" : "") + '">' + l + "</button>").join("") + "</div></div>";
 const range = (key, label, min, max, step) => '<div class="row"><div class="lbl">' + label + '</div><input type="range" data-range="' + key + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + S.set[key] + '"></div>';
 const time = (s) => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
@@ -92,7 +92,8 @@ export function show(name, data) {
         ${range("fov", "Field of view", 60, 95, 1)}
         ${range("bright", "Brightness", 0, 1, 0.05)}
         ${range("volume", "Volume", 0, 1, 0.05)}
-        ${seg("quality", { label: "Graphics", items: [["auto", "Auto"], ["high", "Shadows"], ["low", "Fast"]] }, "quality")}
+        ${seg("quality", { label: "Graphics", items: [["auto", "Auto"], ["low", "Fast"], ["high", "Shadows"], ["ultra", "Unrestrained"]] }, "quality")}
+        ${seg("textures", { label: "Textures", items: [["low", "Low"], ["medium", "Medium"], ["high", "High"], ["original", "Original"]], note: texLine, noteId: "texState" }, "textures")}
         <h3>Version ${info("update")}</h3>
         <div class="row"><div class="lbl">Last Flame ${u.version}<small id="updState">${u.ready ? "A new version is ready." : u.supported ? "Checked every 30 minutes." : "Updates need the installed app."}</small></div>
         ${u.ready ? btn("updApply", null, "Reload", "small primary") : btn("updCheck", null, "Check for updates", "small")}</div>
@@ -150,6 +151,10 @@ const ACT = {
   updCheck: () => { const st = $("updState"); if (st) st.textContent = "Checking…"; upd.checkNow().then((r) => { const s2 = $("updState"); if (s2) s2.textContent = r === "ready" ? "A new version is ready." : r === "current" ? "You are up to date." : r === "downloading" ? "Downloading a new version…" : r === "offline" ? "Offline: could not check." : "Updates need the installed app."; }); },
   updApply: () => upd.apply()
 };
+
+/* How the Original textures are coming along: one line under the setting. */
+let texLine = "";
+export function texNote(text) { texLine = text || ""; const el = $("texState"); if (el) el.textContent = texLine; }
 
 /* ---------- during the night ---------- */
 

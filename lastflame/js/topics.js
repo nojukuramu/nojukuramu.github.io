@@ -86,7 +86,16 @@ export const TOPICS = {
   },
   quality: {
     title: "Graphics",
-    body: `<p><b>Shadows</b> lets your lantern throw moving shadows, with a glow round every flame. <b>Fast</b> leaves those out and draws fewer pixels, for a phone or an older computer. Either way the lamps, the moon and the lightning keep their shadows — they are drawn once and kept, and they are what stops light coming through a wall. <b>Auto</b> picks Fast on a phone and Shadows elsewhere.</p>`
+    body: `<p><b>Shadows</b> lets your lantern throw moving shadows, with a glow round every flame, the polished floors, the varnish and the brass reflect the room, and the walls and floors have depth — floorboard seams, panel edges, broken plaster — that moves as you do. <b>Fast</b> leaves those out and draws fewer pixels, for a phone or an older computer. Either way the lamps, the moon and the lightning keep their shadows — they are drawn once and kept, and they are what stops light coming through a wall. <b>Auto</b> picks Fast on a phone and Shadows elsewhere.</p>
+<p><b>Unrestrained</b> holds nothing back: every pixel your screen has, smoothed edges, shadows twice as sharp and redrawn twice as often, textures kept sharp at a slant, the bounce light worked out twice as often. It is for a strong computer with a proper graphics card; on anything less it will stutter. Auto never picks it.</p>`
+  },
+  textures: {
+    title: "Textures",
+    body: `<p>How sharp the walls, floors and furniture are up close.</p>
+<ul><li><b>Original</b> — the textures at the size they were made: 2k for the walls, floors and ceilings, 1k for every piece of furniture. About 16 MB, downloaded the first time you choose it and kept for offline after. Needs a computer with plenty of graphics memory.</li>
+<li><b>High</b> — the textures the game ships with, made small so the whole game fits in a few megabytes. Always there, even offline.</li>
+<li><b>Medium</b> and <b>Low</b> — High at half and a quarter of the size, made on your device: for a phone that is short of memory, or stutters when you walk into a new room.</li></ul>
+<p>Changing it takes effect at once; nothing about the night changes.</p>`
   },
   end: {
     title: "The end of the night",

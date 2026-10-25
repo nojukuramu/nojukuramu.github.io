@@ -12,7 +12,9 @@
    On a computer: the title is up and the house loads; Begin starts a night
    and the house is drawn, not black; W walks, F turns the wick down and up;
    holding E at a lamp lights it; E at a closet hides you and E again lets
-   you out; Escape pauses and Settings change and stick; being caught under
+   you out; Escape pauses and Settings change and stick — the Original
+   textures arrive when chosen and Low shrinks them, Unrestrained draws
+   with multisampled edges; being caught under
    Lola's Rules wakes you by the lamp; at the fifth lamp the house turns and
    the dead rise out of the lamps; the front door at the end is the way out
    and the night ends on its screen. On a phone held sideways: the touch
@@ -146,6 +148,20 @@ const standAt = (p, at, look) => p.evaluate(([at, look]) => {
   await p.click('[data-arg="fear:gentle"]');
   check("a setting changes and is saved", await p.evaluate(() => window.__lf.S.set.fear === "gentle" && /"fear":"gentle"/.test(localStorage.getItem("lastflame-save-v1") || "")));
   check("the version and a manual update check are in Settings", await p.isVisible('[data-act="updCheck"]') || await p.isVisible('[data-act="updApply"]'));
+  // textures: the widest normal map on the house's surfaces, as the materials hold it now
+  const surfaceWidth = () => p.evaluate(() => { let w = 0; window.__lf.render.three().scene.traverse((o) => { if (o.isMesh && o.material && o.material.isMeshStandardMaterial && o.material.normalMap && o.material.normalMap.image) w = Math.max(w, o.material.normalMap.image.width || 0); }); return w; });
+  const w0 = await surfaceWidth();
+  await p.click('[data-arg="textures:original"]');
+  check("Original textures arrive and go into the house (" + w0 + " px -> 2048 px)", await until(p, () => { let w = 0; window.__lf.render.three().scene.traverse((o) => { if (o.isMesh && o.material && o.material.isMeshStandardMaterial && o.material.normalMap && o.material.normalMap.image) w = Math.max(w, o.material.normalMap.image.width || 0); }); return w >= 2048; }, null, 60000));
+  await p.click('[data-arg="textures:low"]');
+  const wl = await surfaceWidth();
+  check("Low makes them smaller, on the spot (" + wl + " px)", wl > 0 && wl <= w0 / 4 + 1);
+  await p.click('[data-arg="textures:high"]');
+  check("and High puts back what ships (" + (await surfaceWidth()) + " px)", (await surfaceWidth()) === w0);
+  await p.click('[data-arg="quality:ultra"]');
+  const ultra = await p.evaluate(() => { const lf = window.__lf; lf.render.draw(lf.g, 0.016, {}); const r = lf.render.three().renderer; return { aa: lf.render._debug().composer.renderTarget1.samples, dpr: r.getPixelRatio() }; });
+  check("Unrestrained draws with multisampled edges (" + ultra.aa + "x)", ultra.aa === 4);
+  await p.click('[data-arg="quality:low"]');
   await p.click('[data-act="back"]');
   await p.click('[data-act="resume"]');
   check("and the night goes on", await until(p, () => !window.__lf.g || (document.getElementById("screen").hidden && window.__lf.g.state === "play"), null, 15000));
@@ -154,7 +170,9 @@ const standAt = (p, at, look) => p.evaluate(([at, look]) => {
   await p.evaluate(() => { const g = window.__lf.g, h = g.hunter, pl = g.player; h.active = true; h.state = "chase"; h.chaseV = 3; h.x = pl.x + 0.5; h.z = pl.z; h.aware = 1.2; g.dir.relaxT = 0; });
   check("caught is caught", await until(p, () => window.__lf.g.state === "caught" || window.__lf.g.stats.deaths > 0, null, 20000));
   await shot(p, "caught");
-  check("and under Lola's Rules you wake by the lamp", await until(p, () => { const g = window.__lf.g, l = g.L.lamps[0]; return g.state === "play" && Math.hypot(g.player.x - l.x, g.player.z - l.z) < 3; }, null, 45000));
+  // (waking takes 2.6 s of game time, at most 0.1 s a frame: on a software GPU
+  // that is a minute or more of real time)
+  check("and under Lola's Rules you wake by the lamp", await until(p, () => { const g = window.__lf.g, l = g.L.lamps[0]; return g.state === "play" && Math.hypot(g.player.x - l.x, g.player.z - l.z) < 3; }, null, 120000));
 
   // the end, the real way: every lamp lit, the breather run out, and the house turns
   await p.evaluate(() => {
@@ -188,11 +206,15 @@ const standAt = (p, at, look) => p.evaluate(([at, look]) => {
   const pctx = await browser.newContext({ viewport: { width: 640, height: 300 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
   const q = await pctx.newPage();
   watch(q);
+  // a phone that chose Original textures last time: they must come in at start
+  await q.addInitScript(() => { try { localStorage.setItem("lastflame-save-v1", JSON.stringify({ v: 1, set: { textures: "original", quality: "low" } })); } catch (e) { /* none */ } });
   await q.goto(url);
   await q.waitForFunction(() => window.__lf && window.__lf.render.progress() >= 1, null, { timeout: 60000 });
   await q.evaluate(() => { const lf = window.__lf; lf.S.set.quality = "low"; lf.render.setQuality("low"); });
   await q.tap('[data-act="begin"]');
   check("a tap begins the night", await until(q, () => window.__lf.g && window.__lf.g.state === "play", null, 20000));
+  check("Original textures chosen before, load at start", await until(q, () => { let w = 0; window.__lf.render.three().scene.traverse((o) => { if (o.isMesh && o.material && o.material.isMeshStandardMaterial && o.material.normalMap && o.material.normalMap.image) w = Math.max(w, o.material.normalMap.image.width || 0); }); return w >= 2048; }, null, 60000));
+  await q.evaluate(() => { const lf = window.__lf; lf.S.set.textures = "high"; lf.render.setTextures("high"); });
   check("the touch controls are there", await until(q, () => !document.getElementById("touch").hidden, null, 10000));
   const s0 = await q.evaluate(() => ({ x: window.__lf.g.player.x, z: window.__lf.g.player.z }));
   // a thumb on the left half, pushed up
