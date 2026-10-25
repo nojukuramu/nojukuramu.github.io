@@ -250,7 +250,7 @@ function playNight(M, o, maxT) {
     // render.js and creature.js patch three's shaders by finding lines in them:
     // if three is ever updated and a line moves, the patch would quietly do nothing
     const three = read("vendor/build/three.module.min.js");
-    const lines = ["#include <lights_fragment_maps>", "#include <envmap_physical_pars_fragment>", "#include <opaque_fragment>", "reflectVec = inverseTransformDirection( reflectVec, viewMatrix );", "vec3 radiance = vec3( 0.0 );", "vec3 iblIrradiance = vec3( 0.0 );"];
+    const lines = ["#include <lights_fragment_maps>", "#include <envmap_physical_pars_fragment>", "#include <opaque_fragment>", "reflectVec = inverseTransformDirection( reflectVec, viewMatrix );", "vec3 radiance = vec3( 0.0 );", "vec3 iblIrradiance = vec3( 0.0 );", "mat3 getTangentFrame( vec3 eye_pos, vec3 surf_norm, vec2 uv )", "varying vec2 vMapUv;", "texture2D( normalMap, vNormalMapUv )", "texture2D( map, vMapUv )"];
     const lost = lines.filter((l) => !three.includes(l));
     check("the shader patches find every line they patch in the vendored three", !lost.length, lost.join(" | "));
     const man = JSON.parse(read("manifest.webmanifest"));
@@ -277,6 +277,10 @@ function playNight(M, o, maxT) {
     }
     const covered = glbImages.filter((n) => ix[n]).length;
     check("almost every furniture texture has its Original (" + covered + "/" + glbImages.length + ")", covered >= glbImages.length - 2 && Object.keys(ix).every((n) => glbImages.includes(n)));
+    // depth: each surface's height rides in its normal map's alpha (render.js, "Depth")
+    const alphaOf = (f) => { const b = fs.readFileSync(path.join(ROOT, f)); return b.toString("latin1", 12, 16) === "VP8X" && (b[20] & 0x10) !== 0; };
+    const flat = textures.flatMap((t) => ["assets/textures/" + t + "_n.webp", "assets/textures/original/" + t + "_n.webp"]).filter((f) => exists(f) && !alphaOf(f));
+    check("every surface's normal map carries its height, shipped and Original", !flat.length, flat.join(", "));
     const inShell = shell.filter((f) => /\/original\//.test(f));
     check("the Original set is not in the shell, so an install stays small", !inShell.length, inShell.slice(0, 3).join(", "));
     const origBytes = orig.filter(exists).concat(list("assets/models/original", ".webp")).reduce((s, f) => s + fs.statSync(path.join(ROOT, f)).size, 0);

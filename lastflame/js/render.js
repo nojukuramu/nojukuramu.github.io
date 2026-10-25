@@ -277,9 +277,10 @@ function bounceLit(m) {
     const own = mat.userData.patch;
     if (own) {
       mat.onBeforeCompile = (sh) => { bounceShader(sh); own(sh); };
-      // keyed by the look, not the function: one function makes both looks
-      const key = "bounce+" + (mat.userData.patchKey || own.toString());
-      mat.customProgramCacheKey = () => key;
+      // keyed by the look, not the function: one function makes several looks
+      // (and a look may change with the quality setting: then the key does too)
+      const pk = mat.userData.patchKey;
+      mat.customProgramCacheKey = () => "bounce+" + (typeof pk === "function" ? pk() : pk || own.toString());
     } else mat.onBeforeCompile = bounceShader;
     mat.needsUpdate = true;
   }
@@ -685,6 +686,72 @@ function loadTex(name, srgb, repeat) {
 let progressFn = null;
 function step() { loaded++; if (progressFn) progressFn(loaded / Math.max(1, total)); if (loaded >= total) { ready = true; if (progressFn) progressFn(1); } }
 
+/* ------------------------------------------------------------------ */
+/* Depth                                                              */
+/*
+ * Walls and floors are flat boxes, and a normal map only tilts the light
+ * on them: under a lantern held low, the gaps between floorboards, the
+ * mortar between tiles and the brick where the plaster has fallen away
+ * still read as painted on. Parallax occlusion mapping gives them depth.
+ * Each surface's height (Poly Haven's displacement map) rides in the
+ * alpha of its normal map, so it costs no texture slot — the shaders are
+ * close to the sixteen a graphics card is sure to have. Every fragment
+ * walks its view ray down into that height in steps until it is under the
+ * surface, and every map is read where the ray came to rest instead of
+ * where the box is: seams sink, raised edges hide what is behind them,
+ * and it all moves as the eye does. The walk is 12 steps on Shadows and 32
+ * on Unrestrained, fades out with distance, and Fast does without.
+ */
+const POM_GLSL = `
+uniform float pomScale;
+vec2 pomOffset( vec2 uv ) {
+  #if defined( USE_NORMALMAP_TANGENTSPACE ) && POM_STEPS > 0
+  float k = pomScale * smoothstep( 9.0, 4.0, length( vViewPosition ) );
+  if ( k <= 0.0 ) return uv;
+  vec3 n = normalize( vNormal ), v = normalize( vViewPosition );
+  mat3 tbn = getTangentFrame( - vViewPosition, n, uv );
+  vec3 vt = vec3( dot( tbn[ 0 ], v ), dot( tbn[ 1 ], v ), dot( n, v ) );
+  if ( vt.z <= 0.0 ) return uv;
+  vec2 gx = dFdx( uv ), gy = dFdy( uv );
+  float layer = 1.0 / float( POM_STEPS );
+  vec2 stp = vt.xy / max( vt.z, 0.25 ) * k * layer;
+  vec2 cur = uv;
+  float d = 0.0, h = 2.0 - 2.0 * textureGrad( normalMap, cur, gx, gy ).a;
+  for ( int i = 0; i < POM_STEPS; i ++ ) {
+    if ( d >= h ) break;
+    cur -= stp; d += layer;
+    h = 2.0 - 2.0 * textureGrad( normalMap, cur, gx, gy ).a;
+  }
+  // between the last step above the surface and the first below it
+  vec2 prev = cur + stp;
+  float after = h - d, before = ( 2.0 - 2.0 * textureGrad( normalMap, prev, gx, gy ).a ) - ( d - layer );
+  return mix( cur, prev, clamp( after / ( after - before + 1e-5 ), 0.0, 1.0 ) );
+  #else
+  return uv;
+  #endif
+}
+`;
+const POM_MAIN = `void main() {
+#ifdef USE_MAP
+  vec2 pomUv = pomOffset( vMapUv );
+  #define vMapUv pomUv
+  #define vNormalMapUv pomUv
+  #define vAoMapUv pomUv
+  #define vRoughnessMapUv pomUv
+#endif`;
+const pomSteps = () => (quality === "ultra" ? 32 : quality === "high" ? 12 : 0);
+/* `depth`: how deep its relief goes, in the texture's own units (metres
+   over the metres one repeat of it covers on the walls). */
+function deepen(m, depth) {
+  const scale = { value: depth };
+  m.userData.patchKey = () => "pom" + pomSteps();
+  m.userData.patch = (sh) => {
+    sh.uniforms.pomScale = scale;
+    sh.fragmentShader = "#define POM_STEPS " + pomSteps() + "\n" + sh.fragmentShader.replace("void main() {", POM_GLSL + POM_MAIN);
+  };
+  return m;
+}
+
 /* `coat`: a polish over it — a second, sharper reflection on top of the
    surface's own (three's clearcoat), for what has been waxed. */
 function pbr(name, color, rough, coat, bump) {
@@ -700,13 +767,16 @@ function pbr(name, color, rough, coat, bump) {
 function materials() {
   // the floors of a bahay na bato are wide hardwood planks polished with
   // banana leaves until they shine; the cocina's cement tiles are waxed
-  M.floor = pbr("floor", "#c9b8a8", 1, [0.6, 0.1], 1.3);
-  M.tiles = pbr("tiles", "#d8c0b0", 1, [0.35, 0.2], 1.2);
-  M.plaster = pbr("plaster", "#cfc6b6");
-  M.damaged = pbr("damaged", "#c0b7a4");
+  // (depth: the relief in metres, over the metres one repeat covers — the
+  // boxes in build() and buildWalls() lay floors at 2.2 m and 1.4 m a
+  // repeat, the wainscot at 1.3, plaster at 2.6, the ceiling at 2.4)
+  M.floor = deepen(pbr("floor", "#c9b8a8", 1, [0.6, 0.1], 1.3), 0.02 / 2.2);
+  M.tiles = deepen(pbr("tiles", "#d8c0b0", 1, [0.35, 0.2], 1.2), 0.005 / 1.4);
+  M.plaster = deepen(pbr("plaster", "#cfc6b6"), 0.012 / 2.6);
+  M.damaged = deepen(pbr("damaged", "#c0b7a4"), 0.03 / 2.6);
   // varnished wood: the wainscot, the doors and the aparadors
-  M.panels = pbr("panels", "#a89080", 0.75, null, 1.2);
-  M.ceiling = pbr("ceiling", "#8d7866");
+  M.panels = deepen(pbr("panels", "#a89080", 0.75, null, 1.2), 0.015 / 1.3);
+  M.ceiling = deepen(pbr("ceiling", "#8d7866"), 0.02 / 2.4);
   M.cabinet = pbr("cabinet", "#b49a86", 0.8, null, 1.2);
   M.trim = new THREE.MeshStandardMaterial({ color: "#2c1a0f", roughness: 0.55, map: M.cabinet.map });
   M.calado = new THREE.MeshStandardMaterial({ color: "#5a3a24", map: M.cabinet.map, alphaMap: T.calado(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 });

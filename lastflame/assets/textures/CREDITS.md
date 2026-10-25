@@ -5,6 +5,10 @@ Each is the 1k JPEG set — colour, OpenGL normal, and ARM (ambient occlusion in
 green) — resized (the floor and plaster colour to 1024, the rest to 512 or 256) and re-encoded as
 WebP.
 
+Each normal map carries the texture's height in its alpha — Poly Haven's 2k displacement map,
+stretched to fill the range and kept between half and full alpha — for the parallax that gives the
+walls and floors their depth (`js/render.js`).
+
 `original/` holds the same textures for the Original texture setting, not shrunk: the 2k JPEG
 colour and normal and the 1k ARM, re-encoded as WebP and named as the shipped files are. They are
 not in the offline install; the game fetches them the first time Original is chosen.

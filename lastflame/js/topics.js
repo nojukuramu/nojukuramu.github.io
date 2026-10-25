@@ -86,7 +86,7 @@ export const TOPICS = {
   },
   quality: {
     title: "Graphics",
-    body: `<p><b>Shadows</b> lets your lantern throw moving shadows, with a glow round every flame, and the polished floors, the varnish and the brass reflect the room. <b>Fast</b> leaves those out and draws fewer pixels, for a phone or an older computer. Either way the lamps, the moon and the lightning keep their shadows — they are drawn once and kept, and they are what stops light coming through a wall. <b>Auto</b> picks Fast on a phone and Shadows elsewhere.</p>
+    body: `<p><b>Shadows</b> lets your lantern throw moving shadows, with a glow round every flame, the polished floors, the varnish and the brass reflect the room, and the walls and floors have depth — floorboard seams, panel edges, broken plaster — that moves as you do. <b>Fast</b> leaves those out and draws fewer pixels, for a phone or an older computer. Either way the lamps, the moon and the lightning keep their shadows — they are drawn once and kept, and they are what stops light coming through a wall. <b>Auto</b> picks Fast on a phone and Shadows elsewhere.</p>
 <p><b>Unrestrained</b> holds nothing back: every pixel your screen has, smoothed edges, shadows twice as sharp and redrawn twice as often, textures kept sharp at a slant, the bounce light worked out twice as often. It is for a strong computer with a proper graphics card; on anything less it will stutter. Auto never picks it.</p>`
   },
   textures: {

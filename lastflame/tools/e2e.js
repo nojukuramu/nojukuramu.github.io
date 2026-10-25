@@ -170,7 +170,9 @@ const standAt = (p, at, look) => p.evaluate(([at, look]) => {
   await p.evaluate(() => { const g = window.__lf.g, h = g.hunter, pl = g.player; h.active = true; h.state = "chase"; h.chaseV = 3; h.x = pl.x + 0.5; h.z = pl.z; h.aware = 1.2; g.dir.relaxT = 0; });
   check("caught is caught", await until(p, () => window.__lf.g.state === "caught" || window.__lf.g.stats.deaths > 0, null, 20000));
   await shot(p, "caught");
-  check("and under Lola's Rules you wake by the lamp", await until(p, () => { const g = window.__lf.g, l = g.L.lamps[0]; return g.state === "play" && Math.hypot(g.player.x - l.x, g.player.z - l.z) < 3; }, null, 45000));
+  // (waking takes 2.6 s of game time, at most 0.1 s a frame: on a software GPU
+  // that is a minute or more of real time)
+  check("and under Lola's Rules you wake by the lamp", await until(p, () => { const g = window.__lf.g, l = g.L.lamps[0]; return g.state === "play" && Math.hypot(g.player.x - l.x, g.player.z - l.z) < 3; }, null, 120000));
 
   // the end, the real way: every lamp lit, the breather run out, and the house turns
   await p.evaluate(() => {

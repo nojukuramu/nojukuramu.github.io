@@ -15,7 +15,7 @@ Serve the folder (`npx http-server lastflame` or any static server) and open it.
 
 | Check | Command |
 |-------|---------|
-| Static and behaviour checks (116) | `node tools/validate.js` |
+| Static and behaviour checks (117) | `node tools/validate.js` |
 | The game in a real browser, WebGL included (37) | `node tools/e2e.js [--shots dir]` |
 
 `validate.js` builds 250 houses and walks every one, then lets an autopilot play two dozen whole
@@ -101,6 +101,14 @@ and every second or so while your lantern moves; the hunter and the dead are lef
 floors and the cocina's cement tiles have a clearcoat (polished with banana leaves, and waxed), the
 wainscot and doors are varnished, and the capiz has the iridescence of the nacre it is. Fast
 reflects nothing.
+
+**Depth.** A normal map only tilts the light on a flat box; under a lantern held low, floorboard
+seams and broken plaster still read as painted on. So the walls, floors, tiles and ceilings use
+parallax occlusion mapping: each surface's height (Poly Haven's displacement map) rides in the
+alpha of its normal map — no extra texture, which matters with the shaders near the sixteen
+textures a card is sure to allow — and each fragment walks its view ray down into that height,
+12 steps on Shadows and 32 on Unrestrained, fading out with distance; every map is then read where
+the ray came to rest. Fast does without.
 
 **Graphics and textures.** Two settings, apart. *Graphics* is how hard the card works: Fast
 (a phone: one sample per shadow, no lantern shadows, no bloom), Shadows, and Unrestrained — every
