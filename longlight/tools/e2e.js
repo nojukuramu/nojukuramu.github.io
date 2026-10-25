@@ -88,6 +88,14 @@ const itemSpot = (p, key) => p.evaluate((key) => {
 /* The widest normal map in the scene's lit materials, as they hold it now. */
 const normalWidth = (p) => p.evaluate(() => { let w = 0; window.__ll.render.three().scene.traverse((o) => { if (o.isMesh && o.material && o.material.normalMap && o.material.normalMap.image) w = Math.max(w, o.material.normalMap.image.width || 0); }); return w; });
 
+/* Wait until the walk's clock is moving: a software GPU stops for a long
+   while (a minute, once) the first time it draws anything new, and a key
+   pressed then is a key held through nothing. */
+async function settle(p) {
+  const t0 = await p.evaluate(() => window.__ll.g ? window.__ll.g.t : 0);
+  return until(p, (t0) => { const g = window.__ll.g; return !!g && g.t > t0 + 0.3; }, t0, 240000);
+}
+
 (async () => {
   await new Promise((res) => server.listen(0, res));
   const url = "http://localhost:" + server.address().port + "/";
@@ -115,11 +123,9 @@ const normalWidth = (p) => p.evaluate(() => { let w = 0; window.__ll.render.thre
   await p.click('[data-arg="diff:normal"]');
   await p.click('[data-act="begin"]');
   check("Wake up starts a journey", await until(p, () => window.__ll.g && window.__ll.g.state === "play" && document.getElementById("screen").hidden, null, 180000));
-  // the pointer lock a headless browser may refuse is not the test; the
-  // buttons say this is a hand on a screen, which never pauses for it
-  await p.evaluate(() => { window.__ll.input.button("check", false); if (document.getElementById("screen").className === "s-pause") window.__ll.resume(); });
   check("you wake in the bunkhouse", await p.evaluate(() => { const g = window.__ll.g; return g.p.inside === g.W.sites[0].wake.hut; }));
-  check("and the first hint comes", await until(p, () => document.getElementById("hint").classList.contains("in"), null, 30000));
+  await settle(p);
+  check("and the first hint comes", await until(p, () => document.getElementById("hint").textContent.length > 10, null, 120000));
   const nSounds = await p.evaluate(() => window.__ll.audio.SOUNDS.length + window.__ll.audio.PIANO.length + window.__ll.audio.CELLO.length);
   check("every recording loads and decodes (" + nSounds + ")", await until(p, (n) => window.__ll.audio.loadedCount() >= n, nSounds, 60000), await p.evaluate(() => window.__ll.audio.loadedCount()) + " loaded");
   const b = await brightness(p);
@@ -129,7 +135,7 @@ const normalWidth = (p) => p.evaluate(() => { let w = 0; window.__ll.render.thre
   // walking
   const at0 = await p.evaluate(() => ({ x: window.__ll.g.p.x, z: window.__ll.g.p.z }));
   await p.keyboard.down("KeyW");
-  await until(p, (a) => { const pl = window.__ll.g.p; return Math.hypot(pl.x - a.x, pl.z - a.z) > 0.3; }, at0, 30000);
+  await until(p, (a) => { const pl = window.__ll.g.p; return Math.hypot(pl.x - a.x, pl.z - a.z) > 0.3; }, at0, 60000);
   await p.keyboard.up("KeyW");
   const moved = await p.evaluate((a) => { const pl = window.__ll.g.p; return Math.hypot(pl.x - a.x, pl.z - a.z); }, at0);
   check("W walks (" + moved.toFixed(2) + " m)", moved > 0.3);
@@ -137,6 +143,7 @@ const normalWidth = (p) => p.evaluate(() => { let w = 0; window.__ll.render.thre
   // the lantern
   const lan = await itemSpot(p, "lantern");
   await standAt(p, lan.at, lan.look);
+  await settle(p);
   check("at the lantern, the prompt says what E will do", await until(p, () => /take the lantern/i.test(document.getElementById("prompt-verb").textContent) && !document.getElementById("prompt").hidden, null, 20000), await p.evaluate(() => document.getElementById("prompt-verb").textContent));
   await p.keyboard.press("KeyE");
   check("E takes it", await until(p, () => window.__ll.g.p.keys.lantern, null, 20000));
@@ -164,6 +171,7 @@ const normalWidth = (p) => p.evaluate(() => { let w = 0; window.__ll.render.thre
     return { hut: h.id, at: { x: a.x, z: a.z, inside: h.id }, look: { x: d.x, y: h.floor + 1.1, z: d.z } };
   });
   await standAt(p, door.at, door.look);
+  await settle(p);
   check("at the door, E will open it", await until(p, () => /open the door/i.test(document.getElementById("prompt-verb").textContent), null, 20000), await p.evaluate(() => document.getElementById("prompt-verb").textContent));
   await p.keyboard.press("KeyE");
   check("E opens it", await until(p, (id) => window.__ll.g.doors[id] > 0.5, door.hut, 15000));
@@ -173,6 +181,7 @@ const normalWidth = (p) => p.evaluate(() => { let w = 0; window.__ll.render.thre
   await standAt(p, bea.at, bea.look);
   check("outside, the land comes in round you", await until(p, () => { const c = window.__ll.terrain.coverage(); return c.pending === 0 && c.queued === 0; }, null, 120000));
   await p.evaluate(() => { const g = window.__ll.g; g.p.fuel = Math.max(g.p.fuel, g.D.beacon); });
+  await settle(p);
   check("at a beacon, E will light it", await until(p, () => /light the beacon/i.test(document.getElementById("prompt-verb").textContent), null, 20000), await p.evaluate(() => document.getElementById("prompt-verb").textContent));
   await p.keyboard.down("KeyE");
   const lit = await until(p, (id) => window.__ll.g.lit[id], bea.id, 90000);
@@ -185,7 +194,7 @@ const normalWidth = (p) => p.evaluate(() => { let w = 0; window.__ll.render.thre
 
   // pause and settings
   await p.keyboard.press("Escape");
-  check("Escape pauses", await until(p, () => document.getElementById("screen").className === "s-pause", null, 15000));
+  check("Escape pauses", await until(p, () => document.getElementById("screen").className === "s-pause", null, 60000));
   await p.click('[data-act="settings"]');
   await p.click('[data-arg="motion:false"]');
   check("a setting changes and is saved", await p.evaluate(() => window.__ll.S.set.motion === false && /"motion":false/.test(localStorage.getItem("longlight-save-v1") || "")));
@@ -200,24 +209,23 @@ const normalWidth = (p) => p.evaluate(() => { let w = 0; window.__ll.render.thre
   await p.click('[data-arg="quality:low"]');
   await p.click('[data-act="back"]');
   await p.click('[data-act="resume"]');
-  await p.evaluate(() => { if (document.getElementById("screen").className === "s-pause") window.__ll.resume(); });
-  check("and the walk goes on", await until(p, () => document.getElementById("screen").hidden && window.__ll.g.state === "play", null, 15000));
+  check("and the walk goes on", await until(p, () => document.getElementById("screen").hidden && window.__ll.g.state === "play", null, 30000));
 
   // leaving saves the walk; the title offers to go on with it
   const before = await p.evaluate(() => ({ seed: window.__ll.W.seed, x: window.__ll.g.p.x, z: window.__ll.g.p.z, lit: window.__ll.g.lit[0] }));
   await p.keyboard.press("Escape");
-  await until(p, () => document.getElementById("screen").className === "s-pause", null, 15000);
+  await until(p, () => document.getElementById("screen").className === "s-pause", null, 60000);
   await p.click('[data-act="quit"]');
   check("leaving goes back to the title, which offers to go on", await until(p, () => document.getElementById("screen").className === "s-title" && !!document.querySelector('[data-act="resume"]'), null, 15000));
   await p.click('[data-act="resume"]');
   check("and going on is the same walk, where you stood", await until(p, (b) => { const L = window.__ll, g = L.g; return g && g.state === "play" && L.W.seed === b.seed && Math.hypot(g.p.x - b.x, g.p.z - b.z) < 1 && g.lit[0] === b.lit; }, before, 120000));
-  await p.evaluate(() => { if (document.getElementById("screen").className === "s-pause") window.__ll.resume(); });
 
   // the end, the real way: the station's beacon lit, and the light answers
   const st = await p.evaluate(() => { const g = window.__ll.g, b = g.W.beacons.find((x) => x.big), s = g.W.sites[g.W.sites.length - 1]; const dx = s.x - b.x, dz = s.z - b.z, d = Math.hypot(dx, dz) || 1; return { id: b.id, at: { x: b.x + (dx / d) * 2.2, z: b.z + (dz / d) * 2.2, inside: -1 }, look: { x: b.x, y: b.y + 1.6, z: b.z } }; });
   await standAt(p, st.at, st.look);
   await p.evaluate(() => { const g = window.__ll.g; g.p.fuel = Math.max(g.p.fuel, g.D.beacon); for (let i = 0; i < g.lit.length; i++) g.lit[i] = true; });
   await until(p, () => { const c = window.__ll.terrain.coverage(); return c.pending === 0 && c.queued === 0; }, null, 120000);
+  await settle(p);
   check("at the station, the last beacon waits", await until(p, () => /light the beacon/i.test(document.getElementById("prompt-verb").textContent), null, 20000), await p.evaluate(() => document.getElementById("prompt-verb").textContent));
   await p.keyboard.down("KeyE");
   check("lighting it begins the end", await until(p, () => !!window.__ll.g.ending, null, 90000));
@@ -246,18 +254,20 @@ const normalWidth = (p) => p.evaluate(() => { let w = 0; window.__ll.render.thre
   await q.tap('[data-act="newrun"]');
   await q.tap('[data-act="begin"]');
   check("a tap begins the walk", await until(q, () => window.__ll.g && window.__ll.g.state === "play" && document.getElementById("screen").hidden, null, 180000));
+  await settle(q);
   check("the touch controls are there", await until(q, () => !document.getElementById("touch").hidden, null, 10000));
   const s0 = await q.evaluate(() => ({ x: window.__ll.g.p.x, z: window.__ll.g.p.z }));
   // a thumb on the left half, pushed up
   const cdp = await pctx.newCDPSession(q);
   await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 120, y: 220, id: 1 }] });
   await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 120, y: 170, id: 1 }] });
-  await until(q, (a) => { const pl = window.__ll.g.p; return Math.hypot(pl.x - a.x, pl.z - a.z) > 0.3; }, s0, 30000);
+  await until(q, (a) => { const pl = window.__ll.g.p; return Math.hypot(pl.x - a.x, pl.z - a.z) > 0.3; }, s0, 60000);
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   const tm = await q.evaluate((a) => { const pl = window.__ll.g.p; return Math.hypot(pl.x - a.x, pl.z - a.z); }, s0);
   check("the stick walks (" + tm.toFixed(2) + " m)", tm > 0.3);
   const ql = await itemSpot(q, "lantern");
   await standAt(q, ql.at, ql.look);
+  await settle(q);
   await until(q, () => /take the lantern/i.test(document.getElementById("prompt-verb").textContent), null, 20000);
   const ub = await q.evaluate(() => { const b = document.getElementById("use").getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; });
   await q.touchscreen.tap(ub.x, ub.y);

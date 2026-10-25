@@ -26,12 +26,13 @@ const SEG = 64, N = SEG + 1, ROOT = 16384, LEAF = 64, MAXL = Math.round(Math.log
 // split when nearer than K times a chunk's size: at 1.1 a triangle is about
 // three-quarters of a degree across, a dozen pixels on a laptop's screen
 const K = { low: 0.8, high: 1.1, ultra: 1.6 };
+const NEAR = 40;
 let quality = "high";
 let scene = null, group = null, workers = [], ready = 0, W = null, onWorld = null, mat = null, depthMat = null;
 const cache = new Map();         // key -> { mesh, lo, hi, used }
 const pending = new Map();       // key -> worker index
 const queue = [];
-let index = null;
+let index = null, coarse = null;
 const U = {
   windDir: { value: new THREE.Vector2(0, 1) }, time: { value: 0 },
   snowN: { value: null }, softN: { value: null }, aerC: { value: null }, aerN: { value: null },
@@ -48,7 +49,7 @@ export function init(sc, textures, lit) {
   for (const k in textures) setTexture(k, textures[k]);
   mat = material();
   if (lit) lit(mat);
-  index = buildIndex();
+  index = buildIndex(1); coarse = buildIndex(2);
   const n = Math.max(2, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
   for (let i = 0; i < n; i++) {
     const w = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
@@ -118,23 +119,26 @@ function message(i, m) {
 export const world = () => W;
 export const isReady = () => !!W;
 
-/* The index of one chunk: the grid, then its skirts, both faces. */
-function buildIndex() {
+/* The index of one chunk: the grid, then its skirts, both faces. With a
+   step of 2 it is the same vertices, every other one: Fast draws the land
+   that way, all but the finest chunks within NEAR of the eye, for about a
+   third of the triangles (a million is too many for a phone). Those stay
+   whole so the ground the feet and the footprints are on is the ground
+   drawn. Swapping a chunk's index as you walk costs nothing to speak of. */
+function buildIndex(step) {
   const ix = [];
-  for (let j = 0; j < SEG; j++) for (let i = 0; i < SEG; i++) {
-    const a = j * N + i, b = a + 1, c = a + N, d = c + 1;
+  for (let j = 0; j < SEG; j += step) for (let i = 0; i < SEG; i += step) {
+    const a = j * N + i, b = a + step, c = a + N * step, d = c + step;
     ix.push(a, c, b, b, c, d);
   }
   const base = N * N;
-  const edge = (k) => [k * N, (k + 1) * N];
   // edges as built by the worker: bottom, top, left, right
   const rows = [[], [], [], []];
   for (let i = 0; i < N; i++) { rows[0].push(i); rows[1].push((N - 1) * N + i); rows[2].push(i * N); rows[3].push(i * N + N - 1); }
-  for (let e = 0; e < 4; e++) for (let i = 0; i < SEG; i++) {
-    const t0 = rows[e][i], t1 = rows[e][i + 1], s0 = base + e * N + i, s1 = s0 + 1;
+  for (let e = 0; e < 4; e++) for (let i = 0; i < SEG; i += step) {
+    const t0 = rows[e][i], t1 = rows[e][i + step], s0 = base + e * N + i, s1 = s0 + step;
     ix.push(t0, s0, t1, t1, s0, s1, t0, t1, s0, t1, s1, s0);
   }
-  void edge;
   return new THREE.Uint16BufferAttribute(ix, 1);
 }
 
@@ -166,12 +170,16 @@ export function update(eye, groundY) {
       if (ok) { for (const [cx, cz] of kids) visit(l + 1, cx, cz, h); return; }
       for (const [cx, cz] of kids) { const kk = key(l + 1, cx, cz, h); if (!cache.has(kk)) want.push({ key: kk, l: l + 1, x0: cx, z0: cz, size: h, d }); }
     }
-    if (c) { shown.add(id); c.used = performance.now(); }
+    if (c) { shown.add(id); c.used = performance.now(); c.near = l === MAXL && d < NEAR; }
     else want.push({ key: id, l, x0, z0, size, d: -1 });
   };
   visit(0, -ROOT / 2, -ROOT / 2, ROOT);
   for (const id of lastShown) if (!shown.has(id)) { const c = cache.get(id); if (c) c.mesh.visible = false; }
-  for (const id of shown) cache.get(id).mesh.visible = true;
+  for (const id of shown) {
+    const c = cache.get(id), g = c.mesh.geometry, ix = quality === "low" && !c.near ? coarse : index;
+    c.mesh.visible = true;
+    if (g.index !== ix) g.setIndex(ix);
+  }
   lastShown = new Set(shown);
   // coarse first, then nearest
   want.sort((a, b) => a.l - b.l || a.d - b.d);
