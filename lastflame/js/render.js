@@ -17,7 +17,8 @@
  *     each with shadows of its own so no light goes through a wall, the light
  *     that bounces off what they light and spills through doorways (below),
  *     and from outside only the moon and the lightning, through the capiz and
- *     the cracks — the eye adapts a little when you are in the dark, as eyes do;
+ *     the cracks — the eye adapts a little when you are in the dark, as eyes do —
+ *     and the room you are in, reflected in whatever is polished (below);
  *   - one post pass after the tone mapping carries everything the research
  *     calls vague feedback: dread narrows the vignette, drains the colour,
  *     splits it at the edges and makes the picture breathe. No meter.
@@ -164,6 +165,7 @@ export function init(canvas, onProgress) {
   composer.addPass(post);
 
   bounceInit();
+  probeInit();
   materials();
   creature = makeCreature(T);
   scene.add(creature.group);
@@ -262,7 +264,10 @@ const BOUNCE_GLSL = `
 #endif`;
 function bounceShader(sh) {
   sh.uniforms.lfMap = BU.lfMap; sh.uniforms.lfBox = BU.lfBox; sh.uniforms.lfSky = BU.lfSky;
-  sh.fragmentShader = "uniform sampler2D lfMap;\nuniform vec4 lfBox;\nuniform vec3 lfSky;\n" + sh.fragmentShader.replace("#include <lights_fragment_maps>", "#include <lights_fragment_maps>\n" + BOUNCE_GLSL);
+  sh.uniforms.prMin = PR.U.prMin; sh.uniforms.prMax = PR.U.prMax; sh.uniforms.prPos = PR.U.prPos; sh.uniforms.prOn = PR.U.prOn;
+  sh.fragmentShader = "uniform sampler2D lfMap;\nuniform vec4 lfBox;\nuniform vec3 lfSky;\n" + sh.fragmentShader
+    .replace("#include <envmap_physical_pars_fragment>", PROBE_GLSL + THREE.ShaderChunk.envmap_physical_pars_fragment.replace("reflectVec = inverseTransformDirection( reflectVec, viewMatrix );", "reflectVec = prProject( inverseTransformDirection( reflectVec, viewMatrix ) );"))
+    .replace("#include <lights_fragment_maps>", "#include <lights_fragment_maps>\n" + BOUNCE_GLSL + PROBE_MIX_GLSL);
 }
 function bounceLit(m) {
   for (const mat of [].concat(m || [])) {
@@ -364,6 +369,106 @@ function bounceFrame(g, dt, power, hiding) {
     half[i * 4 + 3] = toHalf(B.sky[i] + (doorOpen ? B.door[i] : 0));
   }
   B.tex.needsUpdate = true;
+}
+
+/* ------------------------------------------------------------------ */
+/* Reflections                                                        */
+/*
+ * Every surface here is PBR — colour, normal, roughness and occlusion maps,
+ * metalness on the furniture — but a PBR surface can only reflect what it
+ * is given to reflect, and with nothing round it, a polished floor is as
+ * dull as plaster: all it shows are the highlights of the lights
+ * themselves. So the room you are in is photographed in six directions
+ * from its middle, blurred once for each roughness (three's PMREM), and
+ * every surface reflects that — a lamp's flame on the floorboards, the
+ * capiz in the brass, the doorway in the varnish of a door.
+ *
+ * Two corrections make one photograph from the middle of a room hold for
+ * all of it. Box projection: the room is a box, so a reflected ray is
+ * followed to the wall it would hit and the photograph is read in that
+ * direction from where it was taken, and a reflection sits where it
+ * should rather than sliding as you walk. And the photograph only
+ * reflects in its own room, fading out through the doorways; what lights
+ * a surface diffusely stays the bounce light's job (above), so nothing
+ * leaks through a wall. It is taken again when you enter a room, when its
+ * lamps or doors change, and a few times a second while your lantern moves
+ * through it; the hunter and the dead are left out of it, or the floor
+ * would remember where they stood.
+ */
+const PR = { rt: null, cam: null, pmrem: null, env: null, black: null, room: -1, key: "", t: 0, at: null, size: 0, U: { prMin: { value: new THREE.Vector3() }, prMax: { value: new THREE.Vector3() }, prPos: { value: new THREE.Vector3() }, prOn: { value: 0 } } };
+const PROBE_GLSL = `
+uniform vec3 prMin, prMax, prPos;
+uniform float prOn;
+vec3 prProject( vec3 dir ) {
+  vec3 wp = ( vec4( - vViewPosition, 0.0 ) * viewMatrix ).xyz + cameraPosition;
+  if ( prOn < 0.5 || any( lessThan( wp, prMin - 0.05 ) ) || any( greaterThan( wp, prMax + 0.05 ) ) ) return dir;
+  vec3 t = max( ( prMax - wp ) / dir, ( prMin - wp ) / dir );
+  return wp + dir * min( min( t.x, t.y ), t.z ) - prPos;
+}
+`;
+const PROBE_MIX_GLSL = `
+#if defined( USE_ENVMAP ) && defined( RE_IndirectSpecular )
+{
+  vec3 prW = ( vec4( - vViewPosition, 0.0 ) * viewMatrix ).xyz + cameraPosition;
+  float prK = prOn * ( 1.0 - smoothstep( 0.0, 1.5, length( max( max( prMin - prW, prW - prMax ), 0.0 ) ) ) );
+  radiance *= prK;
+  clearcoatRadiance *= prK;
+  #if defined( RE_IndirectDiffuse )
+  iblIrradiance = vec3( 0.0 );
+  #endif
+}
+#endif`;
+
+function probeInit() {
+  PR.pmrem = new THREE.PMREMGenerator(renderer);
+  // an empty room to reflect until the first photograph, so every shader is
+  // built with reflections from the start and none is rebuilt later
+  PR.black = PR.pmrem.fromScene(new THREE.Scene());
+  scene.environment = PR.black.texture;
+}
+function probeSize(n) {
+  if (PR.size === n) return;
+  PR.size = n;
+  if (PR.rt) PR.rt.dispose();
+  PR.rt = new THREE.WebGLCubeRenderTarget(n, { type: THREE.HalfFloatType });
+  PR.cam = new THREE.CubeCamera(0.05, 30, PR.rt);
+  PR.room = -1;
+}
+function probeFrame(g, dt, lit) {
+  if (quality === "low" || !PR.cam) return;
+  const L = g.L, x = camera.position.x, z = camera.position.z;
+  const i = Math.floor(x / CELL), j = Math.floor(z / CELL);
+  const room = i >= 0 && j >= 0 && i < GW && j < GH ? L.cellRoom[j * GW + i] : -1;
+  if (room < 0) return;
+  const key = L.lamps.filter((l) => l.lit).map((l) => l.id).join() + "|" + (B.A ? B.A.key : "") + "|" + (lit ? 1 : 0) + (g.flipped ? "f" : "");
+  PR.t -= dt;
+  const moved = !PR.at || Math.hypot(x - PR.at.x, z - PR.at.z) > (quality === "ultra" ? 0.4 : 0.9);
+  if (room !== PR.room || key !== PR.key || (lit && PR.t <= 0 && moved)) probeTake(g, room, key);
+}
+function probeTake(g, room, key) {
+  const rm = g.L.rooms[room];
+  PR.room = room; PR.key = key; PR.t = quality === "ultra" ? 0.3 : 0.8;
+  PR.at = { x: camera.position.x, z: camera.position.z };
+  PR.U.prMin.value.set(rm.x * CELL, 0, rm.z * CELL);
+  PR.U.prMax.value.set((rm.x + rm.w) * CELL, WALL_H, (rm.z + rm.h) * CELL);
+  PR.U.prPos.value.set(rm.cx, 1.5, rm.cz);
+  // what moves is left out; the shadows already drawn this frame are used as they are
+  const hide = [creature.group, creature.hairRoot, lanternVM, dust].concat(ghostViews.flatMap((v) => [v.group, v.hairRoot]));
+  const was = hide.map((o) => o.visible);
+  for (const o of hide) o.visible = false;
+  const auto = renderer.shadowMap.autoUpdate;
+  renderer.shadowMap.autoUpdate = false;
+  PR.cam.position.copy(PR.U.prPos.value);
+  // it only needs its own room and what shows through the doorways: the
+  // rest of the house is left beyond the far plane
+  const reach = Math.hypot(rm.w, rm.h) * CELL * 0.5 + 5;
+  for (const c of PR.cam.children) if (c.far !== reach) { c.far = reach; c.updateProjectionMatrix(); }
+  PR.cam.update(renderer, scene);
+  renderer.shadowMap.autoUpdate = auto;
+  hide.forEach((o, k) => { o.visible = was[k]; });
+  PR.env = PR.pmrem.fromCubemap(PR.rt.texture, PR.env);
+  scene.environment = PR.env.texture;
+  PR.U.prOn.value = 1;
 }
 
 /* ------------------------------------------------------------------ */
@@ -580,26 +685,33 @@ function loadTex(name, srgb, repeat) {
 let progressFn = null;
 function step() { loaded++; if (progressFn) progressFn(loaded / Math.max(1, total)); if (loaded >= total) { ready = true; if (progressFn) progressFn(1); } }
 
-function pbr(name, color, rough) {
+/* `coat`: a polish over it — a second, sharper reflection on top of the
+   surface's own (three's clearcoat), for what has been waxed. */
+function pbr(name, color, rough, coat, bump) {
   // arm: ambient occlusion in red, roughness in green
   const arm = loadTex(name + "_arm");
-  return new THREE.MeshStandardMaterial({
+  const o = {
     map: loadTex(name, true), normalMap: loadTex(name + "_n"), aoMap: arm, roughnessMap: arm,
-    color: color || "#ffffff", roughness: rough === undefined ? 1 : rough, metalness: 0, normalScale: new THREE.Vector2(1, 1)
-  });
+    color: color || "#ffffff", roughness: rough === undefined ? 1 : rough, metalness: 0, normalScale: new THREE.Vector2(bump || 1, bump || 1)
+  };
+  return coat ? new THREE.MeshPhysicalMaterial(Object.assign(o, { clearcoat: coat[0], clearcoatRoughness: coat[1] })) : new THREE.MeshStandardMaterial(o);
 }
 
 function materials() {
-  M.floor = pbr("floor", "#c9b8a8");
-  M.tiles = pbr("tiles", "#d8c0b0");
+  // the floors of a bahay na bato are wide hardwood planks polished with
+  // banana leaves until they shine; the cocina's cement tiles are waxed
+  M.floor = pbr("floor", "#c9b8a8", 1, [0.6, 0.1], 1.3);
+  M.tiles = pbr("tiles", "#d8c0b0", 1, [0.35, 0.2], 1.2);
   M.plaster = pbr("plaster", "#cfc6b6");
   M.damaged = pbr("damaged", "#c0b7a4");
-  M.panels = pbr("panels", "#a89080");
+  // varnished wood: the wainscot, the doors and the aparadors
+  M.panels = pbr("panels", "#a89080", 0.75, null, 1.2);
   M.ceiling = pbr("ceiling", "#8d7866");
-  M.cabinet = pbr("cabinet", "#b49a86");
-  M.trim = new THREE.MeshStandardMaterial({ color: "#2c1a0f", roughness: 0.7, map: M.cabinet.map });
+  M.cabinet = pbr("cabinet", "#b49a86", 0.8, null, 1.2);
+  M.trim = new THREE.MeshStandardMaterial({ color: "#2c1a0f", roughness: 0.55, map: M.cabinet.map });
   M.calado = new THREE.MeshStandardMaterial({ color: "#5a3a24", map: M.cabinet.map, alphaMap: T.calado(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 });
-  M.capiz = new THREE.MeshStandardMaterial({ map: T.capiz(), color: "#d8d0bf", roughness: 0.55, emissive: new THREE.Color("#9fb4ff"), emissiveIntensity: 0, side: THREE.DoubleSide });
+  // capiz is nacre: a mother-of-pearl shimmer that turns with the angle
+  M.capiz = new THREE.MeshPhysicalMaterial({ map: T.capiz(), color: "#d8d0bf", roughness: 0.4, emissive: new THREE.Color("#9fb4ff"), emissiveIntensity: 0, side: THREE.DoubleSide, iridescence: 0.6, iridescenceIOR: 1.35, iridescenceThicknessRange: [180, 420] });
   M.paper = new THREE.MeshStandardMaterial({ map: T.paper(), roughness: 0.9, side: THREE.DoubleSide });
   M.tin = new THREE.MeshStandardMaterial({ color: "#7a2e1c", roughness: 0.55, metalness: 0.6 });
   M.tinCap = new THREE.MeshStandardMaterial({ color: "#b8a070", roughness: 0.4, metalness: 0.8 });
@@ -629,7 +741,7 @@ function load(onProgress) {
         o.castShadow = true; o.receiveShadow = true;
         for (const mat of [].concat(o.material)) {
           if (mat.transparent) { mat.depthWrite = false; o.castShadow = false; }
-          mat.envMapIntensity = 0;
+          mat.envMapIntensity = 1;
           for (const slot of TEX_SLOTS) if (mat[slot] && !mat[slot].userData.base) { mat[slot].userData.aniso = mat[slot].anisotropy; texBase(mat[slot], null); }
         }
         bounceLit(o.material);
@@ -673,6 +785,9 @@ export function setQuality(q) {
   const samples = ultra ? 4 : 0;
   for (const rt of [composer.renderTarget1, composer.renderTarget2]) if (rt.samples !== samples) { rt.samples = samples; rt.dispose(); }
   texAniso(ultra ? renderer.capabilities.getMaxAnisotropy() : 0);
+  // reflections: none on Fast (nothing is reflected, and no shader asks)
+  if (hi) { probeSize(ultra ? 256 : 128); scene.environment = PR.env ? PR.env.texture : PR.black.texture; }
+  else { scene.environment = null; PR.U.prOn.value = 0; PR.room = -1; }
   scene.traverse((o) => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
   resize();
 }
@@ -844,6 +959,7 @@ export function build(g) {
   for (const c of H.cracks) H.openings.push(c);
   buildShafts(H.openings);
   bounceBuild(L);
+  PR.room = -1; PR.U.prOn.value = 0;
   killT = -1; fadeIn = 1;
   // compile every shader now, the creature's included, so its first
   // appearance is a fright and not a stutter
@@ -1201,6 +1317,7 @@ export function feed(events, g) {
         for (const l of g.L.lamps) if (l.lit) H.lampDirty[l.id] = true;
         moonDL.shadow.needsUpdate = lightning.shadow.needsUpdate = true;
         bounceBuild(g.L);
+        PR.room = -1;
         break;
       }
       case "enter": { const w = H.windows[e.window]; if (w) w.open = 1; break; }
@@ -1412,6 +1529,7 @@ export function draw(g, dt, view) {
     n++;
   }
   bounceFrame(g, dt, power, hiding);
+  probeFrame(g, dt, lit && !hiding);
 
   // --- dust follows the lantern ---
   dust.position.set(camera.position.x, 0, camera.position.z);
@@ -1460,4 +1578,4 @@ export function bearing(x, z) {
 export function stats() { return renderer ? { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures } : null; }
 export const three = () => ({ renderer, scene, camera });
 /* For tools/: what the renderer keeps about the house it is drawing. */
-export const _debug = () => ({ B, H, lampLights, BU, composer, TX });
+export const _debug = () => ({ B, H, lampLights, BU, composer, TX, PR });

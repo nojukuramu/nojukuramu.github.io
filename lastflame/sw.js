@@ -9,7 +9,7 @@
    drift. Bumping it is what publishes an update. Changed: the shell, which
    is this game's, and holds the house's models, surfaces and sounds too, so a
    night offline sounds and looks like a night online. */
-var CACHE = "lastflame-v3";
+var CACHE = "lastflame-v4";
 var SHELL = [
   "./",
   "./index.html",

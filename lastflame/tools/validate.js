@@ -247,6 +247,12 @@ function playNight(M, o, maxT) {
     const unused = assets.filter((f) => !want.includes(f));
     check("no asset on disk that the code never loads", !unused.length, unused.join(", "));
     check("index.html maps \"three\" to the vendored build", /"three":"\.\/vendor\/build\/three\.module\.min\.js"/.test(html));
+    // render.js and creature.js patch three's shaders by finding lines in them:
+    // if three is ever updated and a line moves, the patch would quietly do nothing
+    const three = read("vendor/build/three.module.min.js");
+    const lines = ["#include <lights_fragment_maps>", "#include <envmap_physical_pars_fragment>", "#include <opaque_fragment>", "reflectVec = inverseTransformDirection( reflectVec, viewMatrix );", "vec3 radiance = vec3( 0.0 );", "vec3 iblIrradiance = vec3( 0.0 );"];
+    const lost = lines.filter((l) => !three.includes(l));
+    check("the shader patches find every line they patch in the vendored three", !lost.length, lost.join(" | "));
     const man = JSON.parse(read("manifest.webmanifest"));
     const icons = man.icons.map((i) => i.src).filter((s) => !exists(s));
     check("every manifest icon exists", !icons.length, icons.join(", "));
