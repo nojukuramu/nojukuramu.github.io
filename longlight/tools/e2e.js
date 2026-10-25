@@ -107,6 +107,9 @@ async function settle(p) {
   process.stdout.write("\nA computer\n");
   const ctx = await browser.newContext({ viewport: { width: 640, height: 360 } });
   const p = await ctx.newPage();
+  // a click waits for the page to take it, and a software GPU recompiling
+  // every material for a new Graphics setting can hold the page a minute
+  p.setDefaultTimeout(180000);
   watch(p);
   // Fast, so a software GPU keeps up; everything else as it ships
   await p.addInitScript(() => { try { if (!localStorage.getItem("longlight-save-v1")) localStorage.setItem("longlight-save-v1", JSON.stringify({ v: 1, set: { quality: "low" } })); } catch (e) { /* none */ } });
@@ -249,6 +252,7 @@ async function settle(p) {
   errors.length = 0;
   const pctx = await browser.newContext({ viewport: { width: 640, height: 300 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
   const q = await pctx.newPage();
+  q.setDefaultTimeout(180000);
   watch(q);
   await q.addInitScript(() => { try { localStorage.setItem("longlight-save-v1", JSON.stringify({ v: 1, set: { quality: "low" } })); } catch (e) { /* none */ } });
   await q.goto(url);
