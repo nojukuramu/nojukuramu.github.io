@@ -3,8 +3,9 @@
  * The renderer setup is Ballzooka's (ballzooka/js/render.js), which is
  * Bloomworks': the same vendored three r160, ACES tone mapping, an
  * UnrealBloomPass so that anything burning bleeds light, and a quality switch
- * that drops the lantern's shadows and the bloom on a slow phone. Everything
- * else is this game's:
+ * that drops the lantern's shadows and the bloom on a slow phone (and, the
+ * other way, an Unrestrained setting that holds nothing back), with the
+ * textures' resolution as a switch of its own. Everything else is this game's:
  *
  *   - the house is built from the layout: floors, wainscoted walls with a
  *     calado fretwork band along the top of every inner wall and cracks in
@@ -315,7 +316,7 @@ function bounceFrame(g, dt, power, hiding) {
   const lx = camera.position.x, lz = camera.position.z, lI = power > 0 ? LANTERN_CD * power * power * (hiding ? 0.2 : 1) : 0;
   if (B.lanternT <= 0 && lI > 0 && (!B.lanternAt || Math.hypot(lx - B.lanternAt.x, lz - B.lanternAt.z) > 0.12)) {
     lightField(B.A, lx, lz, LANTERN_REACH, B.lantern);
-    B.lanternAt = { x: lx, z: lz }; B.lanternT = 0.08; B.dirty = true;
+    B.lanternAt = { x: lx, z: lz }; B.lanternT = quality === "ultra" ? 0.04 : 0.08; B.dirty = true;
   }
   if (Math.abs(lI - B.lanternI) > 0.15) B.dirty = true;
   // the dead light the walls round them, a little, and never through one
@@ -334,7 +335,7 @@ function bounceFrame(g, dt, power, hiding) {
   if (doorOpen !== B.doorOpen) { B.doorOpen = doorOpen; B.dirty = true; }
   B.combT -= dt;
   if (!B.dirty || B.combT > 0) return;
-  B.dirty = false; B.combT = 0.07; B.lanternI = lI;
+  B.dirty = false; B.combT = quality === "ultra" ? 0.035 : 0.07; B.lanternI = lI;
   const S = B.sum, N = B.N, R2 = B_R0 * B_R0;
   S.fill(0);
   const add = (f, I, color) => {
@@ -445,11 +446,133 @@ function aimSun(l, L, az, el) {
 }
 const sunDir = (l, out) => out.copy(l.target.position).sub(l.position).normalize();
 
+/* ------------------------------------------------------------------ */
+/* Texture resolution                                                 */
+/*
+ * Four sets of the same pictures. High is what ships and is kept offline:
+ * Poly Haven's textures shrunk so the whole game fits in a few megabytes
+ * (the furniture to 256 pixels, the walls to 512 or 1024). Original is the
+ * same textures at the size they were downloaded at — 2k for the walls,
+ * floors and ceilings, 1k for every piece of furniture — fetched the first
+ * time it is chosen and kept by the service worker after. Medium and Low
+ * are High halved and quartered on the device, for a phone short of memory.
+ *
+ * three cannot swap the picture inside a texture it has already uploaded
+ * (WebGL 2 storage is fixed at its first size), so each level is its own
+ * set of textures, made from the shipped one, and switching puts them into
+ * the materials' slots in its place. Nothing is rebuilt and nothing
+ * recompiles; what the other levels made is let go.
+ */
+const TEX_SLOTS = ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap", "alphaMap", "clearcoatMap", "clearcoatRoughnessMap", "clearcoatNormalMap"];
+const TX = { level: "high", job: 0, bases: new Map(), mats: new Set(), index: null, note: null, aniso: 0 };
+
+/** A shipped texture, and where its Original is (a furniture texture's is looked up by name). */
+function texBase(t, url) {
+  if (!TX.bases.has(t)) {
+    TX.bases.set(t, { url, d: {}, img: null, failed: false, loading: false });
+    if (TX.aniso) { t.anisotropy = TX.aniso; t.needsUpdate = true; }
+    if (TX.level === "original") texFetch();
+  }
+  texScan();
+}
+/** A material whose textures follow the level. */
+function texTrack(m) { for (const mat of [].concat(m || [])) TX.mats.add(mat); texScan(); }
+function texScan() {
+  for (const mat of TX.mats) for (const slot of TEX_SLOTS) {
+    const cur = mat[slot];
+    if (!cur) continue;
+    const base = cur.userData.base || cur;
+    if (!TX.bases.has(base)) continue;
+    const t = texFor(base);
+    if (t !== cur) mat[slot] = t;
+  }
+}
+function texFor(base) {
+  const b = TX.bases.get(base), lv = TX.level;
+  if (lv === "high") return base;
+  if (b.d[lv]) return b.d[lv];
+  if (lv === "original") return b.img ? (b.d[lv] = derive(base, b.img)) : base;
+  const img = base.image;
+  if (!img || !img.width) return base;
+  const k = lv === "medium" ? 2 : 4, c = document.createElement("canvas");
+  c.width = Math.max(8, Math.round(img.width / k)); c.height = Math.max(8, Math.round(img.height / k));
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  return (b.d[lv] = derive(base, c));
+}
+function derive(base, img) {
+  const t = base.clone();
+  t.source = new THREE.Source(img);
+  t.userData = { base };
+  if (TX.aniso) t.anisotropy = TX.aniso;
+  t.needsUpdate = true;
+  return t;
+}
+/* Put the level in, and let go of what the other levels made. */
+function texRefresh() {
+  texScan();
+  for (const b of TX.bases.values()) for (const k in b.d) if (k !== TX.level) { b.d[k].dispose(); delete b.d[k]; }
+}
+const texUrl = (base, b) => b.url || (TX.index && TX.index[base.name] ? "assets/models/original/" + TX.index[base.name] : null);
+
+/** "original" | "high" | "medium" | "low". `note(text)` hears how the Original download is going. */
+export function setTextures(level, note) {
+  if (note) TX.note = note;
+  level = ["original", "high", "medium", "low"].includes(level) ? level : "high";
+  if (level === TX.level) return;
+  TX.level = level;
+  TX.job++;
+  texRefresh();
+  if (level === "original") texFetch(); else if (TX.note) TX.note("");
+}
+/* The Original pictures not yet here, a few at a time — including those of
+   models that finish loading after Original was chosen (texBase calls in). */
+function texFetch() {
+  if (TX.level !== "original") return;
+  if (!TX.index) {
+    if (!TX.indexP) TX.indexP = fetch("assets/models/original/index.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((ix) => { TX.index = ix; texFetch(); });
+    return;
+  }
+  TX.queue = TX.queue || [];
+  TX.active = TX.active || 0;
+  for (const [base, b] of TX.bases) if (!b.img && !b.loading && !b.failed && texUrl(base, b)) { b.loading = true; TX.queue.push([base, b]); }
+  const job = TX.job;
+  while (TX.active < 6 && TX.queue.length) {
+    const [base, b] = TX.queue.shift();
+    TX.active++;
+    const done = () => {
+      b.loading = false; TX.active--;
+      if (job === TX.job) texScan();
+      texSay();
+      texFetch();
+    };
+    new THREE.ImageLoader().load(texUrl(base, b), (img) => { b.img = img; done(); }, undefined, () => { b.failed = true; done(); });
+  }
+  texSay();
+}
+function texSay() {
+  if (!TX.note || TX.level !== "original") return;
+  let want = 0, here = 0, failed = 0;
+  for (const [base, b] of TX.bases) if (texUrl(base, b)) { want++; if (b.img) here++; if (b.failed) failed++; }
+  TX.note(here + failed < want ? "Original: " + Math.round((here / Math.max(1, want)) * 100) + "% here" : failed ? "Original needs a connection the first time." : "");
+}
+export const textureLevel = () => TX.level;
+/* Unrestrained: every texture sharpened as far as the card allows at a slant. */
+function texAniso(a) {
+  if (a === TX.aniso) return;
+  TX.aniso = a;
+  for (const [base, b] of TX.bases) {
+    const want = a || base.userData.aniso || 1;
+    base.anisotropy = want; base.needsUpdate = true;
+    for (const k in b.d) { b.d[k].anisotropy = want; b.d[k].needsUpdate = true; }
+  }
+}
+
 function loadTex(name, srgb, repeat) {
-  const t = new THREE.TextureLoader().load("assets/textures/" + name + ".webp", () => step(), undefined, () => step());
+  const t = new THREE.TextureLoader().load("assets/textures/" + name + ".webp", () => { texBase(t, "assets/textures/original/" + name + ".webp"); step(); }, undefined, () => step());
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.anisotropy = 8;
+  t.userData.aniso = 8;
   if (repeat) t.repeat.set(repeat, repeat);
   total++;
   return t;
@@ -488,6 +611,7 @@ function materials() {
   M.flame = new THREE.SpriteMaterial({ map: T.flame(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
   M.glow = new THREE.SpriteMaterial({ map: T.glow(), color: "#ff8a35", blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.55 });
   for (const k in M) bounceLit(M[k]);
+  texTrack(Object.values(M));
   // the window's shadow is its lattice: the shells let the light through
   const lattice = T.capizLattice();
   M.capizDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, alphaMap: lattice, alphaTest: 0.5, side: THREE.DoubleSide });
@@ -503,8 +627,13 @@ function load(onProgress) {
       g.scene.traverse((o) => {
         if (!o.isMesh) return;
         o.castShadow = true; o.receiveShadow = true;
-        for (const mat of [].concat(o.material)) { if (mat.transparent) { mat.depthWrite = false; o.castShadow = false; } mat.envMapIntensity = 0; }
+        for (const mat of [].concat(o.material)) {
+          if (mat.transparent) { mat.depthWrite = false; o.castShadow = false; }
+          mat.envMapIntensity = 0;
+          for (const slot of TEX_SLOTS) if (mat[slot] && !mat[slot].userData.base) { mat[slot].userData.aniso = mat[slot].anisotropy; texBase(mat[slot], null); }
+        }
         bounceLit(o.material);
+        texTrack(o.material);
       });
       tpl[m] = g.scene;
       step();
@@ -517,11 +646,15 @@ export const progress = () => loaded / Math.max(1, total);
 /* Fast keeps every shadow that is drawn once and kept — the lamps', the
    moon's, the lightning's, which are what stop light going through walls —
    at a lower resolution and with one sample each, and drops the lantern's,
-   which is redrawn every frame, and the bloom. */
+   which is redrawn every frame, and the bloom. Unrestrained holds nothing
+   back: every pixel the screen has, four samples to each of them at the
+   edges, shadows at twice the resolution and the lamps' redrawn twice as
+   often, textures sharpened at a slant as far as the card goes, and the
+   bounce light worked out twice as often. */
 export function setQuality(q) {
-  quality = q;
+  quality = q === "ultra" || q === "low" ? q : "high";
   if (!renderer) return;
-  const hi = q === "high";
+  const hi = quality !== "low", ultra = quality === "ultra";
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = hi ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
   lanternLight.castShadow = hi;
@@ -529,10 +662,17 @@ export function setQuality(q) {
     if (l.shadow.mapSize.x !== s) { l.shadow.mapSize.set(s, s); if (l.shadow.map) { l.shadow.map.dispose(); l.shadow.map = null; } }
     l.shadow.needsUpdate = true;
   };
-  for (const l of lampLights) size(l, hi ? 512 : 256);
-  size(moonDL, hi ? 2048 : 1024);
-  size(lightning, hi ? 2048 : 1024);
+  for (const l of lampLights) size(l, ultra ? 1024 : hi ? 512 : 256);
+  size(lanternLight, ultra ? 1024 : 512);
+  size(moonDL, ultra ? 4096 : hi ? 2048 : 1024);
+  size(lightning, ultra ? 4096 : hi ? 2048 : 1024);
   bloom.enabled = hi;
+  // edges: the picture is drawn into the composer's own buffers, so the
+  // canvas's antialias does nothing; Unrestrained multisamples those, as
+  // Magic Sandbox's high tier does (magic_sandbox/js/gfx.js)
+  const samples = ultra ? 4 : 0;
+  for (const rt of [composer.renderTarget1, composer.renderTarget2]) if (rt.samples !== samples) { rt.samples = samples; rt.dispose(); }
+  texAniso(ultra ? renderer.capabilities.getMaxAnisotropy() : 0);
   scene.traverse((o) => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
   resize();
 }
@@ -544,7 +684,7 @@ export function setBrightness(v) { if (renderer) renderer.toneMappingExposure = 
 export function resize() {
   if (!renderer) return;
   const w = window.innerWidth, h = window.innerHeight;
-  const dpr = Math.min(quality === "high" ? 1.75 : 1, window.devicePixelRatio || 1);
+  const dpr = Math.min(quality === "ultra" ? 3 : quality === "high" ? 1.75 : 1, window.devicePixelRatio || 1);
   renderer.setPixelRatio(dpr);
   renderer.setSize(w, h, false);
   composer.setPixelRatio(dpr);
@@ -1131,7 +1271,7 @@ export function draw(g, dt, view) {
       // and the brass: unlit by the point light sitting inside it, which would
       // blow it out white; a dark metal, the flame and its glow do the rest
       if (/glass/i.test(o.name + (o.material && o.material.name))) o.material = M.globe;
-      else o.material = new THREE.MeshBasicMaterial({ map: o.material.map || null, color: "#4a3a2a" });
+      else { o.material = new THREE.MeshBasicMaterial({ map: o.material.map || null, color: "#4a3a2a" }); texTrack(o.material); }
     });
     lanternVM.add(m);
     lanternVM.userData.model = m;
@@ -1262,13 +1402,14 @@ export function draw(g, dt, view) {
   }
   frameN++;
   // one lamp's shadows a frame, taking turns (every other frame on Fast)
-  for (let k = 0; k < lampLights.length && (quality === "high" || (frameN & 1)); k++) {
+  // (two a frame on Unrestrained)
+  for (let k = 0, n = 0; k < lampLights.length && n < (quality === "ultra" ? 2 : 1) && (quality !== "low" || (frameN & 1)); k++) {
     const i = (H.shadowQ + k) % lampLights.length;
     if (!H.lampDirty[i]) continue;
     lampLights[i].shadow.needsUpdate = true;
     H.lampDirty[i] = false;
     H.shadowQ = i + 1;
-    break;
+    n++;
   }
   bounceFrame(g, dt, power, hiding);
 
@@ -1286,7 +1427,7 @@ export function draw(g, dt, view) {
   U.chroma.value = dread * 0.8 + chase * 0.8 + near * 0.6;
   U.desat.value = Math.min(0.75, dread * 0.6 + (g.flipped ? 0.15 : 0));
   U.blue.value = adapt * 0.6;
-  U.grain.value = 0.045 + dread * 0.05 + (quality === "high" ? 0 : -0.015);
+  U.grain.value = 0.045 + dread * 0.05 + (quality !== "low" ? 0 : -0.015);
   U.flash.value = flash * 0.05 + (killT >= 0 && killT < 0.08 && scares === "full" ? 0.6 : 0);
   if (killT >= 0) {
     killT += dt;
@@ -1319,4 +1460,4 @@ export function bearing(x, z) {
 export function stats() { return renderer ? { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures } : null; }
 export const three = () => ({ renderer, scene, camera });
 /* For tools/: what the renderer keeps about the house it is drawing. */
-export const _debug = () => ({ B, H, lampLights, BU });
+export const _debug = () => ({ B, H, lampLights, BU, composer, TX });

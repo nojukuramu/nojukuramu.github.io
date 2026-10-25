@@ -63,7 +63,7 @@ h1 { font-weight: 400; font-size: clamp(38px, 9vw, 60px); letter-spacing: .12em;
 .row .lbl { display: flex; flex-direction: column; font-size: 15px; }
 .row .lbl small { color: var(--dim); font-size: 12px; }
 .row .lbl .info { display: inline-grid; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; font-family: var(--sans); font-size: 13px; }
+.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; font-family: var(--sans); font-size: 13px; }
 .seg button { padding: 7px 11px; color: var(--dim); }
 .seg button.on { background: rgba(255, 177, 92, .18); color: #fff3e2; }
 input[type=range] { width: 170px; accent-color: var(--ember); }

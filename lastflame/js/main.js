@@ -26,11 +26,13 @@ render.init(canvas, (p) => ui.progress(p));
 
 let g = null, paused = false, frozen = false, lastT = performance.now(), seenState = null, view = { raise: false };
 
-/* Auto: a phone gets the fast renderer, anything with a mouse gets shadows. */
+/* Auto: a phone gets the fast renderer, anything with a mouse gets shadows.
+   Unrestrained is only ever chosen, never guessed. */
 const quality = (q) => (q === "auto" ? (matchMedia("(pointer: coarse)").matches ? "low" : "high") : q);
 function apply() {
   const s = S.set;
   render.setQuality(quality(s.quality));
+  render.setTextures(s.textures, (text) => ui.texNote(text));
   render.setMotion(s.motion);
   render.setScares(s.scares);
   render.setFov(s.fov);

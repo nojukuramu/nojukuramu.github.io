@@ -46,5 +46,12 @@ Poly Haven publishes them.
 | `vase.glb` | [antique_ceramic_vase_01](https://polyhaven.com/a/antique_ceramic_vase_01) |
 | `photo.glb` | [hanging_picture_frame_02](https://polyhaven.com/a/hanging_picture_frame_02) |
 
+`original/` holds every model's textures for the Original texture setting, at the 1k they were
+downloaded at instead of the 256 pixels packed into the `.glb`: one WebP per picture in the model,
+named after it (`index.json` maps the picture's name to its file). Where the packed model merged
+two maps into one picture (metalness and roughness), the same is built from Poly Haven's ARM map,
+which holds them in the same channels. The oil lamp's glass keeps its shipped picture: its alpha
+has no 1k source. They are fetched only when Original is chosen.
+
 The closets (aparadors), the doors, the windows, the walls and the creature are not models:
 they are built in code (`js/render.js`, `js/creature.js`).

@@ -15,8 +15,8 @@ Serve the folder (`npx http-server lastflame` or any static server) and open it.
 
 | Check | Command |
 |-------|---------|
-| Static and behaviour checks (109) | `node tools/validate.js` |
-| The game in a real browser, WebGL included (32) | `node tools/e2e.js [--shots dir]` |
+| Static and behaviour checks (115) | `node tools/validate.js` |
+| The game in a real browser, WebGL included (37) | `node tools/e2e.js [--shots dir]` |
 
 `validate.js` builds 250 houses and walks every one, then lets an autopilot play two dozen whole
 nights and prints how it did — it gets out of most of them, and is caught several times a night
@@ -88,6 +88,19 @@ way: the moon from one side all night, each flash of lightning from a new one, t
 (whose lattice it lays across the floor), the cracks in the outside walls and the open front door,
 with a shaft of light in the air behind each. `tools/validate.js` checks, for hundreds of lamps,
 that light only ever leaves a room by a doorway and that a shut door keeps it in.
+
+**Graphics and textures.** Two settings, apart. *Graphics* is how hard the card works: Fast
+(a phone: one sample per shadow, no lantern shadows, no bloom), Shadows, and Unrestrained — every
+pixel the screen has, 4× multisampled edges (Magic Sandbox's composer target), shadows at twice
+the resolution and redrawn twice as often, full anisotropic filtering, the bounce light worked out
+twice as often. *Textures* is how sharp things are up close: High is what ships (the furniture's
+textures at 256 pixels, the walls' at 256 to 1024, so the whole game installs in a few megabytes);
+Original is the same Poly Haven textures as they were downloaded — 2k for the walls, floors and
+ceilings, 1k for the furniture, 16 MB in `assets/textures/original/` and `assets/models/original/`,
+fetched the first time it is chosen and cached after, never part of the install; Medium and Low are
+High halved and quartered on the device. WebGL 2 cannot resize a texture three has already
+uploaded, so each level is its own set of textures put into the materials' slots — switching is
+immediate, and nothing recompiles.
 
 **Assets.** Furniture and surfaces are [Poly Haven](https://polyhaven.com) (CC0), packed small with
 glTF-Transform — see [`assets/models/CREDITS.md`](assets/models/CREDITS.md) and

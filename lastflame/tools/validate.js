@@ -254,6 +254,27 @@ function playNight(M, o, maxT) {
     check("every manifest icon is in the shell", !unshelled.length, unshelled.join(", "));
     const big = assets.reduce((s, f) => s + fs.statSync(path.join(ROOT, f)).size, 0);
     check("the assets stay under 8 MB (" + (big / 1048576).toFixed(1) + " MB)", big < 8 * 1048576);
+    // the Original textures: on disk, named as the code asks for them, and not
+    // in the shell — they are fetched only when chosen, and kept after
+    const orig = textures.flatMap((t) => ["", "_n", "_arm"].map((s) => "assets/textures/original/" + t + s + ".webp"));
+    const noOrig = orig.filter((f) => !exists(f));
+    check("every surface has its Original (" + orig.length + ")", !noOrig.length, noOrig.join(", "));
+    const ix = exists("assets/models/original/index.json") ? JSON.parse(read("assets/models/original/index.json")) : {};
+    const ixFiles = Object.values(ix), onDisk = list("assets/models/original", ".webp").map((f) => path.basename(f));
+    check("the furniture's Original index names only files that are there (" + ixFiles.length + ")", ixFiles.length > 0 && ixFiles.every((f) => onDisk.includes(f)));
+    check("and every file there is in it", onDisk.every((f) => ixFiles.includes(f)), onDisk.filter((f) => !ixFiles.includes(f)).join(", "));
+    // every picture in every model is either in it, or is one of the few kept as shipped
+    const glbImages = [];
+    for (const f of list("assets/models", ".glb")) {
+      const b = fs.readFileSync(path.join(ROOT, f)), n = b.readUInt32LE(12), j = JSON.parse(b.slice(20, 20 + n).toString("utf8"));
+      for (const im of j.images || []) glbImages.push(im.name);
+    }
+    const covered = glbImages.filter((n) => ix[n]).length;
+    check("almost every furniture texture has its Original (" + covered + "/" + glbImages.length + ")", covered >= glbImages.length - 2 && Object.keys(ix).every((n) => glbImages.includes(n)));
+    const inShell = shell.filter((f) => /\/original\//.test(f));
+    check("the Original set is not in the shell, so an install stays small", !inShell.length, inShell.slice(0, 3).join(", "));
+    const origBytes = orig.filter(exists).concat(list("assets/models/original", ".webp")).reduce((s, f) => s + fs.statSync(path.join(ROOT, f)).size, 0);
+    check("the Original set stays under 24 MB (" + (origBytes / 1048576).toFixed(1) + " MB)", origBytes < 24 * 1048576);
   }
 
   section("Static: ids, topics, icons, credits, provenance");
@@ -261,7 +282,7 @@ function playNight(M, o, maxT) {
     const src = jsFiles.map(read).join("\n");
     const htmlIds = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
     const used = new Set([...src.matchAll(/(?:getElementById|\$)\("([A-Za-z][\w-]*)"\)/g)].map((m) => m[1]));
-    const dynamic = new Set(["updState"]);
+    const dynamic = new Set(["updState", "texState"]);
     const missing = [...used].filter((id) => !htmlIds.has(id) && !dynamic.has(id));
     check("every id the scripts reach for is in index.html (" + used.size + ")", !missing.length, missing.join(", "));
     const { TOPICS, NOTES } = await imp("js/topics.js");
