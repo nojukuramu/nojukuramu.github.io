@@ -1,461 +1,267 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Magic Circles — A Certain RPG Game</title>
-    <meta name="description"
-        content="A magic-based RPG prototype. Draw elemental magic circles — polygons become elements, circles become spell containers — then cast layered, combo spells.">
-    <meta name="theme-color" content="#16213e">
-    <style>
-        :root {
-            --air: #A0E0E0;
-            --fire: #E06060;
-            --earth: #80C060;
-            --water: #4080E0;
-            --bg0: #0c0d16;
-            --bg1: #16213e;
-            --ink: #e7e9f3;
-            --muted: #9aa0b8;
-            --panel: rgba(255, 255, 255, 0.04);
-            --line: rgba(255, 255, 255, 0.10);
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-            color: var(--ink);
-            background:
-                radial-gradient(1200px 600px at 50% -10%, rgba(64, 128, 224, 0.18), transparent 60%),
-                radial-gradient(900px 500px at 90% 10%, rgba(224, 96, 96, 0.10), transparent 55%),
-                linear-gradient(160deg, var(--bg0) 0%, var(--bg1) 100%);
-            background-attachment: fixed;
-            min-height: 100vh;
-            line-height: 1.6;
-        }
-
-        .wrap {
-            max-width: 980px;
-            margin: 0 auto;
-            padding: 56px 22px 80px;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 14px;
-        }
-
-        .eyebrow {
-            letter-spacing: 4px;
-            font-size: 12px;
-            text-transform: uppercase;
-            color: var(--muted);
-        }
-
-        h1 {
-            font-size: clamp(34px, 6vw, 58px);
-            font-weight: 800;
-            letter-spacing: 1px;
-            margin: 8px 0 6px;
-            background: linear-gradient(90deg, var(--air), var(--water) 40%, var(--fire) 75%, var(--earth));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            text-shadow: 0 0 38px rgba(120, 150, 255, 0.18);
-        }
-
-        .tagline {
-            color: var(--muted);
-            font-size: clamp(15px, 2.4vw, 18px);
-            max-width: 640px;
-            margin: 0 auto;
-        }
-
-        .glyph {
-            width: 132px;
-            height: 132px;
-            margin: 26px auto 6px;
-            display: block;
-            opacity: 0.95;
-            filter: drop-shadow(0 0 14px rgba(120, 150, 255, 0.35));
-            animation: spin 60s linear infinite;
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        section {
-            margin-top: 46px;
-        }
-
-        h2 {
-            font-size: 13px;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            color: var(--muted);
-            border-bottom: 1px solid var(--line);
-            padding-bottom: 10px;
-            margin-bottom: 22px;
-        }
-
-        /* Launch cards */
-        .cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 16px;
-        }
-
-        a.card {
-            display: block;
-            text-decoration: none;
-            color: inherit;
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: 14px;
-            padding: 22px;
-            transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-        }
-
-        a.card:hover {
-            transform: translateY(-3px);
-            border-color: rgba(160, 180, 255, 0.55);
-            background: rgba(255, 255, 255, 0.07);
-        }
-
-        .card .ico {
-            font-size: 28px;
-        }
-
-        .card h3 {
-            margin: 10px 0 6px;
-            font-size: 19px;
-        }
-
-        .card p {
-            color: var(--muted);
-            font-size: 14px;
-        }
-
-        .card .go {
-            margin-top: 14px;
-            font-size: 13px;
-            font-weight: 700;
-            letter-spacing: 1px;
-            color: var(--air);
-        }
-
-        .card.primary {
-            border-color: rgba(64, 128, 224, 0.5);
-            background: linear-gradient(180deg, rgba(64, 128, 224, 0.10), var(--panel));
-        }
-
-        /* Elements */
-        .elements {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 14px;
-        }
-
-        .el {
-            border: 1px solid var(--line);
-            border-left-width: 4px;
-            border-radius: 10px;
-            padding: 14px 16px;
-            background: var(--panel);
-        }
-
-        .el .sides {
-            font-size: 12px;
-            color: var(--muted);
-            letter-spacing: 1px;
-        }
-
-        .el .name {
-            font-weight: 800;
-            font-size: 18px;
-            margin: 2px 0;
-        }
-
-        .el .role {
-            font-size: 13px;
-            color: var(--muted);
-        }
-
-        .el.air {
-            border-left-color: var(--air);
-        }
-
-        .el.air .name {
-            color: var(--air);
-        }
-
-        .el.fire {
-            border-left-color: var(--fire);
-        }
-
-        .el.fire .name {
-            color: var(--fire);
-        }
-
-        .el.earth {
-            border-left-color: var(--earth);
-        }
-
-        .el.earth .name {
-            color: var(--earth);
-        }
-
-        .el.water {
-            border-left-color: var(--water);
-        }
-
-        .el.water .name {
-            color: var(--water);
-        }
-
-        /* How it works steps */
-        .steps {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px;
-        }
-
-        .step {
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: 12px;
-            padding: 18px;
-        }
-
-        .step .n {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 26px;
-            height: 26px;
-            border-radius: 50%;
-            background: rgba(160, 224, 224, 0.15);
-            color: var(--air);
-            font-weight: 800;
-            font-size: 13px;
-            margin-bottom: 10px;
-        }
-
-        .step h4 {
-            font-size: 15px;
-            margin-bottom: 4px;
-        }
-
-        .step p {
-            font-size: 13.5px;
-            color: var(--muted);
-        }
-
-        .note {
-            margin-top: 16px;
-            font-size: 13.5px;
-            color: var(--muted);
-            background: rgba(224, 96, 96, 0.06);
-            border: 1px solid rgba(224, 96, 96, 0.18);
-            border-radius: 10px;
-            padding: 12px 14px;
-        }
-
-        kbd {
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-            font-size: 12px;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid var(--line);
-            border-bottom-width: 2px;
-            border-radius: 5px;
-            padding: 1px 6px;
-            color: var(--ink);
-        }
-
-        .controls {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-            gap: 8px 24px;
-        }
-
-        .controls .row {
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            border-bottom: 1px dashed var(--line);
-            padding: 7px 0;
-            font-size: 14px;
-        }
-
-        .controls .row span:last-child {
-            color: var(--muted);
-            text-align: right;
-        }
-
-        footer {
-            margin-top: 56px;
-            padding-top: 20px;
-            border-top: 1px solid var(--line);
-            text-align: center;
-            color: var(--muted);
-            font-size: 13px;
-        }
-
-        footer a {
-            color: var(--air);
-            text-decoration: none;
-        }
-
-        footer a:hover {
-            text-decoration: underline;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Magic Circles — A Certain RPG</title>
+<meta name="description" content="Draw your own spells and walk a world that never ends. A 2.5D spell-drawing RPG in the browser: seeded lands, roads and ruins, Wardens to beat, offline once installed.">
+<meta name="theme-color" content="#0d131c">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="icons/mc-192.png" type="image/png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/mc-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Magic Circles">
+<link rel="stylesheet" href="css/game.css">
+<!-- One version number: sw.js carries it as its cache name, and tools/validate.js refuses to let the two drift. Bumping it is what publishes an update. -->
+<script>window.MC_VERSION = "3";</script>
+<script type="importmap">{"imports":{"three":"./vendor/build/three.module.min.js"}}</script>
 </head>
+<body class="atTitle">
+<canvas id="gl"></canvas>
+<div id="touchzone"></div>
+<div id="numbers"></div>
+<div id="vignette"></div>
+<div id="hurtFlash"></div>
 
-<body>
-    <div class="wrap">
-        <header>
-            <div class="eyebrow">Prototype Release #1</div>
-            <h1>Magic Circles</h1>
-            <!-- Decorative magic-circle glyph: 12-node ring + nested polygons -->
-            <svg class="glyph" viewBox="0 0 200 200" fill="none" aria-hidden="true">
-                <circle cx="100" cy="100" r="86" stroke="#A0E0E0" stroke-opacity="0.35" />
-                <circle cx="100" cy="100" r="66" stroke="#4080E0" stroke-opacity="0.5" />
-                <polygon points="100,40 152,130 48,130" stroke="#E06060" stroke-opacity="0.8" />
-                <polygon points="100,52 142,100 100,148 58,100" stroke="#80C060" stroke-opacity="0.7" />
-                <g fill="#ffffff" fill-opacity="0.85">
-                    <!-- 12 nodes -->
-                    <circle cx="100" cy="14" r="3" />
-                    <circle cx="143" cy="26" r="3" />
-                    <circle cx="174" cy="57" r="3" />
-                    <circle cx="186" cy="100" r="3" />
-                    <circle cx="174" cy="143" r="3" />
-                    <circle cx="143" cy="174" r="3" />
-                    <circle cx="100" cy="186" r="3" />
-                    <circle cx="57" cy="174" r="3" />
-                    <circle cx="26" cy="143" r="3" />
-                    <circle cx="14" cy="100" r="3" />
-                    <circle cx="26" cy="57" r="3" />
-                    <circle cx="57" cy="26" r="3" />
-                </g>
-            </svg>
-            <p class="tagline">A magic-based RPG prototype where you <strong>draw</strong> your spells.
-                Trace polygons on a ring of nodes to forge elements, wrap them in circles, stack layers
-                into combos, and cast.</p>
-        </header>
-
-        <section>
-            <h2>Launch</h2>
-            <div class="cards">
-                <a class="card primary" href="phaser.html">
-                    <div class="ico">🎮</div>
-                    <h3>Play</h3>
-                    <p>A Phaser.js RPG with sprites, chunked world streaming, a minimap, and a
-                        full-scene magic editor. Roam a procedural world and open the editor with
-                        <kbd>M</kbd> to draw and cast spells in real time.</p>
-                    <div class="go">ENTER ▸</div>
-                </a>
-            </div>
-        </section>
-
-        <section>
-            <h2>The Magic-Circle System</h2>
-            <p class="tagline" style="margin:0 0 22px; max-width:none; text-align:left;">
-                There are no spell menus. A spell is a <strong>drawing</strong>. Inside the editor you trace
-                shapes across a ring of <strong>12 nodes</strong> — and the number of sides decides the element.
-            </p>
-            <div class="elements">
-                <div class="el air">
-                    <div class="sides">3 SIDES · TRIANGLE</div>
-                    <div class="name">Air</div>
-                    <div class="role">Speed &amp; knockback — sends targets flying.</div>
-                </div>
-                <div class="el fire">
-                    <div class="sides">4 SIDES · SQUARE</div>
-                    <div class="name">Fire</div>
-                    <div class="role">Damage &amp; burn (damage over time).</div>
-                </div>
-                <div class="el earth">
-                    <div class="sides">5 SIDES · PENTAGON</div>
-                    <div class="name">Earth</div>
-                    <div class="role">Impact &amp; force — bulldozes through.</div>
-                </div>
-                <div class="el water">
-                    <div class="sides">6 SIDES · HEXAGON</div>
-                    <div class="name">Water</div>
-                    <div class="role">Slow &amp; control.</div>
-                </div>
-            </div>
-
-            <div class="steps" style="margin-top:18px;">
-                <div class="step">
-                    <div class="n">1</div>
-                    <h4>Trace elements</h4>
-                    <p>Click node to node to draw a closed polygon. 3/4/5/6 sides → Air/Fire/Earth/Water.
-                        Each shape is the spell's <em>fuel</em>.</p>
-                </div>
-                <div class="step">
-                    <div class="n">2</div>
-                    <h4>Drag circles</h4>
-                    <p>Drag on empty space to make a circle — the spell's <em>container</em>. Big = blunt/heavy,
-                        small = sharp/precise.</p>
-                </div>
-                <div class="step">
-                    <div class="n">3</div>
-                    <h4>Add runes</h4>
-                    <p>Tap a circle's edge to drop a rune. The first rune steers the spell's launch
-                        direction.</p>
-                </div>
-                <div class="step">
-                    <div class="n">4</div>
-                    <h4>Stack layers</h4>
-                    <p>Layers fire bottom-first; upper layers become <em>payloads</em> released on
-                        <kbd>Right-Click</kbd> — mid-flight combos and shape-shifts.</p>
-                </div>
-            </div>
-
-            <div class="note">
-                <strong>Power &amp; Spectrum.</strong> A power slider scales your first layer (more range &amp;
-                mana cost). The <em>power ÷ radius</em> ratio sorts each cast onto a spectrum — from a piercing
-                <strong>NEEDLE</strong> through <strong>DART</strong>, <strong>BOULDER</strong>, and a massive
-                <strong>NOVA</strong>. Elements also fight each other on cast: Water beats Fire, Fire beats
-                Earth, Earth beats Air, Air beats Water — overlapping opposites cancel out.
-            </div>
-        </section>
-
-        <section>
-            <h2>Controls</h2>
-            <div class="controls">
-                <div class="row"><span>Move</span><span>WASD / Arrows</span></div>
-                <div class="row"><span>Dash</span><span><kbd>Shift</kbd></span></div>
-                <div class="row"><span>Shoot / Cast</span><span>Left Click</span></div>
-                <div class="row"><span>Magic editor</span><span><kbd>M</kbd> or MAGIC button</span></div>
-                <div class="row"><span>Remote-trigger payloads</span><span>Right Click</span></div>
-                <div class="row"><span>Undo (in editor)</span><span><kbd>Ctrl</kbd>+<kbd>Z</kbd></span></div>
-                <div class="row"><span>Close editor</span><span><kbd>Esc</kbd> / <kbd>M</kbd></span></div>
-            </div>
-            <p class="tagline" style="margin-top:14px; max-width:none; text-align:left; font-size:13.5px;">
-                Tip: equip a <strong>scroll</strong> to open the magic editor — each scroll stores its own spell.
-            </p>
-        </section>
-
-        <footer>
-            <p>A Certain RPG Game · static build of the <code>a_certain_rpg_game</code> prototype.<br>
-                Phaser Edition loads Phaser 3.80.1 from a CDN. See the
-                <a href="https://github.com/nojukuramu/nojukuramu.github.io/tree/main/magic_circles">documentation on
-                    GitHub</a>.<br>
-                Enjoying it? <a href="https://buymeacoffee.com/noju" target="_blank" rel="noopener">Buy me a coffee</a>.</p>
-        </footer>
+<!-- ============ HUD ============ -->
+<div id="hud" hidden>
+  <div id="hudTL">
+    <div class="vit">
+      <div class="lvl" title="Level">
+        <svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18" class="track"/><circle id="lvlArc" cx="20" cy="20" r="18" class="arc"/></svg>
+        <b id="lvlN">1</b>
+      </div>
+      <div class="bars">
+        <div class="bar hp"><i class="trail" id="hpTrail"></i><i class="fill" id="hpF"></i><span id="hpT"></span></div>
+        <div class="bar vg" title="Vigor"><i class="fill" id="vgF"></i></div>
+        <div class="pools">
+          <div class="pool" id="mpw_air" title="Air"><i data-icon="air"></i><div class="g"><i id="mp_air"></i></div><span id="mpn_air"></span></div>
+          <div class="pool" id="mpw_fire" title="Fire"><i data-icon="fire"></i><div class="g"><i id="mp_fire"></i></div><span id="mpn_fire"></span></div>
+          <div class="pool" id="mpw_earth" title="Earth"><i data-icon="earth"></i><div class="g"><i id="mp_earth"></i></div><span id="mpn_earth"></span></div>
+          <div class="pool" id="mpw_water" title="Water"><i data-icon="water"></i><div class="g"><i id="mp_water"></i></div><span id="mpn_water"></span></div>
+          <button class="info" data-info="mana" aria-label="About mana"><i data-icon="info"></i></button>
+        </div>
+        <div class="under"><span id="potions" class="potions"></span><span id="rankN" class="rank"></span></div>
+      </div>
     </div>
-</body>
+  </div>
+  <div id="hudTop">
+    <div id="compass" hidden><span id="compassArrow"><i data-icon="up"></i></span><span class="ct"><b id="compassName"></b><small id="compassDist"></small></span></div>
+    <div id="place"><span id="dayIco"></span><span id="placeName"></span></div>
+  </div>
+  <div id="bossBar" hidden><div id="bossName"></div><div class="bbar"><i id="bossF"></i></div></div>
+  <div id="hudTR">
+    <canvas id="minimap" aria-label="Minimap"></canvas>
+    <div class="hbtns">
+      <button id="btnMap" class="iconBtn" aria-label="Map"><i data-icon="map"></i></button>
+      <button id="btnBook" class="iconBtn" aria-label="Spellbook"><i data-icon="book"></i></button>
+      <button id="btnPause" class="iconBtn" aria-label="Pause"><i data-icon="pause"></i></button>
+    </div>
+  </div>
+  <div id="spellbar"></div>
+  <div id="coach" hidden></div>
+  <div id="triggerHint" hidden></div>
+  <div id="edgeArrow"><i data-icon="up"></i></div>
+  <div id="toasts"></div>
+  <div id="banner" class="banner"></div>
+</div>
 
+<!-- ============ touch ============ -->
+<div id="touchUI" hidden>
+  <div class="stick" id="stickL"><div class="nub"></div></div>
+  <div class="stick" id="stickR"><div class="nub"></div></div>
+  <button id="tDash" class="tb big" aria-label="Dash"><i data-icon="dash"></i><span>Dash</span></button>
+  <button id="tPotion" class="tb" aria-label="Drink a potion"><i data-icon="flask"></i><b id="tPotionN">2</b></button>
+  <button id="tTrigger" class="tb hot" aria-label="Release the payload" hidden><i data-icon="trigger"></i></button>
+</div>
+
+<!-- ============ Spellbook ============ -->
+<section id="book" hidden aria-label="Spellbook">
+  <header class="bookHead">
+    <div id="bookSlots"></div>
+    <div class="spacer"></div>
+    <button class="info" data-info="spells" aria-label="How drawing works"><i data-icon="info"></i></button>
+    <button id="bookPresets" class="btn ghost" aria-label="Examples"><i data-icon="sparkle"></i><span>Examples</span></button>
+    <button id="bookClose" class="btn primary">Done</button>
+  </header>
+  <div class="bookBody">
+    <div class="pageWrap">
+      <canvas id="page"></canvas>
+      <div id="pageHint"></div>
+      <div id="stamps" aria-label="Stamps">
+        <button data-el="air" title="Air: triangle" style="--c:#a0e0e0"><i data-icon="air"></i></button>
+        <button data-el="fire" title="Fire: square" style="--c:#ff6633"><i data-icon="fire"></i></button>
+        <button data-el="earth" title="Earth: pentagon" style="--c:#80c060"><i data-icon="earth"></i></button>
+        <button data-el="water" title="Water: hexagon" style="--c:#4488ff"><i data-icon="water"></i></button>
+      </div>
+      <div id="bookTools">
+        <button data-tool="glyph" title="Glyph (G)"><i data-icon="toolGlyph"></i><span>Glyph</span></button>
+        <button data-tool="seal" title="Seal (S)"><i data-icon="toolSeal"></i><span>Seal</span></button>
+        <button data-tool="rune" title="Rune (R)"><i data-icon="toolRune"></i><span>Rune</span></button>
+        <button data-tool="erase" title="Erase (X)"><i data-icon="toolErase"></i><span>Erase</span></button>
+        <span class="sep"></span>
+        <button id="toolMirror" title="Mirror left and right"><i data-icon="layers"></i><span>Mirror</span></button>
+        <button id="toolUndo" title="Undo (Ctrl+Z)"><i data-icon="undo"></i><span>Undo</span></button>
+        <button id="toolClear" title="Clear this layer"><i data-icon="trash"></i><span>Clear</span></button>
+        <button id="toolView" title="Reset the view"><i data-icon="target"></i><span>View</span></button>
+      </div>
+    </div>
+    <aside class="bookSide">
+      <input id="spellName" maxlength="22" autocomplete="off" spellcheck="false" aria-label="Spell name">
+      <div id="readout"></div>
+      <div id="bookWarn" hidden></div>
+      <canvas id="preview" aria-label="Preview"></canvas>
+      <div class="field">
+        <label>Layers <button class="info" data-info="spells" aria-label="About layers"><i data-icon="info"></i></button></label>
+        <div id="layerTabs"></div>
+        <small id="layerNote"></small>
+      </div>
+      <div class="field">
+        <label>Power <b id="powerN">1</b> <button class="info" data-info="spectrum" aria-label="About power"><i data-icon="info"></i></button></label>
+        <input type="range" id="power" min="1" max="10" step="1" value="1">
+      </div>
+      <div id="rankLine"></div>
+    </aside>
+  </div>
+</section>
+<div id="presets" class="sheetish" hidden>
+  <header><h2>Examples</h2><button id="presetsClose" class="iconBtn" aria-label="Close"><i data-icon="close"></i></button></header>
+  <p class="muted">Loading one replaces this scroll. Undo brings yours back.</p>
+  <div id="presetList"></div>
+</div>
+
+<!-- ============ Map ============ -->
+<section id="map" hidden aria-label="Map">
+  <canvas id="mapCanvas"></canvas>
+  <div class="mapHead">
+    <span id="mapSeed"></span>
+    <button class="info" data-info="map" aria-label="About the map"><i data-icon="info"></i></button>
+    <div class="spacer"></div>
+    <button id="mapHome" class="iconBtn" aria-label="Back to where you are"><i data-icon="target"></i></button>
+    <button id="mapClose" class="btn primary">Done</button>
+  </div>
+  <div class="mapHint">Tap a lit waystone to step there</div>
+</section>
+
+<!-- ============ screens ============ -->
+<section id="scr-title" class="screen title" hidden>
+  <div class="tcard">
+    <svg class="crest" viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="32" cy="32" r="29" opacity=".5"/><circle cx="32" cy="32" r="22"/>
+      <path d="M32 12l17.3 30H14.7z"/><circle cx="32" cy="32" r="4" fill="currentColor"/>
+    </svg>
+    <h1>Magic Circles</h1>
+    <p class="tag">A Certain RPG</p>
+    <div class="tbtns">
+      <button id="btnContinue" class="btn primary wide" hidden><span>Continue</span><small></small></button>
+      <button id="btnNew" class="btn wide">New journey</button>
+      <button id="btnBookTitle" class="btn wide"><i data-icon="book"></i>Spellbook</button>
+      <div class="trow">
+        <button id="btnSettingsTitle" class="btn ghost"><i data-icon="gear"></i>Settings</button>
+        <button class="btn ghost" data-info="howto"><i data-icon="info"></i>How to play</button>
+      </div>
+    </div>
+    <p id="titleBest" class="muted"></p>
+  </div>
+  <footer><span id="verLine"></span> · <button class="link" data-info="controls">Controls</button> · <button class="link" data-info="privacy">What is stored</button> · <button class="link" data-info="credits">Credits</button> · <a class="link" href="https://buymeacoffee.com/noju" target="_blank" rel="noopener">Buy me a coffee</a></footer>
+</section>
+
+<section id="scr-new" class="screen" hidden>
+  <div class="panel">
+    <h2>A new journey</h2>
+    <div class="field">
+      <label for="seedIn">Seed <button class="info" data-info="seed" aria-label="About seeds"><i data-icon="info"></i></button></label>
+      <input id="seedIn" class="txt mono" maxlength="32" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label>Who walks it</label>
+      <div id="looks"></div>
+    </div>
+    <div class="stackbtns">
+      <button id="btnNewGo" class="btn primary wide"><i data-icon="play"></i>Begin</button>
+      <button id="btnNewBack" class="btn ghost wide">Back</button>
+    </div>
+  </div>
+</section>
+
+<section id="scr-pause" class="screen" hidden>
+  <div class="panel">
+    <h2>Paused</h2>
+    <p id="pauseStats" class="muted"></p>
+    <p id="pauseSeed" class="muted mono"></p>
+    <div class="stackbtns">
+      <button id="btnResume" class="btn primary wide"><i data-icon="play"></i>Resume</button>
+      <div class="trow">
+        <button id="btnPauseBook" class="btn"><i data-icon="book"></i>Spellbook</button>
+        <button id="btnPauseMap" class="btn"><i data-icon="map"></i>Map</button>
+      </div>
+      <div class="trow">
+        <button id="btnPauseSettings" class="btn ghost"><i data-icon="gear"></i>Settings</button>
+        <button class="btn ghost" data-info="controls"><i data-icon="pad"></i>Controls</button>
+        <button class="btn ghost" data-info="wardens"><i data-icon="crown"></i>Wardens</button>
+      </div>
+      <button id="btnQuit" class="btn ghost wide"><i data-icon="exit"></i>Save and leave to the title</button>
+    </div>
+  </div>
+</section>
+
+<section id="scr-settings" class="screen" hidden>
+  <div class="panel">
+    <h2>Settings</h2>
+    <div class="setrow">
+      <label for="setQuality">Graphics <button class="info" data-info="quality" aria-label="About graphics"><i data-icon="info"></i></button></label>
+      <span><select id="setQuality"><option value="auto">Auto</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select> <small id="qualityNow" class="muted"></small></span>
+    </div>
+    <div class="setrow"><label for="set_master">Volume</label><input type="range" id="set_master" min="0" max="100"></div>
+    <div class="setrow"><label for="set_music">Music</label><input type="range" id="set_music" min="0" max="100"></div>
+    <div class="setrow"><label for="set_sfx">Effects</label><input type="range" id="set_sfx" min="0" max="100"></div>
+    <label class="tog"><input type="checkbox" id="set_shake"><span>Screen shake</span></label>
+    <label class="tog"><input type="checkbox" id="set_numbers"><span>Damage numbers</span></label>
+    <label class="tog"><input type="checkbox" id="set_flashes"><span>Bright flashes</span></label>
+    <label class="tog"><input type="checkbox" id="set_autoAim"><span>Touch: holding still aims for you</span></label>
+    <div class="verbox">
+      <span id="setVersion"></span>
+      <button id="btnCheckUpdate" class="btn ghost small"><i data-icon="refresh"></i>Check for updates</button>
+      <button class="info" data-info="update" aria-label="About updates"><i data-icon="info"></i></button>
+      <small id="updateStatus" class="muted"></small>
+    </div>
+    <div class="stackbtns">
+      <button id="btnSettingsBack" class="btn primary wide">Back</button>
+      <button id="btnResetAll" class="btn danger small">Erase all saved data</button>
+    </div>
+  </div>
+</section>
+
+<section id="scr-death" class="screen" hidden>
+  <div class="panel">
+    <h2 class="red">You fall</h2>
+    <p id="deathBy" class="muted"></p>
+    <div class="stackbtns">
+      <button id="btnWake" class="btn primary wide"><i data-icon="waystone"></i>Wake at your waystone</button>
+      <button id="btnDeathTitle" class="btn ghost wide">To the title</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ info sheet, update bar, curtain ============ -->
+<div id="info-scrim" hidden></div>
+<div id="info-sheet" role="dialog" aria-labelledby="info-title" hidden>
+  <header><h2 id="info-title"></h2><button id="info-close" class="iconBtn" aria-label="Close"><i data-icon="close"></i></button></header>
+  <div id="info-body"></div>
+</div>
+<div id="update-bar" hidden><span>A new version is ready.</span><button id="update-go" class="btn primary small">Reload</button><button id="update-later" class="btn ghost small">Later</button></div>
+<div id="fade"></div>
+<div id="loading">
+  <svg class="crest spin" viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="32" cy="32" r="22"/><path d="M32 12l17.3 30H14.7z"/><path d="M32 52L14.7 22h34.6z" opacity=".55"/>
+  </svg>
+  <b>Drawing the circle</b>
+  <div class="lbar"><i id="loadBar"></i></div>
+  <noscript>Magic Circles needs JavaScript.</noscript>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
 </html>
