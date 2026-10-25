@@ -467,6 +467,33 @@
         c.beginPath(); c.arc(w * 0.8, h * 0.36, 1.8, 0, 6.283); c.arc(w * 0.84, h * 0.37, 1.8, 0, 6.283); c.fill();
       }
     },
+    /* a long horizon at dusk, the sun low and sliding along it; beacons on
+       the rises come alight one by one, east of the last, and once all are
+       burning a far light answers out over the sea */
+    beacons: function (c, w, h, p, a) {
+      var hy = h * 0.62, loop = p % 9, n = 5, i;
+      var sx = w * (0.1 + (loop / 9) * 0.8), sy = hy - h * 0.06 + Math.sin((loop / 9) * 3.14) * -h * 0.05;
+      var g = c.createRadialGradient(sx, sy, 1, sx, sy, h * 0.5);
+      g.addColorStop(0, "rgba(255,200,150,.30)"); g.addColorStop(1, "rgba(255,160,110,0)");
+      c.fillStyle = g; c.fillRect(0, 0, w, hy);
+      c.fillStyle = "rgba(255,243,226,.85)"; c.beginPath(); c.arc(sx, sy, 3.2, 0, 6.283); c.fill();
+      c.strokeStyle = "rgba(255,243,226,.5)"; c.lineWidth = 1.2; c.beginPath();
+      for (i = 0; i <= 40; i++) { var x = (i / 40) * w; var y = hy - Math.max(0, Math.sin(i * 0.55) * 0.5 + Math.sin(i * 0.21 + 1) * 0.6) * h * 0.06; i ? c.lineTo(x, y) : c.moveTo(x, y); }
+      c.stroke();
+      for (i = 0; i < n; i++) {
+        var bx = w * (0.14 + i * 0.16), by = hy - h * 0.05 - (i % 2) * h * 0.03, on = loop > 1 + i * 1.1;
+        c.strokeStyle = "rgba(255,243,226,.6)"; c.lineWidth = 1;
+        c.beginPath(); c.moveTo(bx - 3, by + 6); c.lineTo(bx, by - 2); c.lineTo(bx + 3, by + 6); c.stroke();
+        if (on) {
+          var fl = 1 + Math.sin(p * 9 + i) * 0.12, gl = c.createRadialGradient(bx, by - 3, 0.5, bx, by - 3, h * 0.12 * fl);
+          gl.addColorStop(0, "rgba(255,180,90,.55)"); gl.addColorStop(1, "rgba(255,140,60,0)");
+          c.fillStyle = gl; c.fillRect(bx - h * 0.14, by - 3 - h * 0.14, h * 0.28, h * 0.28);
+          c.fillStyle = a; c.beginPath(); c.arc(bx, by - 3, 2 * fl, 0, 6.283); c.fill();
+        }
+      }
+      c.strokeStyle = "rgba(255,243,226,.18)"; c.beginPath(); c.moveTo(0, h * 0.8); c.lineTo(w, h * 0.8); c.stroke();
+      if (loop > 7) { c.fillStyle = "rgba(255,226,160," + Math.min(1, (loop - 7) * 1.5) * 0.9 + ")"; c.beginPath(); c.arc(w * 0.88, h * 0.76, 1.6, 0, 6.283); c.fill(); }
+    },
     /* three reels rolling past a payline, stopping left to right on 7-7-7 */
     reels: function (c, w, h, p, a) {
       var rw = w * 0.2, gap = w * 0.04, x0 = (w - rw * 3 - gap * 2) / 2, top = h * 0.16, rh = h * 0.68, cell = rh / 3;
@@ -605,6 +632,10 @@
       desc: "Lola's house, a typhoon, a brownout, and five lamps to relight before it finds you.",
       hi: ["A bahay na bato built fresh every night, and one aswang you mostly only hear", "Light keeps you safe until the fifth lamp, then it gives you away", "Hide, hold your breath, and listen: the tiktik is loudest when it is far"],
       tags: ["Three.js", "horror", "offline"] },
+    { name: "The Long Light", href: "longlight/", badge: "Walk", accent: "#FFB46A", kind: "games", motif: "beacons",
+      desc: "A quiet walk across an empty Antarctica, lighting beacons for anyone out there.",
+      hi: ["A generated coast of eroded ranges, glacier, sastrugi and sea ice, eight kilometres from base to East Cape", "Food, warmth and fuel, kept gently; no enemies, only the wind and what people left", "A sun that circles the sky and sinks a little every turn, into the polar night"],
+      tags: ["Three.js", "open world", "offline"] },
     { name: "ARCO", href: "arco/", badge: "Instrument", accent: "#E0A24C", kind: "sound", motif: "strings",
       desc: "A guitar for a phone held sideways.",
       hi: ["A six-string neck that hammers, pulls, slides and bends", "Tap frets to play, or pick, strum and palm-mute the body", "Power chords under one thumb, in any tuning"],
