@@ -235,10 +235,10 @@ async function settle(p) {
   await p.keyboard.up("KeyE");
   // (the ending is a minute of game time, at most 0.1 s a frame: on a software
   // GPU that is many minutes, so the clock is moved on to just before each beat)
-  await p.evaluate(() => { window.__ll.g.ending.t = 21.5; });
-  check("and the light answers", await until(p, () => window.__ll.g.ending.answered, null, 60000));
+  await p.evaluate(() => { const e = window.__ll.g.ending; if (e) e.t = Math.max(e.t, 21.5); });
+  check("and the light answers", await until(p, () => !!window.__ll.g.ending && window.__ll.g.ending.answered, null, 60000));
   await shot(p, "answer");
-  await p.evaluate(() => { window.__ll.g.ending.t = 57.5; });
+  await p.evaluate(() => { const e = window.__ll.g.ending; if (e) e.t = Math.max(e.t, 57.5); });
   check("and the journey ends on its screen", await until(p, () => document.getElementById("screen").className === "s-over" && /answered/.test(document.getElementById("screen").textContent), null, 60000));
   await shot(p, "over");
   check("the journey is counted", await p.evaluate(() => window.__ll.S.stats.arrived >= 1));
