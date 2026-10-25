@@ -46,7 +46,7 @@ export const TEXTURES = ["snow_wind", "snow_soft", "snow_aerial", "rock", "ice",
 const PATH = { packed: { m: "assets/models/", t: "assets/textures/" }, full: { m: "assets/full/models/", t: "assets/full/textures/" } };
 
 let renderer, scene, camera, composer, bloom, post, outPass, sky, csm = null, hemi, fog;
-let quality = "high", assets = "packed", motion = true, fov = 72, bright = 0.5;
+let quality = "high", assets = "packed", motion = true, fov = 72, bright = 0.5, csmGen = 0;
 let lanternVM, lanternFlame, lanternGlow, lanternLight, roomLight;
 const tpl = {};                  // loaded model templates
 const lit = new Set();           // every material lit by the sun (CSM must know them all)
@@ -196,7 +196,12 @@ function wire(mat) {
   const own = mat.userData.patch;
   mat.onBeforeCompile = (sh, r) => { if (csmHook) csmHook(sh, r); if (own) own(sh); fogPatch(sh); };
   const key = mat.userData.patchKey || "";
-  mat.customProgramCacheKey = () => key + "|lit|" + (csm ? csm.cascades : 0);
+  // CSM.dispose() deletes its uniforms from every material's compiled
+  // uniforms, and three would reuse the old program (same defines, same
+  // lights) without running the new hook: the cascades would get no
+  // splits, or the next frame would throw. A key per CSM built makes three
+  // compile each material afresh through the new one.
+  mat.customProgramCacheKey = () => key + "|lit|" + (csm ? csm.cascades + ":" + csmGen : 0);
   mat.needsUpdate = true;
 }
 
@@ -308,11 +313,16 @@ const Q = {
   ultra: { cascades: 4, size: 4096, far: 1800, dpr: 3, bloom: true, env: 1, samples: 4, pcf: THREE.PCFSoftShadowMap, lanternShadow: true }
 };
 export function setQuality(q) {
-  quality = Q[q] ? q : "high";
+  q = Q[q] ? q : "high";
+  // every setting applies them all; rebuilding the shadows for nothing
+  // would cost a recompile of every lit material
+  if (csm && q === quality) return;
+  quality = q;
   if (!renderer) return;
   const c = Q[quality];
   renderer.shadowMap.type = c.pcf;
   if (csm) { csm.remove(); csm.dispose(); }
+  csmGen++;
   csm = new CSM({ camera, parent: scene, cascades: c.cascades, maxFar: c.far, shadowMapSize: c.size, lightDirection: new THREE.Vector3(0, -1, 0), lightIntensity: 0, mode: "practical", lightMargin: c.cascades > 1 ? 600 : 120, shadowBias: -0.00012, lightFar: 5000, lightNear: 1 });
   csm.fade = c.cascades > 1;
   for (const l of csm.lights) { l.shadow.normalBias = c.cascades > 1 ? 0.06 : 0.03; l.shadow.radius = 2; }

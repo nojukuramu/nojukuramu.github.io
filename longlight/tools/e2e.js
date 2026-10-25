@@ -124,7 +124,9 @@ async function settle(p) {
   await p.click('[data-act="begin"]');
   check("Wake up starts a journey", await until(p, () => window.__ll.g && window.__ll.g.state === "play" && document.getElementById("screen").hidden, null, 180000));
   check("you wake in the bunkhouse", await p.evaluate(() => { const g = window.__ll.g; return g.p.inside === g.W.sites[0].wake.hut; }));
-  await settle(p);
+  // (a setting changed on the way in, the difficulty, once stopped the
+  // loop dead: every setting rebuilt the shadows under compiled materials)
+  check("and the walk's clock is moving", await settle(p));
   check("and the first hint comes", await until(p, () => document.getElementById("hint").textContent.length > 10, null, 120000));
   const nSounds = await p.evaluate(() => window.__ll.audio.SOUNDS.length + window.__ll.audio.PIANO.length + window.__ll.audio.CELLO.length);
   check("every recording loads and decodes (" + nSounds + ")", await until(p, (n) => window.__ll.audio.loadedCount() >= n, nSounds, 60000), await p.evaluate(() => window.__ll.audio.loadedCount()) + " loaded");
@@ -209,7 +211,7 @@ async function settle(p) {
   await p.click('[data-arg="quality:low"]');
   await p.click('[data-act="back"]');
   await p.click('[data-act="resume"]');
-  check("and the walk goes on", await until(p, () => document.getElementById("screen").hidden && window.__ll.g.state === "play", null, 30000));
+  check("and the walk goes on, its clock moving, every setting applied", await until(p, () => document.getElementById("screen").hidden && window.__ll.g.state === "play", null, 30000) && await settle(p));
 
   // leaving saves the walk; the title offers to go on with it
   const before = await p.evaluate(() => ({ seed: window.__ll.W.seed, x: window.__ll.g.p.x, z: window.__ll.g.p.z, lit: window.__ll.g.lit[0] }));

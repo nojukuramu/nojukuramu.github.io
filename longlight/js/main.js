@@ -27,7 +27,7 @@ info.init();
 const canvas = document.getElementById("view");
 render.init(canvas, () => ui.progress(progress()));
 
-let g = null, W = null, paused = false, overlay = null, frozen = false, lastT = performance.now(), saveT = 20, building = null;
+let g = null, W = null, paused = false, overlay = null, frozen = false, waking = false, lastT = performance.now(), saveT = 20, building = null;
 const view = { check: false };
 
 /* A phone gets Fast and anything else Normal, the first time; Unrestrained
@@ -80,11 +80,15 @@ async function begin(saved) {
   const seed = saved ? saved.seed : (Math.random() * 0xffffffff) >>> 0 || DEFAULT_SEED;
   ui.show("loading");
   await world(seed);
+  // the walk is made now but starts when it is shown: warm() draws it while
+  // the land comes in, and the loop leaves it alone till then
+  waking = true;
   g = game.newRun(W, { diff: saved ? saved.diff : S.set.diff, saved });
   if (!saved) { clearJourney(); S.stats.journeys++; save(); saveJourney(game.snapshot(g)); }
   render.build(g);
   // let the land round the eye mesh before showing it
   await warm();
+  waking = false;
   input.setLook(g.p.yaw, g.p.pitch || 0);
   input.setEnabled(true);
   input.lock();
@@ -222,7 +226,7 @@ function handle(evs) {
 function frame(now) {
   let dt = Math.min(0.1, (now - lastT) / 1000);
   lastT = now;
-  if (frozen) { requestAnimationFrame(frame); return; }
+  if (frozen || waking) { requestAnimationFrame(frame); return; }
   if (g) {
     if (!paused && !overlay) {
       const inp = input.read(dt);
