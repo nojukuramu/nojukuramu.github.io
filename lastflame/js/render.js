@@ -3,17 +3,20 @@
  * The renderer setup is Ballzooka's (ballzooka/js/render.js), which is
  * Bloomworks': the same vendored three r160, ACES tone mapping, an
  * UnrealBloomPass so that anything burning bleeds light, and a quality switch
- * that drops shadows and bloom on a slow phone. Everything else is this game's:
+ * that drops the lantern's shadows and the bloom on a slow phone. Everything
+ * else is this game's:
  *
  *   - the house is built from the layout: floors, wainscoted walls with a
- *     calado fretwork band along the top of every inner wall, a beamed
- *     ceiling, capiz windows, doors that swing, closets with louvred doors
- *     you can see out through, and Poly Haven furniture placed as the layout
- *     says;
+ *     calado fretwork band along the top of every inner wall and cracks in
+ *     the outside ones, a beamed ceiling, capiz windows, doors that swing,
+ *     closets with louvred doors you can see out through, and Poly Haven
+ *     furniture placed as the layout says;
  *   - the light is the lantern in your hand (a point light that throws
  *     shadows, so the furniture's shadows swing as you walk), the five lamps,
- *     lightning through the capiz, and almost nothing else — the eye adapts a
- *     little when you are in the dark, as eyes do;
+ *     each with shadows of its own so no light goes through a wall, the light
+ *     that bounces off what they light and spills through doorways (below),
+ *     and from outside only the moon and the lightning, through the capiz and
+ *     the cracks — the eye adapts a little when you are in the dark, as eyes do;
  *   - one post pass after the tone mapping carries everything the research
  *     calls vague feedback: dread narrows the vignette, drains the colour,
  *     splits it at the edges and makes the picture breathe. No meter.
@@ -29,9 +32,17 @@ import { ShaderPass } from "../vendor/jsm/postprocessing/ShaderPass.js";
 import { OutputPass } from "../vendor/jsm/postprocessing/OutputPass.js";
 import { GLTFLoader } from "../vendor/jsm/loaders/GLTFLoader.js";
 import { mergeGeometries } from "../vendor/jsm/utils/BufferGeometryUtils.js";
-import { CELL, GW, GH, WALL_H, SOLID_H, DOOR_H, PROPS, WIN_Y0, WIN_Y1, WIN_W, POOL_R } from "./house.js";
+import { CELL, GW, GH, WALL_H, SOLID_H, DOOR_H, PROPS, WIN_Y0, WIN_Y1, WIN_W } from "./house.js";
+import { airGrid, airDoors, lightField, RES } from "./nav.js";
+import { rng } from "./rng.js";
 import * as T from "./textures.js";
 import { makeCreature } from "./creature.js";
+import { GHOST } from "./ghosts.js";
+
+const NIGHT = new THREE.Color("#020308"), FLASH_SKY = new THREE.Color("#b8c8ff");
+const LAMP_REACH = 22, LANTERN_REACH = 18;
+// candela: what a lamp's flame and the lantern's put out, before the flicker
+const LAMP_CD = 22, LANTERN_CD = 11, GHOST_CD = 2.5;
 
 const MODELS = ["lantern", "oil_lamp", "sofa", "armchair", "tea_table", "rocking_chair", "grandfather_clock", "screen", "painting", "dining_table", "chair", "china_cabinet", "jug", "bed", "iron_bed", "nightstand", "mirror", "commode", "santo", "candlestick", "bench", "pot", "bucket", "palayok", "table", "stool", "gallinera", "side_table", "sungka", "drawers", "crate", "bookshelf", "vase", "photo"];
 export const MODEL_FILES = MODELS.map((m) => "assets/models/" + m + ".glb");
@@ -44,9 +55,10 @@ let world = null, wallGroup = null;
 const M = {};            // materials
 const tpl = {};          // loaded model templates
 let loaded = 0, total = 0, ready = false;
-let lanternVM, lanternFlame, lanternGlow, lanternLight, hemi, lightning, dust, moon;
+let lanternVM, lanternFlame, lanternGlow, lanternLight, hemi, lightning, moonDL, dust, moon, shafts = null;
 const lampLights = [];
-let creature = null;
+let creature = null, killGhost = -1;
+const ghostViews = [];   // the dead, at the end: made at the start, so they never cost a stutter
 let H = null;            // the handles of the house being drawn: doors, closets, lamps...
 let flashT = 0, flashPow = 0, flashes = [], shake = 0, adapt = 0, bob = 0, bobAmp = 0, killT = -1, fadeIn = 0, raise = 0, lean = 0;
 const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3();
@@ -62,30 +74,55 @@ export function init(canvas, onProgress) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   scene = new THREE.Scene();
-  scene.background = new THREE.Color("#010102");
-  scene.fog = new THREE.FogExp2("#020203", 0.075);
+  // the night outside: seen only through the cracks, the open front door,
+  // and in every flash, when it is the brightest thing there is
+  scene.background = new THREE.Color(NIGHT);
+  // thin enough that a lamp across the house still reads as a lamp: the dark
+  // here is the absence of light, not a wall of murk
+  scene.fog = new THREE.FogExp2("#030407", 0.03);
   camera = new THREE.PerspectiveCamera(fov, 1, 0.04, 60);
   camera.rotation.order = "YXZ";
   scene.add(camera);
 
   hemi = new THREE.HemisphereLight("#a8bde0", "#3a332c", 0.04);
   scene.add(hemi);
-  // lightning: a cold light from outside, through the capiz
-  lightning = new THREE.DirectionalLight("#c4d2ff", 0);
-  lightning.castShadow = true;
-  lightning.shadow.mapSize.set(1024, 1024);
-  lightning.shadow.autoUpdate = false;
-  Object.assign(lightning.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 70 });
-  lightning.shadow.bias = -0.002;
-  scene.add(lightning, lightning.target);
+  // the moon and the lightning: two lights from outside. The moon is faint
+  // and still, and its shadows are drawn once; the lightning comes from a
+  // new side every flash, so a different wall's cracks and windows throw it
+  // across the floor each time. Both reach in only where the house lets
+  // them: the capiz, the cracks, a door left open.
+  const sun = (color, size) => {
+    const l = new THREE.DirectionalLight(color, 0);
+    l.castShadow = true;
+    l.shadow.mapSize.set(size, size);
+    l.shadow.autoUpdate = false;
+    Object.assign(l.shadow.camera, { left: -17, right: 17, top: 17, bottom: -17, near: 1, far: 80 });
+    l.shadow.bias = -0.0015;
+    l.shadow.normalBias = 0.02;
+    scene.add(l, l.target);
+    return l;
+  };
+  moonDL = sun("#8fa6d8", 2048);
+  lightning = sun("#c4d2ff", 2048);
   // the front door, at the end: cold light where the way out is. Made now and
   // left dark, so the number of lights never changes (a change recompiles
   // every shader, and that would land on the night's biggest moment)
-  moon = new THREE.PointLight("#9fb6ff", 0, 8, 2);
+  moon = new THREE.PointLight("#9fb6ff", 0, 14, 2);
   scene.add(moon);
-  for (let i = 0; i < 3; i++) {
-    const l = new THREE.PointLight("#ff9a4e", 0, 9, 2);
-    l.castShadow = false;
+  // one light for each of the five lamps, each with its own shadows: a lamp
+  // lights its own room and whatever it can see through the doorway, and
+  // nothing on the far side of a wall. Lamps do not move, so a lamp's
+  // shadows are drawn when something near it changes, not every frame.
+  for (let i = 0; i < 5; i++) {
+    const l = new THREE.PointLight("#ff9a4e", 0, LAMP_REACH, 2);
+    l.castShadow = true;
+    l.shadow.autoUpdate = false;
+    l.shadow.mapSize.set(512, 512);
+    l.shadow.camera.near = 0.05;
+    l.shadow.camera.far = LAMP_REACH;
+    l.shadow.bias = -0.003;
+    l.shadow.normalBias = 0.02;
+    l.shadow.radius = 2.5;
     scene.add(l);
     lampLights.push(l);
   }
@@ -93,12 +130,13 @@ export function init(canvas, onProgress) {
   // the lantern in your hand
   lanternVM = new THREE.Group();
   camera.add(lanternVM);
-  lanternLight = new THREE.PointLight("#ffa45c", 6, 11, 2);
+  lanternLight = new THREE.PointLight("#ffa45c", 6, LANTERN_REACH, 2);
   lanternLight.castShadow = true;
   lanternLight.shadow.mapSize.set(512, 512);
   lanternLight.shadow.camera.near = 0.08;
-  lanternLight.shadow.camera.far = 11;
+  lanternLight.shadow.camera.far = LANTERN_REACH;
   lanternLight.shadow.bias = -0.004;
+  lanternLight.shadow.normalBias = 0.015;
   lanternLight.shadow.radius = 3;
   camera.add(lanternLight);
   const fl = new THREE.SpriteMaterial({ map: T.flame(), color: "#ffffff", blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
@@ -124,9 +162,18 @@ export function init(canvas, onProgress) {
   post = new ShaderPass(POST);
   composer.addPass(post);
 
+  bounceInit();
   materials();
   creature = makeCreature(T);
   scene.add(creature.group);
+  creature.group.traverse((o) => { if (o.isMesh) bounceLit(o.material); });
+  creature.hairRoot.traverse((o) => { if (o.isMesh) bounceLit(o.material); });
+  for (let i = 0; i < 3; i++) {
+    const v = makeCreature(T, { ghost: true });
+    scene.add(v.group);
+    for (const r of [v.group, v.hairRoot]) r.traverse((o) => { if (o.isMesh) bounceLit(o.material); });
+    ghostViews.push(v);
+  }
   load(onProgress);
   resize();
   window.addEventListener("resize", resize);
@@ -168,6 +215,235 @@ const POST = {
       gl_FragColor = vec4(col, 1.0);
     }`
 };
+
+/* ------------------------------------------------------------------ */
+/* Light that bounces                                                 */
+/*
+ * A lamp lights more than it can see: its light comes back off the walls,
+ * the floor and the ceiling and fills the room, then spills out through the
+ * doorway into the next one, weaker for every metre it has travelled — and
+ * none of it goes through a wall. Doing that properly is out of reach of a
+ * phone. This keeps the one thing that matters, the way round: nav.js's
+ * lightField() measures how far each light's glow has to travel through the
+ * air to reach every quarter-metre of the house, the falloff of that goes
+ * into a small texture laid over the floor plan, and every surface adds
+ * what it reads there, just in front of itself, to its ambient light. The
+ * alpha channel is the same for the night outside: how near a window, a
+ * crack or the open front door each spot is.
+ */
+const BOUNCE = 0.6;      // how much of a light comes back off a room
+const B_R0 = 2.2;        // metres: closer than this, the bounce stops climbing
+const BU = { lfMap: { value: null }, lfBox: { value: new THREE.Vector4() }, lfSky: { value: new THREE.Vector3() } };
+let B = null;
+
+function bounceInit() {
+  const nx = Math.ceil(GW * CELL / RES), nz = Math.ceil(GH * CELL / RES), N = nx * nz;
+  const tex = new THREE.DataTexture(new Uint16Array(N * 4), nx, nz, THREE.RGBAFormat, THREE.HalfFloatType);
+  tex.magFilter = tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  BU.lfMap.value = tex;
+  BU.lfBox.value.set(0, 0, 1 / (nx * RES), 1 / (nz * RES));
+  B = { nx, nz, N, tex, sum: new Float32Array(N * 4), A: null, lamp: [], lampDirty: [], lantern: new Float32Array(N), lanternAt: null, lanternT: 0, lanternI: -1, sky: new Float32Array(N), door: new Float32Array(N), doorOpen: false, dirty: true, combT: 0 };
+}
+
+/* The patch every lit surface gets: one texture read, added to the ambient.
+   World position and normal come back out of the view-space ones three
+   already has, so the shader needs no new varyings. */
+const BOUNCE_GLSL = `
+#if defined( RE_IndirectDiffuse )
+{
+  vec3 lfW = ( vec4( - vViewPosition, 0.0 ) * viewMatrix ).xyz + cameraPosition;
+  vec3 lfN = ( vec4( geometryNormal, 0.0 ) * viewMatrix ).xyz;
+  vec4 lfT = texture2D( lfMap, ( lfW.xz + lfN.xz * 0.3 - lfBox.xy ) * lfBox.zw );
+  irradiance += lfT.rgb + lfT.a * lfSky;
+}
+#endif`;
+function bounceShader(sh) {
+  sh.uniforms.lfMap = BU.lfMap; sh.uniforms.lfBox = BU.lfBox; sh.uniforms.lfSky = BU.lfSky;
+  sh.fragmentShader = "uniform sampler2D lfMap;\nuniform vec4 lfBox;\nuniform vec3 lfSky;\n" + sh.fragmentShader.replace("#include <lights_fragment_maps>", "#include <lights_fragment_maps>\n" + BOUNCE_GLSL);
+}
+function bounceLit(m) {
+  for (const mat of [].concat(m || [])) {
+    if (!mat.isMeshStandardMaterial || mat.userData.bounce) continue;
+    mat.userData.bounce = true;
+    // a material with a look of its own (creature.js) keeps it, after the bounce
+    const own = mat.userData.patch;
+    if (own) {
+      mat.onBeforeCompile = (sh) => { bounceShader(sh); own(sh); };
+      // keyed by the look, not the function: one function makes both looks
+      const key = "bounce+" + (mat.userData.patchKey || own.toString());
+      mat.customProgramCacheKey = () => key;
+    } else mat.onBeforeCompile = bounceShader;
+    mat.needsUpdate = true;
+  }
+}
+
+/* A new house: the air it is made of, and how near the night outside is. */
+function bounceBuild(L) {
+  B.A = airGrid(L);
+  B.lamp = []; B.lampDirty = []; B.lanternAt = null; B.ghost = [];
+  B.sky.fill(0); B.door.fill(0);
+  const f = new Float32Array(B.N);
+  for (const o of H.openings) {
+    lightField(B.A, o.ix, o.iz, 9, f);
+    for (let i = 0; i < B.N; i++) if (f[i] < 9) B.sky[i] += o.k / (1 + (f[i] / 1.4) ** 2);
+  }
+  const fd = L.doors.find((d) => d.kind === "front");
+  if (fd) {
+    lightField(B.A, fd.x, fd.z - 0.4, 14, f);
+    for (let i = 0; i < B.N; i++) if (f[i] < 14) B.door[i] = 2.2 / (1 + (f[i] / 1.8) ** 2);
+  }
+  B.dirty = true;
+}
+
+const tmpC = new THREE.Color();
+function bounceFrame(g, dt, power, hiding) {
+  if (!B.A) return;
+  const L = g.L;
+  // a door opened or shut: every glow has a new way round
+  if (airDoors(B.A)) { for (const l of L.lamps) B.lampDirty[l.id] = true; B.lanternAt = null; B.lanternT = 0; }
+  // at most one lamp's field a frame
+  for (const l of L.lamps) {
+    if (!l.lit || (B.lamp[l.id] && !B.lampDirty[l.id])) continue;
+    B.lamp[l.id] = lightField(B.A, l.x, l.z, LAMP_REACH, B.lamp[l.id]);
+    B.lampDirty[l.id] = false; B.dirty = true;
+    break;
+  }
+  // the lantern moves: its glow is worked out again a dozen times a second
+  B.lanternT -= dt;
+  const lx = camera.position.x, lz = camera.position.z, lI = power > 0 ? LANTERN_CD * power * power * (hiding ? 0.2 : 1) : 0;
+  if (B.lanternT <= 0 && lI > 0 && (!B.lanternAt || Math.hypot(lx - B.lanternAt.x, lz - B.lanternAt.z) > 0.12)) {
+    lightField(B.A, lx, lz, LANTERN_REACH, B.lantern);
+    B.lanternAt = { x: lx, z: lz }; B.lanternT = 0.08; B.dirty = true;
+  }
+  if (Math.abs(lI - B.lanternI) > 0.15) B.dirty = true;
+  // the dead light the walls round them, a little, and never through one
+  for (const q of g.ghosts || []) {
+    const f = B.ghost[q.id] || (B.ghost[q.id] = { f: new Float32Array(B.N), at: null, t: q.id * 0.07, k: 0 });
+    f.t -= dt;
+    f.k = q.state === "rise" ? Math.max(0, Math.min(1, q.t / GHOST.rise)) : 1;
+    if (f.t <= 0 && f.k > 0) { lightField(B.A, q.x, q.z, 8, f.f); f.at = true; f.t = 0.2; B.dirty = true; }
+  }
+  // how much lamplight reaches where you stand: your eyes go by that, not by
+  // the rule's pool (draw() below). Orange light, so about half of it counts.
+  const here = Math.min(B.N - 1, Math.max(0, Math.floor(lz / RES) * B.nx + Math.floor(lx / RES)));
+  B.here = 0;
+  for (const l of L.lamps) if (l.lit && B.lamp[l.id]) { const d = B.lamp[l.id][here]; B.here += 0.5 * LAMP_CD * BOUNCE / (B_R0 * B_R0 + d * d); }
+  const fd = L.doors.find((d) => d.kind === "front"), doorOpen = !!(fd && !fd.locked);
+  if (doorOpen !== B.doorOpen) { B.doorOpen = doorOpen; B.dirty = true; }
+  B.combT -= dt;
+  if (!B.dirty || B.combT > 0) return;
+  B.dirty = false; B.combT = 0.07; B.lanternI = lI;
+  const S = B.sum, N = B.N, R2 = B_R0 * B_R0;
+  S.fill(0);
+  const add = (f, I, color) => {
+    tmpC.set(color);
+    const r = tmpC.r * I, gg = tmpC.g * I, b = tmpC.b * I;
+    for (let i = 0; i < N; i++) {
+      const d = f[i];
+      if (d === Infinity) continue;
+      const k = 1 / (R2 + d * d);
+      S[i * 4] += r * k; S[i * 4 + 1] += gg * k; S[i * 4 + 2] += b * k;
+    }
+  };
+  for (const l of L.lamps) {
+    if (!l.lit || !B.lamp[l.id]) continue;
+    const hl = H.lamps[l.id];
+    add(B.lamp[l.id], LAMP_CD * BOUNCE * (1 + (hl ? hl.flare : 0)) * (g.flipped ? 1.3 : 1), g.flipped ? "#ff7a3a" : "#ff9a4e");
+  }
+
+  if (lI > 0 && B.lanternAt) add(B.lantern, lI * BOUNCE, "#ffa45c");
+  for (const q of g.ghosts || []) { const f = B.ghost[q.id]; if (f && f.at) add(f.f, GHOST_CD * BOUNCE * f.k, "#8fa8d8"); }
+  const half = B.tex.image.data, toHalf = THREE.DataUtils.toHalfFloat;
+  for (let i = 0; i < N; i++) {
+    half[i * 4] = toHalf(Math.min(6e4, S[i * 4]));
+    half[i * 4 + 1] = toHalf(Math.min(6e4, S[i * 4 + 1]));
+    half[i * 4 + 2] = toHalf(Math.min(6e4, S[i * 4 + 2]));
+    half[i * 4 + 3] = toHalf(B.sky[i] + (doorOpen ? B.door[i] : 0));
+  }
+  B.tex.needsUpdate = true;
+}
+
+/* ------------------------------------------------------------------ */
+/* Shafts                                                             */
+/*
+ * Light from outside, seen in the air: a beam from every window and crack
+ * on the side the light is coming from, faint for the moon, blinding for a
+ * moment in a flash. Each opening is a prism pushed into the house along
+ * the light's direction in the vertex shader, so the same geometry serves
+ * every flash from every side; a face fades as it turns edge-on, which is
+ * what makes a box of light read as a soft beam, and walls hide whatever
+ * part of a beam is behind them.
+ */
+const SHAFT = {
+  vertexShader: `
+    attribute vec3 aEdge; attribute vec2 aN; attribute float aT, aK;
+    uniform vec3 uDir; uniform float uLen;
+    varying float vT, vA;
+    void main() {
+      vec4 wp = modelMatrix * vec4( position + uDir * ( aT * uLen ), 1.0 );
+      float facing = dot( vec3( aN.x, 0.0, aN.y ), uDir );
+      vec3 n = normalize( cross( aEdge, uDir ) );
+      float side = abs( dot( n, normalize( cameraPosition - wp.xyz ) ) );
+      vA = aK * smoothstep( 0.05, 0.4, facing ) * side * side;
+      vT = aT;
+      gl_Position = projectionMatrix * viewMatrix * wp;
+    }`,
+  fragmentShader: `
+    uniform vec3 uColor; uniform float uPow;
+    varying float vT, vA;
+    void main() {
+      float t = 1.0 - vT;
+      gl_FragColor = vec4( uColor * ( vA * uPow * t * t ), 1.0 );
+    }`
+};
+function shaftMaterial(color) {
+  return new THREE.ShaderMaterial({
+    uniforms: { uDir: { value: new THREE.Vector3(0, -1, 0) }, uLen: { value: 8 }, uColor: { value: new THREE.Color(color) }, uPow: { value: 0 } },
+    vertexShader: SHAFT.vertexShader, fragmentShader: SHAFT.fragmentShader,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide
+  });
+}
+function buildShafts(openings) {
+  const pos = [], edge = [], nrm = [], tt = [], kk = [];
+  for (const o of openings) {
+    // the four corners of the opening on the inside face of the wall
+    const P = [[o.a, o.y0], [o.b, o.y0], [o.b, o.y1], [o.a, o.y1]].map(([s, y]) => (o.v ? [o.cin, y, s] : [s, y, o.cin]));
+    for (let k = 0; k < 4; k++) {
+      const p = P[k], q = P[(k + 1) % 4], e = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+      for (const [v, t] of [[p, 0], [q, 0], [q, 1], [p, 0], [q, 1], [p, 1]]) {
+        pos.push(v[0], v[1], v[2]); edge.push(e[0], e[1], e[2]); nrm.push(o.nx, o.nz); tt.push(t); kk.push(o.k * o.beam);
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("aEdge", new THREE.Float32BufferAttribute(edge, 3));
+  g.setAttribute("aN", new THREE.Float32BufferAttribute(nrm, 2));
+  g.setAttribute("aT", new THREE.Float32BufferAttribute(tt, 1));
+  g.setAttribute("aK", new THREE.Float32BufferAttribute(kk, 1));
+  if (!shafts) shafts = { moon: shaftMaterial("#7d93c8"), flash: shaftMaterial("#c8d6ff") };
+  const grp = new THREE.Group();
+  for (const k of ["moon", "flash"]) {
+    const m = new THREE.Mesh(g, shafts[k]);
+    m.frustumCulled = false; m.renderOrder = 5; m.castShadow = false; m.receiveShadow = false;
+    m.userData.shared = k === "flash";
+    grp.add(m);
+  }
+  world.add(grp);
+}
+
+/* Where the night comes in from, for a new house: one side for the moon. */
+function aimSun(l, L, az, el) {
+  const d = 40, cx0 = L.W / 2, cz0 = L.D / 2;
+  l.position.set(cx0 + Math.sin(az) * Math.cos(el) * d, Math.sin(el) * d, cz0 + Math.cos(az) * Math.cos(el) * d);
+  l.target.position.set(cx0, 0, cz0);
+  l.target.updateMatrixWorld();
+  l.updateMatrixWorld();
+  l.shadow.needsUpdate = true;
+}
+const sunDir = (l, out) => out.copy(l.target.position).sub(l.position).normalize();
 
 function loadTex(name, srgb, repeat) {
   const t = new THREE.TextureLoader().load("assets/textures/" + name + ".webp", () => step(), undefined, () => step());
@@ -211,6 +487,11 @@ function materials() {
   M.globe = new THREE.MeshBasicMaterial({ color: "#ffb36b", transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false });
   M.flame = new THREE.SpriteMaterial({ map: T.flame(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
   M.glow = new THREE.SpriteMaterial({ map: T.glow(), color: "#ff8a35", blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.55 });
+  for (const k in M) bounceLit(M[k]);
+  // the window's shadow is its lattice: the shells let the light through
+  const lattice = T.capizLattice();
+  M.capizDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, alphaMap: lattice, alphaTest: 0.5, side: THREE.DoubleSide });
+  M.capizDist = new THREE.MeshDistanceMaterial({ alphaMap: lattice, alphaTest: 0.5, side: THREE.DoubleSide });
 }
 
 function load(onProgress) {
@@ -223,6 +504,7 @@ function load(onProgress) {
         if (!o.isMesh) return;
         o.castShadow = true; o.receiveShadow = true;
         for (const mat of [].concat(o.material)) { if (mat.transparent) { mat.depthWrite = false; o.castShadow = false; } mat.envMapIntensity = 0; }
+        bounceLit(o.material);
       });
       tpl[m] = g.scene;
       step();
@@ -232,13 +514,24 @@ function load(onProgress) {
 export const isReady = () => ready;
 export const progress = () => loaded / Math.max(1, total);
 
+/* Fast keeps every shadow that is drawn once and kept — the lamps', the
+   moon's, the lightning's, which are what stop light going through walls —
+   at a lower resolution and with one sample each, and drops the lantern's,
+   which is redrawn every frame, and the bloom. */
 export function setQuality(q) {
   quality = q;
   if (!renderer) return;
   const hi = q === "high";
-  renderer.shadowMap.enabled = hi;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = hi ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
   lanternLight.castShadow = hi;
-  lightning.castShadow = hi;
+  const size = (l, s) => {
+    if (l.shadow.mapSize.x !== s) { l.shadow.mapSize.set(s, s); if (l.shadow.map) { l.shadow.map.dispose(); l.shadow.map = null; } }
+    l.shadow.needsUpdate = true;
+  };
+  for (const l of lampLights) size(l, hi ? 512 : 256);
+  size(moonDL, hi ? 2048 : 1024);
+  size(lightning, hi ? 2048 : 1024);
   bloom.enabled = hi;
   scene.traverse((o) => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
   resize();
@@ -246,7 +539,7 @@ export function setQuality(q) {
 export function setMotion(v) { motion = !!v; }
 export function setScares(v) { scares = v; }
 export function setFov(v) { fov = v; if (camera) { camera.fov = fov; camera.updateProjectionMatrix(); } }
-export function setBrightness(v) { if (renderer) renderer.toneMappingExposure = 0.8 + v * 0.5; }
+export function setBrightness(v) { if (renderer) renderer.toneMappingExposure = 0.9 + v * 0.55; }
 
 export function resize() {
   if (!renderer) return;
@@ -329,7 +622,7 @@ export function build(g) {
   world = new THREE.Group();
   scene.add(world);
   const L = g.L;
-  H = { doors: [], closets: [], lamps: [], props: [], tins: [], notes: [], windows: [], kicks: [], boards: [] };
+  H = { doors: [], closets: [], lamps: [], props: [], tins: [], notes: [], windows: [], kicks: [], boards: [], cracks: cracksOf(L), openings: [], lampDirty: [], shadowQ: 0, doorA: [] };
 
   // floors and ceilings, one quad each per room, and the beams
   const fc = chunker();
@@ -389,18 +682,35 @@ export function build(g) {
     H.notes[n.id] = o;
   }
   creature.reset();
-  // the moon, and every flash of lightning, come from one side of the house,
-  // low enough to fall through the capiz onto the floor
-  lightning.position.set(L.W / 2 + 24, 12, L.D / 2 + 17);
-  lightning.target.position.set(L.W / 2, 0, L.D / 2);
-  lightning.target.updateMatrixWorld();
-  lightning.shadow.needsUpdate = true;
+  // every lamp has its light waiting over its wick, dark until it is lit
+  for (let i = 0; i < lampLights.length; i++) {
+    const l = L.lamps[i], ll = lampLights[i];
+    ll.intensity = 0;
+    if (!l) continue;
+    ll.position.set(l.x, l.y + H.lamps[l.id].fy + 0.05, l.z);
+    ll.updateMatrixWorld();
+    ll.shadow.needsUpdate = true;
+  }
+  // the moon stands on one side of this house all night, low enough to fall
+  // through the capiz onto the floor; the lightning picks a side every flash
+  const mr = rng((L.seed ^ 0x6d00) >>> 0);
+  aimSun(moonDL, L, mr() * Math.PI * 2, 0.42 + mr() * 0.2);
+  aimSun(lightning, L, mr() * Math.PI * 2, 0.5);
+  // the windows and the cracks: where the night comes in
+  for (const w of L.windows) {
+    const s = w.v ? w.x : w.z, inX = -w.n[0], inZ = -w.n[1];
+    H.openings.push({ v: w.v, a: (w.v ? w.z : w.x) - WIN_W / 2 + 0.04, b: (w.v ? w.z : w.x) + WIN_W / 2 - 0.04, y0: WIN_Y0 + 0.03, y1: WIN_Y1 - 0.03, cin: s + (w.v ? inX : inZ) * 0.15, nx: inX, nz: inZ, ix: w.x + inX * 0.5, iz: w.z + inZ * 0.5, k: 1, beam: 0.1 });
+  }
+  for (const c of H.cracks) H.openings.push(c);
+  buildShafts(H.openings);
+  bounceBuild(L);
   killT = -1; fadeIn = 1;
   // compile every shader now, the creature's included, so its first
   // appearance is a fright and not a stutter
-  creature.group.visible = true;
+  const all = [creature].concat(ghostViews);
+  for (const v of all) { v.reset(); v.group.visible = true; if (!v.hairRoot.parent) scene.add(v.hairRoot); v.hairRoot.visible = true; }
   try { renderer.compile(scene, camera); } catch (e) { /* compiled lazily instead */ }
-  creature.group.visible = false;
+  for (const v of all) v.group.visible = false;
 }
 
 function dispose(o) {
@@ -419,7 +729,7 @@ function buildWalls(L) {
     const top = w.ext ? WALL_H : SOLID_H;
     const t = w.t, half = t / 2;
     // the pieces of this run: [a, b, y0, y1]
-    const pieces = [];
+    let pieces = [];
     let a = w.a - (w.ext ? half : 0);
     const end = w.b + (w.ext ? half : 0);
     for (const h of w.holes) {
@@ -429,6 +739,7 @@ function buildWalls(L) {
       a = h.b;
     }
     if (end > a) pieces.push([a, end, 0, top]);
+    if (w.ext) for (const k of H.cracks) if (k.w === w) pieces = carve(pieces, k);
     const mx = w.v ? w.c : (w.a + w.b) / 2, mz = w.v ? (w.a + w.b) / 2 : w.c;
     const plasterKind = L.seed % 3 === 0 && !w.ext ? "damaged" : "plaster";
     for (const [p0, p1, y0, y1] of pieces) {
@@ -479,6 +790,49 @@ function buildWalls(L) {
   world.add(wallGroup);
 }
 
+/* An old house in a typhoon is not sealed: boards have shrunk apart, knots
+   have fallen out, the plaster has cracked through. Slits and holes in the
+   outside walls, the same for a seed every time — dark until lightning
+   strikes on their side, when each one is a blade of light across the room. */
+function cracksOf(L) {
+  const r = rng((L.seed ^ 0x2c4ac) >>> 0), out = [];
+  for (const w of L.walls) {
+    if (!w.ext) continue;
+    const len = w.b - w.a, n = Math.max(0, Math.round((len / 4.5) * (0.6 + r() * 0.8)));
+    const inward = w.c < 0.01 ? 1 : -1;
+    for (let k = 0; k < n; k++) for (let tries = 0; tries < 10; tries++) {
+      const slit = r() < 0.65;
+      const hw = slit ? 0.012 + r() * 0.02 : 0.03 + r() * 0.035;
+      const hh = slit ? 0.14 + r() * 0.3 : hw * (0.8 + r() * 0.6);
+      const at = w.a + 0.5 + r() * (len - 1);
+      const y = slit ? 1.2 + hh + r() * Math.max(0, WALL_H - 1.5 - 2 * hh) : 0.25 + r() * 2.6;
+      const clash = w.holes.some((h) => at + hw > h.a - 0.3 && at - hw < h.b + 0.3) || out.some((o) => o.w === w && Math.abs(o.at - at) < 0.4);
+      if (clash) continue;
+      const cin = w.c + inward * w.t / 2;
+      out.push({
+        w, at, v: w.v, a: at - hw, b: at + hw, y0: y - hh, y1: y + hh, cin, nx: w.v ? inward : 0, nz: w.v ? 0 : inward,
+        ix: (w.v ? cin + inward * 0.4 : at), iz: (w.v ? at : cin + inward * 0.4), k: slit ? 0.22 : 0.16, beam: slit ? 1 : 0.8
+      });
+      break;
+    }
+  }
+  return out;
+}
+/* A rectangle of wall with a hole taken out of it: up to four rectangles. */
+function carve(rects, h) {
+  const out = [];
+  for (const q of rects) {
+    const [p0, p1, y0, y1] = q;
+    if (h.b <= p0 || h.a >= p1 || h.y1 <= y0 || h.y0 >= y1) { out.push(q); continue; }
+    const a = Math.max(p0, h.a), b = Math.min(p1, h.b), c = Math.max(y0, h.y0), d = Math.min(y1, h.y1);
+    if (a > p0) out.push([p0, a, y0, y1]);
+    if (b < p1) out.push([b, p1, y0, y1]);
+    if (c > y0) out.push([a, b, y0, c]);
+    if (d < y1) out.push([a, b, d, y1]);
+  }
+  return out;
+}
+
 function sealVisual(d, ch) {
   const half = 0.09, seed = d.id * 7;
   for (const side of [-1, 1]) for (let k = 0; k < 4; k++) {
@@ -511,7 +865,10 @@ function makeDoor(L, d) {
   const grp = new THREE.Group();
   const front = d.kind === "front";
   const leaves = front ? 2 : 1;
-  const lw = (d.w - 0.04) / leaves, lh = front ? 2.46 : DOOR_H - 0.02;
+  // a finger's gap under every door: a lit room behind a shut one shows as
+  // a line of light along the floor
+  const GAP = 0.03;
+  const lw = (d.w - 0.04) / leaves, lh = (front ? 2.46 : DOOR_H - 0.02) - GAP;
   const out = [];
   // which side does it swing to: into room a
   const ra = L.rooms[d.a];
@@ -533,7 +890,7 @@ function makeDoor(L, d) {
     const knob2 = knob.clone(); knob2.position.z = -0.05;
     leaf.add(body, knob, knob2);
     const dir = i === 0 ? 1 : -1;
-    leaf.position.set(dir * lw / 2, lh / 2, 0);
+    leaf.position.set(dir * lw / 2, lh / 2 + GAP, 0);
     if (dir < 0) leaf.rotation.y = Math.PI;
     pivot.add(leaf);
     const hingeAt = -d.w / 2 + 0.02 + (i === 0 ? 0 : d.w - 0.04);
@@ -555,7 +912,8 @@ function makeWindow(w) {
   for (let i = 0; i < 2; i++) {
     const p = new THREE.Mesh(new THREE.PlaneGeometry(sash, hgt), M.capiz);
     p.position.set((i ? 1 : -1) * sash / 2, (WIN_Y0 + WIN_Y1) / 2, i ? 0.025 : -0.025);
-    p.castShadow = false; p.receiveShadow = true;
+    p.castShadow = true; p.receiveShadow = true;
+    p.customDepthMaterial = M.capizDepth; p.customDistanceMaterial = M.capizDist;
     grp.add(p);
     panes.push(p);
     // the sash frame
@@ -632,6 +990,8 @@ function makeCloset(c) {
 function makeLamp(l) {
   const grp = new THREE.Group();
   const m = propMesh("oil_lamp");
+  // its light sits inside its own chimney: the lamp must not shade itself
+  m.traverse((o) => { if (o.isMesh) o.castShadow = false; });
   grp.add(m);
   let flameMesh = null, fy = 0.42;
   m.traverse((o) => { if (o.isMesh && /flame/i.test(o.name + (o.material && o.material.name))) flameMesh = o; });
@@ -673,24 +1033,34 @@ function propMesh(kind) {
 export function feed(events, g) {
   for (const e of events) {
     switch (e.type) {
-      case "lightning": flashes.push({ t: 0, pow: e.power, side: Math.random(), placed: false }); break;
+      case "lightning":
+        flashes.push({ t: 0, pow: e.power });
+        // from a new side each time: a different wall's cracks light up; the
+        // event carries the side on, so the thunder comes from it too
+        if (g && g.L) { e.az = Math.random() * Math.PI * 2; aimSun(lightning, g.L, e.az, 0.32 + Math.random() * 0.4); }
+        break;
       case "kick": {
         const o = H.props[e.prop];
         if (o) { const dl = Math.hypot(e.dx, e.dz) || 1; H.kicks.push({ o, vx: e.dx / dl * 0.9, vz: e.dz / dl * 0.9, spin: (Math.random() - 0.5) * 6, t: 0.35 }); }
         break;
       }
-      case "lampLit": { const h = H.lamps[e.id]; if (h) { h.lit = true; h.flare = 1; } break; }
+      case "lampLit": { const h = H.lamps[e.id]; if (h) { h.lit = true; h.flare = 1; } H.lampDirty[e.id] = true; if (lampLights[e.id]) lampLights[e.id].shadow.needsUpdate = true; break; }
       case "closetIn": case "closetOut": { const c = H.closets[e.id]; if (c) { c.open = 1; c.target = 0; } break; }
       case "closetRattle": { const c = H.closets[e.id]; if (c) c.rattle = 2.3; break; }
       case "closetRip": { const c = H.closets[e.id]; if (c) { c.open = 1.6; c.target = 1; c.rattle = 0; } shake = 1; break; }
-      case "kill": killT = 0; shake = scares === "full" ? 1.4 : 0; break;
-      case "respawn": killT = -1; fadeIn = 1; creature.reset(); break;
+      case "kill": killT = 0; killGhost = e.ghost === undefined ? -1 : e.ghost; shake = scares === "full" ? 1.4 : 0; break;
+      case "respawn": killT = -1; killGhost = -1; fadeIn = 1; creature.reset(); for (const v of ghostViews) v.reset(); break;
+      case "ghostRise": shake = Math.max(shake, 0.3); { const hl = H.lamps[e.lamp]; if (hl) hl.flare = 2; } break;
       case "flip": {
         buildWalls(g.L);
         for (const id of e.changes.moved) { const p = g.L.props[id], o = H.props[id]; if (o) o.rotation.y = p.rot; }
         for (const id of e.changes.sealed) { const d = H.doors[id]; if (d) d.a = 0; }
         for (const h of H.lamps) if (h) h.flare = 1.5;
-        lightning.shadow.needsUpdate = true;
+        // new walls: every shadow and every way round is redrawn — the lamps'
+        // one a frame, so the night's biggest moment does not stutter
+        for (const l of g.L.lamps) if (l.lit) H.lampDirty[l.id] = true;
+        moonDL.shadow.needsUpdate = lightning.shadow.needsUpdate = true;
+        bounceBuild(g.L);
         break;
       }
       case "enter": { const w = H.windows[e.window]; if (w) w.open = 1; break; }
@@ -699,7 +1069,13 @@ export function feed(events, g) {
     }
   }
 }
-let lanternFlick = 0, flashNow = 0;
+let lanternFlick = 0, flashNow = 0, frameN = 0;
+
+/* Something moved at (x,z): the lit lamps that can see that far want their
+   shadows drawn again. */
+function shadowsNear(g, x, z, reach) {
+  for (const l of g.L.lamps) if (l.lit && Math.hypot(l.x - x, l.z - z) < (reach || 10)) H.lampDirty[l.id] = true;
+}
 
 /* ------------------------------------------------------------------ */
 /* The frame                                                          */
@@ -769,49 +1145,40 @@ export function draw(g, dt, view) {
   lanternGlow.material.opacity = 0.45 * power * flick;
   tmpV.set(lanternVM.position.x, lanternVM.position.y - 0.03, lanternVM.position.z);
   lanternLight.position.copy(tmpV);
-  lanternLight.intensity = lit ? 7.5 * power * power * Math.max(0.2, flick) * (hiding ? 0.4 : 1) : 0;
-  lanternLight.distance = 4 + 8 * power;
+  lanternLight.intensity = lit ? LANTERN_CD * power * power * Math.max(0.2, flick) * (hiding ? 0.4 : 1) : 0;
 
-  // --- lamps ---
-  const litLamps = [];
+  // --- lamps: each its own light, over its own wick ---
   for (const l of g.L.lamps) {
-    const hl = H.lamps[l.id];
+    const hl = H.lamps[l.id], ll = lampLights[l.id];
     if (!hl) continue;
     hl.flare = Math.max(0, hl.flare - dt * 0.8);
     const on = l.lit;
     hl.flame.visible = on; hl.glow.visible = on;
     if (hl.flameMesh) hl.flameMesh.visible = false;
+    if (!ll) continue;
     if (on) {
       const f = 1 + 0.07 * Math.sin(t * 11 + l.id * 3) + (Math.random() - 0.5) * 0.06;
       const big = 1 + hl.flare * 1.5 + (g.flipped ? 0.25 : 0);
       hl.flame.scale.set(0.03 * f * big, 0.065 * f * big, 1);
       hl.glow.material.opacity = 0.45 * f * Math.min(2, big);
-      litLamps.push({ l, d: Math.hypot(l.x - camera.position.x, l.z - camera.position.z), f, big });
-    }
-  }
-  litLamps.sort((a, b) => a.d - b.d);
-  for (let i = 0; i < lampLights.length; i++) {
-    const L = lampLights[i], q = litLamps[i];
-    if (!q) { L.intensity = 0; continue; }
-    L.position.set(q.l.x, q.l.y + H.lamps[q.l.id].fy + 0.05, q.l.z);
-    L.intensity = 8 * q.f * q.big * (g.flipped ? 1.3 : 1);
-    L.distance = POOL_R * 3.2;
-    L.color.set(g.flipped ? "#ff7a3a" : "#ff9a4e");
+      ll.intensity = LAMP_CD * f * big * (g.flipped ? 1.3 : 1);
+      ll.color.set(g.flipped ? "#ff7a3a" : "#ff9a4e");
+    } else ll.intensity = 0;
   }
 
   // --- the way out, once it is open ---
   const fd = g.L.doors.find((d) => d.kind === "front");
   if (fd && !fd.locked) {
     moon.position.set(fd.x, 1.6, fd.z + 0.9);
-    moon.intensity += ((2.2 + flashNow * 6) - moon.intensity) * Math.min(1, dt * 2);
+    moon.intensity += ((3.2 + flashNow * 8) - moon.intensity) * Math.min(1, dt * 2);
   } else moon.intensity = 0;
 
   // --- the dark, and eyes getting used to it ---
-  const dark = !lit && !(g.inPool && !g.flipped);
-  adapt += ((dark ? 1 : 0) - adapt) * Math.min(1, dt * (dark ? 0.12 : 1.5));
-  // grey and colourless (the post pass takes the colour out as you adapt),
-  // but enough to make out a doorway, a table, a shape standing still
-  hemi.intensity = 0.04 + adapt * (g.flipped ? 2.3 : 1.7);
+  // how dark it is is how little light reaches you: past a lit doorway a
+  // lamp still keeps your eyes from going over to the grey of the dark
+  const lampLit = Math.min(1, (B.here || 0) / 0.12);
+  const dark = lit ? 0 : 1 - lampLit;
+  adapt += (dark - adapt) * Math.min(1, dt * (dark > adapt ? 0.12 : 1.5));
 
   // --- lightning ---
   let flash = 0;
@@ -823,24 +1190,40 @@ export function draw(g, dt, view) {
     flash = Math.max(flash, k * f.pow);
     if (f.t > 0.8) flashes.splice(i, 1);
   }
-  // between flashes the same light is the moon through the capiz: it only
-  // gets in where the windows let it (with shadows), so it stays faint without them
-  const moonBase = quality === "high" ? 0.35 : 0.05;
-  lightning.intensity = moonBase + flash * (quality === "high" ? 4 : 1.6);
+  // grey and colourless (the post pass takes the colour out as you adapt),
+  // but enough to make out a doorway, a table, a shape standing still; and
+  // in a flash, the whole house for an instant, bright where the windows are
+  hemi.intensity = 0.04 + adapt * (g.flipped ? 2.3 : 1.7) + flash * 0.25;
+  // the moon only gets in where the windows and cracks let it
+  moonDL.intensity = 0.45;
+  lightning.intensity = flash * 6;
   flashNow = flash;
-  if (flash > 0.02 && quality === "high") lightning.shadow.needsUpdate = true;
-  M.capiz.emissiveIntensity = flash * 1.6 + 0.04 + adapt * 0.08;
+  if (flash > 0.02) lightning.shadow.needsUpdate = true;
+  M.capiz.emissiveIntensity = flash * 1.6 + 0.05 + adapt * 0.08;
+  // outside, through every crack: the night, and in a flash, white
+  scene.background.copy(NIGHT).lerp(FLASH_SKY, Math.min(1, flash * 1.4)).multiplyScalar(1 + flash * 2.5);
+  BU.lfSky.value.set(0.05, 0.065, 0.11).addScaledVector(tmpV.set(0.75, 0.82, 1.0), flash * 2.4);
+  if (shafts) {
+    sunDir(moonDL, shafts.moon.uniforms.uDir.value);
+    sunDir(lightning, shafts.flash.uniforms.uDir.value);
+    shafts.moon.uniforms.uPow.value = 0.05 + adapt * 0.04;
+    shafts.flash.uniforms.uPow.value = flash * 0.45;
+  }
 
   // --- doors, closets, kicked things ---
   for (const d of g.L.doors) {
     const hd = H.doors[d.id];
     if (!hd) continue;
     const target = d.sealed ? 0 : d.kind === "front" ? (d.locked ? 0 : 0.22 + (g.state === "won" ? 0.8 : 0)) : d.open;
+    const was = hd.a;
     hd.a += (target - hd.a) * Math.min(1, dt * (d.open > 0.5 && h.state === "chase" ? 14 : 5));
     for (const lf of hd.leaves) lf.pivot.rotation.y = lf.base + lf.dir * hd.a * 1.65;
+    // a door swinging moves the shadows of every lamp that can see it
+    if (Math.abs(hd.a - was) > 1e-3) shadowsNear(g, d.x, d.z);
   }
   for (const cl of H.closets) {
     if (!cl) continue;
+    if (cl.open > cl.target + 1e-3) { const c = g.L.closets[H.closets.indexOf(cl)]; if (c) shadowsNear(g, c.x, c.z); }
     cl.open = Math.max(cl.target, cl.open - dt * 1.4);
     const a = Math.min(1.5, cl.open) * 1.0;
     let rat = 0;
@@ -851,6 +1234,7 @@ export function draw(g, dt, view) {
     const k = H.kicks[i];
     k.t -= dt;
     k.o.position.x += k.vx * dt; k.o.position.z += k.vz * dt;
+    shadowsNear(g, k.o.position.x, k.o.position.z, 6);
     k.o.rotation.y += k.spin * dt;
     k.vx *= 0.9; k.vz *= 0.9;
     if (k.t <= 0) H.kicks.splice(i, 1);
@@ -860,7 +1244,33 @@ export function draw(g, dt, view) {
   for (const w of H.windows) if (w && w.open > 0) { w.open = Math.max(0.5, w.open - dt * 0.3); w.panes[0].position.x = -((WIN_W - 0.06) / 4) - w.open * 0.35; }
 
   // --- the hunter ---
-  creature.update(h, dt, { t, camera, flash, lanternPower: power, kill: killT, scares, killedBy: g.state === "caught" });
+  creature.update(h, dt, { t, camera, flash, lanternPower: power, kill: killT, scares, killedBy: g.state === "caught" && killGhost < 0 });
+  // --- the dead ---
+  const gs = g.ghosts || [];
+  for (let i = 0; i < ghostViews.length; i++) {
+    const q = gs[i];
+    const view = q ? { active: true, state: q.state, x: q.x, z: q.z, yaw: q.yaw, speed: q.speed, moving: q.moving, walked: q.walked, sees: q.sees, riseK: q.state === "rise" ? Math.max(0, q.t / GHOST.rise) : 1 } : { active: false };
+    ghostViews[i].update(view, dt, { t, camera, flash, lanternPower: power, kill: killT, scares, killedBy: g.state === "caught" && killGhost === i });
+  }
+
+  // --- shadows that are kept, redrawn when something near them moved ---
+  // it throws its shadow in a lamp's light and in the moon's: what is near
+  // it is redrawn while it walks
+  if (creature.group.visible) {
+    shadowsNear(g, h.x, h.z, 9);
+    if ((frameN & 3) === 0) moonDL.shadow.needsUpdate = true;
+  }
+  frameN++;
+  // one lamp's shadows a frame, taking turns (every other frame on Fast)
+  for (let k = 0; k < lampLights.length && (quality === "high" || (frameN & 1)); k++) {
+    const i = (H.shadowQ + k) % lampLights.length;
+    if (!H.lampDirty[i]) continue;
+    lampLights[i].shadow.needsUpdate = true;
+    H.lampDirty[i] = false;
+    H.shadowQ = i + 1;
+    break;
+  }
+  bounceFrame(g, dt, power, hiding);
 
   // --- dust follows the lantern ---
   dust.position.set(camera.position.x, 0, camera.position.z);
@@ -908,3 +1318,5 @@ export function bearing(x, z) {
 
 export function stats() { return renderer ? { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures } : null; }
 export const three = () => ({ renderer, scene, camera });
+/* For tools/: what the renderer keeps about the house it is drawing. */
+export const _debug = () => ({ B, H, lampLights, BU });

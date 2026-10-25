@@ -18,9 +18,23 @@
  *                end), so it stops at the edge and looks at you;
  *   rip          it saw you get into that closet.
  *
- * What it knows is only what it sees and hears. The director nudges it
- * toward the part of the house you are in, never to the spot, and it never
- * teleports: every metre it covers, it walks (tools/validate.js checks).
+ * What it knows is only what it sees and hears — but it uses all of it:
+ *
+ *   - lose it, and it does not stop where it last saw you: it goes on a few
+ *     steps the way you were heading, and searches there;
+ *   - a search where it lost you, or round a closet door it heard shut, may
+ *     end at a closet: it picks the nearest and tears it open. It does not
+ *     know you are in that one — it is guessing, and you hear it guess;
+ *   - your lantern lights more than you: if it sees the light on the walls
+ *     round a corner for a moment, it comes to see what is carrying it;
+ *   - it remembers how it last saw each door, and a door you have opened or
+ *     shut since is a door it goes through;
+ *   - at the end, while one of the dead is after you, it does not chase you
+ *     too: it goes to the rooms between you and the front door.
+ *
+ * The director nudges it toward the part of the house you are in, never to
+ * the spot, and it never teleports: every metre it covers, it walks
+ * (tools/validate.js checks).
  *
  * Its sounds are honest. Every footstep it makes is played where it is, so
  * the house teaches you to trust your ears. The tiktik call is honest too, in
@@ -29,9 +43,11 @@
  * Pure: no DOM, no three.js. */
 
 import { findPath, sees, soundField, heardAt, poolAvoid, nearestFree, cx, cz, cellOf, RES } from "./nav.js";
-import { roomAt, CELL, POOL_R } from "./house.js";
+import { roomAt, roomPath, CELL, POOL_R } from "./house.js";
 
-export const SPEED = { patrol: 1.25, search: 1.5, investigate: 1.95, pass: 1.45, retreat: 2.3, chase0: 2.7 };
+export const SPEED = { patrol: 1.25, search: 1.5, investigate: 1.95, pass: 1.45, retreat: 2.3, chase0: 2.7, rush: 1.3 };
+/* How likely a search ends at a closet, for how afraid the player asked to be. */
+export const CHECK = { gentle: 0.2, normal: 0.35, merciless: 0.5 };
 const FOV = { calm: Math.PI / 3, chase: Math.PI * 0.95 };
 
 export function newHunter() {
@@ -41,7 +57,8 @@ export function newHunter() {
     aware: 0, sees: false, lastSeen: null, lostT: 0, chaseV: 0,
     search: null, sawHide: -1, ripT: 0, doorT: 0, doorId: -1, stareT: 0,
     stepD: 0, tikT: 14, growlT: 4, repathT: 0, visited: {}, room: -1, field: null, fieldT: 0,
-    noticeT: 0, lastHeard: null, burnedT: 0, frozen: 0, pass: null, walked: 0
+    noticeT: 0, lastHeard: null, burnedT: 0, frozen: 0, pass: null, walked: 0,
+    lightT: 0, lightCheckT: 0, doorsSeen: {}, doorCheckT: 0, cutT: 0, rush: false, checks: 0
   };
 }
 
@@ -89,6 +106,7 @@ function walk(g, dt, v) {
     if (h.doorT <= 0) {
       const d = g.L.doors[h.doorId];
       d.open = 1;
+      h.doorsSeen[d.id] = true;
       ev(g, { type: "door", id: d.id, open: true, slam: h.state === "chase" || h.state === "rip", who: "hunter" });
       g.noise(d.x, d.z, h.state === "chase" ? 10 : 6, "door", true);
     }
@@ -163,8 +181,11 @@ function perceive(g, dt) {
     if (h.sees) {
       const k = (0.9 + 2.8 * Math.max(0, 1 - d / R)) * (p.lantern && p.oil > 0 ? 1.4 : 1) * tune(g).detect;
       h.aware = Math.min(1.2, h.aware + k * dt);
-      h.lastSeen = { x: p.x, z: p.z, t: g.t };
-    } else h.aware = Math.max(0, h.aware - 0.3 * dt);
+      h.lastSeen = { x: p.x, z: p.z, t: g.t, vx: p.vx, vz: p.vz };
+    } else {
+      h.aware = Math.max(0, h.aware - 0.3 * dt);
+      lightOnWalls(g, dt, d);
+    }
   } else if (p.hiding >= 0) {
     h.aware = Math.max(0, h.aware - 0.3 * dt);
     // a lantern left burning in a closet shines out through the slats: it
@@ -197,7 +218,8 @@ export function hear(g, x, z, r, kind) {
   if (h.state === "investigate" && h.lastHeard && h.lastHeard.r > r && g.t - h.lastHeard.t < 4) return false;
   h.lastHeard = { x, z, r, t: g.t };
   ev(g, { type: "heard", x, z, kind });
-  investigate(g, x, z, 3.5);
+  // a closet door it heard shut is a closet it may open; a run or a crash it hurries to
+  investigate(g, x, z, 3.5, { closet: kind === "closet", rush: r >= 6 });
   return true;
 }
 
@@ -211,18 +233,103 @@ function setState(g, s) {
   ev(g, { type: "hstate", from: was, to: s });
 }
 
-export function investigate(g, x, z, radius) {
+/** o: { closet: this search may end at a closet, rush: it hurries there }. */
+export function investigate(g, x, z, radius, o) {
   const h = g.hunter;
   setState(g, "investigate");
   h.beacon = false;
-  h.search = { x, z, r: radius || 3.5, passes: 3, at: null };
+  h.rush = !!(o && o.rush);
+  h.search = { x, z, r: radius || 3.5, passes: 3, at: null, closet: !!(o && o.closet) };
   h.wait = 0;
   goTo(g, x, z, () => searchNext(g));
+}
+
+/* The end of a search, sometimes: the closet nearest where it is looking,
+   torn open on a guess. The same walk, rattle and rip as when it saw you go
+   in (so the sound of it is the same warning), but nothing told it which. */
+function checkCloset(g) {
+  const h = g.hunter, s = h.search;
+  if (!s || !s.closet || g.flipped) return false;
+  s.closet = false;
+  if (g.r() > (CHECK[g.fear] || CHECK.normal)) return false;
+  const room = roomAt(g.L, s.x, s.z);
+  const near = g.L.closets.filter((c) => Math.hypot(c.front.x - s.x, c.front.z - s.z) < s.r + 2.5 && (c.room === room || Math.hypot(c.front.x - s.x, c.front.z - s.z) < 3))
+    .sort((a, b) => Math.hypot(a.front.x - s.x, a.front.z - s.z) - Math.hypot(b.front.x - s.x, b.front.z - s.z));
+  if (!near.length) return false;
+  h.sawHide = near[0].id;
+  h.chaseV = 0;
+  h.checks++;
+  ev(g, { type: "checkCloset", id: near[0].id, x: near[0].x, z: near[0].z });
+  return true;
+}
+
+/* A step on from where it lost you, the way you were going, if it can see
+   that far along it — a guess at the next room, not a fact. */
+function ahead(g, ls) {
+  const v = Math.hypot(ls.vx || 0, ls.vz || 0);
+  if (v < 0.3) return ls;
+  const k = Math.min(3.2, v * 1.4) / v, x = ls.x + ls.vx * k, z = ls.z + ls.vz * k;
+  const c = nearestFree(g.G, x, z);
+  if (c < 0) return ls;
+  const at = { x: cx(g.G, c), z: cz(g.G, c) };
+  return sees(g.G, ls.x, ls.z, at.x, at.z) ? at : ls;
+}
+
+/* Your lantern on the walls: a spot a pace or two from you, lit by your
+   flame, that it can see though it cannot see you. Seen for long enough,
+   it comes to find what is carrying the light. */
+function lightOnWalls(g, dt, d) {
+  const h = g.hunter, p = g.player;
+  if (!(p.lantern && p.oil > 0) || p.hiding >= 0 || g.flipped || g.state !== "play") { h.lightT = 0; return; }
+  if (h.state !== "patrol" && h.state !== "investigate") return;
+  h.lightCheckT -= dt;
+  if (h.lightCheckT > 0) return;
+  h.lightCheckT = 0.25;
+  const R = (8 + 10 * g.lanternPower) * tune(g).sight;
+  let lit = false;
+  if (d < R + 3) for (let k = 0; k < 8 && !lit; k++) {
+    const a = (k * Math.PI) / 4, rr = 1.2 + 1.3 * g.lanternPower;
+    const sx = p.x + Math.sin(a) * rr, sz = p.z + Math.cos(a) * rr, sc = cellOf(g.G, sx, sz);
+    if (g.G.opaque[sc] || Math.hypot(sx - h.x, sz - h.z) > R) continue;
+    let ang = Math.atan2(sx - h.x, sz - h.z) - h.yaw;
+    while (ang > Math.PI) ang -= Math.PI * 2;
+    while (ang < -Math.PI) ang += Math.PI * 2;
+    if (Math.abs(ang) > FOV.calm) continue;
+    lit = sees(g.G, p.x, p.z, sx, sz) && sees(g.G, h.x, h.z, sx, sz);
+  }
+  h.lightT = lit ? h.lightT + 0.25 * g.lanternPower : Math.max(0, h.lightT - 0.25);
+  if (h.lightT >= 1.1) {
+    h.lightT = 0;
+    ev(g, { type: "notice", why: "light" });
+    investigate(g, p.x, p.z, 3);
+  }
+}
+
+/* The doors: how each looked when it last saw it. One you have opened or
+   shut since is a way you have gone. */
+function doorsChanged(g, dt) {
+  const h = g.hunter;
+  h.doorCheckT -= dt;
+  if (h.doorCheckT > 0) return;
+  h.doorCheckT = 0.5;
+  for (const d of g.L.doors) {
+    if (d.kind !== "door" || d.sealed || Math.hypot(d.x - h.x, d.z - h.z) > 9 || !sees(g.G, h.x, h.z, d.x, d.z)) continue;
+    const open = d.open > 0.5, was = h.doorsSeen[d.id];
+    h.doorsSeen[d.id] = open;
+    if (was === undefined || was === open || h.state !== "patrol" || !(d.touchedAt > g.t - 60)) continue;
+    // the room on the other side of it from here
+    const mine = roomAt(g.L, h.x, h.z), other = d.a === mine ? d.b : d.a, rm = g.L.rooms[other];
+    if (!rm) continue;
+    ev(g, { type: "notice", why: "door", id: d.id });
+    investigate(g, rm.cx, rm.cz, 3);
+    return;
+  }
 }
 
 function searchNext(g) {
   const h = g.hunter, s = h.search;
   if (!s || s.passes <= 0) { patrolNext(g); return; }
+  if (checkCloset(g)) { setState(g, "rip"); h.path = null; h.goalCloset = -1; return; }
   s.passes--;
   h.wait = 1.4 + g.r() * 1.8;
   h.lookT = 0;
@@ -336,6 +443,16 @@ export function step(g, dt) {
 
   if (h.frozen > 0) { h.frozen -= dt; turn(h, Math.atan2(p.x - h.x, p.z - h.z), dt * 5); h.moving = false; return; }
 
+  if (h.state === "patrol" || h.state === "investigate") doorsChanged(g, dt);
+  // the end: one of the dead has you running; it goes to where you are running to
+  h.cutT -= dt;
+  if (g.flipped && h.cutT <= 0 && (h.state === "patrol" || h.state === "investigate") && g.ghosts && g.ghosts.some((q) => q.state === "chase")) {
+    h.cutT = 12;
+    const route = roomPath(g.L, Math.max(0, roomAt(g.L, p.x, p.z)), Math.max(0, roomAt(g.L, g.L.exit.x, g.L.exit.z)));
+    const rm = g.L.rooms[route[Math.min(2, route.length - 1)]];
+    if (rm && rm.id !== h.room) { ev(g, { type: "notice", why: "cut" }); investigate(g, rm.cx, rm.cz, 2.5, { rush: true }); }
+  }
+
   switch (h.state) {
     case "chase": {
       // it saw you get into that closet: straight there
@@ -345,9 +462,9 @@ export function step(g, dt) {
       if (inLight) { stare(g, 2.5 + g.r() * 1.5); break; }
       if (h.lostT > 2.2) {
         ev(g, { type: "lost" });
-        const ls = h.lastSeen || { x: p.x, z: p.z };
+        const ls = ahead(g, h.lastSeen || { x: p.x, z: p.z });
         h.aware = 0.3;
-        investigate(g, ls.x, ls.z, 3.5);
+        investigate(g, ls.x, ls.z, 3.5, { closet: true });
         if (g.dir.wantRelax) { g.dir.wantRelax = false; g.relax(); }
         break;
       }
@@ -427,7 +544,7 @@ export function step(g, dt) {
         }
         break;
       }
-      const v = h.state === "investigate" ? SPEED.investigate * (h.beacon ? 1.35 : 1) : h.state === "retreat" ? SPEED.retreat : SPEED.patrol * (g.flipped ? 1.25 : 1);
+      const v = h.state === "investigate" ? SPEED.investigate * (h.beacon ? 1.35 : h.rush ? SPEED.rush : 1) : h.state === "retreat" ? SPEED.retreat : SPEED.patrol * (g.flipped ? 1.25 : 1);
       if (!h.path) { if (h.state === "investigate" && h.search && h.search.at) { const a = h.search.at; h.search.at = null; goTo(g, a.x, a.z, () => searchNext(g)); } else if (h.state === "investigate" && h.search) searchNext(g); else if (h.state === "retreat") { h.wait = 2; } else patrolNext(g); break; }
       if (walk(g, dt, v)) { const f = h.onArrive; h.onArrive = null; if (f) f(); else h.wait = 1; }
     }

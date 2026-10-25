@@ -58,15 +58,18 @@ function pilot(M, g, mem, dt) {
   if (p.hiding >= 0) {
     mem.hid = (mem.hid || 0) + dt;
     inp.breath = h.active && d < 3.2 && p.breath > 0.15;
-    if (mem.hid > 4 && (!h.active || (h.state !== "chase" && h.state !== "rip" && d > 7))) { inp.usePress = true; mem.hid = 0; mem.path = null; }
+    const ghostClose = (g.ghosts || []).some((q) => q.state !== "rise" && Math.hypot(q.x - p.x, q.z - p.z) < 6);
+    if (mem.hid > 4 && !ghostClose && (!h.active || (h.state !== "chase" && h.state !== "rip" && d > 7))) { inp.usePress = true; mem.hid = 0; mem.path = null; }
     return inp;
   }
   // the end: lantern out
   if (g.flipped && p.lantern) inp.lanternPress = true;
   if (!g.flipped && !p.lantern && p.oil > 0) inp.lanternPress = true;
   const chased = h.active && (h.state === "chase" || (h.sees && h.aware > 0.5 && d < 7)) && h.state !== "pass" && h.state !== "stare";
+  // the end: the ghosts out of the lamps. It does what a person would — runs for the door
+  const ghostNear = (g.ghosts || []).some((q) => q.state !== "rise" && Math.hypot(q.x - p.x, q.z - p.z) < 7);
   let goal = null, run = false;
-  if (chased) {
+  if (chased && !g.flipped) {
     run = true;
     // a lit lamp's light, before the end, is the safest place there is
     const pool = !g.flipped && L.lamps.filter((l) => l.lit).map((l) => ({ l, dd: Math.hypot(l.front.x - p.x, l.front.z - p.z) })).sort((a, b) => a.dd - b.dd)[0];
@@ -92,12 +95,30 @@ function pilot(M, g, mem, dt) {
   } else if (g.flipped) {
     const fd = L.doors.find((q) => q.kind === "front");
     goal = { x: fd.x, z: fd.z - 0.6, front: true };
-    inp.crouch = h.active && d < 7;
+    run = ghostNear || chased;
+    inp.crouch = !run && h.active && d < 7;
+    // one coming at it, nearer the door than it is: hide if a closet is right
+    // there and it is not looking, or else go round the other way
+    const gq = (g.ghosts || []).filter((q) => q.state === "chase" || (q.state === "hunt" && Math.hypot(q.x - p.x, q.z - p.z) < 4)).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
+    if (gq && Math.hypot(gq.x - p.x, gq.z - p.z) < 6 && (gq.state === "chase" || Math.hypot(gq.x - fd.x, gq.z - fd.z) < Math.hypot(p.x - fd.x, p.z - fd.z))) {
+      const closet = L.closets.map((c) => ({ c, dd: Math.hypot(c.front.x - p.x, c.front.z - p.z) })).sort((a, b) => a.dd - b.dd)[0];
+      // (a ghost cannot open one, seen or not; it is the hunter it must not be seen by)
+      if (closet && closet.dd < 1.3 && !(h.active && h.sees)) { inp.yaw = Math.atan2(closet.c.x - p.x, closet.c.z - p.z); inp.usePress = true; return inp; }
+      if (closet && closet.dd < 5) goal = closet.c.front;
+      else {
+        const gr = M.house.roomAt(L, gq.x, gq.z), hops = L.graph.hops[Math.max(0, gr)];
+        const far = L.rooms.slice().sort((a, b) => hops[b.id] - hops[a.id])[0];
+        goal = { x: far.cx, z: far.cz };
+      }
+    }
   }
   if (goal) {
     mem.repath = (mem.repath || 0) - dt;
     if (!mem.path || mem.repath <= 0 || mem.goalKey !== goal.x + "," + goal.z) {
-      mem.path = nav.findPath(g.G, p.x, p.z, goal.x, goal.z, null, 0.5);
+      // at the end it can see them (they glow), and walks round them where it can
+      const gs = g.flipped ? g.ghosts.filter((q) => q.state !== "rise") : [];
+      const avoid = gs.length ? (c) => { const x = nav.cx(g.G, c), z = nav.cz(g.G, c); let k = 0; for (const q of gs) { const dd = Math.hypot(q.x - x, q.z - z); if (dd < 3.5) k += (3.5 - dd) * 2; } return k; } : null;
+      mem.path = nav.findPath(g.G, p.x, p.z, goal.x, goal.z, avoid, 0.5);
       mem.repath = 0.5; mem.goalKey = goal.x + "," + goal.z;
     }
     const path = mem.path;
@@ -114,7 +135,8 @@ function pilot(M, g, mem, dt) {
     if (mem.since > 2) { if (mem.last && Math.hypot(mem.last.x - p.x, mem.last.z - p.z) < 0.25) { mem.wig = -(mem.wig || 1); inp.side = mem.wig; mem.path = null; } mem.last = { x: p.x, z: p.z }; mem.since = 0; }
   }
   const t = game.target(g);
-  if (t && (t.kind === "lamp" || t.kind === "borrow")) { inp.use = true; inp.fwd = 0; inp.yaw = Math.atan2(t.x - p.x, t.z - p.z); }
+  // (at the end its lantern stays out: no stopping at a lamp to light it)
+  if (t && (t.kind === "lamp" || (t.kind === "borrow" && !g.flipped))) { inp.use = true; inp.fwd = 0; inp.yaw = Math.atan2(t.x - p.x, t.z - p.z); }
   if (t && t.kind === "front" && g.flipped) inp.usePress = true;
   if (t && t.kind === "tin") inp.usePress = true;
   return inp;
@@ -124,8 +146,8 @@ function playNight(M, o, maxT) {
   const g = M.game.newRun(o);
   const mem = {};
   const dt = 1 / 30;
-  const track = { maxStep: 0, chases: 0, poolBreach: 0, tele: 0, burns: 0, farRips: 0 };
-  let last = { x: g.hunter.x, z: g.hunter.z, active: g.hunter.active };
+  const track = { maxStep: 0, chases: 0, poolBreach: 0, tele: 0, burns: 0, farRips: 0, ghostStep: 0, ghostKills: 0, ghostNights: 0, ghostSpawnNear: 0, checks: 0, farChecks: 0, notice: {} };
+  let last = { x: g.hunter.x, z: g.hunter.z, active: g.hunter.active }, lastG = [];
   while (g.t < (maxT || 1500) && g.state !== "won" && g.state !== "dead") {
     const inp = g.state === "play" ? pilot(M, g, mem, dt) : {};
     M.game.step(g, dt, inp);
@@ -137,7 +159,15 @@ function playNight(M, o, maxT) {
       // a closet is torn open by something standing at it
       if (e.type === "kill" && e.how === "closet") { const c = g.L.closets[g.player.hiding >= 0 ? g.player.hiding : 0]; if (Math.hypot(c.front.x - h.x, c.front.z - h.z) > 1.3) track.farRips++; }
       if (e.type === "enter" || e.type === "respawn") jumped = true;
+      if (e.type === "kill" && e.how === "ghost") track.ghostKills++;
+      if (e.type === "checkCloset") { track.checks++; const s0 = h.search; if (!s0 || Math.hypot(g.L.closets[e.id].front.x - s0.x, g.L.closets[e.id].front.z - s0.z) > s0.r + 2.6) track.farChecks++; }
+      if (e.type === "notice") track.notice[e.why] = (track.notice[e.why] || 0) + 1;
+      if (e.type === "ghostRise" && Math.hypot(e.x - g.player.x, e.z - g.player.z) < 6) track.ghostSpawnNear++;
     }
+    // the ghosts never move faster than they can, either
+    if (g.ghosts.length) track.ghostNights = 1;
+    g.ghosts.forEach((q, i) => { const o = lastG[i]; if (o && !jumped && g.state === "play") track.ghostStep = Math.max(track.ghostStep, Math.hypot(q.x - o.x, q.z - o.z) / dt); });
+    lastG = g.ghosts.map((q) => ({ x: q.x, z: q.z }));
     if (h.active && last.active && !jumped) {
       const stepD = Math.hypot(h.x - last.x, h.z - last.z);
       track.maxStep = Math.max(track.maxStep, stepD / dt);
@@ -259,6 +289,7 @@ function playNight(M, o, maxT) {
   const nav = await imp("js/nav.js");
   const hunt = await imp("js/hunter.js");
   const game = await imp("js/game.js");
+  const ghosts = await imp("js/ghosts.js");
   const { rng } = await imp("js/rng.js");
   const M = { house, nav, hunt, game };
   {
@@ -302,6 +333,45 @@ function playNight(M, o, maxT) {
     }
     check("from every lamp, the front door can still be reached", !trapped.length, trapped.slice(0, 5).join(", "));
     check("most houses board up a doorway on the way back (" + sealed + "/120)", sealed > 90);
+  }
+
+  section("Behaviour: light goes round, never through");
+  {
+    // a lit lamp's glow (render.js's bounce light) reaches a spot in another
+    // room no sooner than the walk through one of its own doorways
+    let bad = 0, shutBad = 0, n = 0, reached = 0;
+    for (let s = 0; s < 40; s++) {
+      const L = house.generate(s * 53 + 11), A = nav.airGrid(L);
+      for (const l of L.lamps) {
+        const f = nav.lightField(A, l.x, l.z, 30), mine = l.room;
+        const ways = L.doors.filter((d) => (d.a === mine || d.b === mine) && !d.sealed && d.open > 0.5);
+        for (let c = 0; c < f.length; c++) {
+          if (A.wall[c] || A.shut[c] || f[c] === Infinity) continue;
+          const x = (c % A.nx + 0.5) * nav.RES, z = (Math.floor(c / A.nx) + 0.5) * nav.RES, r = house.roomAt(L, x, z);
+          if (r === mine || r < 0) continue;
+          n++; reached++;
+          const via = Math.min(...ways.map((d) => Math.hypot(d.x - l.x, d.z - l.z) + Math.hypot(x - d.x, z - d.z)));
+          if (f[c] < via - 0.9) bad++;
+        }
+        // with every door of its room shut and no open arch, it stays in the room
+        const arches = L.doors.some((d) => (d.a === mine || d.b === mine) && d.kind !== "door" && !d.sealed);
+        if (!arches) {
+          const saved = L.doors.map((d) => d.open);
+          for (const d of L.doors) if (d.a === mine || d.b === mine) d.open = 0;
+          nav.airDoors(A);
+          const g2 = nav.lightField(A, l.x, l.z, 40);
+          for (let c = 0; c < g2.length; c++) {
+            if (A.wall[c] || A.shut[c] || g2[c] === Infinity) continue;
+            const x = (c % A.nx + 0.5) * nav.RES, z = (Math.floor(c / A.nx) + 0.5) * nav.RES, r = house.roomAt(L, x, z);
+            if (r !== mine && r >= 0) { shutBad++; break; }
+          }
+          L.doors.forEach((d, i) => { d.open = saved[i]; });
+          nav.airDoors(A);
+        }
+      }
+    }
+    check("a lamp's light leaves its room only through a doorway (" + reached + " spots reached next door)", !bad && reached > 1000, bad + " spots lit through a wall");
+    check("and a shut door keeps it in", !shutBad, shutBad + " lamps leaked");
   }
 
   section("Behaviour: the rules");
@@ -419,6 +489,50 @@ function playNight(M, o, maxT) {
     check("a lit lantern at the end is a beacon it knows", gf.hunter.lastSeen && gf.hunter.lastSeen.beacon);
   }
 
+  section("Behaviour: what it does with what it knows");
+  {
+    // a search round a closet door it heard shut: sometimes it opens one, the nearest
+    let n = 0, opened = 0, near = 0;
+    for (let s = 0; s < 40; s++) {
+      const g = game.newRun({ seed: 300 + s, skipIntro: true }), h = g.hunter, c = g.L.closets[s % g.L.closets.length];
+      const rm = g.L.rooms[(c.room + 3) % g.L.rooms.length];
+      Object.assign(h, { active: true, x: rm.cx, z: rm.cz });
+      const free = nav.nearestFree(g.G, h.x, h.z); h.x = nav.cx(g.G, free); h.z = nav.cz(g.G, free);
+      // the player out of it: hidden, dark, in the closet furthest away
+      const far = g.L.closets.slice().sort((a, b) => Math.hypot(b.x - c.x, b.z - c.z) - Math.hypot(a.x - c.x, a.z - c.z))[0];
+      Object.assign(g.player, { x: far.inside.x, z: far.inside.z, hiding: far.id, lantern: false, dread: 0 });
+      g.dir.relaxT = 0;
+      hunt.investigate(g, c.front.x, c.front.z, 3, { closet: true });
+      n++;
+      for (let i = 0; i < 30 * 40 && h.state !== "patrol"; i++) {
+        game.step(g, 1 / 30, { yaw: g.player.yaw });
+        for (const e of g.events) if (e.type === "checkCloset") { opened++; if (Math.hypot(g.L.closets[e.id].front.x - c.front.x, g.L.closets[e.id].front.z - c.front.z) < 5.6) near++; }
+      }
+    }
+    check("a search round a closet it heard sometimes ends at one (" + opened + "/" + n + ")", opened > n * 0.15 && opened < n * 0.6);
+    check("and it is one near where it was looking", near === opened);
+    // your lantern, round a corner: it sees the light on the walls and comes
+    let tried = 0, light = 0;
+    for (let s = 0; s < 40; s++) {
+      const g = game.newRun({ seed: 100 + s, skipIntro: true }), L = g.L, p = g.player, h = g.hunter;
+      const d = L.doors.find((q) => q.kind === "arch" && q.b >= 0);
+      if (!d) continue;
+      const ra = L.rooms[d.a], nA = d.v ? [Math.sign(ra.cx - d.x), 0] : [0, Math.sign(ra.cz - d.z)], side = d.v ? [0, 1] : [1, 0];
+      const hc = nav.nearestFree(g.G, d.x + nA[0] * 3.5, d.z + nA[1] * 3.5);
+      let pc = -1;
+      for (const sg of [1, -1]) { const c = nav.nearestFree(g.G, d.x - nA[0] * 1.2 + side[0] * 1.7 * sg, d.z - nA[1] * 1.2 + side[1] * 1.7 * sg); if (c >= 0 && hc >= 0 && !nav.sees(g.G, nav.cx(g.G, hc), nav.cz(g.G, hc), nav.cx(g.G, c), nav.cz(g.G, c))) { pc = c; break; } }
+      if (hc < 0 || pc < 0) continue;
+      tried++;
+      Object.assign(h, { active: true, state: "patrol", x: nav.cx(g.G, hc), z: nav.cz(g.G, hc), path: null, wait: 99 });
+      h.yaw = Math.atan2(d.x - h.x, d.z - h.z);
+      p.x = nav.cx(g.G, pc); p.z = nav.cz(g.G, pc); p.lantern = true; p.oil = 0.9; g.dir.relaxT = 0;
+      let why = null;
+      for (let i = 0; i < 30 * 5 && !why; i++) { game.step(g, 1 / 30, { yaw: p.yaw }); for (const e of g.events) if (e.type === "notice") why = e.why; }
+      if (why === "light") light++;
+    }
+    check("it sees your lantern's light round a corner, and comes (" + light + " of " + tried + " corners)", tried >= 5 && light >= 2);
+  }
+
   section("Behaviour: the first visit is a lesson, not a trap");
   {
     // light the first lamp, then either hide (lantern still lit — nobody has said not to yet)
@@ -452,7 +566,8 @@ function playNight(M, o, maxT) {
   section("Behaviour: whole nights, played by the autopilot");
   {
     const N = 24;
-    let won = 0, deaths = 0, maxStep = 0, breaches = 0, chases = 0, burns = 0, farRips = 0;
+    let won = 0, deaths = 0, maxStep = 0, breaches = 0, chases = 0, burns = 0, farRips = 0, ghostStep = 0, ghostKills = 0, ghostNights = 0, ghostNear = 0, checks = 0, farChecks = 0;
+    const notice = {};
     const times = [];
     for (let s = 0; s < N; s++) {
       const { g, track } = playNight(M, { seed: 7000 + s * 13, mode: "lola" }, 1500);
@@ -463,6 +578,9 @@ function playNight(M, o, maxT) {
       chases += track.chases;
       burns += track.burns;
       farRips += track.farRips;
+      ghostStep = Math.max(ghostStep, track.ghostStep); ghostKills += track.ghostKills; ghostNights += track.ghostNights; ghostNear += track.ghostSpawnNear;
+      checks += track.checks; farChecks += track.farChecks;
+      for (const k in track.notice) notice[k] = (notice[k] || 0) + track.notice[k];
     }
     times.sort((a, b) => a - b);
     const med = times.length ? times[Math.floor(times.length / 2)] : 0;
@@ -472,6 +590,11 @@ function playNight(M, o, maxT) {
     check("a night has chases in it (" + (chases / N).toFixed(1) + " a night)", chases / N >= 0.5);
     check("it is rarely caught in a lamp's light, and never stuck there (" + (burns / N).toFixed(2) + " burns a night)", burns / N < 1);
     check("a closet is only ever torn open by something standing at it", farRips === 0, farRips + " from a distance");
+    check("the end brings the ghosts out of the lamps (" + ghostNights + "/" + N + " nights)", ghostNights >= won);
+    check("a ghost never moves faster than its chase (" + ghostStep.toFixed(2) + " m/s)", ghostStep <= ghosts.GHOST.chase * ghosts.GHOSTS.merciless.pace + 0.05);
+    check("no ghost comes out of a lamp right beside you", ghostNear === 0, ghostNear + " times");
+    check("the ghosts catch people, sometimes (" + ghostKills + " in " + N + " nights)", ghostKills > 0);
+    check("a closet it guesses at is always one near where it was searching", farChecks === 0, farChecks + " far away");
     process.stdout.write("    autopilot: " + won + "/" + N + " escaped, " + (deaths / N).toFixed(1) + " deaths a night, median " + Math.round(med) + " s\n");
     // the same seed and the same hands: the same night
     const a = playNight(M, { seed: 4242 }, 400).g, b = playNight(M, { seed: 4242 }, 400).g;

@@ -12,7 +12,12 @@
  *              tables are looked over;
  *   hearing  — distance measured along the floor, not through the wall: a
  *              sound in the next room is as far as the walk round through
- *              the doorway, and a shut door makes it a few metres further.
+ *              the doorway, and a shut door makes it a few metres further;
+ *   light    — the same walk round, but through the air: over the
+ *              furniture, never through a wall or a shut door. It is how
+ *              far a lamp's glow travels to reach a corner, so the light
+ *              that bounces round a room spills out of its doorway and
+ *              stops at its walls (render.js draws it).
  *
  * Collision for the player is boxes, not this grid (move() at the bottom), so
  * walking along a wall is smooth rather than stepped.
@@ -307,6 +312,105 @@ export function poolAvoid(G, lamps, active) {
     for (const l of lit) if ((x - l.x) * (x - l.x) + (z - l.z) * (z - l.z) < R2) return Infinity;
     return 0;
   };
+}
+
+/* ---------- light ---------- */
+
+/**
+ * The air of the house on the same quarter-metre cells: what light can
+ * cross. Only walls stop it — not furniture, which it goes over — and shut
+ * doors, which are kept apart so a door swinging costs a few cells, not the
+ * whole grid. Walls are thickened by half a cell so even the thinnest one
+ * is two cells of solid that light cannot squeeze between.
+ */
+export function airGrid(L) {
+  const nx = Math.ceil(L.W / RES), nz = Math.ceil(L.D / RES), N = nx * nz;
+  const A = { L, nx, nz, wall: new Uint8Array(N), shut: new Uint8Array(N), doors: [], key: "" };
+  const cells = (b, inflate, fn) => {
+    const i0 = Math.max(0, Math.floor((b.x0 - inflate) / RES)), i1 = Math.min(nx - 1, Math.floor((b.x1 + inflate) / RES));
+    const j0 = Math.max(0, Math.floor((b.z0 - inflate) / RES)), j1 = Math.min(nz - 1, Math.floor((b.z1 + inflate) / RES));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const x = (i + 0.5) * RES, z = (j + 0.5) * RES;
+      if (x >= b.x0 - inflate && x <= b.x1 + inflate && z >= b.z0 - inflate && z <= b.z1 + inflate) fn(j * nx + i);
+    }
+  };
+  for (const b of L.blocks) if (b.wall) cells(b, RES / 2, (c) => { A.wall[c] = 1; });
+  for (const d of L.doors) {
+    if (d.sealed || (d.kind !== "door" && d.kind !== "front")) continue;
+    const list = [];
+    cells(doorBox(d), RES / 2, (c) => list.push(c));
+    A.doors.push({ id: d.id, cells: list });
+  }
+  airDoors(A);
+  return A;
+}
+
+/** Shut doors into the air grid. Returns true when anything changed. */
+export function airDoors(A) {
+  const key = A.doors.map((q) => (A.L.doors[q.id].open < 0.5 ? 1 : 0)).join("");
+  if (key === A.key) return false;
+  A.key = key;
+  A.shut.fill(0);
+  for (const q of A.doors) if (A.L.doors[q.id].open < 0.5) for (const c of q.cells) A.shut[c] = 1;
+  return true;
+}
+
+/**
+ * How far light from (x,z) travels through the air to every cell within
+ * `max` metres: Dijkstra, as soundField, with walls and shut doors solid.
+ * The cells inside a wall take the distance of the open floor on their own
+ * side, so a surface sampled just in front of a wall reads its own room.
+ */
+export function lightField(A, x, z, max, out) {
+  const { nx, nz } = A, N = nx * nz;
+  const f = out || new Float32Array(N);
+  f.fill(Infinity);
+  const blocked = (c) => A.wall[c] || A.shut[c];
+  let s = Math.min(nx - 1, Math.max(0, Math.floor(x / RES))) + Math.min(nz - 1, Math.max(0, Math.floor(z / RES))) * nx;
+  if (blocked(s)) {
+    // a light against a wall: start from the nearest open cell
+    const i0 = s % nx, j0 = Math.floor(s / nx);
+    let best = -1, bd = Infinity;
+    for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) {
+      const i = i0 + di, j = j0 + dj;
+      if (i < 0 || j < 0 || i >= nx || j >= nz || blocked(j * nx + i)) continue;
+      const dd = di * di + dj * dj;
+      if (dd < bd) { bd = dd; best = j * nx + i; }
+    }
+    if (best < 0) return f;
+    s = best;
+  }
+  f[s] = 0;
+  const open = new Heap();
+  open.push(s, 0);
+  while (open.size) {
+    const c = open.pop(), dc = f[c];
+    if (dc > max) break;
+    const i = c % nx, j = Math.floor(c / nx);
+    for (let k = 0; k < 8; k++) {
+      const ni = i + DI[k], nj = j + DJ[k];
+      if (ni < 0 || nj < 0 || ni >= nx || nj >= nz) continue;
+      const n = nj * nx + ni;
+      if (blocked(n)) continue;
+      if (DI[k] && DJ[k] && (blocked(j * nx + ni) || blocked(nj * nx + i))) continue;
+      const nd = dc + (DI[k] && DJ[k] ? 1.4142 : 1) * RES;
+      if (nd < f[n]) { f[n] = nd; open.push(n, nd); }
+    }
+  }
+  // wall cells: the nearest open floor's distance, from one side only
+  for (let c = 0; c < N; c++) {
+    if (!blocked(c)) continue;
+    const i = c % nx, j = Math.floor(c / nx);
+    let m = Infinity;
+    for (let k = 0; k < 4; k++) {
+      const ni = i + DI[k], nj = j + DJ[k];
+      if (ni < 0 || nj < 0 || ni >= nx || nj >= nz) continue;
+      const n = nj * nx + ni;
+      if (!blocked(n) && f[n] < m) m = f[n];
+    }
+    f[c] = m + RES;
+  }
+  return f;
 }
 
 /* ---------- the player's body ---------- */

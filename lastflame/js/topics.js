@@ -31,7 +31,8 @@ export const TOPICS = {
 <li><b>Lantern</b> — F turns the wick down or up. Right mouse lifts it to look at.</li>
 <li><b>Hold your breath</b> — Space, for a few seconds.</li>
 </ul>
-<p>Headphones, if you have them. Every sound it makes is where it is.</p>`
+<p>Headphones, if you have them. Every sound it makes is where it is.</p>
+<p>At the fifth lamp, everything changes. <button class="about" data-info="end">What happens at the end</button></p>`
   },
   lamps: {
     title: "The lamps and your oil",
@@ -41,7 +42,7 @@ export const TOPICS = {
   },
   light: {
     title: "Light and dark",
-    body: `<p>Your lantern shows you the way, and it shows you to it: lit, it can make you out from across a room. With the wick turned down it has to be almost on top of you.</p>
+    body: `<p>Your lantern shows you the way, and it shows you to it: lit, it can make you out from across a room — and it can see your light on the walls round a corner even when it cannot see you. With the wick turned down it has to be almost on top of you.</p>
 <p>The dark gets into you. The longer you spend in it, and the nearer it comes, the worse you breathe — and past a point, it can hear you breathing. Light settles you again.</p>
 <p>A lamp you have relit is a pool of light it will not step into. That holds for as long as some of the house is still dark.</p>`
   },
@@ -55,6 +56,7 @@ export const TOPICS = {
     title: "What is in the house",
     body: `<p>It goes to what it hears and what it sees. Running is loud; crouching is quiet; some floorboards creak whatever you do; pots on the floor get kicked. A shut door slows it for a moment.</p>
 <p>Its footsteps are always real — you will hear every step it takes, from where it is. The tiktik call is real too, but it works the way the old stories say: <b>loud when it is far, faint when it is near.</b></p>
+<p>It is not stupid. Lose it and it searches the way you were going, not where it last saw you. A search may end with it tearing open the nearest closet, on a guess. It remembers how it left the doors, and notices one you have moved.</p>
 <p>It hunts harder with every lamp you light.</p>`
   },
   fear: {
@@ -84,7 +86,14 @@ export const TOPICS = {
   },
   quality: {
     title: "Graphics",
-    body: `<p><b>Shadows</b> lets your lantern throw moving shadows and the lightning come in through the windows, with a glow round every flame. <b>Fast</b> leaves those out and draws fewer pixels, for a phone or an older computer. <b>Auto</b> picks Fast on a phone and Shadows elsewhere.</p>`
+    body: `<p><b>Shadows</b> lets your lantern throw moving shadows, with a glow round every flame. <b>Fast</b> leaves those out and draws fewer pixels, for a phone or an older computer. Either way the lamps, the moon and the lightning keep their shadows — they are drawn once and kept, and they are what stops light coming through a wall. <b>Auto</b> picks Fast on a phone and Shadows elsewhere.</p>`
+  },
+  end: {
+    title: "The end of the night",
+    body: `<p>When the fifth lamp is lit the house goes quiet for a few seconds. Then it turns: a doorway you came through is boarded up, a wall is broken through, the front door is unlocked — and what was waiting in the lamps comes out of them.</p>
+<p><b>The dead</b> are not the aswang. They know roughly where you are — better the nearer they come, and far better while your lantern burns — and they drift through shut doors. When one sees you it comes straight for you: faster than you walk, slower than you run. They cannot open a closet, and if you stay hidden long enough they lose the thread.</p>
+<p>The aswang is still in the house. While one of the dead has you running, it goes to where you are running to.</p>
+<p>The front door creaks in the wind, and the moonlight comes in through it. Follow either.</p>`
   },
   update: {
     title: "Updates",

@@ -13,8 +13,9 @@
    and the house is drawn, not black; W walks, F turns the wick down and up;
    holding E at a lamp lights it; E at a closet hides you and E again lets
    you out; Escape pauses and Settings change and stick; being caught under
-   Lola's Rules wakes you by the lamp; the front door at the end is the way
-   out and the night ends on its screen. On a phone held sideways: the touch
+   Lola's Rules wakes you by the lamp; at the fifth lamp the house turns and
+   the dead rise out of the lamps; the front door at the end is the way out
+   and the night ends on its screen. On a phone held sideways: the touch
    controls are there, the stick walks, and the hand button hides you.
    ============================================================ */
 "use strict";
@@ -155,11 +156,19 @@ const standAt = (p, at, look) => p.evaluate(([at, look]) => {
   await shot(p, "caught");
   check("and under Lola's Rules you wake by the lamp", await until(p, () => { const g = window.__lf.g, l = g.L.lamps[0]; return g.state === "play" && Math.hypot(g.player.x - l.x, g.player.z - l.z) < 3; }, null, 45000));
 
+  // the end, the real way: every lamp lit, the breather run out, and the house turns
+  await p.evaluate(() => {
+    const g = window.__lf.g;
+    for (const l of g.L.lamps) { if (!l.lit) window.__lf.render.feed([{ type: "lampLit", id: l.id, n: 5 }], g); l.lit = true; l.refilled = true; }
+    g.lit = 5; g.phase = "breather"; g.phaseT = 99;
+  });
+  check("at the end, the dead come out of the lamps", await until(p, () => window.__lf.g.flipped && window.__lf.g.ghosts.length > 0, null, 20000));
+  check("and they rise, and come", await until(p, () => window.__lf.g.ghosts.some((q) => q.state !== "rise") || window.__lf.g.state !== "play", null, 60000));
+  await shot(p, "finale");
   // the way out
   await p.evaluate(() => {
     const g = window.__lf.g;
-    for (const l of g.L.lamps) { l.lit = true; l.refilled = true; }
-    g.lit = 5; g.flipped = true; g.phase = "peak";
+    g.state = "play"; g.ghosts = [];
     g.L.doors.find((d) => d.kind === "front").locked = false;
     g.hunter.active = false;
   });
