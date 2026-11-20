@@ -184,6 +184,9 @@
   #ph-act { display:none; border:1px solid var(--line); border-radius:10px; padding:8px; margin-bottom:8px; background:var(--panel-2); }
   #ph-act.on { display:block; }
   #ph-act .muted { margin-bottom:6px; }
+  #ph-when { margin-top:8px; }
+  #ph-gpsp:empty { display:none; }
+  #ph-gpsp .muted { align-self:center; margin:0 4px 0 0; }
   #ph-edit { margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
   #ph-edit .bar { margin-bottom:4px; }
   .pt img { transform-origin:50% 50%; }
@@ -404,7 +407,7 @@
           <div class="ph-head"><h3 style="margin:0">Photos in the replay<button class="infobtn" data-info="photos" aria-label="How photos are placed"><svg class="i"><use href="#i-info"/></svg></button></h3><button id="ph-onoff" class="tgl" role="switch" style="width:auto;gap:8px"><span>On</span><i></i></button></div>
           <div id="ph-info" class="hint"></div>
           <div id="ph-strip"></div>
-          <div id="ph-act"><div class="muted" id="ph-act-t"></div><div class="bar"><button id="ph-spot" class="on">Choose its spot</button><button id="ph-auto"><svg class="i"><use href="#i-reset"/></svg>Auto</button><button id="ph-del"><svg class="i"><use href="#i-trash"/></svg>Remove</button></div><div id="ph-edit"><div class="bar"><button id="ph-rotl" title="Rotate left" aria-label="Rotate left"><svg class="i"><use href="#i-rotl"/></svg></button><button id="ph-rotr" title="Rotate right" aria-label="Rotate right"><svg class="i"><use href="#i-rotr"/></svg></button><button id="ph-ed-rst"><svg class="i"><use href="#i-reset"/></svg>Original</button></div><label class="fld"><span>Zoom</span><input id="ph-zoom" type="range" min="1" max="4" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label><label class="fld ph-pan"><span>Pan across</span><input id="ph-panx" type="range" min="-1" max="1" step="0.02" value="0" data-unit="" data-def="0"><output></output></label><label class="fld ph-pan"><span>Pan up / down</span><input id="ph-pany" type="range" min="-1" max="1" step="0.02" value="0" data-unit="" data-def="0"><output></output></label></div></div>
+          <div id="ph-act"><div class="muted" id="ph-act-t"></div><div class="bar"><button id="ph-spot" class="on">Choose its spot</button><button id="ph-auto"><svg class="i"><use href="#i-reset"/></svg>Auto</button><button id="ph-del"><svg class="i"><use href="#i-trash"/></svg>Remove</button></div><label class="fld" id="ph-when"><span>Ride time</span><div class="pair"><input type="text" id="ph-at" placeholder="h:mm:ss" style="width:100%"></div><button id="ph-at-go">Place</button></label><div class="bar" id="ph-gpsp"></div><div id="ph-edit"><div class="bar"><button id="ph-rotl" title="Rotate left" aria-label="Rotate left"><svg class="i"><use href="#i-rotl"/></svg></button><button id="ph-rotr" title="Rotate right" aria-label="Rotate right"><svg class="i"><use href="#i-rotr"/></svg></button><button id="ph-ed-rst"><svg class="i"><use href="#i-reset"/></svg>Original</button></div><label class="fld"><span>Zoom</span><input id="ph-zoom" type="range" min="1" max="4" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label><label class="fld ph-pan"><span>Pan across</span><input id="ph-panx" type="range" min="-1" max="1" step="0.02" value="0" data-unit="" data-def="0"><output></output></label><label class="fld ph-pan"><span>Pan up / down</span><input id="ph-pany" type="range" min="-1" max="1" step="0.02" value="0" data-unit="" data-def="0"><output></output></label></div></div>
         </div>
         <div class="grp"><h3>Style</h3>
           <div class="seg"><button id="pm-moment">Moment</button><button id="pm-burst">Burst</button></div>
@@ -3864,7 +3867,7 @@ if (typeof exports === 'object' && typeof module === 'object') {
     stops: { title: "Stops", body: "<p><b>Keep</b> plays every second as it was recorded, stops included.</p><p><b>Shorten</b> keeps a stop up to 20 s as it was; past that, only a little more counts, never more than 90 s. A one-hour rest becomes a short, visible pause.</p><p><b>Skip</b> runs the clock only while the rider moves, so the line keeps flowing. The time shown is still the real time.</p><p>Clean view and the video use the same setting.</p>" },
     camera: { title: "The camera", body: "<p><b>Tilt</b> is how far the camera leans toward the horizon. It is lowered on its own when a hill would come between the camera and the rider.</p><p><b>Distance</b> moves the follow camera closer or farther, in zoom steps: one step is twice as close.</p><p><b>Field of view</b> is the lens. Wide shows more and exaggerates depth; narrow flattens it, like a long lens.</p><p><b>Turn smoothing</b> is how long the camera takes to swing after the route turns. Longer is calmer; shorter keeps the road ahead centred on twisty routes.</p>" },
     sun: { title: "Real sun and moon", body: "<p>The light is worked out for the minute and the place of each moment of the ride: where the sun and moon were, dawn and dusk colours, shadows from the hills, and the cloud cover the weather service recorded for that hour.</p><p>Off, the map is lit as a plain daytime map.</p>" },
-    photos: { title: "Photos in the replay", body: "<p>Each photo stands in 3D where it was taken: from its GPS, or else from the time it was taken, matched to where the ride was then.</p><p>A photo with neither waits in the list for you to choose its spot on the route. Drop pictures on the page to add them.</p><p><b>Moment</b> slows the replay at each photo and frames it. <b>Burst</b> keeps the speed and lets photos rise beside the trail as you pass.</p><p>Changes stay in this tab until <b>Save changes</b> writes a new file.</p>" },
+    photos: { title: "Photos in the replay", body: "<p>Each photo comes up at the time it was taken, where the ride was then. Its GPS sets where the card stands, when it agrees with that moment.</p><p>A photo with no time within the ride (none, or a camera clock that was off) is not guessed from its GPS alone, since a trail can pass one spot hours apart. It waits in the list: type its ride time, choose it on the route, or pick one of the passes near its GPS. Drop pictures on the page to add them.</p><p><b>Moment</b> slows the replay at each photo and frames it. <b>Burst</b> keeps the speed and lets photos rise beside the trail as you pass.</p><p>Changes stay in this tab until <b>Save changes</b> writes a new file.</p>" },
     grouping: { title: "Grouping photos", body: "<p>Photos that belong together share one spot: a deck in <b>Burst</b>, one stop in <b>Moment</b>.</p><p><b>Auto</b> groups by look in Burst and by time and place in Moment, as before. <b>Similar look</b> groups only retakes of the same view. <b>Time and place</b> groups whatever was taken at one spot. <b>Never</b> gives every photo its own turn.</p><p><b>Look tolerance</b> above 1 groups more loosely, below 1 more strictly. <b>Same place within</b> left at Auto is 250 m in Burst and 300 m in Moment. <b>Up to</b> at Auto is 7 per deck, 3 per moment.</p><p>The look of each photo is read in this tab, with MediaPipe's image embedder, the first time photos are opened. Nothing is uploaded.</p>" },
     faces: { title: "Faces", body: "<p>Two photos of the same spot can show different people. With faces on, each face is found (MediaPipe face detector), cut out and compared on its own, so a selfie of one person is not stacked with a selfie of another.</p><p><b>Normal</b> keeps photos apart when their faces differ. <b>Strict</b> also keeps a photo with a face apart from one without. <b>Loose</b> only splits clearly different faces.</p><p>Faces smaller than about a twentieth of the photo are ignored. This tells look-alikes apart, not identities: it is a guide for grouping, nothing more. It all runs in this tab.</p>" },
     frame: { title: "The frame", body: "<p>The stage is the video's frame. Pick its shape here and the preview is letterboxed to it, so what you see is what renders, overlays included.</p><p><b>Resolution</b> is the short side of the video; the long side follows the shape. The long side is capped at 4096 pixels, the most the map can draw.</p><p>Vertical shapes (9:16, 4:5) suit phone feeds; 16:9 suits a screen; 21:9 and 2.39:1 are cinema.</p>" },
@@ -5676,39 +5679,20 @@ if (typeof exports === 'object' && typeof module === 'object') {
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
       }
     };
-    /** Where on the route a photo belongs: its GPS when it has one, else the moment it was taken. */
+    /** Where and when a photo appears. Its time decides when: the moment it was taken, on the route where the ride was then. Its GPS only
+        decides where the card stands, and only when it agrees with that moment (the rider was near the spot then). A photo with no time
+        within the ride (none, or the camera's clock was off) is not guessed from its GPS alone, since a trail can pass one spot hours
+        apart: it waits in the list for the owner to give it a ride time, typed, chosen on the route, or one of the passes near its GPS. */
+    var PH_EARLY = 900; // taken up to 15 min before the start or after the end still counts: it goes at the start or the end
+    function photoTimeIn(o) { if (!(o.t > 0)) return null; var s0 = (o.t - d.t0) / 1000; return s0 >= -PH_EARLY && s0 <= d.dur + PH_EARLY ? Math.max(0, Math.min(d.dur, s0)) : null; }
     function placePhoto(o) {
-      var k = -1, gpsOk = false, best25 = false, man = o.at != null && o.at >= 0;
-      if (man) k = fIdx(Math.max(0, Math.min(d.dur, o.at))); // the owner chose its spot: that ride time, on the route
-      else if (o.lat != null && o.lon != null) {
-        /* Where the arrow passes the photo's spot. A trail can pass the same place twice (out and back), so
-           of all the passes near the spot, take the one at the time the photo was taken; the moment then
-           fires exactly when the arrow is there. */
-        var cosl = Math.cos(o.lat * Math.PI / 180), dist = function (q) { var dx = (fLon[q] - o.lon) * cosl, dy = fLat[q] - o.lat; return Math.sqrt(dx * dx + dy * dy) * 111320; };
-        var best = 1e18;
-        for (var q = 0; q < fLon.length; q++) { var dq = dist(q); if (dq < best) { best = dq; k = q; } }
-        if (best > 600) k = -1; // not on this route: ignore its GPS, place it by time
-        else {
-          gpsOk = true;
-          var near = Math.max(60, best + 40), takenS = o.t > 0 ? (o.t - d.t0) / 1000 : null, passes = [], cur = null;
-          for (var q2 = 0; q2 < fLon.length; q2++) {
-            var dq2 = dist(q2);
-            if (dq2 <= near) { if (!cur || dq2 < cur.d) { if (!cur) { cur = { k: q2, d: dq2 }; passes.push(cur); } else { cur.k = q2; cur.d = dq2; } } }
-            else cur = null; // left the spot: the next visit is a new pass
-          }
-          if (passes.length > 1) {
-            passes.sort(function (a, b) { return takenS != null ? Math.abs(fT[a.k] - takenS) - Math.abs(fT[b.k] - takenS) : fT[a.k] - fT[b.k]; });
-            k = passes[0].k;
-          }
-          best25 = dist(k) > 25; // more than 25 m from the route point it belongs to: pin it on the route (the shot needs the card near the trail)
-        }
+      var man = o.at != null && o.at >= 0, tAt = man ? Math.max(0, Math.min(d.dur, o.at)) : photoTimeIn(o), how = man ? "manual" : "time";
+      if (tAt == null) return null;
+      var k = fIdx(tAt), plon = fLon[k], plat = fLat[k];
+      if (!man && o.lat != null && o.lon != null) {
+        var pq = fixAt(tAt), dk = pq ? Math.hypot((pq[0] - o.lon) * 111320 * Math.cos(o.lat * Math.PI / 180), (pq[1] - o.lat) * 111320) : 1e9;
+        if (dk <= 150) { how = "gps"; if (!SHOT || dk <= 25) { plon = o.lon; plat = o.lat; } } // agrees; the shot wants the card by the trail, so a spot over 25 m off stays on the route
       }
-      if (k < 0 && o.t > 0 && !man) {
-        var s = (o.t - d.t0) / 1000;
-        if (s < -900 || s > d.dur + 900) return null; // not taken during this ride
-        k = fIdx(Math.max(0, Math.min(d.dur, s)));
-      }
-      if (k < 0) return null;
       var ka = Math.max(0, k - 3), kb = Math.min(fLon.length - 1, k + 3);
       var face = (brg([fLon[ka], fLat[ka]], [fLon[kb], fLat[kb]]) + 360) % 360; // its width runs across the route
       // The free side: whichever side of the trail has less of the route on it nearby.
@@ -5719,18 +5703,21 @@ if (typeof exports === 'object' && typeof module === 'object') {
         if (ex * ex + ny * ny > 500 * 500) continue;
         var dd2 = ex * we + ny * wn; if (dd2 > 25) cntR++; else if (dd2 < -25) cntL++;
       }
-      var plon = gpsOk && !(SHOT && best25) ? o.lon : fLon[k], plat = gpsOk && !(SHOT && best25) ? o.lat : fLat[k], tAt = fT[k];
-      /* Its time: when it was taken, if the rider was at the spot then (many photos at one stop each keep their own moment, in order);
-         else the time the arrow passes the spot. */
-      if (man) tAt = Math.max(0, Math.min(d.dur, o.at));
-      else if (o.t > 0) {
-        var tk = (o.t - d.t0) / 1000;
-        if (tk >= 0 && tk <= d.dur) {
-          var pq = fixAt(tk), dk = pq ? Math.hypot((pq[0] - plon) * 111320 * Math.cos(plat * Math.PI / 180), (pq[1] - plat) * 111320) : 1e9;
-          if (!gpsOk || dk <= Math.max(40, (gpsOk ? best : 0) + 30)) tAt = tk;
-        }
+      return { how: how, face: face, side: cntR <= cntL ? 1 : -1, p: 0, f: o.f, t: tAt, lon: plon, lat: plat, w: o.w || 4, h: o.h || 3, a: 0, img: null, tex: null };
+    }
+    /** The passes of the route near a photo's GPS (at most 6), as ride times: offered for a photo with no time within the ride. */
+    function gpsPasses(o) {
+      if (o.lat == null || o.lon == null) return [];
+      var cl = Math.cos(o.lat * Math.PI / 180), dist = function (q) { return Math.hypot((fLon[q] - o.lon) * cl, fLat[q] - o.lat) * 111320; }, best = 1e18;
+      for (var q = 0; q < fLon.length; q++) best = Math.min(best, dist(q));
+      if (best > 600) return [];
+      var near = Math.max(60, best + 40), out = [], cur = null;
+      for (var q2 = 0; q2 < fLon.length; q2++) {
+        var dq = dist(q2);
+        if (dq <= near) { if (!cur) { cur = { k: q2, d: dq }; out.push(cur); } else if (dq < cur.d) { cur.k = q2; cur.d = dq; } }
+        else cur = null; // left the spot: the next visit is a new pass
       }
-      return { how: man ? "manual" : gpsOk ? "gps" : "time", face: face, side: cntR <= cntL ? 1 : -1, p: 0, f: o.f, t: tAt, lon: plon, lat: plat, w: o.w || 4, h: o.h || 3, a: 0, img: null, tex: null };
+      return out.slice(0, 6).map(function (x) { return fT[x.k]; });
     }
     /* ---- what a photo looks like, for grouping similar ones in Burst ----
        dh: a 64-bit difference hash (9x8 grey: is each pixel brighter than its right neighbour), which survives resizing,
@@ -5935,7 +5922,7 @@ if (typeof exports === 'object' && typeof module === 'object') {
         if (o.t > 0 && o.at == null && seen[key]) return; seen[key] = 1; // the same photo added twice: show it once
         var ph = placePhoto(o);
         if (ph) { ph.f = ph.f || o.f; if (o.e) ph.emb = embDecode(o.e); ph.pa = paFrom(o.pa, edKey(edOf(ph.f))); }
-        photoAll.push({ f: o.f, ph: ph, how: ph ? ph.how : null }); // every photo, for the sheet; one with no spot waits for the owner to give it one
+        photoAll.push({ f: o.f, ph: ph, how: ph ? ph.how : null, o: o }); // every photo, for the sheet; one with no spot waits for the owner to give it one
         if (!ph) { skipped++; return; }
         var im = new Image(); im.src = photoSrc(o.f);
         ph.ready = (im.decode ? im.decode() : new Promise(function (r, x) { im.onload = r; im.onerror = x; })).then(function () { ph.img0 = im; phApplyEdit(ph); map.triggerRepaint(); }, function () {});
@@ -5948,7 +5935,7 @@ if (typeof exports === 'object' && typeof module === 'object') {
       embPoll();
       if (photos.length) Promise.all(photos.map(function (ph) { return ph.ready; })).then(function () { paRun(); });
       var nOn = photoAll.length - skipped;
-      photoNote = !photoAll.length ? "No photos on this ride yet." : nOn + " photo" + (nOn === 1 ? "" : "s") + " on the route" + (skipped ? " · " + skipped + " need" + (skipped === 1 ? "s" : "") + " a spot (no time or GPS from this ride): tap one to place it" : "") + (photosOn ? "" : " · hidden in the replay");
+      photoNote = !photoAll.length ? "No photos on this ride yet." : nOn + " photo" + (nOn === 1 ? "" : "s") + " on the route" + (skipped ? " · " + skipped + " need" + (skipped === 1 ? "s" : "") + " a ride time: tap one to give it one" : "") + (photosOn ? "" : " · hidden in the replay");
       $("ph-info").textContent = photoNote;
       ensurePhotoLayer(); phSheetShow();
       try { timelineDraw(); } catch (e) {}
@@ -6367,7 +6354,7 @@ if (typeof exports === 'object' && typeof module === 'object') {
       burstReset(); map.triggerRepaint();
     }
     function photosReload() { loadPhotos(); photosReset(); try { estimate(); } catch (e) {} try { timelineDraw(); } catch (e) {} }
-    var HOW = { gps: ["GPS", "Placed by its GPS"], time: ["Time", "Placed by the time it was taken"], manual: ["You", "Placed by you"] };
+    var HOW = { gps: ["GPS", "Placed by its time; its GPS agrees"], time: ["Time", "Placed by the time it was taken"], manual: ["You", "Placed by you"] };
     /** The sheet: the on/off switch, a strip of every photo, and what can be done with the one tapped. */
     function phSheetShow() {
       var sw = $("ph-onoff"); sw.classList.toggle("on", photosOn); sw.setAttribute("aria-checked", photosOn); sw.querySelector("span").textContent = photosOn ? "Shown" : "Hidden";
@@ -6380,7 +6367,10 @@ if (typeof exports === 'object' && typeof module === 'object') {
       if (!it) phSel = null;
       $("ph-act").classList.toggle("on", !!it);
       if (it) {
-        $("ph-act-t").textContent = it.ph ? HOW[it.how][1] + " · " + clock(it.ph.t) + " into the ride" : "No time or GPS from this ride. Choose its spot on the route.";
+        $("ph-act-t").textContent = it.ph ? HOW[it.how][1] + " · " + clock(it.ph.t) + " into the ride" : it.o && it.o.t > 0 ? "Taken " + new Date(it.o.t).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + ", outside this ride. Give it a ride time." : "No time it was taken. Give it a ride time.";
+        $("ph-at").value = it.ph ? clock(it.ph.t) : ""; $("ph-at").classList.remove("warn");
+        var gp = it.ph ? [] : gpsPasses(it.o || {});
+        $("ph-gpsp").innerHTML = gp.length ? '<span class="muted">Near its GPS at</span>' + gp.map(function (s2) { return '<button data-at="' + s2 + '">' + clock(s2) + "</button>"; }).join("") : "";
         $("ph-spot").textContent = it.ph ? "Move it" : "Choose its spot";
         $("ph-auto").style.display = it.how === "manual" ? "" : "none";
         edShow();
@@ -6392,6 +6382,15 @@ if (typeof exports === 'object' && typeof module === 'object') {
       var f = b.getAttribute("data-f"); phSel = phSel === f ? null : f; phSheetShow();
     };
     $("ph-onoff").onclick = function () { photosOn = !photosOn; pref("replayPhotosOff:" + ID, photosOn ? "0" : "1"); photosReload(); };
+    /* A ride time for the selected photo: typed (h:mm:ss or m:ss), or one of the passes near its GPS. */
+    function phAtSet(s2) { if (!phSel || !B.photoPlace) return; B.photoPlace(+ID, phSel, Math.round(Math.max(0, Math.min(d.dur, s2)) * 10) / 10); photosReload(); }
+    $("ph-at-go").onclick = function () {
+      var p2 = String($("ph-at").value).trim().split(":").map(Number), s2 = p2.length && !p2.some(isNaN) ? p2.reduce(function (a, b) { return a * 60 + b; }, 0) : NaN;
+      if (isNaN(s2) || s2 < 0 || s2 > d.dur + 1) { $("ph-at").classList.add("warn"); return; }
+      phAtSet(s2);
+    };
+    $("ph-at").addEventListener("keydown", function (e) { if (e.key === "Enter") $("ph-at-go").click(); });
+    $("ph-gpsp").onclick = function (e) { var b = e.target.closest && e.target.closest("button[data-at]"); if (b) phAtSet(+b.getAttribute("data-at")); };
     $("ph-auto").onclick = function () { if (!phSel || !B.photoPlace) return; B.photoPlace(+ID, phSel, -1); photosReload(); };
     $("ph-del").onclick = function () { if (!phSel || !B.photoRemove || !confirm("Remove this photo from the replay?")) return; B.photoRemove(+ID, phSel); phSel = null; photosReload(); };
     /* Choosing a spot: the sheet steps aside, the replay pauses, and the seek bar moves the arrow; "Place here" pins the photo to that ride time. */
