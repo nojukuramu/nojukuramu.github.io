@@ -4489,9 +4489,9 @@ if (typeof exports === 'object' && typeof module === 'object') {
           var sf = gF != null && gB != null ? (gF - gB) / (2 * s1) : 0, sr = gR != null && gL != null ? (gR - gL) / (2 * s2) : 0;
           sf = Math.max(-1.2, Math.min(1.2, sf)); sr = Math.max(-1.2, Math.min(1.2, sr));
           if (rSlope.g == null || Math.abs(g0 - rSlope.g) > 4 * L) { rSlope.g = g0; rSlope.f = sf; rSlope.r = sr; }
+          else if (!playing) { rSlope.g = g0; rSlope.f = sf; rSlope.r = sr; } // paused: lie on the slope at once
           else { rSlope.g += (g0 - rSlope.g) * 0.3; rSlope.f += (sf - rSlope.f) * 0.2; rSlope.r += (sr - rSlope.r) * 0.2; }
         } else { rSlope.g = 0; rSlope.f = 0; rSlope.r = 0; }
-        rn.k = (rn.k || 0) + 1; if (rn.k < 40 && map.triggerRepaint) map.triggerRepaint(); // let the easing settle while paused
         var C = maplibregl.MercatorCoordinate.fromLngLat([rn.lon, rn.lat], 0), u = C.meterInMercatorCoordinateUnits();
         var lift = 0.06 * L + 0.4;
         // a point q (across, along, in L) at h metres above the slope: [x, y, z] relative to C, in mercator units
@@ -6464,6 +6464,27 @@ if (typeof exports === 'object' && typeof module === 'object') {
         map.once("idle", f); map.triggerRepaint(); setTimeout(f, maxMs || 12000);
       });
     }
+    /* "idle" also waits for fades, label placement and any queued repaint, not only tiles. Balanced and Fast
+       wait for this instead: checked after each render, it resolves as soon as the frame's tiles are in, which for
+       most frames (the camera needs no new tiles) is the very next render. */
+    function waitTiles(maxMs) {
+      return new Promise(function (res) {
+        var done = false, to = 0;
+        function fin() { if (done) return; done = true; clearTimeout(to); map.off("render", chk); res(); }
+        function chk() { var ok = true; try { ok = map.areTilesLoaded(); } catch (e) {} if (ok) fin(); }
+        map.on("render", chk); to = setTimeout(fin, maxMs || 6000); map.triggerRepaint();
+      });
+    }
+    /** No fades while rendering: a fading tile or label keeps the map busy and is half-drawn in the frame. Returns the undo. */
+    function fadesOff() {
+      var fd = map._fadeDuration, saved = [];
+      try { map._fadeDuration = 0; } catch (e) {}
+      try { (map.getStyle().layers || []).forEach(function (l) { if (l.type === "raster") { saved.push([l.id, map.getPaintProperty(l.id, "raster-fade-duration")]); map.setPaintProperty(l.id, "raster-fade-duration", 0); } }); } catch (e) {}
+      return function () {
+        try { map._fadeDuration = fd; } catch (e) {}
+        saved.forEach(function (x) { try { if (map.getLayer(x[0])) map.setPaintProperty(x[0], "raster-fade-duration", x[1] == null ? undefined : x[1]); } catch (e) {} });
+      };
+    }
     /** The finished map picture: grab it in the render event, while the WebGL buffer still holds it. */
     var grabTmp = null;
     function grabMap(ctx, W, H) {
@@ -6566,7 +6587,8 @@ if (typeof exports === 'object' && typeof module === 'object') {
          and the video must keep the frame it started with, with the panels where they were. */
       var lockEl = $("replay"), lockCss = lockEl.style.cssText, lr = lockEl.getBoundingClientRect();
       lockEl.style.right = "auto"; lockEl.style.bottom = "auto"; lockEl.style.width = lr.width + "px"; lockEl.style.height = lr.height + "px";
-      var restorePr = function () { shotEnd(); document.body.classList.remove("rendering"); try { map.setPixelRatio(oldPr); } catch (e) {} lockEl.style.cssText = lockCss; try { map.resize(); } catch (e) {} };
+      var fadesBack = fadesOff();
+      var restorePr = function () { shotEnd(); fadesBack(); document.body.classList.remove("rendering"); try { map.setPixelRatio(oldPr); } catch (e) {} lockEl.style.cssText = lockCss; try { map.resize(); } catch (e) {} };
       var muxer, enc, codecCfg, failed = null;
       return pickCodec(W, H).then(function (cfg) {
         if (!cfg) throw new Error("No video encoder for " + W + "×" + H + ".");
@@ -6608,10 +6630,10 @@ if (typeof exports === 'object' && typeof module === 'object') {
           if (rendCancel) throw new Error("cancelled");
           if (rideEndI >= 0 && i >= rideEndI + nEnd) return null;
           return frameAt().then(function () {
-            // Best waits for everything twice over; Balanced waits once; Fast gives tiles a moment, then goes.
+            // Best waits for full idle twice over; Balanced waits for the tiles; Fast gives tiles a moment, then goes.
             if (Q === "best") return Promise.all([waitIdle(15000), shadows && sunOn() ? shadows.idle(6000) : null]).then(function () { return waitIdle(4000); });
-            if (Q === "bal") return Promise.all([waitIdle(6000), shadows && sunOn() && i % sunEvery === 0 ? shadows.idle(2000) : null]);
-            return waitIdle(700);
+            if (Q === "bal") return Promise.all([waitTiles(6000), shadows && sunOn() && i % sunEvery === 0 ? shadows.idle(2000) : null]);
+            return waitTiles(700);
           }).then(function () {
             // The same background the screen shows behind the map, so the video matches it.
             ctx.fillStyle = getComputedStyle($("map")).backgroundColor || "#2E3528"; ctx.fillRect(0, 0, W, H);
