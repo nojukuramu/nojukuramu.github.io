@@ -5452,9 +5452,9 @@ if (typeof exports === 'object' && typeof module === 'object') {
         // the clock reaches a photo that has not had its turn: wait here (it is where the rider stood), for at most B_HOLD s per place
         var nx = null; for (var j = 0; j < photos.length; j++) { var q = photos[j]; if (!q.bPlan && q.img && !q.done) { nx = q; break; } }
         if (nx && sOf(nx) <= 0.3) {
-          if (!bHold || placeD(nx, bHold) > B_PLACE) bHold = { lon: nx.lon, lat: nx.lat, T: 0 };
+          if (!bHold || placeD(nx, bHold) > B_PLACE || !sameVisit(bHold, nx)) bHold = { lon: nx.lon, lat: nx.lat, t: nx.t, T: 0 }; // back here hours later: a new wait
           bHold.T += dw; wait = bHold.T <= B_HOLD;
-          if (!wait) photos.forEach(function (q2) { if (!q2.bPlan && placeD(q2, bHold) <= B_PLACE && sOf(q2) <= B_PLAN) { q2.bPlan = true; q2.bSkip = true; } }); // too many here: the rest keep their pins
+          if (!wait) photos.forEach(function (q2) { if (!q2.bPlan && placeD(q2, bHold) <= B_PLACE && sOf(q2) <= B_PLAN && sameVisit(nx, q2)) { q2.bPlan = true; q2.bSkip = true; } }); // too many here: the rest keep their pins (a later visit keeps its own turn)
         }
       }
       if (!wait && bHold && next && placeD(next, bHold) > B_PLACE) bHold = null;
@@ -5793,10 +5793,22 @@ if (typeof exports === 'object' && typeof module === 'object') {
     }
     /** Two photos as one subject: the look, within tolerance, and the same faces. */
     function alikeP(a, b) { return alikeD(a, b) <= alikeMax(a, b) * PHO.sim && faceOK(a, b); }
+    /* One visit, not one place: a trail can pass the same spot hours apart (out and back, a loop, a summit reached twice). Two photos belong
+       to one visit only if the rider never left the spot between them: every route point between their times stays within reach of it.
+       Without this, Burst's look-ahead (screen seconds, so an hour or more of ride at a fast replay) pulled a later pass's photos into the
+       first pass's deck, and they popped out hours early. */
+    function sameVisit(a, b) {
+      var t1 = Math.min(a.t, b.t), t2 = Math.max(a.t, b.t), R = Math.max(150, (PHO.near || 250) + 50);
+      if (t2 - t1 < 30) return true;
+      var k1 = fIdx(t1), k2 = fIdx(t2), st = Math.max(1, Math.floor((k2 - k1) / 400)), cl = Math.cos(a.lat * Math.PI / 180);
+      for (var k = k1; k <= k2; k += st) if (Math.hypot((fLon[k] - a.lon) * 111320 * cl, (fLat[k] - a.lat) * 111320) > R) return false;
+      return true;
+    }
+    window.__sameVisit = function (i, j) { return sameVisit(photos[i], photos[j]); }; // for checking over DevTools
     /** Burst: does o join the deck being gathered for next (items so far), ds screen seconds after it? */
     function burstAlike(o, next, items, ds) {
       var g = phoGrp();
-      if (g === "off") return false;
+      if (g === "off" || !sameVisit(next, o)) return false;
       if (g === "place") return faceOK(o, next);
       var known = (o.emb && next.emb) || (o.pa && next.pa) || (o.sig && next.sig);
       return known ? items.some(function (x) { return alikeP(o, x); }) : ds <= B_STACK; // no look yet: the old rule
@@ -5807,7 +5819,8 @@ if (typeof exports === 'object' && typeof module === 'object') {
       photos.forEach(function (ph) {
         var far = g0 && Math.hypot((ph.lon - g0.lon) * 111320 * Math.cos(ph.lat * Math.PI / 180), (ph.lat - g0.lat) * 111320) > near;
         var split = !g0 || g === "off" || ph.t - g0.t > win || far || (SHOT && cur.length >= mx) || (!SHOT && PHO.max && cur.length >= mx);
-        if (!split && g === "look") split = !cur.some(function (x) { return alikeP(ph, x); });
+        if (!split && !sameVisit(g0, ph)) split = true;
+        else if (!split && g === "look") split = !cur.some(function (x) { return alikeP(ph, x); });
         else if (!split) split = !cur.every(function (x) { return faceOK(ph, x); });
         if (split) { gid++; g0 = ph; cur = []; }
         cur.push(ph); ph.group = gid;
