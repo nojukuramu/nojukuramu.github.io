@@ -184,6 +184,12 @@
   #ph-act { display:none; border:1px solid var(--line); border-radius:10px; padding:8px; margin-bottom:8px; background:var(--panel-2); }
   #ph-act.on { display:block; }
   #ph-act .muted { margin-bottom:6px; }
+  #ph-when { margin-top:8px; }
+  #ph-gpsp:empty { display:none; }
+  #ph-gpsp .muted { align-self:center; margin:0 4px 0 0; }
+  #ph-edit { margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
+  #ph-edit .bar { margin-bottom:4px; }
+  .pt img { transform-origin:50% 50%; }
   #ph-pick { top:8px; display:none; z-index:7; align-items:center; gap:10px; flex-wrap:wrap; }
   #ph-pick.on { display:flex; }
   #ph-pick img { width:52px; height:52px; object-fit:cover; border-radius:9px; flex:none; }
@@ -277,6 +283,8 @@
   <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M20.5 16l-5-5-9 8.5"/></symbol>
   <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5"/></symbol>
+  <symbol id="i-rotl" viewBox="0 0 24 24"><path d="M7 4.5 3.5 8 7 11.5M3.5 8H14a6.5 6.5 0 0 1 0 13h-3"/></symbol>
+  <symbol id="i-rotr" viewBox="0 0 24 24"><path d="M17 4.5 20.5 8 17 11.5M20.5 8H10a6.5 6.5 0 0 0 0 13h3"/></symbol>
   <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v4h4"/></symbol>
   <symbol id="i-save" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M4.5 19.5h15"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
@@ -399,11 +407,31 @@
           <div class="ph-head"><h3 style="margin:0">Photos in the replay<button class="infobtn" data-info="photos" aria-label="How photos are placed"><svg class="i"><use href="#i-info"/></svg></button></h3><button id="ph-onoff" class="tgl" role="switch" style="width:auto;gap:8px"><span>On</span><i></i></button></div>
           <div id="ph-info" class="hint"></div>
           <div id="ph-strip"></div>
-          <div id="ph-act"><div class="muted" id="ph-act-t"></div><div class="bar"><button id="ph-spot" class="on">Choose its spot</button><button id="ph-auto"><svg class="i"><use href="#i-reset"/></svg>Auto</button><button id="ph-del"><svg class="i"><use href="#i-trash"/></svg>Remove</button></div></div>
+          <div id="ph-act"><div class="muted" id="ph-act-t"></div><div class="bar"><button id="ph-spot" class="on">Choose its spot</button><button id="ph-auto"><svg class="i"><use href="#i-reset"/></svg>Auto</button><button id="ph-del"><svg class="i"><use href="#i-trash"/></svg>Remove</button></div><label class="fld" id="ph-when"><span>Ride time</span><div class="pair"><input type="text" id="ph-at" placeholder="h:mm:ss" style="width:100%"></div><button id="ph-at-go">Place</button></label><div class="bar" id="ph-gpsp"></div><div id="ph-edit"><div class="bar"><button id="ph-rotl" title="Rotate left" aria-label="Rotate left"><svg class="i"><use href="#i-rotl"/></svg></button><button id="ph-rotr" title="Rotate right" aria-label="Rotate right"><svg class="i"><use href="#i-rotr"/></svg></button><button id="ph-ed-rst"><svg class="i"><use href="#i-reset"/></svg>Original</button></div><label class="fld"><span>Zoom</span><input id="ph-zoom" type="range" min="1" max="4" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label><label class="fld ph-pan"><span>Pan across</span><input id="ph-panx" type="range" min="-1" max="1" step="0.02" value="0" data-unit="" data-def="0"><output></output></label><label class="fld ph-pan"><span>Pan up / down</span><input id="ph-pany" type="range" min="-1" max="1" step="0.02" value="0" data-unit="" data-def="0"><output></output></label></div></div>
         </div>
         <div class="grp"><h3>Style</h3>
           <div class="seg"><button id="pm-moment">Moment</button><button id="pm-burst">Burst</button></div>
           <div class="hint" id="pm-note"></div>
+        </div>
+        <div class="grp"><h3>Grouping<button class="infobtn" data-info="grouping" aria-label="How photos are grouped"><svg class="i"><use href="#i-info"/></svg></button></h3>
+          <label class="fld"><span>Group by</span><select id="ph-grp"><option value="auto">Auto</option><option value="look">Similar look</option><option value="place">Time and place</option><option value="off">Never</option></select><span></span></label>
+          <label class="fld"><span>Faces</span><select id="ph-face"><option value="off">Ignore</option><option value="loose">Loose</option><option value="normal">Normal</option><option value="strict">Strict</option></select><button class="infobtn" data-info="faces" aria-label="How faces are compared"><svg class="i"><use href="#i-info"/></svg></button></label>
+          <label class="fld"><span>Look tolerance</span><input id="ph-sim" type="range" min="0.4" max="2" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label>
+          <label class="fld"><span>Same place within</span><input id="ph-near" type="range" min="0" max="1000" step="10" value="0" data-unit=" m" data-def="0"><output></output></label>
+          <label class="fld pho-b"><span>Look ahead</span><input id="ph-look" type="range" min="1" max="20" step="0.5" value="6" data-unit=" s" data-def="6"><output></output></label>
+          <label class="fld pho-m"><span>Within</span><input id="ph-win" type="range" min="1" max="60" step="1" value="10" data-unit=" min" data-def="10"><output></output></label>
+          <label class="fld"><span>Up to</span><input id="ph-max" type="range" min="0" max="12" step="1" value="0" data-unit=" per group" data-def="0"><output></output></label>
+          <label class="fld pho-b"><span>Front of the deck</span><select id="ph-order"><option value="sharp">Sharpest</option><option value="time">First taken</option></select><span></span></label>
+          <div class="hint" id="ph-ana"></div>
+        </div>
+        <div class="grp"><h3>Cards</h3>
+          <label class="fld"><span>Size</span><input id="ph-size" type="range" min="0.4" max="2.5" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label>
+          <label class="fld pho-m"><span>Hold each</span><input id="ph-hold" type="range" min="2" max="12" step="0.1" value="4.6" data-unit=" s" data-def="4.6"><output></output></label>
+          <label class="fld pho-m"><span>Next in group</span><input id="ph-swap" type="range" min="0.6" max="4" step="0.1" value="1.7" data-unit=" s" data-def="1.7"><output></output></label>
+          <label class="fld pho-b"><span>Spots at once</span><input id="ph-up" type="range" min="1" max="6" step="1" value="3" data-unit="" data-def="3"><output></output></label>
+          <label class="fld pho-b"><span>Wait at a stop</span><input id="ph-wait" type="range" min="0" max="30" step="0.5" value="8" data-unit=" s" data-def="8"><output></output></label>
+          <label class="fld pho-b"><span>Deck shuffle</span><input id="ph-shuf" type="range" min="0.25" max="1.5" step="0.05" value="0.55" data-unit=" s" data-def="0.55"><output></output></label>
+          <div class="btnrow"><button id="ph-opt-rst"><svg class="i"><use href="#i-reset"/></svg>Reset photo settings</button></div>
         </div>
         <div class="grp">
           <div class="btnrow"><button id="ph-add" class="on"><svg class="i"><use href="#i-plus"/></svg>Add photos</button><button id="ph-save" hidden><svg class="i"><use href="#i-save"/></svg>Save changes</button><button id="ph-clear">Remove all</button></div>
@@ -3714,6 +3742,7 @@ if (typeof exports === 'object' && typeof module === 'object') {
         photoPlace: function (r, f, at) { meta.forEach(function (o) { if (o.f === f) { if (at >= 0) o.at = at; else delete o.at; } }); },
         photoRemove: function (r, f) { meta = meta.filter(function (o) { return o.f !== f; }); },
         photoClear: function () { meta = []; },
+        photoAnno: function (f, pa) { meta.forEach(function (o) { if (o.f === f) o.pa = pa; }); },
         saveBlob: function (b, name, mime) {
           var u = URL.createObjectURL(new Blob([b], { type: mime })), a = document.createElement("a");
           a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); return u;
@@ -3838,7 +3867,9 @@ if (typeof exports === 'object' && typeof module === 'object') {
     stops: { title: "Stops", body: "<p><b>Keep</b> plays every second as it was recorded, stops included.</p><p><b>Shorten</b> keeps a stop up to 20 s as it was; past that, only a little more counts, never more than 90 s. A one-hour rest becomes a short, visible pause.</p><p><b>Skip</b> runs the clock only while the rider moves, so the line keeps flowing. The time shown is still the real time.</p><p>Clean view and the video use the same setting.</p>" },
     camera: { title: "The camera", body: "<p><b>Tilt</b> is how far the camera leans toward the horizon. It is lowered on its own when a hill would come between the camera and the rider.</p><p><b>Distance</b> moves the follow camera closer or farther, in zoom steps: one step is twice as close.</p><p><b>Field of view</b> is the lens. Wide shows more and exaggerates depth; narrow flattens it, like a long lens.</p><p><b>Turn smoothing</b> is how long the camera takes to swing after the route turns. Longer is calmer; shorter keeps the road ahead centred on twisty routes.</p>" },
     sun: { title: "Real sun and moon", body: "<p>The light is worked out for the minute and the place of each moment of the ride: where the sun and moon were, dawn and dusk colours, shadows from the hills, and the cloud cover the weather service recorded for that hour.</p><p>Off, the map is lit as a plain daytime map.</p>" },
-    photos: { title: "Photos in the replay", body: "<p>Each photo stands in 3D where it was taken: from its GPS, or else from the time it was taken, matched to where the ride was then.</p><p>A photo with neither waits in the list for you to choose its spot on the route. Drop pictures on the page to add them.</p><p><b>Moment</b> slows the replay at each photo and frames it. <b>Burst</b> keeps the speed and lets photos rise beside the trail as you pass.</p><p>Changes stay in this tab until <b>Save changes</b> writes a new file.</p>" },
+    photos: { title: "Photos in the replay", body: "<p>Each photo comes up at the time it was taken, where the ride was then. Its GPS sets where the card stands, when it agrees with that moment.</p><p>A photo with no time within the ride (none, or a camera clock that was off) is not guessed from its GPS alone, since a trail can pass one spot hours apart. It waits in the list: type its ride time, choose it on the route, or pick one of the passes near its GPS. Drop pictures on the page to add them.</p><p><b>Moment</b> slows the replay at each photo and frames it. <b>Burst</b> keeps the speed and lets photos rise beside the trail as you pass.</p><p>Changes stay in this tab until <b>Save changes</b> writes a new file.</p>" },
+    grouping: { title: "Grouping photos", body: "<p>Photos that belong together share one spot: a deck in <b>Burst</b>, one stop in <b>Moment</b>.</p><p><b>Auto</b> groups by look in Burst and by time and place in Moment, as before. <b>Similar look</b> groups only retakes of the same view. <b>Time and place</b> groups whatever was taken at one spot. <b>Never</b> gives every photo its own turn.</p><p><b>Look tolerance</b> above 1 groups more loosely, below 1 more strictly. <b>Same place within</b> left at Auto is 250 m in Burst and 300 m in Moment. <b>Up to</b> at Auto is 7 per deck, 3 per moment.</p><p>The look of each photo is read in this tab, with MediaPipe's image embedder, the first time photos are opened. Nothing is uploaded.</p>" },
+    faces: { title: "Faces", body: "<p>Two photos of the same spot can show different people. With faces on, each face is found (MediaPipe face detector), cut out and compared on its own, so a selfie of one person is not stacked with a selfie of another.</p><p><b>Normal</b> keeps photos apart when their faces differ. <b>Strict</b> also keeps a photo with a face apart from one without. <b>Loose</b> only splits clearly different faces.</p><p>Faces smaller than about a twentieth of the photo are ignored. This tells look-alikes apart, not identities: it is a guide for grouping, nothing more. It all runs in this tab.</p>" },
     frame: { title: "The frame", body: "<p>The stage is the video's frame. Pick its shape here and the preview is letterboxed to it, so what you see is what renders, overlays included.</p><p><b>Resolution</b> is the short side of the video; the long side follows the shape. The long side is capped at 4096 pixels, the most the map can draw.</p><p>Vertical shapes (9:16, 4:5) suit phone feeds; 16:9 suits a screen; 21:9 and 2.39:1 are cinema.</p>" },
     quality: { title: "Video quality", body: "<p>The video is made frame by frame, not recorded: for every frame the replay is stepped, the camera and light are set, and the map is waited for.</p><p><b>Best</b> waits until every tile and shadow is in. <b>Balanced</b> waits once. <b>Fast</b> gives the tiles a moment and moves on, for a quick draft.</p><p><b>Bitrate</b> at Auto scales with the size and frame rate. Raise it for sharper satellite detail; lower it for a smaller file.</p>" }
   };
@@ -3919,6 +3950,7 @@ if (typeof exports === 'object' && typeof module === 'object') {
     var o = inp.parentNode.querySelector("output"); if (!o) return;
     var v = +inp.value, u = inp.getAttribute("data-unit") || "";
     if (inp.id === "ov-scale") o.textContent = v ? v + "%" : "Auto";
+    else if ((inp.id === "ph-near" || inp.id === "ph-max") && !v) o.textContent = "Auto";
     else if (inp.id === "cam-dist") o.textContent = v === 0 ? "0" : (v > 0 ? "+" : "") + v.toFixed(2).replace(/0$/, "");
     else o.textContent = (Math.round(v * 100) / 100) + u;
   }
@@ -4489,9 +4521,9 @@ if (typeof exports === 'object' && typeof module === 'object') {
           var sf = gF != null && gB != null ? (gF - gB) / (2 * s1) : 0, sr = gR != null && gL != null ? (gR - gL) / (2 * s2) : 0;
           sf = Math.max(-1.2, Math.min(1.2, sf)); sr = Math.max(-1.2, Math.min(1.2, sr));
           if (rSlope.g == null || Math.abs(g0 - rSlope.g) > 4 * L) { rSlope.g = g0; rSlope.f = sf; rSlope.r = sr; }
+          else if (!playing) { rSlope.g = g0; rSlope.f = sf; rSlope.r = sr; } // paused: lie on the slope at once
           else { rSlope.g += (g0 - rSlope.g) * 0.3; rSlope.f += (sf - rSlope.f) * 0.2; rSlope.r += (sr - rSlope.r) * 0.2; }
         } else { rSlope.g = 0; rSlope.f = 0; rSlope.r = 0; }
-        rn.k = (rn.k || 0) + 1; if (rn.k < 40 && map.triggerRepaint) map.triggerRepaint(); // let the easing settle while paused
         var C = maplibregl.MercatorCoordinate.fromLngLat([rn.lon, rn.lat], 0), u = C.meterInMercatorCoordinateUnits();
         var lift = 0.06 * L + 0.4;
         // a point q (across, along, in L) at h metres above the slope: [x, y, z] relative to C, in mercator units
@@ -5260,7 +5292,9 @@ if (typeof exports === 'object' && typeof module === 'object') {
     var photoAll = [], photosOn = pref("replayPhotosOff:" + ID) !== "1", phSel = null, phPick = null;
     /** Resolves once every photo picture is decoded (or failed), at most maxMs. The video waits for this before its first frame. */
     function photosReady(maxMs) {
-      return Promise.race([Promise.all(photos.map(function (ph) { return ph.ready || null; })), new Promise(function (r) { setTimeout(r, maxMs || 15000); })]);
+      var pics = Promise.race([Promise.all(photos.map(function (ph) { return ph.ready || null; })), new Promise(function (r) { setTimeout(r, maxMs || 15000); })]);
+      // then the faces and looks, which decide the groups (the first time, the models load too): at most two minutes
+      return pics.then(function () { return Promise.race([paRun(), new Promise(function (r) { setTimeout(r, 120000); })]); }).then(function () { if (!moment) momentGroups(); });
     }
     /* Photo moments: when the rider reaches a photo, the replay slows almost to a stop, the camera frames
        the arrow and the photo, the photo unfolds, holds, folds away, and the replay speeds up again. Every
@@ -5324,7 +5358,7 @@ if (typeof exports === 'object' && typeof module === 'object') {
       var g00 = map.queryTerrainElevation ? map.queryTerrainElevation([pv.lon, pv.lat]) : null; if (g00 != null) hold.v = g00;
       var dist = zoomDist(pv.zoom, CT, TS, pv.lat), aMax = Math.max.apply(null, items.map(function (x) { return x.w / x.h; }));
       // 26% of the screen's height, but never wider than 42% of its width (a wide photo on a tall phone), between PHOTO_H and 4x PHOTO_H
-      var S0 = Math.min(4 * PH, Math.max(PH, Math.min(0.26 * H, 0.42 * W / aMax) / F * dist));
+      var S0 = Math.min(4 * PH, Math.max(PH, Math.min(0.26 * PHO.size * H, 0.42 * W / aMax) / F * dist));
       function camAt(b) { var c = camFromOpts([pv.lon, pv.lat], hAt(0, 0), pv.zoom, pv.pitch, b, CT, TS); return { C: [fr.x(c.lng), fr.y(c.lat), c.alt], B: camBasis(b, pv.pitch) }; }
       var views = [camAt(pv.b), camAt(pv.b + 15), camAt(pv.b - 15)], V0 = views[0];
       var rider = [0, 0, hAt(0, 0) + 2], x0 = fD[fIdx(ph0.t)] || 0, route = [], RB = camBasis(pv.b, pv.pitch).r;
@@ -5361,7 +5395,7 @@ if (typeof exports === 'object' && typeof module === 'object') {
         var clr = 0; for (var j = 0; j < 4; j++) if (marchHit(hAt, V0.C, qs[0].c[j], 0, 10, 15, 2) < 0) clr++;
         if (clr < 3 || marchHit(hAt, V0.C, qs[0].ctr, 0, 10, 15, 2) >= 0) return null;                   // not behind a hill
         var rq = projPt(V0.C, V0.B, rider, F, W, H), cxp = (bx.x0 + bx.x1) / 2, cyp = (bx.y0 + bx.y1) / 2, tx = rq && cxp < rq[0] ? 0.28 * W : 0.72 * W;
-        var cost = Math.abs(cxp - tx) / W + Math.abs(cyp - 0.4 * H) / H + Math.abs((bx.y1 - bx.y0) / H - 0.26) * 2 + (side !== ph0.side ? 0.15 : 0);
+        var cost = Math.abs(cxp - tx) / W + Math.abs(cyp - 0.4 * H) / H + Math.abs((bx.y1 - bx.y0) / H - 0.26 * PHO.size) * 2 + (side !== ph0.side ? 0.15 : 0);
         if (curV && cur && hides(curV.C, [fr.x(riderLast ? riderLast[0] : pv.lon), fr.y(riderLast ? riderLast[1] : pv.lat), hAt(fr.x(riderLast ? riderLast[0] : pv.lon), fr.y(riderLast ? riderLast[1] : pv.lat)) + 2], qs)) cost += 1; // soft: not over the arrow as it rises
         return { side: side, dIn: dIn, hb: hb, S: S, qs: qs, cost: cost, ctr: [cxp, cyp] };
       }
@@ -5409,11 +5443,10 @@ if (typeof exports === 'object' && typeof module === 'object') {
               if (o === next || o.bPlan || !o.img || o.done || items.length >= B_FAN) return;
               var ds = sOf(o) - s0, near = placeD(o, next) <= B_NEAR;
               if (ds < 0 || !near) return;
-              var known = (o.emb && next.emb) || (o.sig && next.sig);
-              var alike = known ? items.some(function (x) { return alikeD(o, x) <= alikeMax(o, x); }) : ds <= B_STACK; // no look yet: the old rule
-              if (alike && ds <= B_LOOK) items.push(o);
+              if (ds <= B_LOOK && burstAlike(o, next, items, ds)) items.push(o);
             });
-            items.sort(function (a, b) { return ((b.sig && b.sig.sharp) || 0) - ((a.sig && a.sig.sharp) || 0); });
+            if (PHO.order === "time") items.sort(function (a, b) { return a.t - b.t; });
+            else items.sort(function (a, b) { return ((b.sig && b.sig.sharp) || 0) - ((a.sig && a.sig.sharp) || 0); });
             var sp = null; try { sp = burstPlan(items); } catch (e) { sp = null; }
             if (sp) { sp.tau = 0; sp.sPlan = last && same ? Math.max(s0, 1.3) : s0; sp.ext = items.length > 1 ? Math.min(4.2, items.length * DECK_SH + 0.3) : 0; bSpots.push(sp); } // a late one at a stop still rises in full
             else items.forEach(function (x) { x.bPlan = true; x.bSkip = true; });
@@ -5422,9 +5455,9 @@ if (typeof exports === 'object' && typeof module === 'object') {
         // the clock reaches a photo that has not had its turn: wait here (it is where the rider stood), for at most B_HOLD s per place
         var nx = null; for (var j = 0; j < photos.length; j++) { var q = photos[j]; if (!q.bPlan && q.img && !q.done) { nx = q; break; } }
         if (nx && sOf(nx) <= 0.3) {
-          if (!bHold || placeD(nx, bHold) > B_PLACE) bHold = { lon: nx.lon, lat: nx.lat, T: 0 };
+          if (!bHold || placeD(nx, bHold) > B_PLACE || !sameVisit(bHold, nx)) bHold = { lon: nx.lon, lat: nx.lat, t: nx.t, T: 0 }; // back here hours later: a new wait
           bHold.T += dw; wait = bHold.T <= B_HOLD;
-          if (!wait) photos.forEach(function (q2) { if (!q2.bPlan && placeD(q2, bHold) <= B_PLACE && sOf(q2) <= B_PLAN) { q2.bPlan = true; q2.bSkip = true; } }); // too many here: the rest keep their pins
+          if (!wait) photos.forEach(function (q2) { if (!q2.bPlan && placeD(q2, bHold) <= B_PLACE && sOf(q2) <= B_PLAN && sameVisit(nx, q2)) { q2.bPlan = true; q2.bSkip = true; } }); // too many here: the rest keep their pins (a later visit keeps its own turn)
         }
       }
       if (!wait && bHold && next && placeD(next, bHold) > B_PLACE) bHold = null;
@@ -5479,7 +5512,7 @@ if (typeof exports === 'object' && typeof module === 'object') {
       return { sc: sc, oW: 0.05 * wFront * d + dk.slide * 0.62 * wFront, pb: -0.06 * hM * dk.d, dz: 0.035 * hM * d + dk.slide * 0.12 * hM, turn: d < 1 ? dk.turn * d : dk.turn };
     }
     function inMoment(ph) { return !!moment && moment.group.indexOf(ph) >= 0; }
-    var PHOTO_H = d.category === "HIKE" ? 110 : 200; // metres tall: big enough to read from the follow camera
+    var PHOTO_H0 = d.category === "HIKE" ? 110 : 200, PHOTO_H = PHOTO_H0; // metres tall: big enough to read from the follow camera (times the Size setting)
     var PV = "attribute vec3 a_pos; attribute vec2 a_uv; uniform mat4 u_m; varying vec2 v_uv; void main() { gl_Position = u_m * vec4(a_pos, 1.0); v_uv = a_uv; }";
     var PF = "precision mediump float; varying vec2 v_uv; uniform sampler2D u_tex; uniform float u_a; uniform vec3 u_tint; uniform float u_solid; uniform float u_ring;" +
       " void main() {" +
@@ -5646,39 +5679,20 @@ if (typeof exports === 'object' && typeof module === 'object') {
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
       }
     };
-    /** Where on the route a photo belongs: its GPS when it has one, else the moment it was taken. */
+    /** Where and when a photo appears. Its time decides when: the moment it was taken, on the route where the ride was then. Its GPS only
+        decides where the card stands, and only when it agrees with that moment (the rider was near the spot then). A photo with no time
+        within the ride (none, or the camera's clock was off) is not guessed from its GPS alone, since a trail can pass one spot hours
+        apart: it waits in the list for the owner to give it a ride time, typed, chosen on the route, or one of the passes near its GPS. */
+    var PH_EARLY = 900; // taken up to 15 min before the start or after the end still counts: it goes at the start or the end
+    function photoTimeIn(o) { if (!(o.t > 0)) return null; var s0 = (o.t - d.t0) / 1000; return s0 >= -PH_EARLY && s0 <= d.dur + PH_EARLY ? Math.max(0, Math.min(d.dur, s0)) : null; }
     function placePhoto(o) {
-      var k = -1, gpsOk = false, best25 = false, man = o.at != null && o.at >= 0;
-      if (man) k = fIdx(Math.max(0, Math.min(d.dur, o.at))); // the owner chose its spot: that ride time, on the route
-      else if (o.lat != null && o.lon != null) {
-        /* Where the arrow passes the photo's spot. A trail can pass the same place twice (out and back), so
-           of all the passes near the spot, take the one at the time the photo was taken; the moment then
-           fires exactly when the arrow is there. */
-        var cosl = Math.cos(o.lat * Math.PI / 180), dist = function (q) { var dx = (fLon[q] - o.lon) * cosl, dy = fLat[q] - o.lat; return Math.sqrt(dx * dx + dy * dy) * 111320; };
-        var best = 1e18;
-        for (var q = 0; q < fLon.length; q++) { var dq = dist(q); if (dq < best) { best = dq; k = q; } }
-        if (best > 600) k = -1; // not on this route: ignore its GPS, place it by time
-        else {
-          gpsOk = true;
-          var near = Math.max(60, best + 40), takenS = o.t > 0 ? (o.t - d.t0) / 1000 : null, passes = [], cur = null;
-          for (var q2 = 0; q2 < fLon.length; q2++) {
-            var dq2 = dist(q2);
-            if (dq2 <= near) { if (!cur || dq2 < cur.d) { if (!cur) { cur = { k: q2, d: dq2 }; passes.push(cur); } else { cur.k = q2; cur.d = dq2; } } }
-            else cur = null; // left the spot: the next visit is a new pass
-          }
-          if (passes.length > 1) {
-            passes.sort(function (a, b) { return takenS != null ? Math.abs(fT[a.k] - takenS) - Math.abs(fT[b.k] - takenS) : fT[a.k] - fT[b.k]; });
-            k = passes[0].k;
-          }
-          best25 = dist(k) > 25; // more than 25 m from the route point it belongs to: pin it on the route (the shot needs the card near the trail)
-        }
+      var man = o.at != null && o.at >= 0, tAt = man ? Math.max(0, Math.min(d.dur, o.at)) : photoTimeIn(o), how = man ? "manual" : "time";
+      if (tAt == null) return null;
+      var k = fIdx(tAt), plon = fLon[k], plat = fLat[k];
+      if (!man && o.lat != null && o.lon != null) {
+        var pq = fixAt(tAt), dk = pq ? Math.hypot((pq[0] - o.lon) * 111320 * Math.cos(o.lat * Math.PI / 180), (pq[1] - o.lat) * 111320) : 1e9;
+        if (dk <= 150) { how = "gps"; if (!SHOT || dk <= 25) { plon = o.lon; plat = o.lat; } } // agrees; the shot wants the card by the trail, so a spot over 25 m off stays on the route
       }
-      if (k < 0 && o.t > 0 && !man) {
-        var s = (o.t - d.t0) / 1000;
-        if (s < -900 || s > d.dur + 900) return null; // not taken during this ride
-        k = fIdx(Math.max(0, Math.min(d.dur, s)));
-      }
-      if (k < 0) return null;
       var ka = Math.max(0, k - 3), kb = Math.min(fLon.length - 1, k + 3);
       var face = (brg([fLon[ka], fLat[ka]], [fLon[kb], fLat[kb]]) + 360) % 360; // its width runs across the route
       // The free side: whichever side of the trail has less of the route on it nearby.
@@ -5689,18 +5703,21 @@ if (typeof exports === 'object' && typeof module === 'object') {
         if (ex * ex + ny * ny > 500 * 500) continue;
         var dd2 = ex * we + ny * wn; if (dd2 > 25) cntR++; else if (dd2 < -25) cntL++;
       }
-      var plon = gpsOk && !(SHOT && best25) ? o.lon : fLon[k], plat = gpsOk && !(SHOT && best25) ? o.lat : fLat[k], tAt = fT[k];
-      /* Its time: when it was taken, if the rider was at the spot then (many photos at one stop each keep their own moment, in order);
-         else the time the arrow passes the spot. */
-      if (man) tAt = Math.max(0, Math.min(d.dur, o.at));
-      else if (o.t > 0) {
-        var tk = (o.t - d.t0) / 1000;
-        if (tk >= 0 && tk <= d.dur) {
-          var pq = fixAt(tk), dk = pq ? Math.hypot((pq[0] - plon) * 111320 * Math.cos(plat * Math.PI / 180), (pq[1] - plat) * 111320) : 1e9;
-          if (!gpsOk || dk <= Math.max(40, (gpsOk ? best : 0) + 30)) tAt = tk;
-        }
+      return { how: how, face: face, side: cntR <= cntL ? 1 : -1, p: 0, f: o.f, t: tAt, lon: plon, lat: plat, w: o.w || 4, h: o.h || 3, a: 0, img: null, tex: null };
+    }
+    /** The passes of the route near a photo's GPS (at most 6), as ride times: offered for a photo with no time within the ride. */
+    function gpsPasses(o) {
+      if (o.lat == null || o.lon == null) return [];
+      var cl = Math.cos(o.lat * Math.PI / 180), dist = function (q) { return Math.hypot((fLon[q] - o.lon) * cl, fLat[q] - o.lat) * 111320; }, best = 1e18;
+      for (var q = 0; q < fLon.length; q++) best = Math.min(best, dist(q));
+      if (best > 600) return [];
+      var near = Math.max(60, best + 40), out = [], cur = null;
+      for (var q2 = 0; q2 < fLon.length; q2++) {
+        var dq = dist(q2);
+        if (dq <= near) { if (!cur) { cur = { k: q2, d: dq }; out.push(cur); } else if (dq < cur.d) { cur.k = q2; cur.d = dq; } }
+        else cur = null; // left the spot: the next visit is a new pass
       }
-      return { how: man ? "manual" : gpsOk ? "gps" : "time", face: face, side: cntR <= cntL ? 1 : -1, p: 0, f: o.f, t: tAt, lon: plon, lat: plat, w: o.w || 4, h: o.h || 3, a: 0, img: null, tex: null };
+      return out.slice(0, 6).map(function (x) { return fT[x.k]; });
     }
     /* ---- what a photo looks like, for grouping similar ones in Burst ----
        dh: a 64-bit difference hash (9x8 grey: is each pixel brighter than its right neighbour), which survives resizing,
@@ -5737,8 +5754,150 @@ if (typeof exports === 'object' && typeof module === 'object') {
       try { var bin = atob(b64), n = bin.length, u8 = new Uint8Array(n); for (var i = 0; i < n; i++) u8[i] = bin.charCodeAt(i); return new Float32Array(u8.buffer); } catch (e) { return null; }
     }
     function embDiff(a, b) { var s = 0, n = Math.min(a.length, b.length); for (var i = 0; i < n; i++) s += a[i] * b[i]; return 1 - s; }
-    function alikeD(a, b) { return a.emb && b.emb ? embDiff(a.emb, b.emb) : photoDiff(a, b); }
-    function alikeMax(a, b) { return a.emb && b.emb ? SIMILAR_E : SIMILAR; }
+    // The app's vectors first; else the ones read here (same embedder, but they are never mixed with the app's); else the look hash.
+    function alikeD(a, b) { return a.emb && b.emb ? embDiff(a.emb, b.emb) : a.pa && b.pa ? embDiff(a.pa.e, b.pa.e) : photoDiff(a, b); }
+    function alikeMax(a, b) { return (a.emb && b.emb) || (a.pa && b.pa) ? SIMILAR_E : SIMILAR; }
+    /* ---- photo settings (Photos tab): every default is the old fixed value, so an untouched tab groups and paces as before ---- */
+    var PHO = { grp: "auto", face: "normal", sim: 1, near: 0, look: 6, win: 10, max: 0, order: "sharp", size: 1, hold: 4.6, swap: 1.7, up: 3, wait: 8, shuf: 0.55 };
+    var PHO_DEF = JSON.parse(JSON.stringify(PHO));
+    try { var pj = JSON.parse(pref("replayPhotoOpts") || "{}"); Object.keys(PHO).forEach(function (k) { if (pj[k] != null && typeof pj[k] === typeof PHO[k]) PHO[k] = pj[k]; }); } catch (e) {}
+    function phoApply() {
+      PHOTO_H = PHOTO_H0 * PHO.size; MOMENT = PHO.hold; SWAP = PHO.swap; B_MAX = PHO.up; B_HOLD = PHO.wait; DECK_SH = PHO.shuf;
+      B_NEAR = PHO.near || 250; B_LOOK = PHO.look; B_FAN = phoGrp() === "off" ? 1 : PHO.max || 7;
+    }
+    function phoGrp() { return PHO.grp === "auto" ? (burstOn() ? "look" : "place") : PHO.grp; }
+    /* Faces: found and cut out by MediaPipe's face detector, each cut-out embedded on its own. On the photos this was tuned on, retakes of one
+       person sat under 0.30 apart and different people over 0.50 (while their whole-photo vectors could be 0.00 apart: same spot, same light). */
+    var FACE_MAX = { loose: 0.48, normal: 0.38, strict: 0.30 };
+    function faceOK(a, b) {
+      if (PHO.face === "off" || !a.pa || !b.pa) return true;
+      var A = a.pa.f, Bf = b.pa.f;
+      if (!A.length && !Bf.length) return true;
+      if (!A.length || !Bf.length) return PHO.face !== "strict";
+      var X = A.length <= Bf.length ? A : Bf, Y = X === A ? Bf : A, worst = 0;
+      X.forEach(function (x) { var m = 2; Y.forEach(function (y) { m = Math.min(m, embDiff(x.e, y.e)); }); worst = Math.max(worst, m); }); // every face of the smaller set has its match
+      return worst <= FACE_MAX[PHO.face];
+    }
+    /** Two photos as one subject: the look, within tolerance, and the same faces. */
+    function alikeP(a, b) { return alikeD(a, b) <= alikeMax(a, b) * PHO.sim && faceOK(a, b); }
+    /* One visit, not one place: a trail can pass the same spot hours apart (out and back, a loop, a summit reached twice). Two photos belong
+       to one visit only if the rider never left the spot between them: every route point between their times stays within reach of it.
+       Without this, Burst's look-ahead (screen seconds, so an hour or more of ride at a fast replay) pulled a later pass's photos into the
+       first pass's deck, and they popped out hours early. */
+    function sameVisit(a, b) {
+      var t1 = Math.min(a.t, b.t), t2 = Math.max(a.t, b.t), R = Math.max(150, (PHO.near || 250) + 50);
+      if (t2 - t1 < 30) return true;
+      var k1 = fIdx(t1), k2 = fIdx(t2), st = Math.max(1, Math.floor((k2 - k1) / 400)), cl = Math.cos(a.lat * Math.PI / 180);
+      for (var k = k1; k <= k2; k += st) if (Math.hypot((fLon[k] - a.lon) * 111320 * cl, (fLat[k] - a.lat) * 111320) > R) return false;
+      return true;
+    }
+    window.__sameVisit = function (i, j) { return sameVisit(photos[i], photos[j]); }; // for checking over DevTools
+    /** Burst: does o join the deck being gathered for next (items so far), ds screen seconds after it? */
+    function burstAlike(o, next, items, ds) {
+      var g = phoGrp();
+      if (g === "off" || !sameVisit(next, o)) return false;
+      if (g === "place") return faceOK(o, next);
+      var known = (o.emb && next.emb) || (o.pa && next.pa) || (o.sig && next.sig);
+      return known ? items.some(function (x) { return alikeP(o, x); }) : ds <= B_STACK; // no look yet: the old rule
+    }
+    /** Moment: photos close in time and place share one moment; with Similar look they must also look alike; with Never, one each. */
+    function momentGroups() {
+      var win = PHO.win * 60, near = PHO.near || 300, mx = PHO.max || 3, g = phoGrp(), gid = 0, g0 = null, cur = [];
+      photos.forEach(function (ph) {
+        var far = g0 && Math.hypot((ph.lon - g0.lon) * 111320 * Math.cos(ph.lat * Math.PI / 180), (ph.lat - g0.lat) * 111320) > near;
+        var split = !g0 || g === "off" || ph.t - g0.t > win || far || (SHOT && cur.length >= mx) || (!SHOT && PHO.max && cur.length >= mx);
+        if (!split && !sameVisit(g0, ph)) split = true;
+        else if (!split && g === "look") split = !cur.some(function (x) { return alikeP(ph, x); });
+        else if (!split) split = !cur.every(function (x) { return faceOK(ph, x); });
+        if (split) { gid++; g0 = ph; cur = []; }
+        cur.push(ph); ph.group = gid;
+      });
+    }
+    function phoSave() { pref("replayPhotoOpts", JSON.stringify(PHO)); }
+    /* ---- per-photo edits: a quarter turn and a zoom (crop) with its pan, kept per ride under a "replay…" key so Save changes carries them ---- */
+    var phEd = {}; try { phEd = JSON.parse(pref("replayPhotoEdit:" + ID) || "{}") || {}; } catch (e) { phEd = {}; }
+    function edOf(f) { var e = phEd[f] || {}; return { r: ((e.r | 0) % 4 + 4) % 4, z: Math.max(1, Math.min(4, +e.z || 1)), x: Math.max(-1, Math.min(1, +e.x || 0)), y: Math.max(-1, Math.min(1, +e.y || 0)) }; }
+    function edKey(e) { return e.r + "|" + e.z + "|" + e.x + "|" + e.y; }
+    function edSave() { pref("replayPhotoEdit:" + ID, JSON.stringify(phEd)); }
+    /** The picture as edited: turned, then cropped to the zoom around the pan. Same shape as the turned photo, so the card keeps its proportions. */
+    function phApplyEdit(ph) {
+      var im = ph.img0; if (!im) return;
+      var e = edOf(ph.f);
+      if (ph.w0 == null) { ph.w0 = ph.w; ph.h0 = ph.h; }
+      if (!e.r && e.z === 1) { ph.img = im; ph.w = ph.w0; ph.h = ph.h0; }
+      else {
+        var W0 = im.naturalWidth || im.width, H0 = im.naturalHeight || im.height, odd = e.r % 2 === 1, RW = odd ? H0 : W0, RH = odd ? W0 : H0;
+        var cv = document.createElement("canvas"); cv.width = RW; cv.height = RH;
+        var cx = cv.getContext("2d"); cx.imageSmoothingQuality = "high";
+        cx.translate(RW / 2, RH / 2); cx.scale(e.z, e.z);
+        cx.translate(-e.x * RW / 2 * (1 - 1 / e.z), -e.y * RH / 2 * (1 - 1 / e.z));
+        cx.rotate(e.r * Math.PI / 2); cx.drawImage(im, -W0 / 2, -H0 / 2);
+        ph.img = cv; ph.w = odd ? ph.h0 : ph.w0; ph.h = odd ? ph.w0 : ph.h0;
+      }
+      try { ph.sig = photoSig(ph.img); } catch (x) { ph.sig = null; }
+      ph.tex = null; // the old texture belongs to the GL context; a fresh one is made from the edited picture on the next draw
+    }
+    /** The strip's thumbnail drawn as the card will be (the turn and the zoom; the pan roughly). */
+    function edCss(f) { var e = edOf(f); if (!e.r && e.z === 1) return ""; var k = (1 - 1 / e.z) * 50; return ' style="transform:scale(' + e.z + ") translate(" + (-e.x * k) + "%," + (-e.y * k) + "%) rotate(" + e.r * 90 + 'deg)"'; }
+    /* ---- reading the photos: MediaPipe (vendored under vendor/mediapipe, loaded only when needed) gives each photo a vector for its look
+       and one per face. Kept on the photo (and, on the PC, in the file Save changes writes), so a photo is read once per edit. ---- */
+    var PA = { st: "idle", tasks: null, again: false, done: Promise.resolve(), n: 0, of: 0 };
+    function paB64(v) { var u8 = new Uint8Array(v.buffer, v.byteOffset, v.byteLength), s2 = ""; for (var q = 0; q < u8.length; q += 0x8000) s2 += String.fromCharCode.apply(null, u8.subarray(q, q + 0x8000)); return btoa(s2); }
+    function paFrom(o, key) { // stored -> in memory
+      if (!o || o.k !== key || !o.e) return null;
+      var e = embDecode(o.e); if (!e) return null;
+      return { k: key, e: e, f: (o.f || []).map(function (x) { return { e: embDecode(x.e), r: x.r }; }).filter(function (x) { return x.e; }) };
+    }
+    function paModels() {
+      if (PA.tasks) return PA.tasks;
+      var base = new URL("vendor/mediapipe/", document.baseURI).href;
+      PA.tasks = import(base + "vision_bundle.mjs").then(function (mp) {
+        var fs = { wasmLoaderPath: base + "wasm/vision_wasm_internal.js", wasmBinaryPath: base + "wasm/vision_wasm_internal.wasm" };
+        return Promise.all([
+          mp.FaceDetector.createFromOptions(fs, { baseOptions: { modelAssetPath: base + "blaze_face_short_range.tflite", delegate: "CPU" }, runningMode: "IMAGE", minDetectionConfidence: 0.5 }),
+          mp.ImageEmbedder.createFromOptions(fs, { baseOptions: { modelAssetPath: base + "mobilenet_v3_small.tflite", delegate: "CPU" }, runningMode: "IMAGE", l2Normalize: true, quantize: false })
+        ]).then(function (r) { return { fd: r[0], em: r[1] }; });
+      });
+      PA.tasks.catch(function () {});
+      return PA.tasks;
+    }
+    function paOne(m, ph) {
+      var im = ph.img, W = im.naturalWidth || im.width, H = im.naturalHeight || im.height;
+      var e = new Float32Array(m.em.embed(im).embeddings[0].floatEmbedding), faces = [];
+      m.fd.detect(im).detections.forEach(function (dt) {
+        var b = dt.boundingBox, rel = Math.max(b.width / W, b.height / H); if (rel < 0.06) return; // a face in the background is not the subject
+        var side = Math.max(b.width, b.height) * 1.5, cv = document.createElement("canvas"); cv.width = cv.height = 160;
+        cv.getContext("2d").drawImage(im, b.originX + b.width / 2 - side / 2, b.originY + b.height / 2 - side / 2, side, side, 0, 0, 160, 160);
+        faces.push({ e: new Float32Array(m.em.embed(cv).embeddings[0].floatEmbedding), r: +rel.toFixed(3) });
+      });
+      return { e: e, f: faces };
+    }
+    function paNote() {
+      var el = $("ph-ana"); if (!el) return;
+      var nR = photos.filter(function (ph) { return ph.pa; }).length;
+      el.textContent = PA.st === "run" ? "Reading photos " + PA.n + " / " + PA.of + "…" : PA.st === "fail" ? "Faces and looks could not be read here; grouping uses the look hash." : PA.st === "ready" && nR ? "Faces and looks read for " + nR + " photo" + (nR === 1 ? "" : "s") + "." : "";
+    }
+    /** Read every photo that has no vectors for its current edit. One at a time, yielding between them so the replay keeps running. */
+    function paRun() {
+      var need = photos.filter(function (ph) { return !ph.pa || ph.pa.k !== edKey(edOf(ph.f)); });
+      if (PA.st === "run") { PA.again = true; return PA.done; } // after the current pass, once more for what changed meanwhile
+      if (!need.length || PA.st === "fail") { if (PA.st !== "fail") PA.st = "ready"; paNote(); return PA.done; }
+      PA.st = "run"; PA.n = 0; PA.of = need.length; paNote();
+      PA.done = paModels().then(function (m) {
+        return need.reduce(function (pr, ph) {
+          return pr.then(function () {
+            return Promise.resolve(ph.ready).then(function () {
+              if (!ph.img) return;
+              var key = edKey(edOf(ph.f)), r = paOne(m, ph); r.k = key; ph.pa = r;
+              if (B.photoAnno) try { B.photoAnno(ph.f, { k: key, e: paB64(r.e), f: r.f.map(function (x) { return { e: paB64(x.e), r: x.r }; }) }); } catch (e) {}
+              PA.n++; if (PA.n % 5 === 0) paNote();
+              return new Promise(function (res) { setTimeout(res, 0); });
+            });
+          });
+        }, Promise.resolve()).then(function () { PA.st = "ready"; paNote(); if (!moment) momentGroups(); if (PA.again) { PA.again = false; return paRun(); } });
+      }, function () { PA.st = "fail"; PA.again = false; paNote(); });
+      return PA.done;
+    }
     /** Photos added before the embedder existed get their vectors in the background; re-read the list until they arrive (at most a minute). */
     function embPoll() {
       if (!B.photoEmbed || !B.photoList) return;
@@ -5762,25 +5921,21 @@ if (typeof exports === 'object' && typeof module === 'object') {
         var key = o.t + "|" + o.lat + "|" + o.lon + "|" + o.w + "x" + o.h;
         if (o.t > 0 && o.at == null && seen[key]) return; seen[key] = 1; // the same photo added twice: show it once
         var ph = placePhoto(o);
-        if (ph) { ph.f = ph.f || o.f; if (o.e) ph.emb = embDecode(o.e); }
-        photoAll.push({ f: o.f, ph: ph, how: ph ? ph.how : null }); // every photo, for the sheet; one with no spot waits for the owner to give it one
+        if (ph) { ph.f = ph.f || o.f; if (o.e) ph.emb = embDecode(o.e); ph.pa = paFrom(o.pa, edKey(edOf(ph.f))); }
+        photoAll.push({ f: o.f, ph: ph, how: ph ? ph.how : null, o: o }); // every photo, for the sheet; one with no spot waits for the owner to give it one
         if (!ph) { skipped++; return; }
         var im = new Image(); im.src = photoSrc(o.f);
-        ph.ready = (im.decode ? im.decode() : new Promise(function (r, x) { im.onload = r; im.onerror = x; })).then(function () { ph.img = im; try { ph.sig = photoSig(im); } catch (e) { ph.sig = null; } map.triggerRepaint(); }, function () {});
+        ph.ready = (im.decode ? im.decode() : new Promise(function (r, x) { im.onload = r; im.onerror = x; })).then(function () { ph.img0 = im; phApplyEdit(ph); map.triggerRepaint(); }, function () {});
         if (photosOn) photos.push(ph);
       });
       photos.sort(function (a, b) { return a.t - b.t; });
-      // Photos taken close together (10 min, 300 m) share one moment.
-      var gid = 0, g0 = null, gn = 0;
-      photos.forEach(function (ph) {
-        var far = g0 && Math.hypot((ph.lon - g0.lon) * 111320 * Math.cos(ph.lat * Math.PI / 180), (ph.lat - g0.lat) * 111320) > 300;
-        if (!g0 || ph.t - g0.t > 600 || far || (SHOT && gn >= 3)) { gid++; g0 = ph; gn = 0; } // at most 3 photos per moment; the rest become the next one
-        gn++; ph.group = gid;
-      });
+      // Photos taken close together (by default 10 min, 300 m, at most 3) share one moment; see momentGroups and the Grouping settings.
+      phoApply(); momentGroups();
       window.__photos = photos; // for checking over DevTools
       embPoll();
+      if (photos.length) Promise.all(photos.map(function (ph) { return ph.ready; })).then(function () { paRun(); });
       var nOn = photoAll.length - skipped;
-      photoNote = !photoAll.length ? "No photos on this ride yet." : nOn + " photo" + (nOn === 1 ? "" : "s") + " on the route" + (skipped ? " · " + skipped + " need" + (skipped === 1 ? "s" : "") + " a spot (no time or GPS from this ride): tap one to place it" : "") + (photosOn ? "" : " · hidden in the replay");
+      photoNote = !photoAll.length ? "No photos on this ride yet." : nOn + " photo" + (nOn === 1 ? "" : "s") + " on the route" + (skipped ? " · " + skipped + " need" + (skipped === 1 ? "s" : "") + " a ride time: tap one to give it one" : "") + (photosOn ? "" : " · hidden in the replay");
       $("ph-info").textContent = photoNote;
       ensurePhotoLayer(); phSheetShow();
       try { timelineDraw(); } catch (e) {}
@@ -5852,7 +6007,7 @@ if (typeof exports === 'object' && typeof module === 'object') {
       if (!p0 || fD.length < 2 || !map.calculateCameraOptionsFromTo) return null;
       var TR = map.transform, CT = TR.cameraToCenterDistance, TS = TR.tileSize || 512, lon0 = p0[0], lat0 = p0[1], fr = mkFrame(lon0, lat0);
       var F = 0.5 * H / Math.tan((map.getVerticalFieldOfView ? map.getVerticalFieldOfView() : 36.87) * R / 2);
-      var hasT = !!map.queryTerrainElevation, g0 = ph0.g != null ? ph0.g : 0, hold = { v: g0 }, PH = PHOTO_H, qc = {}, kS = 0.28 * H / F; // kS: card height per metre of camera distance (28% of the screen)
+      var hasT = !!map.queryTerrainElevation, g0 = ph0.g != null ? ph0.g : 0, hold = { v: g0 }, PH = PHOTO_H, qc = {}, kS = 0.28 * PHO.size * H / F; // kS: card height per metre of camera distance (28% of the screen)
       function qEl(lo, la) { // the exact height the photo renderer uses (exaggerated metres), remembered; null when the map has none
         if (!hasT) return null;
         var k = lo.toFixed(6) + "," + la.toFixed(6);
@@ -6086,7 +6241,7 @@ if (typeof exports === 'object' && typeof module === 'object') {
       var want = map.getBearing();
       /* Card size follows the camera distance: tall enough to be about 28% of the screen at the current distance, never smaller than PHOTO_H,
          eased over ~0.8 s so it never pops. A card the director placed keeps the size it planned with. */
-      var csT = Math.min(4 * PHOTO_H, Math.max(PHOTO_H, 0.28 * 2 * Math.tan((map.getVerticalFieldOfView ? map.getVerticalFieldOfView() : 36.87) * Math.PI / 360) * zoomDist(map.getZoom(), map.transform.cameraToCenterDistance, map.transform.tileSize || 512, map.getCenter().lat))); // never more than 4x PHOTO_H
+      var csT = Math.min(4 * PHOTO_H, Math.max(PHOTO_H, 0.28 * PHO.size * 2 * Math.tan((map.getVerticalFieldOfView ? map.getVerticalFieldOfView() : 36.87) * Math.PI / 360) * zoomDist(map.getZoom(), map.transform.cameraToCenterDistance, map.transform.tileSize || 512, map.getCenter().lat))); // never more than 4x PHOTO_H
       photos.forEach(function (ph) { var tt = (ph.own || ph.bOwn) && ph.csT ? ph.csT : csT; ph.cs = ph.cs == null ? tt : ph.cs + (tt - ph.cs) * (1 - Math.exp(-dtY / 0.8)); });
       keepClear(dtY);
       photos.forEach(function (ph) {
@@ -6199,22 +6354,26 @@ if (typeof exports === 'object' && typeof module === 'object') {
       burstReset(); map.triggerRepaint();
     }
     function photosReload() { loadPhotos(); photosReset(); try { estimate(); } catch (e) {} try { timelineDraw(); } catch (e) {} }
-    var HOW = { gps: ["GPS", "Placed by its GPS"], time: ["Time", "Placed by the time it was taken"], manual: ["You", "Placed by you"] };
+    var HOW = { gps: ["GPS", "Placed by its time; its GPS agrees"], time: ["Time", "Placed by the time it was taken"], manual: ["You", "Placed by you"] };
     /** The sheet: the on/off switch, a strip of every photo, and what can be done with the one tapped. */
     function phSheetShow() {
       var sw = $("ph-onoff"); sw.classList.toggle("on", photosOn); sw.setAttribute("aria-checked", photosOn); sw.querySelector("span").textContent = photosOn ? "Shown" : "Hidden";
       $("photos").classList.toggle("on", photosOn && photos.length > 0);
       var list = photoAll.slice().sort(function (a, b) { return (a.ph ? 1 : 0) - (b.ph ? 1 : 0) || (a.ph && b.ph ? a.ph.t - b.ph.t : 0); }); // the ones needing a spot first, then in ride order
       $("ph-strip").innerHTML = list.map(function (it) {
-        return '<button class="pt' + (it.ph ? "" : " need") + (photosOn ? "" : " off") + (phSel === it.f ? " sel" : "") + '" data-f="' + it.f + '"><img loading="lazy" src="' + photoSrc(it.f) + '" alt=""><span>' + (it.ph ? HOW[it.how][0] : "Place") + "</span></button>";
+        return '<button class="pt' + (it.ph ? "" : " need") + (photosOn ? "" : " off") + (phSel === it.f ? " sel" : "") + '" data-f="' + it.f + '"><img loading="lazy" src="' + photoSrc(it.f) + '" alt=""' + edCss(it.f) + '><span>' + (it.ph ? HOW[it.how][0] : "Place") + "</span></button>";
       }).join("");
       var it = photoAll.filter(function (x) { return x.f === phSel; })[0];
       if (!it) phSel = null;
       $("ph-act").classList.toggle("on", !!it);
       if (it) {
-        $("ph-act-t").textContent = it.ph ? HOW[it.how][1] + " · " + clock(it.ph.t) + " into the ride" : "No time or GPS from this ride. Choose its spot on the route.";
+        $("ph-act-t").textContent = it.ph ? HOW[it.how][1] + " · " + clock(it.ph.t) + " into the ride" : it.o && it.o.t > 0 ? "Taken " + new Date(it.o.t).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + ", outside this ride. Give it a ride time." : "No time it was taken. Give it a ride time.";
+        $("ph-at").value = it.ph ? clock(it.ph.t) : ""; $("ph-at").classList.remove("warn");
+        var gp = it.ph ? [] : gpsPasses(it.o || {});
+        $("ph-gpsp").innerHTML = gp.length ? '<span class="muted">Near its GPS at</span>' + gp.map(function (s2) { return '<button data-at="' + s2 + '">' + clock(s2) + "</button>"; }).join("") : "";
         $("ph-spot").textContent = it.ph ? "Move it" : "Choose its spot";
         $("ph-auto").style.display = it.how === "manual" ? "" : "none";
+        edShow();
       }
       try { optsHtml(); } catch (e) {}
     }
@@ -6223,6 +6382,15 @@ if (typeof exports === 'object' && typeof module === 'object') {
       var f = b.getAttribute("data-f"); phSel = phSel === f ? null : f; phSheetShow();
     };
     $("ph-onoff").onclick = function () { photosOn = !photosOn; pref("replayPhotosOff:" + ID, photosOn ? "0" : "1"); photosReload(); };
+    /* A ride time for the selected photo: typed (h:mm:ss or m:ss), or one of the passes near its GPS. */
+    function phAtSet(s2) { if (!phSel || !B.photoPlace) return; B.photoPlace(+ID, phSel, Math.round(Math.max(0, Math.min(d.dur, s2)) * 10) / 10); photosReload(); }
+    $("ph-at-go").onclick = function () {
+      var p2 = String($("ph-at").value).trim().split(":").map(Number), s2 = p2.length && !p2.some(isNaN) ? p2.reduce(function (a, b) { return a * 60 + b; }, 0) : NaN;
+      if (isNaN(s2) || s2 < 0 || s2 > d.dur + 1) { $("ph-at").classList.add("warn"); return; }
+      phAtSet(s2);
+    };
+    $("ph-at").addEventListener("keydown", function (e) { if (e.key === "Enter") $("ph-at-go").click(); });
+    $("ph-gpsp").onclick = function (e) { var b = e.target.closest && e.target.closest("button[data-at]"); if (b) phAtSet(+b.getAttribute("data-at")); };
     $("ph-auto").onclick = function () { if (!phSel || !B.photoPlace) return; B.photoPlace(+ID, phSel, -1); photosReload(); };
     $("ph-del").onclick = function () { if (!phSel || !B.photoRemove || !confirm("Remove this photo from the replay?")) return; B.photoRemove(+ID, phSel); phSel = null; photosReload(); };
     /* Choosing a spot: the sheet steps aside, the replay pauses, and the seek bar moves the arrow; "Place here" pins the photo to that ride time. */
@@ -6253,7 +6421,49 @@ if (typeof exports === 'object' && typeof module === 'object') {
       photos.forEach(function (ph) { ph.done = (skipOn() ? movingAt(ph.t) : ph.t) < nowC - 0.5; ph.fade = 0; });
       burstReset(); map.triggerRepaint();
     }
-    $("pm-moment").onclick = function () { pmodeSet("moment"); }; $("pm-burst").onclick = function () { pmodeSet("burst"); };
+    function pmodeTo(m) { pmodeSet(m); phoShow(); phoApply(); if (!moment) momentGroups(); try { estimate(); } catch (e) {} }
+    $("pm-moment").onclick = function () { pmodeTo("moment"); }; $("pm-burst").onclick = function () { pmodeTo("burst"); };
+    /* Edit the selected photo: turn it, zoom into it. Applied to the card at once; its look and faces are read again. */
+    function edShow() {
+      var e = edOf(phSel), set = function (id, v) { var el = $(id); el.value = v; el.dispatchEvent(new Event("input")); };
+      edBusy = true; set("ph-zoom", e.z); set("ph-panx", e.x); set("ph-pany", e.y); edBusy = false;
+      Array.prototype.forEach.call(document.querySelectorAll(".ph-pan"), function (el) { el.style.display = e.z > 1 ? "" : "none"; });
+    }
+    var edBusy = false, edT = 0;
+    function edChange(fn) {
+      if (!phSel) return;
+      var e = edOf(phSel); fn(e);
+      if (!e.r && e.z === 1) delete phEd[phSel]; else phEd[phSel] = e;
+      edSave();
+      var ph = (photoAll.filter(function (x) { return x.f === phSel; })[0] || {}).ph;
+      if (ph && ph.img0) { phApplyEdit(ph); map.triggerRepaint(); }
+      var b = document.querySelector('.pt[data-f="' + phSel + '"] img'); if (b) b.setAttribute("style", (edCss(phSel).match(/style="([^"]*)"/) || [0, ""])[1]);
+      Array.prototype.forEach.call(document.querySelectorAll(".ph-pan"), function (el) { el.style.display = e.z > 1 ? "" : "none"; });
+      clearTimeout(edT); edT = setTimeout(function () { paRun(); }, 600); // read it again once the slider rests
+    }
+    $("ph-rotl").onclick = function () { edChange(function (e) { e.r = (e.r + 3) % 4; }); };
+    $("ph-rotr").onclick = function () { edChange(function (e) { e.r = (e.r + 1) % 4; }); };
+    $("ph-ed-rst").onclick = function () { edChange(function (e) { e.r = 0; e.z = 1; e.x = 0; e.y = 0; }); edShow(); };
+    [["ph-zoom", "z"], ["ph-panx", "x"], ["ph-pany", "y"]].forEach(function (p) {
+      $(p[0]).addEventListener("input", function () { if (edBusy) return; var v = +this.value; edChange(function (e) { e[p[1]] = v; }); });
+    });
+    /* The Photos tab's settings. Grouping changes regroup at once; the deck being shown keeps its cards until it folds. */
+    var PHO_IN = { "ph-sim": "sim", "ph-near": "near", "ph-look": "look", "ph-win": "win", "ph-max": "max", "ph-size": "size", "ph-hold": "hold", "ph-swap": "swap", "ph-up": "up", "ph-wait": "wait", "ph-shuf": "shuf" };
+    var PHO_SEL = { "ph-grp": "grp", "ph-face": "face", "ph-order": "order" };
+    function phoChanged() { phoSave(); phoApply(); if (!moment) momentGroups(); try { estimate(); } catch (e) {} try { timelineDraw(); } catch (e) {} map.triggerRepaint(); }
+    function phoShow() {
+      phoBusy = true;
+      Object.keys(PHO_IN).forEach(function (id) { var el = $(id); el.value = PHO[PHO_IN[id]]; el.dispatchEvent(new Event("input", { bubbles: false })); });
+      Object.keys(PHO_SEL).forEach(function (id) { $(id).value = PHO[PHO_SEL[id]]; });
+      Array.prototype.forEach.call(document.querySelectorAll(".pho-b"), function (el) { el.style.display = burstOn() ? "" : "none"; });
+      Array.prototype.forEach.call(document.querySelectorAll(".pho-m"), function (el) { el.style.display = burstOn() ? "none" : ""; });
+      phoBusy = false;
+    }
+    var phoBusy = false;
+    Object.keys(PHO_IN).forEach(function (id) { $(id).addEventListener("input", function () { if (phoBusy) return; PHO[PHO_IN[id]] = +this.value; phoChanged(); }); });
+    Object.keys(PHO_SEL).forEach(function (id) { $(id).addEventListener("change", function () { PHO[PHO_SEL[id]] = this.value; phoChanged(); if (id === "ph-face" && this.value !== "off") paRun(); }); });
+    $("ph-opt-rst").onclick = function () { PHO = JSON.parse(JSON.stringify(PHO_DEF)); phoShow(); phoChanged(); };
+    phoShow();
     pmodeShow();
     $("ph-clear").onclick = function () { if (!B.photoClear || !confirm("Remove all photos from this ride's replay?")) return; B.photoClear(+ID); phSel = null; photosReload(); };
     if (!B.photoPick) $("ph-add").style.display = "none"; // the PC player cannot add photos
@@ -6464,6 +6674,27 @@ if (typeof exports === 'object' && typeof module === 'object') {
         map.once("idle", f); map.triggerRepaint(); setTimeout(f, maxMs || 12000);
       });
     }
+    /* "idle" also waits for fades, label placement and any queued repaint, not only tiles. Balanced and Fast
+       wait for this instead: checked after each render, it resolves as soon as the frame's tiles are in, which for
+       most frames (the camera needs no new tiles) is the very next render. */
+    function waitTiles(maxMs) {
+      return new Promise(function (res) {
+        var done = false, to = 0;
+        function fin() { if (done) return; done = true; clearTimeout(to); map.off("render", chk); res(); }
+        function chk() { var ok = true; try { ok = map.areTilesLoaded(); } catch (e) {} if (ok) fin(); }
+        map.on("render", chk); to = setTimeout(fin, maxMs || 6000); map.triggerRepaint();
+      });
+    }
+    /** No fades while rendering: a fading tile or label keeps the map busy and is half-drawn in the frame. Returns the undo. */
+    function fadesOff() {
+      var fd = map._fadeDuration, saved = [];
+      try { map._fadeDuration = 0; } catch (e) {}
+      try { (map.getStyle().layers || []).forEach(function (l) { if (l.type === "raster") { saved.push([l.id, map.getPaintProperty(l.id, "raster-fade-duration")]); map.setPaintProperty(l.id, "raster-fade-duration", 0); } }); } catch (e) {}
+      return function () {
+        try { map._fadeDuration = fd; } catch (e) {}
+        saved.forEach(function (x) { try { if (map.getLayer(x[0])) map.setPaintProperty(x[0], "raster-fade-duration", x[1] == null ? undefined : x[1]); } catch (e) {} });
+      };
+    }
     /** The finished map picture: grab it in the render event, while the WebGL buffer still holds it. */
     var grabTmp = null;
     function grabMap(ctx, W, H) {
@@ -6566,7 +6797,8 @@ if (typeof exports === 'object' && typeof module === 'object') {
          and the video must keep the frame it started with, with the panels where they were. */
       var lockEl = $("replay"), lockCss = lockEl.style.cssText, lr = lockEl.getBoundingClientRect();
       lockEl.style.right = "auto"; lockEl.style.bottom = "auto"; lockEl.style.width = lr.width + "px"; lockEl.style.height = lr.height + "px";
-      var restorePr = function () { shotEnd(); document.body.classList.remove("rendering"); try { map.setPixelRatio(oldPr); } catch (e) {} lockEl.style.cssText = lockCss; try { map.resize(); } catch (e) {} };
+      var fadesBack = fadesOff();
+      var restorePr = function () { shotEnd(); fadesBack(); document.body.classList.remove("rendering"); try { map.setPixelRatio(oldPr); } catch (e) {} lockEl.style.cssText = lockCss; try { map.resize(); } catch (e) {} };
       var muxer, enc, codecCfg, failed = null;
       return pickCodec(W, H).then(function (cfg) {
         if (!cfg) throw new Error("No video encoder for " + W + "×" + H + ".");
@@ -6608,10 +6840,10 @@ if (typeof exports === 'object' && typeof module === 'object') {
           if (rendCancel) throw new Error("cancelled");
           if (rideEndI >= 0 && i >= rideEndI + nEnd) return null;
           return frameAt().then(function () {
-            // Best waits for everything twice over; Balanced waits once; Fast gives tiles a moment, then goes.
+            // Best waits for full idle twice over; Balanced waits for the tiles; Fast gives tiles a moment, then goes.
             if (Q === "best") return Promise.all([waitIdle(15000), shadows && sunOn() ? shadows.idle(6000) : null]).then(function () { return waitIdle(4000); });
-            if (Q === "bal") return Promise.all([waitIdle(6000), shadows && sunOn() && i % sunEvery === 0 ? shadows.idle(2000) : null]);
-            return waitIdle(700);
+            if (Q === "bal") return Promise.all([waitTiles(6000), shadows && sunOn() && i % sunEvery === 0 ? shadows.idle(2000) : null]);
+            return waitTiles(700);
           }).then(function () {
             // The same background the screen shows behind the map, so the video matches it.
             ctx.fillStyle = getComputedStyle($("map")).backgroundColor || "#2E3528"; ctx.fillRect(0, 0, W, H);
