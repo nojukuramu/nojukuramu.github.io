@@ -7161,7 +7161,7 @@ var qrcode = function() {
           try { map.jumpTo(lastPose); } catch (e) {}
           return res();
         }
-        started = true; follow = true; tog("follow", true); userAt = 0; camPos = null;
+        started = true; follow = true; tog("follow", true); userAt = 0; camResync(true);
         var b = cam === "north" ? 0 : (travelBearing(t, 30) != null ? travelBearing(t, 30) : (smoothB || 0));
         smoothB = arrowB = b; marker.setRotation(b);
         var want = cleanOn ? cleanPitch : +$("tiltv").value;
@@ -7182,7 +7182,22 @@ var qrcode = function() {
     };
     $("seek").max = Math.max(1, Math.round(d.dur * 10));
     $("seek").oninput = function () { t = +$("seek").value / 10; draw(true); };
-    map.on("dragstart", function () { userAt = Date.now(); if (SHOT && shot) shotEnd(); });
+    /* Any hand on the map (drag, wheel or pinch zoom, rotate, tilt) holds the follow camera off for 4 s from the last touch. Only
+       dragstart used to: a wheel zoom or a rotate was fought every frame, and a drag longer than 4 s was taken back mid-drag. */
+    function userTook(e) { if (e && e.originalEvent) { userAt = Date.now(); userHeld = true; if (SHOT && shot) shotEnd(); } }
+    map.on("dragstart", function () { userAt = Date.now(); userHeld = true; if (SHOT && shot) shotEnd(); });
+    ["move", "zoomstart", "rotatestart", "pitchstart"].forEach(function (ev) { map.on(ev, userTook); });
+    var userHeld = false;
+    /* Hand the camera back to the rider. The view the user left behind is not a starting point: MapLibre may still be easing the
+       drag's inertia with the ground height frozen at the spot dragged to, the follow position is from before, and the hill
+       guard may have pulled the zoom and tilt back for that other view. So: stop what is running, start the follow position at
+       the rider, let the guard look again from here. full (Play, Preview): the follow distance comes back too. */
+    function camResync(full) {
+      try { map.stop(); } catch (e) {}
+      camPos = null; zOff = 0; lastBlockAt = 0; capAt = 0; pitchCap = 90; userHeld = false;
+      if (!shot) clampSet(true);
+      if (full) userZoomed = false;
+    }
 
     function idxAt(s) { // last row at or before s
       var a = c.elapsed_s, lo = 0, hi = n - 1;
@@ -7521,6 +7536,7 @@ var qrcode = function() {
       riderLast = [p[0], p[1], (smooth ? arrowB : smoothB) || 0];
       riderSet(riderLast[0], riderLast[1], riderLast[2]);
       if (SHOT && shot && (seeking || !follow || Date.now() - userAt <= 4000)) shotEnd(); // a seek, a drag or follow off cancels the shot
+      if (follow && Date.now() - userAt > 4000 && userHeld) camResync(false); // the hands came off: start again from the rider
       if (follow && Date.now() - userAt > 4000) {
         // The follow camera runs on its own state; during a photo moment it is blended with the shot (see below).
         var tx = p[0], ty = p[1];
