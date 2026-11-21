@@ -7684,7 +7684,7 @@ var qrcode = function() {
     var cleanPitch = 62; // (the tilt cap and the zoom pull-back that lived here are gone: the smart camera is the only terrain guard)
     var followZoom = d.category === "HIKE" ? 15.2 : d.category === "CYCLE" ? 14.6 : 14.2, followBase = followZoom, userZoomed = false; // a higher default view (0.6 zoom out from before)
     map.on("zoomstart", function (e) { if (e && e.originalEvent) userZoomed = true; });
-    /* ---------- the smart camera, for hills (Camera tab, on by default): the only thing that moves the follow camera for terrain ----------
+    /* ---------- the smart camera, for hills (Camera tab, off by default): the only thing that moves the follow camera for terrain ----------
        The tilt cap (clearPitch) and the zoom pull-back (unclip) it once worked beside are gone: three guards each reacting to the
        frame in front of them pulled the view three ways at once.
        It plans for the stretch ahead, not the instant: every 0.75 s of screen time it scores a set of poses around the chosen view
@@ -7695,7 +7695,7 @@ var qrcode = function() {
        as the arrow has been hidden 1.5 s in a row: a ridge passing in front for a moment is let be. Every change is eased slowly and
        rate-limited, so the camera drifts to a new pose rather than snapping. Heights come from one grid anchored at the ride's start
        and kept between plans, so the ground under a stretch is asked from the map once, not again every plan. */
-    var SMART = pref("replayCamSmart") !== "0";
+    var SMART = pref("replayCamSmart") === "1"; // off unless turned on: until it has been tried on more hilly rides
     var sm = { p: null, b: 0, z: 0, T: null, acc: 1e9, hid: 0, since: 0 }, SM_EVERY = 0.75, SM_AHEAD = [0, 1.5, 3, 4.5], SM_W = [1, 0.9, 0.8, 0.7];
     function smartReset() { sm.p = null; sm.b = 0; sm.z = 0; sm.T = null; sm.acc = 1e9; sm.hid = 0; sm.since = 0; }
     tog("cam-smart", SMART);
