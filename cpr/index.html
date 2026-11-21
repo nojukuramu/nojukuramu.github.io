@@ -419,7 +419,7 @@
         <div class="grp">
           <div class="ph-head"><h3 style="margin:0">Photos in the replay<button class="infobtn" data-info="photos" aria-label="How photos are placed"><svg class="i"><use href="#i-info"/></svg></button></h3><button id="ph-onoff" class="tgl" role="switch" style="width:auto;gap:8px"><span>On</span><i></i></button></div>
           <div id="ph-info" class="hint"></div>
-          <div id="ph-act"><div class="muted" id="ph-act-t"></div><div class="bar"><button id="ph-spot" class="on">Choose its spot</button><button id="ph-auto"><svg class="i"><use href="#i-reset"/></svg>Auto</button><button id="ph-del"><svg class="i"><use href="#i-trash"/></svg>Remove</button></div><label class="fld" id="ph-when"><span>Ride time</span><div class="pair"><input type="text" id="ph-at" placeholder="h:mm:ss" style="width:100%"></div><button id="ph-at-go">Place</button></label><div class="bar" id="ph-gpsp"></div><div id="ph-edit"><div class="bar"><button id="ph-rotl" title="Rotate left" aria-label="Rotate left"><svg class="i"><use href="#i-rotl"/></svg></button><button id="ph-rotr" title="Rotate right" aria-label="Rotate right"><svg class="i"><use href="#i-rotr"/></svg></button><button id="ph-ed-rst"><svg class="i"><use href="#i-reset"/></svg>Original</button></div><label class="fld"><span>Zoom</span><input id="ph-zoom" type="range" min="1" max="4" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label><label class="fld ph-pan"><span>Pan across</span><input id="ph-panx" type="range" min="-1" max="1" step="0.02" value="0" data-unit="" data-def="0"><output></output></label><label class="fld ph-pan"><span>Pan up / down</span><input id="ph-pany" type="range" min="-1" max="1" step="0.02" value="0" data-unit="" data-def="0"><output></output></label></div></div>
+          <div id="ph-act"><div class="muted" id="ph-act-t"></div><div class="bar"><button id="ph-spot" class="on">Choose its spot</button><button id="ph-auto"><svg class="i"><use href="#i-reset"/></svg>Auto</button><button id="ph-del"><svg class="i"><use href="#i-trash"/></svg>Remove</button></div><label class="fld" id="ph-when"><span>Ride time</span><div class="pair"><input type="text" id="ph-at" placeholder="h:mm:ss" style="width:100%"></div><button id="ph-at-go">Place</button></label><div class="bar" id="ph-gpsp"></div><div id="ph-edit"><div class="bar"><button id="ph-rotl" title="Rotate left" aria-label="Rotate left"><svg class="i"><use href="#i-rotl"/></svg></button><button id="ph-rotr" title="Rotate right" aria-label="Rotate right"><svg class="i"><use href="#i-rotr"/></svg></button><button id="ph-ed-rst"><svg class="i"><use href="#i-reset"/></svg>Original</button></div><label class="fld"><span>Straighten</span><input id="ph-ang" type="range" min="-45" max="45" step="0.5" value="0" data-unit="°" data-def="0"><output></output></label><label class="fld"><span>Crop</span><select id="ph-crop"><option value="">Original shape</option><option value="1:1">Square 1:1</option><option value="4:3">4:3</option><option value="3:4">3:4</option><option value="3:2">3:2</option><option value="2:3">2:3</option><option value="16:9">16:9</option><option value="9:16">9:16</option></select><span></span></label><label class="fld"><span>Zoom</span><input id="ph-zoom" type="range" min="1" max="4" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label><label class="fld ph-pan"><span>Pan across</span><input id="ph-panx" type="range" min="-1" max="1" step="0.02" value="0" data-unit="" data-def="0"><output></output></label><label class="fld ph-pan"><span>Pan up / down</span><input id="ph-pany" type="range" min="-1" max="1" step="0.02" value="0" data-unit="" data-def="0"><output></output></label><label class="fld"><span>Card size</span><input id="ph-psz" type="range" min="0.5" max="2" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label></div></div>
         </div>
         <div class="grp"><h3>Style</h3>
           <div class="seg"><button id="pm-moment">Moment</button><button id="pm-burst">Burst</button></div>
@@ -8336,29 +8336,46 @@ var qrcode = function() {
     function phoSave() { pref("replayPhotoOpts", JSON.stringify(PHO)); }
     /* ---- per-photo edits: a quarter turn and a zoom (crop) with its pan, kept per ride under a "replay…" key so Save changes carries them ---- */
     var phEd = {}; try { phEd = JSON.parse(pref("replayPhotoEdit:" + ID) || "{}") || {}; } catch (e) { phEd = {}; }
-    function edOf(f) { var e = phEd[f] || {}; return { r: ((e.r | 0) % 4 + 4) % 4, z: Math.max(1, Math.min(4, +e.z || 1)), x: Math.max(-1, Math.min(1, +e.x || 0)), y: Math.max(-1, Math.min(1, +e.y || 0)) }; }
-    function edKey(e) { return e.r + "|" + e.z + "|" + e.x + "|" + e.y; }
+    /* r: quarter turns; a: straighten, -45..45 degrees; c: crop shape ("" keeps the photo's, else "w:h"); z, x, y: zoom and pan inside
+       that crop; s: this card's size against the others. Only s leaves the picture alone. */
+    var ED_CROP = { "1:1": 1, "4:3": 4 / 3, "3:4": 3 / 4, "3:2": 1.5, "2:3": 2 / 3, "16:9": 16 / 9, "9:16": 9 / 16 };
+    function edOf(f) {
+      var e = phEd[f] || {};
+      return { r: ((e.r | 0) % 4 + 4) % 4, z: Math.max(1, Math.min(4, +e.z || 1)), x: Math.max(-1, Math.min(1, +e.x || 0)), y: Math.max(-1, Math.min(1, +e.y || 0)),
+        a: Math.max(-45, Math.min(45, +e.a || 0)), c: ED_CROP[e.c] ? e.c : "", s: Math.max(0.5, Math.min(2, +e.s || 1)) };
+    }
+    function edPlain(e) { return !e.r && e.z === 1 && !e.a && !e.c; } // the picture as it came (the size may still differ)
+    function edKey(e) { return e.r + "|" + e.z + "|" + e.x + "|" + e.y + (e.a || e.c ? "|" + e.a + "|" + e.c : ""); } // the old key when only the old edits are used, so nothing is read again for nothing
     function edSave() { pref("replayPhotoEdit:" + ID, JSON.stringify(phEd)); }
-    /** The picture as edited: turned, then cropped to the zoom around the pan. Same shape as the turned photo, so the card keeps its proportions. */
+    /** The picture as edited: turned, straightened, cropped to its shape, then zoomed around the pan. The card takes the crop's
+        proportions. A straightened picture is scaled up just enough that the tilted edges never show inside the crop. */
     function phApplyEdit(ph) {
       var im = ph.img0; if (!im) return;
       var e = edOf(ph.f);
       if (ph.w0 == null) { ph.w0 = ph.w; ph.h0 = ph.h; }
-      if (!e.r && e.z === 1) { ph.img = im; ph.w = ph.w0; ph.h = ph.h0; }
+      ph.sz = e.s;
+      if (edPlain(e)) { ph.img = im; ph.w = ph.w0; ph.h = ph.h0; }
       else {
         var W0 = im.naturalWidth || im.width, H0 = im.naturalHeight || im.height, odd = e.r % 2 === 1, RW = odd ? H0 : W0, RH = odd ? W0 : H0;
-        var cv = document.createElement("canvas"); cv.width = RW; cv.height = RH;
+        var A = ED_CROP[e.c] || 0, CW = RW, CH = RH;
+        if (A) { if (RW / RH > A) CW = RH * A; else CH = RW / A; } // the largest rectangle of that shape inside the turned photo
+        CW = Math.max(1, Math.round(CW)); CH = Math.max(1, Math.round(CH));
+        var th = Math.abs(e.a) * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th);
+        var k = Math.max((CW * cs + CH * sn) / RW, (CW * sn + CH * cs) / RH, 1); // cover: the crop, tilted, still inside the picture
+        var sx = Math.max(0, (k * RW - CW / e.z) / 2), sy = Math.max(0, (k * RH - CH / e.z) / 2); // how far the pan can go each way
+        if (th) { sx *= 1 - sn; sy *= 1 - sn; } // tilted, the corners come in: keep the pan short of them
+        var cv = document.createElement("canvas"); cv.width = CW; cv.height = CH;
         var cx = cv.getContext("2d"); cx.imageSmoothingQuality = "high";
-        cx.translate(RW / 2, RH / 2); cx.scale(e.z, e.z);
-        cx.translate(-e.x * RW / 2 * (1 - 1 / e.z), -e.y * RH / 2 * (1 - 1 / e.z));
+        cx.translate(CW / 2, CH / 2); cx.scale(e.z, e.z); cx.translate(-e.x * sx, -e.y * sy);
+        cx.rotate(e.a * Math.PI / 180); cx.scale(k, k);
         cx.rotate(e.r * Math.PI / 2); cx.drawImage(im, -W0 / 2, -H0 / 2);
-        ph.img = cv; ph.w = odd ? ph.h0 : ph.w0; ph.h = odd ? ph.w0 : ph.h0;
+        ph.img = cv; ph.w = CW; ph.h = CH;
       }
       try { ph.sig = photoSig(ph.img); } catch (x) { ph.sig = null; }
-      ph.tex = null; // the old texture belongs to the GL context; a fresh one is made from the edited picture on the next draw
+      photoTexFree([ph]); // a fresh texture is made from the edited picture on the next draw; the old one leaves the GPU now
     }
     /** The strip's thumbnail drawn as the card will be (the turn and the zoom; the pan roughly). */
-    function edCss(f) { var e = edOf(f); if (!e.r && e.z === 1) return ""; var k = (1 - 1 / e.z) * 50; return ' style="transform:scale(' + e.z + ") translate(" + (-e.x * k) + "%," + (-e.y * k) + "%) rotate(" + e.r * 90 + 'deg)"'; }
+    function edCss(f) { var e = edOf(f); if (edPlain(e)) return ""; var k = (1 - 1 / e.z) * 50, sa = 1 + Math.abs(Math.sin(e.a * Math.PI / 180)); return ' style="transform:scale(' + e.z * sa + ") translate(" + (-e.x * k) + "%," + (-e.y * k) + "%) rotate(" + (e.r * 90 + e.a) + 'deg)"'; }
     /* ---- reading the photos: MediaPipe (vendored under vendor/mediapipe, loaded only when needed) gives each photo a vector for its look
        and one per face. Kept on the photo (and, on the PC, in the file Save changes writes), so a photo is read once per edit. ---- */
     var PA = { st: "idle", tasks: null, again: false, done: Promise.resolve(), n: 0, of: 0 };
@@ -8767,7 +8784,7 @@ var qrcode = function() {
       /* Card size follows the camera distance: tall enough to be about 28% of the screen at the current distance, never smaller than PHOTO_H,
          eased over ~0.8 s so it never pops. A card the director placed keeps the size it planned with. */
       var csT = Math.min(4 * PHOTO_H, Math.max(PHOTO_H, 0.28 * PHO.size * 2 * Math.tan((map.getVerticalFieldOfView ? map.getVerticalFieldOfView() : 36.87) * Math.PI / 360) * zoomDist(map.getZoom(), map.transform.cameraToCenterDistance, map.transform.tileSize || 512, map.getCenter().lat))); // never more than 4x PHOTO_H
-      photos.forEach(function (ph) { var tt = (ph.own || ph.bOwn) && ph.csT ? ph.csT : csT; ph.cs = ph.cs == null ? tt : ph.cs + (tt - ph.cs) * (1 - Math.exp(-dtY / 0.8)); });
+      photos.forEach(function (ph) { var tt = ((ph.own || ph.bOwn) && ph.csT ? ph.csT : csT) * (ph.sz || 1); ph.cs = ph.cs == null ? tt : ph.cs + (tt - ph.cs) * (1 - Math.exp(-dtY / 0.8)); }); // ph.sz: this card's own size (Card size)
       keepClear(dtY);
       photos.forEach(function (ph) {
         if (ph.yaw == null) ph.yaw = ph.face;
@@ -8951,27 +8968,29 @@ var qrcode = function() {
     /* Edit the selected photo: turn it, zoom into it. Applied to the card at once; its look and faces are read again. */
     function edShow() {
       var e = edOf(phSel), set = function (id, v) { var el = $(id); el.value = v; el.dispatchEvent(new Event("input")); };
-      edBusy = true; set("ph-zoom", e.z); set("ph-panx", e.x); set("ph-pany", e.y); edBusy = false;
-      Array.prototype.forEach.call(document.querySelectorAll(".ph-pan"), function (el) { el.style.display = e.z > 1 ? "" : "none"; });
+      edBusy = true; set("ph-zoom", e.z); set("ph-panx", e.x); set("ph-pany", e.y); set("ph-ang", e.a); set("ph-psz", e.s); $("ph-crop").value = e.c; edBusy = false;
+      edPanShow(e);
     }
     var edBusy = false, edT = 0;
-    function edChange(fn) {
+    function edChange(fn, only) {
       if (!phSel) return;
       var e = edOf(phSel); fn(e);
-      if (!e.r && e.z === 1) delete phEd[phSel]; else phEd[phSel] = e;
+      if (edPlain(e) && e.s === 1) delete phEd[phSel]; else phEd[phSel] = e;
       edSave();
       var ph = (photoAll.filter(function (x) { return x.f === phSel; })[0] || {}).ph;
       if (ph && ph.img0) { phApplyEdit(ph); map.triggerRepaint(); }
       var b = document.querySelector('.pt[data-f="' + phSel + '"] img'); if (b) b.setAttribute("style", (edCss(phSel).match(/style="([^"]*)"/) || [0, ""])[1]);
-      Array.prototype.forEach.call(document.querySelectorAll(".ph-pan"), function (el) { el.style.display = e.z > 1 ? "" : "none"; });
-      clearTimeout(edT); edT = setTimeout(function () { paRun(); }, 600); // read it again once the slider rests
+      edPanShow(e);
+      if (only !== "s") { clearTimeout(edT); edT = setTimeout(function () { paRun(); }, 600); } // read it again once the slider rests (the size changes nothing to read)
     }
+    function edPanShow(e) { Array.prototype.forEach.call(document.querySelectorAll(".ph-pan"), function (el) { el.style.display = e.z > 1 || e.c || e.a ? "" : "none"; }); } // only when there is room to pan
     $("ph-rotl").onclick = function () { edChange(function (e) { e.r = (e.r + 3) % 4; }); };
     $("ph-rotr").onclick = function () { edChange(function (e) { e.r = (e.r + 1) % 4; }); };
-    $("ph-ed-rst").onclick = function () { edChange(function (e) { e.r = 0; e.z = 1; e.x = 0; e.y = 0; }); edShow(); };
-    [["ph-zoom", "z"], ["ph-panx", "x"], ["ph-pany", "y"]].forEach(function (p) {
-      $(p[0]).addEventListener("input", function () { if (edBusy) return; var v = +this.value; edChange(function (e) { e[p[1]] = v; }); });
+    $("ph-ed-rst").onclick = function () { edChange(function (e) { e.r = 0; e.z = 1; e.x = 0; e.y = 0; e.a = 0; e.c = ""; e.s = 1; }); edShow(); };
+    [["ph-zoom", "z"], ["ph-panx", "x"], ["ph-pany", "y"], ["ph-ang", "a"], ["ph-psz", "s"]].forEach(function (p) {
+      $(p[0]).addEventListener("input", function () { if (edBusy) return; var v = +this.value; edChange(function (e) { e[p[1]] = v; }, p[1]); });
     });
+    $("ph-crop").onchange = function () { if (edBusy) return; var v = this.value; edChange(function (e) { e.c = v; e.x = 0; e.y = 0; }); };
     /* The Photos tab's settings. Grouping changes regroup at once; the deck being shown keeps its cards until it folds. */
     var PHO_IN = { "ph-sim": "sim", "ph-near": "near", "ph-look": "look", "ph-win": "win", "ph-max": "max", "ph-size": "size", "ph-hold": "hold", "ph-swap": "swap", "ph-up": "up", "ph-wait": "wait", "ph-shuf": "shuf" };
     var PHO_SEL = { "ph-grp": "grp", "ph-face": "face", "ph-order": "order" };
