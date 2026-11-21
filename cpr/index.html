@@ -6401,7 +6401,7 @@ var qrcode = function() {
     camera: { title: "The camera", body: "<p><b>Tilt</b> is how far the camera leans toward the horizon. It is lowered on its own when a hill would come between the camera and the rider.</p><p><b>Distance</b> moves the follow camera closer or farther, in zoom steps: one step is twice as close.</p><p><b>Field of view</b> is the lens. Wide shows more and exaggerates depth; narrow flattens it, like a long lens.</p><p><b>Turn smoothing</b> is how long the camera takes to swing after the route turns. Longer is calmer; shorter keeps the road ahead centred on twisty routes.</p>" },
     sun: { title: "Real sun and moon", body: "<p>The light is worked out for the minute and the place of each moment of the ride: where the sun and moon were, dawn and dusk colours, shadows from the hills, and the cloud cover the weather service recorded for that hour.</p><p>Off, the map is lit as a plain daytime map.</p>" },
     photos: { title: "Photos in the replay", body: "<p>Each photo comes up at the time it was taken, where the ride was then. Its GPS sets where the card stands, when it agrees with that moment.</p><p>A photo with no time within the ride (none, or a camera clock that was off) is not guessed from its GPS alone, since a trail can pass one spot hours apart. It waits in the list: type its ride time, choose it on the route, or pick one of the passes near its GPS. Drop pictures on the page to add them.</p><p><b>Moment</b> slows the replay at each photo and frames it. <b>Burst</b> keeps the speed and lets photos rise beside the trail as you pass.</p><p>Changes stay in this tab until <b>Save changes</b> writes a new file.</p>" },
-    smartcam: { title: "Smart camera on hills", body: "<p>On hilly ground a fixed follow view keeps losing the arrow behind a ridge, or the route over the next crest. With this on, the camera looks a few times a second at the poses around your chosen view: tilted further down, turned up to 40° to one side, or stepped back a little. It checks what each one can really see over the terrain: the arrow, the route ahead and just behind, and the photos coming up. It takes the one closest to your settings that sees them, and glides there: down quickly when the arrow would be hidden, back up slowly once the view is clear.</p><p>On flat ground it changes nothing. Off, the camera only tilts down when a hill blocks the line back to the camera, as before. It is used in the preview and in rendered videos too. With North up, it never turns the view.</p>" },
+    smartcam: { title: "Smart camera on hills", body: "<p>On hilly ground a fixed follow view keeps losing the arrow behind a ridge, or the route over the next crest. With this on, the camera picks one view for the stretch ahead: it looks at where the rider will be over the next few seconds and at the views around your chosen one (tilted further down, turned up to 30° to one side, or stepped back a little). It counts what each can really see over the terrain (the arrow, the route around it, the photos coming up) and takes the one that does best over the whole stretch.</p><p>Then it sticks with it. A ridge that hides the arrow for a second or two is let be; it changes only for a clearly better view, or once the arrow has been hidden for 1.5 s. Every change is a slow glide, never a jump.</p><p>It is the only thing that moves the camera for the terrain. Off, the camera keeps exactly your chosen tilt and distance, hills or not. On flat ground the two are the same. It is used in the preview and in rendered videos too. With North up, it never turns the view.</p>" },
     clouds: { title: "Volumetric clouds", body: "<p>The cloud layers over the ride, built in 3D: how much of the sky each height held, hour by hour, and where the low clouds began. They drift with the wind at about 3 km up as the ride's clock runs, and are lit by the sun of that minute. Ridges hide what is behind them, and a peak can stand out of a cloud deck.</p><p>The data comes from Open-Meteo, the weather service the light already uses. It is asked for once, for the same rounded point near the start, with no key. Rides from the last few years get the clouds by height. Older rides get low, mid and high cover at their usual heights instead; the line under the switch says which.</p><p>The shapes are made up; the amount and the heights are real. It is drawn on the graphics card, so a slow computer may play less smoothly with it on. It needs WebGL 2.</p>" },
     cloudopts: { title: "Cloud settings", body: "<p><b>Intensity</b>: how thick each cloud is. <b>Coverage</b>: more or less sky covered than the weather service reported, only where it reported some. <b>Wideness</b>: how far around the view the clouds reach.</p><p><b>Cloud size</b>: big heaps or small puffs. <b>Softness</b>: crisp or misty edges. <b>Height</b>: every layer moved up or down. <b>Wind</b>: how fast they drift with the ride's clock; 0 holds them still.</p><p><b>Underside shade</b>: how much darker the base is than the sunlit top. <b>Ground shadows</b>: the clouds' shadows on the terrain, cast away from the sun. They show only with the sun more than 4° up: a low sun throws them kilometres away.</p><p><b>Detail</b>: how many layers each cloud is drawn with. More is smoother and costs the graphics card more.</p><p>Each setting goes back to its default with a double-click.</p>" },
     grouphow: { title: "Fast or by similarity", body: "<p><b>Fast</b> groups photos only by when and where they were taken. No picture is read, so even hundreds of photos are ready at once. Retakes of one view and different views from one stop can land in the same group.</p><p><b>Similarity</b> also compares what the photos show: their look, and the faces in them. Each photo is read once in this browser (nothing is uploaded), which takes a while the first time for many photos. The settings under Grouping fine-tune it.</p>" },
@@ -7211,12 +7211,10 @@ var qrcode = function() {
         started = true; follow = true; tog("follow", true); userAt = 0; camResync(true);
         var b = cam === "north" ? 0 : (travelBearing(t, 30) != null ? travelBearing(t, 30) : (smoothB || 0));
         smoothB = arrowB = b; marker.setRotation(b);
-        var want = cleanOn ? cleanPitch : +$("tiltv").value;
-        capAt = 0; pitchCap = clearPitch([p[0], p[1]], want, b);
-        var z = userZoomed ? map.getZoom() : followZoom;
+        var want = cleanOn ? cleanPitch : +$("tiltv").value, st = smartStart(want, b, userZoomed ? map.getZoom() : followZoom);
         var to = setTimeout(res, 2200);
         map.once("moveend", function () { clearTimeout(to); res(); });
-        map.easeTo({ center: [p[0], p[1]], zoom: z, pitch: Math.min(want, pitchCap), bearing: b, duration: 1400, easing: function (x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; } });
+        map.easeTo({ center: [p[0], p[1]], zoom: st.zoom, pitch: st.pitch, bearing: st.bearing, duration: 1400, easing: function (x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; } });
       });
     }
     function startPlay() {
@@ -7252,15 +7250,22 @@ var qrcode = function() {
       follow = true; tog("follow", true); userAt = 0; camResync(true);
       var b = cam === "north" ? 0 : arrowB != null ? arrowB : (travelBearing(t, 30) != null ? travelBearing(t, 30) : smoothB || 0);
       smoothB = b; arrowB = arrowB != null ? arrowB : b;
-      var want = cleanOn ? cleanPitch : +$("tiltv").value;
-      capAt = 0; pitchCap = clearPitch([p[0], p[1]], want, b);
-      if (SHOT) { vZoom = followZoom; vPitch = Math.min(want, pitchCap); }
+      var want = cleanOn ? cleanPitch : +$("tiltv").value, st = smartStart(want, b, followZoom);
+      if (SHOT) { vZoom = st.zoom; vPitch = st.pitch; }
       if (playing) return;
-      map.easeTo({ center: [p[0], p[1]], zoom: followZoom, pitch: Math.min(want, pitchCap), bearing: b, duration: 700, easing: function (x) { return 1 - Math.pow(1 - x, 3); } });
+      map.easeTo({ center: [p[0], p[1]], zoom: st.zoom, pitch: st.pitch, bearing: st.bearing, duration: 700, easing: function (x) { return 1 - Math.pow(1 - x, 3); } });
+    }
+    /** The pose to start from (Play, Preview, Behind the arrow): the smart camera's plan for the stretch ahead, already committed,
+        so the replay begins on it and does not glide somewhere else a moment later. Off: the chosen tilt and distance. */
+    function smartStart(want, b, z) {
+      if (!SMART) return { pitch: want, bearing: b, zoom: z };
+      smartReset(); smartPlan(want, b, z, 0, true);
+      var T = sm.T || { p: want, b: 0, z: 0 }; sm.p = T.p; sm.b = T.b; sm.z = T.z; sm.acc = 0;
+      return { pitch: Math.min(want, T.p), bearing: cam === "north" ? b : (b + T.b + 360) % 360, zoom: z + T.z };
     }
     function camResync(full) {
       try { map.stop(); } catch (e) {}
-      camPos = null; zOff = 0; lastBlockAt = 0; capAt = 0; pitchCap = 90; userHeld = false; smartReset();
+      camPos = null; userHeld = false; smartReset();
       if (!shot) clampSet(true);
       if (full) userZoomed = false;
     }
@@ -7616,11 +7621,9 @@ var qrcode = function() {
         var jo = { center: camPos, bearing: cam !== "north" && smoothB != null ? smoothB : 0 };
         // A close follow view: about a kilometre ahead on foot, a few for a bike or car.
         // Come back in (about 0.8 zoom a second) once the hill has been clear for half a second.
-        if (zOff < 0 && performance.now() - lastBlockAt > 500) zOff = Math.min(0, zOff + 0.8 * dw);
         var smartNow = SMART && !(SHOT && shot);
-        if (smartNow) zOff = 0; // the smart camera does its own stepping back (sm.z), eased
-        var fz = followZoom - (SHOT ? 0 : 0.3 * momentWeight()) + (smartNow ? sm.z : zOff);
-        // With SHOT the follow view keeps its own zoom and tilt (vZoom, vPitch); with no shot running they are read back from the map each frame, so pinch, tilt and unclip work as before.
+        var fz = followZoom - (SHOT ? 0 : 0.3 * momentWeight()) + (smartNow ? sm.z : 0);
+        // With SHOT the follow view keeps its own zoom and tilt (vZoom, vPitch); with no shot running they are read back from the map each frame, so pinch and tilt work as before.
         if (SHOT && !shot) { vZoom = map.getZoom(); vPitch = map.getPitch(); }
         var zc = SHOT ? vZoom : map.getZoom();
         if (!userZoomed) { if (seeking) jo.zoom = fz; else if (Math.abs(fz - zc) > (SHOT ? 0.01 : 0.08)) jo.zoom = zc + (fz - zc) * (1 - Math.exp(-dw / 1.2)); }
@@ -7629,43 +7632,35 @@ var qrcode = function() {
         // Never put the camera inside a hill or a building: tilt down until the view back to the camera is clear.
         var target, pc = SHOT ? vPitch : map.getPitch();
         if (smartNow) {
-          if (seeking || Date.now() - sm.at > 250) { // plan: a few times a second, and at once after a jump
-            sm.at = Date.now();
+          sm.acc += seeking ? 0 : dw;
+          if (seeking || sm.acc >= SM_EVERY || !sm.T) { // plan on screen time, so a rendered video plans as often as the preview
             var zb = userZoomed ? (SHOT ? vZoom : map.getZoom()) : followZoom - 0.3 * momentWeight();
-            var pl = null; try { pl = camSmart([p[0], p[1]], want, jo.bearing, zb, cam === "north"); } catch (e) { pl = null; }
-            sm.T = pl ? { p: pl.p, b: pl.b, z: pl.z } : sm.T || { p: want, b: 0, z: 0 };
+            smartPlan(want, jo.bearing, zb, Math.min(sm.acc, 5), seeking);
+            sm.acc = 0;
           }
-          var T2 = sm.T || { p: want, b: 0, z: 0 };
-          if (seeking) { sm.p = T2.p; sm.b = T2.b; sm.z = T2.z; } // a jump lands on the plan at once
-          else if (sm.p == null) { sm.p = pc; sm.b = 0; sm.z = 0; } // the first frame after Play: from where the camera is, never a swing
-          else { // down fast when something would be hidden, back up slowly once clear; the turn and the step back in between
-            sm.p += (T2.p - sm.p) * (1 - Math.exp(-dw / (T2.p < sm.p ? 0.55 : 1.6)));
-            sm.b += (T2.b - sm.b) * (1 - Math.exp(-dw / 1.6));
-            sm.z += (T2.z - sm.z) * (1 - Math.exp(-dw / (T2.z < sm.z ? 0.7 : 1.8)));
-          }
+          if (seeking || sm.p == null) { sm.p = sm.T.p; sm.b = sm.T.b; sm.z = sm.T.z; } // a jump lands on the plan; Play starts on it (camIntro glides there)
+          else smartEase(dw);
           if (cam !== "north") jo.bearing = (jo.bearing + sm.b + 360) % 360;
           target = Math.min(want, sm.p);
-          jo.pitch = seeking ? target : pc + (target - pc) * (1 - Math.exp(-dw / 0.35)); // sm.p is already eased: follow it closely
+          jo.pitch = seeking ? target : pc + (target - pc) * (1 - Math.exp(-dw / 0.3)); // sm.p is already slow and smooth: follow it closely
         } else {
-          if (seeking || Date.now() - capAt > 150) { capAt = Date.now(); pitchCap = clearPitch([p[0], p[1]], want, jo.bearing, SHOT && shot ? vZoom : undefined); }
-          target = Math.min(want, pitchCap);
-          jo.pitch = seeking ? target : pc + (target - pc) * (1 - Math.exp(-dw / (target < pc ? 0.25 : 1.5))); // the old cap, with the switch off
+          target = want; // off: no terrain guard at all, the chosen tilt
+          jo.pitch = seeking ? target : pc + (target - pc) * (1 - Math.exp(-dw / 1.2));
         }
         var wS = 0;
         if (SHOT) {
           vPitch = jo.pitch; vZoom = jo.zoom != null ? jo.zoom : zc; // the follow pose, kept on its own while a shot runs
           wS = shot ? shotW() : 0;
         }
-        var before = [map.getPitch(), map.getZoom()], blk0 = lastBlockAt, inShot = false;
+        var before = [map.getPitch(), map.getZoom()], inShot = false;
         if (SHOT && shot && wS > 0) { // the shot: follow camera and shot camera blended as 3D positions; MapLibre converts the pose
           var so = null; try { so = shotPose(jo, wS, dw); } catch (e) { so = null; }
           if (so) { if (!clampOff) clampSet(false); map.jumpTo(so); jo = so; inShot = true; lastPose = so; shotWatch(); }
         }
         if (!inShot) {
           map.jumpTo(jo);
-          if (!smartNow || shotInGround()) unclip(); // the smart camera plans clear of hills; the old pull-back only if the camera is truly in the ground
           if (SHOT) lastPose = { center: jo.center, zoom: jo.zoom != null ? jo.zoom : map.getZoom(), pitch: map.getPitch(), bearing: jo.bearing };
-        } else if (shotInGround()) { // unclip is not used in a shot; only if the camera is truly in the ground, plan the shot again (once)
+        } else if (shotInGround()) { // only if the camera is truly in the ground, plan the shot again (once)
           var g2 = shot.grp, h2 = shot.hm, c2 = shot.c, o2 = shot.outAt, re2 = shot.re;
           shotEnd(); if (re2 < 1) { shot = directShot(g2, h2, 0.5); if (shot) { shot.c = c2; shot.outAt = o2; shot.re = re2 + 1; shot.Tin = Math.max(shot.Tin, c2 + 0.5); } }
         }
@@ -7686,121 +7681,113 @@ var qrcode = function() {
       var c = camNow(); if (!c || !map.queryTerrainElevation) return false;
       var g = map.queryTerrainElevation([c.lng, c.lat]); return g != null && c.alt < g + 3;
     }
-    /** True when the ground (or a building) is at or above the line from the camera to the map centre. */
-    function camBlocked() {
-      var c = camNow(); if (!c || !map.getTerrain || !map.getTerrain()) return false;
-      var ce = map.getCenter(), ec = map.queryTerrainElevation(ce); if (ec == null) return false;
-      var bld = map.getZoom() >= 14 && map.getLayer("rc-building-3d") && map.getLayoutProperty("rc-building-3d", "visibility") !== "none" ? 30 : 0;
-      for (var f = 0; f <= 0.8; f += 0.1) {
-        var g = map.queryTerrainElevation([c.lng + (ce.lng - c.lng) * f, c.lat + (ce.lat - c.lat) * f]);
-        // a wide margin: finer terrain arriving a moment later can raise the ground by tens of metres
-        if (g != null && g + 40 + (f > 0.05 ? bld : 0) > c.alt + (ec - c.alt) * f) return true;
-      }
-      return false;
-    }
-    /** After a camera move: if a hill is in the way, back the camera off (zoom out a little) rather than
-        tilting it to stare at the ground; tilt only down to 45°. The back-off (zOff) relaxes slowly once clear. */
-    var zOff = 0, lastBlockAt = 0;
-    function unclip() {
-      for (var it = 0; it < 10 && camBlocked(); it++) {
-        lastBlockAt = performance.now();
-        if (zOff > -1.6) { zOff = Math.max(-1.6, zOff - 0.15); map.jumpTo({ zoom: map.getZoom() - 0.15 }); }
-        else if (map.getPitch() > 45) { pitchCap = Math.max(45, map.getPitch() - 3); map.jumpTo({ pitch: pitchCap }); }
-        else break;
-      }
-    }
-    var pitchCap = 90, capAt = 0, cleanPitch = 62;
-    // Hand-made moves too (pinch, tilt, the camera intro): never leave the camera inside a hill.
-    map.on("moveend", function () { if (!playing && !shot) unclip(); });
+    var cleanPitch = 62; // (the tilt cap and the zoom pull-back that lived here are gone: the smart camera is the only terrain guard)
     var followZoom = d.category === "HIKE" ? 15.2 : d.category === "CYCLE" ? 14.6 : 14.2, followBase = followZoom, userZoomed = false; // a higher default view (0.6 zoom out from before)
     map.on("zoomstart", function (e) { if (e && e.originalEvent) userZoomed = true; });
-    /** The steepest pitch, up to want, at which the line from the rider back to the camera clears
-        the ground (and the 3D buildings when they are up) by a few metres. */
-    function clearPitch(center, want, bearing, zoom, strict) { // zoom: a camera that is not the current one; strict: 0 when even 45° is not clear
-      var R = Math.PI / 180, terr = map.getTerrain && map.getTerrain(), zm = zoom != null ? zoom : map.getZoom();
-      var bld = zm >= 14 && map.getLayer("rc-building-3d") && map.getLayoutProperty("rc-building-3d", "visibility") !== "none" ? 35 : 0;
-      if (!terr && !bld) return want;
-      function elev(ll) { if (!terr) return 0; var h = map.queryTerrainElevation(ll); return h == null ? null : h; }
-      var ce = elev(center); if (ce == null) return want;
-      var H = map.getCanvas().clientHeight, fov = (map.getVerticalFieldOfView ? map.getVerticalFieldOfView() : 36.87) * R;
-      var D = 0.5 * H / Math.tan(fov / 2) * 40075016.686 * Math.cos(center[1] * R) / (512 * Math.pow(2, zm));
-      var back = (bearing + 180) * R, kx = 1 / (111320 * Math.cos(center[1] * R)), ky = 1 / 111320;
-      var ground = [];
-      for (var k = 1; k <= 10; k++) ground.push(null);
-      for (var pp = want; pp > 12; pp -= 3) {
-        var ok = true;
-        for (var k = 1; k <= 10 && ok; k++) {
-          var f = k / 10, hd = f * D * Math.sin(pp * R), alt = ce + f * D * Math.cos(pp * R);
-          var g = elev([center[0] + Math.sin(back) * hd * kx, center[1] + Math.cos(back) * hd * ky]);
-          if (g == null) continue;
-          if (g + 10 + (f > 0.08 ? bld : 0) > alt) ok = false;
-        }
-        if (ok) return strict && pp < 45 ? 0 : Math.max(45, pp);
-      }
-      return strict ? 0 : 45; // past this, back the camera off instead (see unclip)
-    }
-    /* ---------- the smart camera, for hills (Camera tab, on by default) ----------
-       What it replaces: clearPitch and unclip only asked "is the line from the rider back to the camera clear?", and answered with
-       a tilt cap recomputed every 150 ms (it jumped whenever a ridge came and went) and a zoom pulled back 0.15 at a time, up to ten
-       times in one frame. So on hilly ground the view lurched, and it still lost the route over the next crest.
-       What it does: four times a second it scores a set of camera poses around the follow view (tilt down from the chosen tilt,
-       turned up to 40° to either side, stepped back up to 0.7 zoom) by what each one can actually see: the arrow, the route ahead
-       and a little behind, and the photo cards coming up, each tested by a ray over the terrain and against the edges of the
-       frame. The pose closest to the chosen view that sees them wins; a small cost for leaving the current plan keeps it from
-       flickering between two near-equals. The frame then eases toward it: down quickly when the arrow would be hidden, back up
-       slowly once it is clear. A pose that already sees everything ends the search, so on flat ground it costs almost nothing. */
+    /* ---------- the smart camera, for hills (Camera tab, on by default): the only thing that moves the follow camera for terrain ----------
+       The tilt cap (clearPitch) and the zoom pull-back (unclip) it once worked beside are gone: three guards each reacting to the
+       frame in front of them pulled the view three ways at once.
+       It plans for the stretch ahead, not the instant: every 0.75 s of screen time it scores a set of poses around the chosen view
+       (tilt down in 6° steps to 36° below, turned up to 30° either side, stepped back up to 0.7 zoom) over where the rider will be
+       now and 1.5, 3 and 4.5 s on. Each moment counts what that pose sees of the arrow, the route around it and the cards coming
+       up, by rays over the terrain and against the frame's edges. The pose that does best over the whole stretch is the one for it.
+       Then it commits. The plan in use is only left for a clearly better one, for any better one once it has stood 6 s, or as soon
+       as the arrow has been hidden 1.5 s in a row: a ridge passing in front for a moment is let be. Every change is eased slowly and
+       rate-limited, so the camera drifts to a new pose rather than snapping. Heights come from one grid anchored at the ride's start
+       and kept between plans, so the ground under a stretch is asked from the map once, not again every plan. */
     var SMART = pref("replayCamSmart") !== "0";
-    var sm = { p: null, b: 0, z: 0, T: null, at: 0 };
-    function smartReset() { sm.p = null; sm.b = 0; sm.z = 0; sm.T = null; sm.at = 0; }
+    var sm = { p: null, b: 0, z: 0, T: null, acc: 1e9, hid: 0, since: 0 }, SM_EVERY = 0.75, SM_AHEAD = [0, 1.5, 3, 4.5], SM_W = [1, 0.9, 0.8, 0.7];
+    function smartReset() { sm.p = null; sm.b = 0; sm.z = 0; sm.T = null; sm.acc = 1e9; sm.hid = 0; sm.since = 0; }
     tog("cam-smart", SMART);
-    function camSmart(rp, want, bear, zBase, northUp) {
+    var smH = null;
+    function smHeights() { // refreshed every 30 s (finer terrain arrives), when the terrain stretch changes, or once it holds 120k points
+      var tr = map.getTerrain && map.getTerrain(), ex = tr && tr.exaggeration != null ? tr.exaggeration : 1, now = performance.now();
+      if (!smH || smH.ex !== ex || smH.cnt.n > 120000 || now - smH.at > 30000) {
+        var fr = mkFrame(fLon[0], fLat[0]), hold = { v: 0 }, cnt = { n: 0 };
+        smH = { fr: fr, hold: hold, cnt: cnt, ex: ex, at: now, h: mkHeights(function (lo, la) { cnt.n++; return map.queryTerrainElevation([lo, la]); }, fr, 30, hold) };
+      }
+      return smH;
+    }
+    /** Ride time sec seconds of screen time from now, at the replay's speed (stops skipped or shortened as they play). */
+    function smAhead(sec) {
+      var eff = Math.max(1, cleanOn ? cleanRate : rate);
+      if (skipOn()) { var S = stops(); return realAt(Math.min(S.total, movingAt(t) + eff * sec)); }
+      return Math.min(d.dur, t + eff * sec);
+    }
+    /** Score the candidate poses over the stretch ahead; returns { best, cur } (cur: the plan in use, scored the same way) or null. */
+    function camSmart(want, bear0, zBase, northUp) {
       if (!map.queryTerrainElevation || !map.getTerrain || !map.getTerrain() || !fD.length) return null;
       var R = Math.PI / 180, cv = map.getCanvas(), W = cv.clientWidth, H = cv.clientHeight; if (!W || !H) return null;
       var TR = map.transform, CT = TR.cameraToCenterDistance, TS = TR.tileSize || 512;
       var F = 0.5 * H / Math.tan((map.getVerticalFieldOfView ? map.getVerticalFieldOfView() : 36.87) * R / 2);
-      var fr = mkFrame(rp[0], rp[1]), g00 = map.queryTerrainElevation([rp[0], rp[1]]), hold = { v: g00 != null ? g00 : 0 };
-      if (g00 == null) return null; // no ground here yet: nothing to plan against
-      var hAt = mkHeights(function (lo, la) { return map.queryTerrainElevation([lo, la]); }, fr, 25, hold), g0 = hAt(0, 0);
-      var D0 = zoomDist(zBase, CT, TS, rp[1]);
-      // what has to be seen, with how much it matters
-      var tg = [{ P: [0, 0, g0 + 3], w: 6, rider: true }];
-      var x0 = fD[fIdx(t)] || 0, reach = Math.min(1800, Math.max(150, D0 * 1.6));
-      [[-0.15, 0.6], [0.2, 1.2], [0.45, 1], [0.7, 0.8], [1, 0.6]].forEach(function (a) {
-        var q = atDist(x0 + a[0] * reach), x = fr.x(q[0]), y = fr.y(q[1]); tg.push({ P: [x, y, hAt(x, y) + 2], w: a[1] });
-      });
-      photos.forEach(function (ph) { // the cards up now or about to rise, nearest first, at most three
-        if (tg.length >= 9 || ph.done || !ph.img) return;
-        var gx = fr.x(ph.lon), gy = fr.y(ph.lat); if (Math.hypot(gx, gy) > reach * 1.3) return;
-        var S = ph.cs || PHOTO_H, wM = S * ph.w / ph.h, fb = (ph.face || 0) * R, sd = ph.side || 1, dIn = ph.dIn != null ? ph.dIn : 0.55 * S;
-        var cx = gx + Math.cos(fb) * sd * (dIn + wM / 2), cy = gy - Math.sin(fb) * sd * (dIn + wM / 2);
-        tg.push({ P: [cx, cy, Math.max(hAt(gx, gy), hAt(cx, cy)) + (ph.hb != null ? ph.hb : 0.5 * S) + S * 0.55], w: 1.2 });
-      });
-      var wSum = 0; tg.forEach(function (o) { wSum += o.w; });
-      function score(pitch, db, dz) {
-        var d = zoomDist(zBase + dz, CT, TS, rp[1]), B = camBasis(bear + db, pitch);
-        var C = [-B.f[0] * d, -B.f[1] * d, g0 - B.f[2] * d];
-        var gC = hAt(C[0], C[1]); if (C[2] < gC + 25) return { s: -1e9 }; // the camera under (or skimming) a hill
-        var seen = 0, riderSeen = false;
-        for (var i = 0; i < tg.length; i++) {
-          var o = tg[i], q = projPt(C, B, o.P, F, W, H);
+      var G = smHeights(), fr = G.fr, hAt = G.h;
+      var p0 = fixAt(t); if (!p0) return null;
+      var g00 = map.queryTerrainElevation([p0[0], p0[1]]); if (g00 == null) return null; // no ground here yet: nothing to plan against
+      G.hold.v = g00;
+      var lat0 = p0[1], D0 = zoomDist(zBase, CT, TS, lat0), reach = Math.min(1800, Math.max(150, D0 * 1.6));
+      var eff = Math.max(1, cleanOn ? cleanRate : rate);
+      // the moments of the stretch: where the rider is, which way the follow camera faces, what has to be seen
+      var mo = SM_AHEAD.map(function (sec, si) {
+        var tt = sec ? smAhead(sec) : t, q = fixAt(tt); if (!q) return null;
+        var rx = fr.x(q[0]), ry = fr.y(q[1]), g0 = hAt(rx, ry);
+        var b = northUp ? 0 : si === 0 ? bear0 : travelBearing(tt, Math.max(8, Math.min(300, clockMps(tt) * eff * 0.15)));
+        if (b == null) b = bear0;
+        var tg = [{ P: [rx, ry, g0 + 3], w: 3, rider: true }], x0 = fD[fIdx(tt)] || 0;
+        [[-0.15, 0.5], [0.25, 1.2], [0.55, 1], [0.9, 0.7]].forEach(function (a) { var r2 = atDist(x0 + a[0] * reach), x = fr.x(r2[0]), y = fr.y(r2[1]); tg.push({ P: [x, y, hAt(x, y) + 2], w: a[1] }); });
+        if (si < 2) photos.forEach(function (ph) { // the cards up now or about to rise, at most three, for the first two moments
+          if (tg.length >= 8 || ph.done || !ph.img) return;
+          var gx = fr.x(ph.lon), gy = fr.y(ph.lat); if (Math.hypot(gx - rx, gy - ry) > reach * 1.3) return;
+          var S = ph.cs || PHOTO_H, wM = S * ph.w / ph.h, fb = (ph.face || 0) * R, sd = ph.side || 1, dIn = ph.dIn != null ? ph.dIn : 0.55 * S;
+          var cx = gx + Math.cos(fb) * sd * (dIn + wM / 2), cy = gy - Math.sin(fb) * sd * (dIn + wM / 2);
+          tg.push({ P: [cx, cy, Math.max(hAt(gx, gy), hAt(cx, cy)) + (ph.hb != null ? ph.hb : 0.5 * S) + S * 0.55], w: 1 });
+        });
+        var wS = 0; tg.forEach(function (o) { wS += o.w; });
+        return { c: [rx, ry, g0], b: b, tg: tg, wS: wS, w: SM_W[si], lat: q[1] };
+      }).filter(Boolean);
+      if (!mo.length) return null;
+      function one(m, pitch, db, dz) { // one moment: 0..13, and whether the arrow is seen
+        var d = zoomDist(zBase + dz, CT, TS, m.lat), B = camBasis(m.b + db, pitch);
+        var C = [m.c[0] - B.f[0] * d, m.c[1] - B.f[1] * d, m.c[2] - B.f[2] * d];
+        if (C[2] < hAt(C[0], C[1]) + 25) return { s: -20, r: false }; // the camera under (or skimming) a hill
+        var seen = 0, rider = false, step = Math.max(20, d / 24);
+        for (var i = 0; i < m.tg.length; i++) {
+          var o = m.tg[i], q = projPt(C, B, o.P, F, W, H);
           if (!q || q[0] < 8 || q[0] > W - 8 || q[1] < 30 || q[1] > H - 20) continue; // off the frame (the top strip holds the title)
-          if (marchHit(hAt, C, o.P, 30, 10, Math.max(15, d / 28), 4) >= 0) continue; // a hill in between
-          seen += o.w; if (o.rider) riderSeen = true;
+          if (marchHit(hAt, C, o.P, 30, 10, step, 4) >= 0) continue;                  // a hill in between
+          seen += o.w; if (o.rider) rider = true;
         }
-        var s = 10 * seen / wSum + (riderSeen ? 4 : 0)
-          - 0.05 * (want - pitch) - 0.018 * Math.abs(db) - 1.4 * Math.abs(dz);
-        if (sm.T) s -= 0.35 * (Math.abs(pitch - sm.T.p) / 10 + Math.abs(db - sm.T.b) / 20 + Math.abs(dz - sm.T.z) / 0.35); // stay with the plan unless clearly better
-        return { s: s, all: seen >= wSum - 1e-6 };
+        return { s: 10 * seen / m.wS + (rider ? 3 : 0), r: rider };
+      }
+      function score(pitch, db, dz) {
+        var s = 0, w = 0, r0 = false;
+        for (var i = 0; i < mo.length; i++) { var r = one(mo[i], pitch, db, dz); s += r.s * mo[i].w; w += mo[i].w; if (i === 0) r0 = r.r; }
+        return { s: s / w - 0.05 * (want - pitch) - 0.02 * Math.abs(db) - 1.2 * Math.abs(dz), r0: r0, p: pitch, b: db, z: dz };
       }
       var pitches = []; for (var pp = want; pp >= Math.max(25, want - 36) - 1e-6; pp -= 6) pitches.push(pp);
-      var bears = northUp ? [0] : [0, -20, 20, -40, 40], zs = [0, -0.35, -0.7], best = null;
-      // nearest to the chosen view first: the first that sees everything at no cost ends the search
+      var bears = northUp ? [0] : [0, -15, 15, -30, 30], zs = [0, -0.35, -0.7], best = null;
       for (var zi = 0; zi < zs.length; zi++) for (var bi = 0; bi < bears.length; bi++) for (var pi = 0; pi < pitches.length; pi++) {
-        var r = score(pitches[pi], bears[bi], zs[zi]);
-        if (!best || r.s > best.s) best = { s: r.s, p: pitches[pi], b: bears[bi], z: zs[zi] };
-        if (r.all && zi === 0 && bi === 0 && pi === 0) return best;
+        var r = score(pitches[pi], bears[bi], zs[zi]); if (!best || r.s > best.s) best = r;
       }
-      return best && best.s > -1e8 ? best : null;
+      var cur = sm.T ? score(Math.min(want, sm.T.p), northUp ? 0 : sm.T.b, sm.T.z) : null;
+      return { best: best, cur: cur };
+    }
+    /** Plan now, and decide whether to change: the commitment rules above. dt: screen seconds since the last plan. */
+    function smartPlan(want, bear, zBase, dt, fresh) {
+      var r = null; try { r = camSmart(want, bear, zBase, cam === "north"); } catch (e) { r = null; }
+      if (!r || !r.best) { if (!sm.T) sm.T = { p: want, b: 0, z: 0 }; return; }
+      sm.since += dt;
+      if (!sm.T || fresh) { sm.T = { p: r.best.p, b: r.best.b, z: r.best.z }; sm.since = 0; sm.hid = 0; return; }
+      sm.hid = r.cur && !r.cur.r0 ? sm.hid + dt : 0;
+      var gain = r.best.s - (r.cur ? r.cur.s : -1e9);
+      if (gain > 2 || (sm.hid >= 1.5 && r.best.r0 && gain > 0) || (sm.since >= 6 && gain > 0.6)) {
+        sm.T = { p: r.best.p, b: r.best.b, z: r.best.z }; sm.since = 0; sm.hid = 0;
+      }
+    }
+    /** Ease toward the plan: slow, and limited per second, so a new plan is drifted to. */
+    function smartEase(dw) {
+      var T = sm.T; if (!T) return;
+      function go(cur, tgt, tau, rate) { var st = (tgt - cur) * (1 - Math.exp(-dw / tau)), lim = rate * dw; return cur + Math.max(-lim, Math.min(lim, st)); }
+      sm.p = go(sm.p, T.p, 1.4, 14); sm.b = go(sm.b, T.b, 1.8, 12); sm.z = go(sm.z, T.z, 1.6, 0.35);
     }
     function frame(ts) {
       if (!playing) return;
@@ -9765,7 +9752,7 @@ var qrcode = function() {
       endT = setTimeout(function () { if (!cleanOn) return; card.style.display = "block"; requestAnimationFrame(function () { card.style.opacity = "1"; }); }, 2800);
     }
     var orbiting = false, endT = 0;
-    window.__cpDbg = { clearPitch: clearPitch, cleanEnd: cleanEnd, cleanStart: cleanStart };
+    window.__cpDbg = { camSmart: camSmart, cleanEnd: cleanEnd, cleanStart: cleanStart };
     function cleanStop() {
       shotEnd(); cleanOn = false; playing = false; playIcon(false);
       orbiting = false; clearTimeout(endT);
@@ -9927,7 +9914,6 @@ var qrcode = function() {
             t = skipOn() ? (playU >= stops().total ? d.dur : realAt(playU)) : Math.min(d.dur, playU);
             if (t >= d.dur) { rideEndI = i + 1; N = rideEndI + nEnd; }
             if (i % sunEvery === 0) sunAt = 0; else sunAt = Date.now();
-            capAt = 0;
             draw(false, 1 / FPS);
             return Promise.resolve();
           }
@@ -9943,7 +9929,6 @@ var qrcode = function() {
           var cc = co.center || start.c;
           map.jumpTo({ center: [start.c.lng + (cc.lng - start.c.lng) * ee, start.c.lat + (cc.lat - start.c.lat) * ee],
             zoom: start.z + ((co.zoom || start.z) - 0.25 - start.z) * ee, pitch: start.p + (55 - start.p) * ee, bearing: b0 + 35 * ee + Math.max(0, j - 2.6 * FPS) / FPS * 9 });
-          unclip();
           return Promise.resolve();
         }
         function step() {
@@ -10066,7 +10051,7 @@ var qrcode = function() {
       clock: clock,
       set: function (k, v) {
         if (k === "dist") { followZoom = followBase - v; userZoomed = false; if (!playing) draw(true); }
-        else if (k === "fov") { try { map.setVerticalFieldOfView(v); } catch (e) {} capAt = 0; if (!playing) draw(true); }
+        else if (k === "fov") { try { map.setVerticalFieldOfView(v); } catch (e) {} sm.acc = 1e9; if (!playing) draw(true); } // a new lens: plan again at once
         else if (k === "exag") { exagWant = v; exagSet(v); }
         else if (k === "lineW") { CTL.lineW = v; [["trk", 1], ["trk-case", 1.5], ["trk-prog", 5 / 6], ["trk-prog-case", 1.5]].forEach(function (L) { if (map.getLayer(L[0])) map.setPaintProperty(L[0], "line-width", v * L[1]); }); }
         else if (k === "trail") { CTL.trail = v; ["trk-prog", "trk-prog-glow"].forEach(function (id) { if (map.getLayer(id)) map.setPaintProperty(id, "line-color", v); }); }
