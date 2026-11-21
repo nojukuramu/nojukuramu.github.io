@@ -395,6 +395,8 @@
       </div>
       <div class="grp"><h3>Light<button class="infobtn" data-info="sun" aria-label="How the light is worked out"><svg class="i"><use href="#i-info"/></svg></button></h3>
         <button id="sun" class="tgl"><span>Real sun and moon</span><i></i></button>
+        <div class="ph-head"><button id="clouds" class="tgl"><span>Volumetric clouds</span><i></i></button><button class="infobtn" data-info="clouds" aria-label="Where the clouds come from"><svg class="i"><use href="#i-info"/></svg></button></div>
+        <div class="hint" id="clouds-note"></div>
       </div>
       <div class="grp"><h3>Route line</h3>
         <label class="fld"><span>Width</span><input id="line-w" type="range" min="2" max="14" step="0.5" value="6" data-unit=" px" data-def="6"><output></output></label>
@@ -6382,6 +6384,7 @@ var qrcode = function() {
     camera: { title: "The camera", body: "<p><b>Tilt</b> is how far the camera leans toward the horizon. It is lowered on its own when a hill would come between the camera and the rider.</p><p><b>Distance</b> moves the follow camera closer or farther, in zoom steps: one step is twice as close.</p><p><b>Field of view</b> is the lens. Wide shows more and exaggerates depth; narrow flattens it, like a long lens.</p><p><b>Turn smoothing</b> is how long the camera takes to swing after the route turns. Longer is calmer; shorter keeps the road ahead centred on twisty routes.</p>" },
     sun: { title: "Real sun and moon", body: "<p>The light is worked out for the minute and the place of each moment of the ride: where the sun and moon were, dawn and dusk colours, shadows from the hills, and the cloud cover the weather service recorded for that hour.</p><p>Off, the map is lit as a plain daytime map.</p>" },
     photos: { title: "Photos in the replay", body: "<p>Each photo comes up at the time it was taken, where the ride was then. Its GPS sets where the card stands, when it agrees with that moment.</p><p>A photo with no time within the ride (none, or a camera clock that was off) is not guessed from its GPS alone, since a trail can pass one spot hours apart. It waits in the list: type its ride time, choose it on the route, or pick one of the passes near its GPS. Drop pictures on the page to add them.</p><p><b>Moment</b> slows the replay at each photo and frames it. <b>Burst</b> keeps the speed and lets photos rise beside the trail as you pass.</p><p>Changes stay in this tab until <b>Save changes</b> writes a new file.</p>" },
+    clouds: { title: "Volumetric clouds", body: "<p>The cloud layers over the ride, built in 3D: how much of the sky each height held, hour by hour, and where the low clouds began. They drift with the wind at about 3 km up as the ride's clock runs, and are lit by the sun of that minute. Ridges hide what is behind them, and a peak can stand out of a cloud deck.</p><p>The data comes from Open-Meteo, the weather service the light already uses. It is asked for once, for the same rounded point near the start, with no key. Rides from the last few years get the clouds by height. Older rides get low, mid and high cover at their usual heights instead; the line under the switch says which.</p><p>The shapes are made up; the amount and the heights are real. It is drawn on the graphics card, so a slow computer may play less smoothly with it on. It needs WebGL 2.</p>" },
     grouphow: { title: "Fast or by similarity", body: "<p><b>Fast</b> groups photos only by when and where they were taken. No picture is read, so even hundreds of photos are ready at once. Retakes of one view and different views from one stop can land in the same group.</p><p><b>Similarity</b> also compares what the photos show: their look, and the faces in them. Each photo is read once in this browser (nothing is uploaded), which takes a while the first time for many photos. The settings under Grouping fine-tune it.</p>" },
     grouping: { title: "Grouping photos", body: "<p>Photos that belong together share one spot: a deck in <b>Burst</b>, one stop in <b>Moment</b>.</p><p><b>Auto</b> groups by look in Burst and by time and place in Moment, as before. <b>Similar look</b> groups only retakes of the same view. <b>Time and place</b> groups whatever was taken at one spot. <b>Never</b> gives every photo its own turn.</p><p><b>Look tolerance</b> above 1 groups more loosely, below 1 more strictly. <b>Same place within</b> left at Auto is 250 m in Burst and 300 m in Moment. <b>Up to</b> at Auto is 7 per deck, 3 per moment.</p><p>The look of each photo is read in this tab, with MediaPipe's image embedder, the first time photos are opened. Nothing is uploaded.</p>" },
     faces: { title: "Faces", body: "<p>Two photos of the same spot can show different people. With faces on, each face is found (MediaPipe face detector), cut out and compared on its own, so a selfie of one person is not stacked with a selfie of another.</p><p><b>Normal</b> keeps photos apart when their faces differ. <b>Strict</b> also keeps a photo with a face apart from one without. <b>Loose</b> only splits clearly different faces.</p><p>Faces smaller than about a twentieth of the photo are ignored. This tells look-alikes apart, not identities: it is a guide for grouping, nothing more. It all runs in this tab.</p>" },
@@ -8491,7 +8494,228 @@ var qrcode = function() {
       try { timelineDraw(); } catch (e) {}
     }
     // Added on top of everything (the cards stand above the route); put back after a style change.
-    function ensurePhotoLayer() { if (photos.length && !map.getLayer("photos3d")) try { map.addLayer(photoLayer); } catch (e) {} }
+    function ensurePhotoLayer() { if (photos.length && !map.getLayer("photos3d")) try { map.addLayer(photoLayer, map.getLayer("clouds3d") ? "clouds3d" : undefined); } catch (e) {} } // under the clouds, which blend over what is behind them
+    /* ---- volumetric clouds (Map tab, off by default): the real cloud layers at the hour of each moment, built in 3D over the terrain ----
+       Data: Open-Meteo, key-less, the same service and the same rounded point as the light. Cloud cover on ten pressure levels with the
+       height of each level, so a layer sits where it was, not at a textbook height; the wind at 700 hPa, which moves them as the replay
+       plays; and the 2 m temperature and dew point, whose spread gives the base of the low clouds (about 125 m per degree). The forecast
+       API keeps that for about three months, the historical-forecast API from 2022; an older ride falls back to the archive's low / mid /
+       high cover at usual heights, and says so.
+       Drawing: stacked horizontal slices through a world-fixed, tileable 3D noise, each slice lit by its height in its layer and by the sun
+       of that minute, blended back to front. A ray march would look softer but costs a full-screen pass per frame; slices share the
+       map's depth buffer for free, so a ridge hides the cloud behind it and a peak can stand out of a deck. */
+    var CL_LV = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200];
+    var cl3 = { on: pref("replayClouds3d") === "1", st: "idle", hours: null, kind: "", elev: 0, layer: null, note: "" };
+    function cl3Note(s) { cl3.note = s; var el = $("clouds-note"); if (el) el.textContent = s; }
+    function cl3Fetch() {
+      if (cl3.st !== "idle" || !fixes.length) return;
+      cl3.st = "load"; cl3Note("Getting the clouds for this ride…");
+      var la = c.gps_lat[fixes[0]].toFixed(2), lo = c.gps_lon[fixes[0]].toFixed(2);
+      var day0 = new Date(d.t0 - 3600000).toISOString().slice(0, 10), day1 = new Date(d.t0 + d.dur * 1000 + 3600000).toISOString().slice(0, 10);
+      var vars = ["temperature_2m", "dew_point_2m", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high", "wind_speed_700hPa", "wind_direction_700hPa"];
+      CL_LV.forEach(function (p) { vars.push("cloud_cover_" + p + "hPa", "geopotential_height_" + p + "hPa"); });
+      function q(v) { return "?latitude=" + la + "&longitude=" + lo + "&hourly=" + v.join(",") + "&start_date=" + day0 + "&end_date=" + day1 + "&timezone=GMT&wind_speed_unit=ms"; }
+      function get(u) { return fetch(u).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (j) { if (!j.hourly || !j.hourly.time) throw new Error("empty"); return j; }); }
+      function levelsOk(j) { var a = j.hourly["cloud_cover_850hPa"], z = j.hourly["geopotential_height_850hPa"]; return a && z && a.some(function (v) { return v != null; }) && z.some(function (v) { return v != null; }); }
+      get("https://api.open-meteo.com/v1/forecast" + q(vars)).then(function (j) { if (!levelsOk(j)) throw 0; return j; })
+        .catch(function () { return get("https://historical-forecast-api.open-meteo.com/v1/forecast" + q(vars)).then(function (j) { if (!levelsOk(j)) throw 0; return j; }); })
+        .then(function (j) { cl3Build(j, "levels"); }, function () {
+          return get("https://archive-api.open-meteo.com/v1/archive" + q(["temperature_2m", "dew_point_2m", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high"])).then(function (j) { cl3Build(j, "bands"); });
+        })
+        .catch(function () { cl3.st = "fail"; cl3Note("No cloud data for this ride (offline, or the weather service did not answer)."); });
+    }
+    /** Each hour as a vertical profile: [height above sea level (m), cover 0..1] from low to high, plus the wind and the low-cloud base. */
+    function cl3Build(j, kind) {
+      var h = j.hourly, el = j.elevation != null ? j.elevation : 0;
+      cl3.elev = el; cl3.kind = kind;
+      cl3.hours = h.time.map(function (tm, i) {
+        var T = h.temperature_2m ? h.temperature_2m[i] : null, Td = h.dew_point_2m ? h.dew_point_2m[i] : null;
+        var base = el + (T != null && Td != null ? Math.max(150, 125 * (T - Td)) : 800); // the lifted condensation level: where a rising parcel turns to cloud
+        var pr = [];
+        if (kind === "levels") {
+          CL_LV.forEach(function (p) {
+            var z = h["geopotential_height_" + p + "hPa"][i], cv = h["cloud_cover_" + p + "hPa"][i];
+            if (z == null || cv == null || z < el - 50) return; // under the ground here
+            pr.push([z, (z < base - 100 ? 0 : cv / 100)]);
+          });
+        } else { // archive: three bands at their usual heights (WMO: low under 2 km, mid 2-6 km, high above)
+          var L = (h.cloud_cover_low[i] || 0) / 100, M = (h.cloud_cover_mid[i] || 0) / 100, Hh = (h.cloud_cover_high[i] || 0) / 100, b0 = Math.max(base, el + 150);
+          pr = [[b0 - 200, 0], [b0 + 200, L], [b0 + 1100, L], [Math.max(b0 + 1500, 2300), 0], [3000, M], [4800, M], [5600, 0], [7600, 0], [8400, Hh], [9200, 0]];
+          pr.sort(function (a, b) { return a[0] - b[0]; });
+        }
+        var ws = h.wind_speed_700hPa ? h.wind_speed_700hPa[i] : null, wd = h.wind_direction_700hPa ? h.wind_direction_700hPa[i] : null;
+        var to = wd != null ? (wd + 180) * Math.PI / 180 : 0, sp = ws != null ? ws : 6; // the wind blows toward wd + 180
+        return { t: Date.parse(tm + "Z"), pr: pr, base: base, wx: Math.sin(to) * sp, wy: Math.cos(to) * sp };
+      });
+      cl3.st = "ready";
+      cl3Note(kind === "levels" ? "Clouds as they were, by height and hour." : "Clouds from low / mid / high cover at usual heights (this ride is older than the height data).");
+      map.triggerRepaint();
+    }
+    /** The profile at ride time s: the two hours around it, blended. */
+    function cl3At(s) {
+      var H = cl3.hours; if (!H || !H.length) return null;
+      var ms = d.t0 + s * 1000, f = (ms - H[0].t) / 3600000, i = Math.max(0, Math.min(H.length - 1, Math.floor(f))), j2 = Math.min(H.length - 1, i + 1), w = Math.max(0, Math.min(1, f - i));
+      var A = H[i], B = H[j2], pr;
+      if (A.pr.length === B.pr.length) pr = A.pr.map(function (p, k) { var q = B.pr[k]; return [p[0] + (q[0] - p[0]) * w, p[1] + (q[1] - p[1]) * w]; });
+      else pr = (w < 0.5 ? A : B).pr; // a level went under the ground or came back: the nearer hour as it was
+      return { pr: pr, wx: A.wx + (B.wx - A.wx) * w, wy: A.wy + (B.wy - A.wy) * w };
+    }
+    /** The heights the slices run through: each stretch of the profile with some cloud, split into slices by how thick it is (48 at most). */
+    function cl3Slices(pr) {
+      var bands = [], cur = null;
+      for (var k = 0; k < pr.length; k++) {
+        var lo = k ? (pr[k - 1][0] + pr[k][0]) / 2 : pr[k][0] - 300, hi = k < pr.length - 1 ? (pr[k][0] + pr[k + 1][0]) / 2 : pr[k][0] + 300;
+        if (pr[k][1] > 0.03) { if (cur && Math.abs(cur.hi - lo) < 1) cur.hi = hi; else { cur = { lo: lo, hi: hi }; bands.push(cur); } } else cur = null;
+      }
+      var tot = 0; bands.forEach(function (b) { tot += b.hi - b.lo; });
+      var out = [];
+      bands.forEach(function (b) {
+        var n = Math.max(6, Math.min(24, Math.round(44 * (b.hi - b.lo) / Math.max(1, tot))));
+        for (var i = 0; i < n; i++) out.push({ z: b.lo + (b.hi - b.lo) * (i + 0.5) / n, f: (i + 0.5) / n, n: n, hiAlt: b.lo > 6500 });
+      });
+      return out;
+    }
+    /** A tileable 3D noise, 64 cubed: value noise in three octaves, its billows sharpened by an inverted cell (Worley) noise, so the
+        tops come out lumpy like cumulus rather than smoky. Made once, in about 0.1 s. */
+    function cl3Noise() {
+      var N = 64, out = new Uint8Array(N * N * N), seed = 1;
+      function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+      function lattice(P) { var a = new Float32Array(P * P * P); for (var i = 0; i < a.length; i++) a[i] = rnd(); return a; }
+      var oct = [[4, lattice(4)], [8, lattice(8)], [16, lattice(16)]], C = 6, pts = [];
+      for (var i = 0; i < C * C * C; i++) pts.push([rnd(), rnd(), rnd()]);
+      function vnoise(P, L, x, y, z) {
+        var X = x * P, Y = y * P, Z = z * P, x0 = Math.floor(X), y0 = Math.floor(Y), z0 = Math.floor(Z), fx = X - x0, fy = Y - y0, fz = Z - z0;
+        fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy); fz = fz * fz * (3 - 2 * fz);
+        function g(a, b, c2) { return L[((a % P + P) % P) + P * (((b % P + P) % P) + P * ((c2 % P + P) % P))]; }
+        var c00 = g(x0, y0, z0) + (g(x0 + 1, y0, z0) - g(x0, y0, z0)) * fx, c10 = g(x0, y0 + 1, z0) + (g(x0 + 1, y0 + 1, z0) - g(x0, y0 + 1, z0)) * fx;
+        var c01 = g(x0, y0, z0 + 1) + (g(x0 + 1, y0, z0 + 1) - g(x0, y0, z0 + 1)) * fx, c11 = g(x0, y0 + 1, z0 + 1) + (g(x0 + 1, y0 + 1, z0 + 1) - g(x0, y0 + 1, z0 + 1)) * fx;
+        var c0 = c00 + (c10 - c00) * fy, c1 = c01 + (c11 - c01) * fy; return c0 + (c1 - c0) * fz;
+      }
+      function worley(x, y, z) {
+        var X = x * C, Y = y * C, Z = z * C, ix = Math.floor(X), iy = Math.floor(Y), iz = Math.floor(Z), best = 9;
+        for (var a = -1; a <= 1; a++) for (var b = -1; b <= 1; b++) for (var e = -1; e <= 1; e++) {
+          var cx = ix + a, cy = iy + b, cz = iz + e, p = pts[((cx % C + C) % C) + C * (((cy % C + C) % C) + C * ((cz % C + C) % C))];
+          var dx = cx + p[0] - X, dy = cy + p[1] - Y, dz = cz + p[2] - Z, dd = dx * dx + dy * dy + dz * dz; if (dd < best) best = dd;
+        }
+        return 1 - Math.min(1, Math.sqrt(best));
+      }
+      for (var z = 0; z < N; z++) for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+        var u = x / N, v = y / N, w = z / N;
+        var fb = 0.55 * vnoise(4, oct[0][1], u, v, w) + 0.3 * vnoise(8, oct[1][1], u, v, w) + 0.15 * vnoise(16, oct[2][1], u, v, w);
+        var val = fb * 0.6 + worley(u, v, w) * 0.4;
+        out[x + N * (y + N * z)] = Math.max(0, Math.min(255, Math.round(val * 255)));
+      }
+      return { N: N, data: out };
+    }
+    var CV3 = "#version 300 es\nin vec3 a_pos; in vec3 a_w; in vec3 a_s; uniform mat4 u_m; out vec3 v_w; out vec3 v_s;" +
+      " void main() { gl_Position = u_m * vec4(a_pos, 1.0); v_w = a_w; v_s = a_s; }";
+    var CF3 = "#version 300 es\nprecision highp float; precision highp sampler3D;" +
+      " in vec3 v_w; in vec3 v_s; uniform sampler3D u_n; uniform vec2 u_lv[12]; uniform int u_nl; uniform vec2 u_off; uniform vec3 u_c; uniform float u_R;" +
+      " uniform vec3 u_cam; uniform vec3 u_lit; uniform vec3 u_dark; uniform float u_a; out vec4 o;" +
+      " float cover(float z) { if (u_nl < 1) return 0.0; if (z <= u_lv[0].x) return u_lv[0].y; float c = u_lv[u_nl - 1].y;" +
+      "  for (int i = 1; i < 12; i++) { if (i >= u_nl) break; if (z <= u_lv[i].x) { float f = (z - u_lv[i - 1].x) / max(1.0, u_lv[i].x - u_lv[i - 1].x); return mix(u_lv[i - 1].y, u_lv[i].y, f); } } return c; }" +
+      " void main() {" +
+      "  float hi = v_s.y;" +                                            // 1 for the high (ice) layers: thin streaks, not heaps
+      "  vec2 sc = mix(vec2(3200.0, 1700.0), vec2(9000.0, 900.0), hi);" + // metres per noise tile, across and up
+      "  vec3 p = vec3((v_w.xy + u_off) / sc.x, v_w.z / sc.y); if (hi > 0.5) p.x *= 0.35;" +
+      "  float n = texture(u_n, p).r * 0.7 + texture(u_n, p * 2.9 + 0.37).r * 0.3;" +
+      "  n = clamp((n - 0.28) / 0.44, 0.0, 1.0);" +                        // the noise spans about 0.28..0.72: stretched to 0..1, so cover maps to sky share
+      "  float cv = cover(v_w.z); float th = 1.0 - cv * mix(1.0, 0.8, hi);" +
+      "  float dens = smoothstep(th, th + mix(0.16, 0.3, hi), n);" +
+      "  float f = v_s.x; dens *= smoothstep(0.0, mix(0.12, 0.4, hi), f) * (1.0 - smoothstep(mix(0.55, 0.6, hi), 1.0, f + (1.0 - n) * 0.35));" + // a flat base, lumpy tops
+      "  float r = length(v_w.xy - u_c.xy) / u_R; dens *= 1.0 - smoothstep(0.65, 1.0, r);" +          // no edge to the box
+      "  float dc = length(v_w - u_cam); dens *= smoothstep(60.0, 600.0, dc);" +                       // the camera inside a cloud sees through the slice at its face
+      "  float a = clamp(dens * (1.0 - pow(0.06, 1.0 / v_s.z)) * u_a * mix(1.0, 0.5, hi), 0.0, 1.0); if (a < 0.003) discard;" +
+      "  vec3 col = mix(u_dark, u_lit, clamp(0.35 + 0.65 * f + (n - 0.5) * 0.4, 0.0, 1.0));" +
+      "  o = vec4(col * a, a); }";
+    function cl3Layer() {
+      return {
+        id: "clouds3d", type: "custom", renderingMode: "3d",
+        onAdd: function (m, gl) {
+          this.gl = gl; this.ok = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
+          if (!this.ok) { cl3Note("Volumetric clouds need WebGL 2, which this browser does not offer."); return; }
+          function sh(type, src) { var o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; }
+          try {
+            var pg = gl.createProgram(); gl.attachShader(pg, sh(gl.VERTEX_SHADER, CV3)); gl.attachShader(pg, sh(gl.FRAGMENT_SHADER, CF3)); gl.linkProgram(pg);
+            if (!gl.getProgramParameter(pg, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pg));
+          } catch (e) { this.ok = false; cl3Note("The clouds could not be drawn here."); return; }
+          this.pg = pg; this.buf = gl.createBuffer(); this.vao = gl.createVertexArray(); // its own vertex array: sharing MapLibre's corrupts the map
+          this.loc = { pos: gl.getAttribLocation(pg, "a_pos"), w: gl.getAttribLocation(pg, "a_w"), s: gl.getAttribLocation(pg, "a_s") };
+          ["u_m", "u_n", "u_lv", "u_nl", "u_off", "u_c", "u_R", "u_cam", "u_lit", "u_dark", "u_a"].forEach(function (k) { this.loc[k] = gl.getUniformLocation(pg, k); }, this);
+          var nz = cl3.noise || (cl3.noise = cl3Noise());
+          this.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_3D, this.tex);
+          gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+          gl.texImage3D(gl.TEXTURE_3D, 0, gl.R8, nz.N, nz.N, nz.N, 0, gl.RED, gl.UNSIGNED_BYTE, nz.data);
+          gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T, gl.TEXTURE_WRAP_R].forEach(function (w) { gl.texParameteri(gl.TEXTURE_3D, w, gl.REPEAT); });
+          gl.bindTexture(gl.TEXTURE_3D, null);
+        },
+        onRemove: function (m, gl) { // one GL context for the map's life: everything made here goes back (see photoTexFree)
+          if (!this.ok) return;
+          try { gl.deleteTexture(this.tex); gl.deleteBuffer(this.buf); gl.deleteVertexArray(this.vao); gl.deleteProgram(this.pg); } catch (e) {}
+        },
+        render: function (gl, args) {
+          if (!this.ok || !cl3.on || cl3.st !== "ready") return;
+          var P = cl3At(t); if (!P || !P.pr.length) return;
+          var sl = cl3Slices(P.pr); if (!sl.length) return;
+          var M = args && args.defaultProjectionData ? args.defaultProjectionData.mainMatrix : args && args.modelViewProjectionMatrix ? args.modelViewProjectionMatrix : args;
+          var ctr = map.getCenter(), O = maplibregl.MercatorCoordinate.fromLngLat(ctr, 0), u = O.meterInMercatorCoordinateUnits();
+          if (!cl3.O0) cl3.O0 = maplibregl.MercatorCoordinate.fromLngLat([fLon[0], fLat[0]], 0); // the noise is fixed to the ground: the ride's start
+          var cxw = (O.x - cl3.O0.x) / u, cyw = -(O.y - cl3.O0.y) / u;
+          var tr = map.getTerrain && map.getTerrain(), ex = tr && tr.exaggeration != null ? tr.exaggeration : 1; // the terrain is drawn stretched: so are the heights
+          var R = Math.max(6000, Math.min(90000, 45000 * Math.pow(2, 12 - map.getZoom())));
+          // the camera, in the same metres, to order the slices and fade the one it sits in
+          var cam = map.getFreeCameraOptions ? map.getFreeCameraOptions() : null, cp = cam && cam.position, camZ = cp ? cp.z / u / ex : 0;
+          var cwx = cp ? (cp.x - cl3.O0.x) / u : cxw, cwy = cp ? -(cp.y - cl3.O0.y) / u : cyw;
+          sl.sort(function (a, b) { return Math.abs(b.z - camZ) - Math.abs(a.z - camZ); }); // back to front: farthest height from the camera first
+          var v = [];
+          sl.forEach(function (s) {
+            var Z = s.z * ex * u, xs = [-R, R], ys = [-R, R];
+            [[0, 0], [1, 0], [1, 1], [0, 0], [1, 1], [0, 1]].forEach(function (q) {
+              var mx = xs[q[0]], my = ys[q[1]];
+              v.push(O.x + mx * u, O.y - my * u, Z, cxw + mx, cyw + my, s.z, s.f, s.hiAlt ? 1 : 0, s.n); // a_s.z: slices in its band, so a full band reaches ~94% whatever its count
+            });
+          });
+          // light: the sun of this minute, as the map is lit; overcast and night clouds go grey and dark
+          var alt = sunNow ? sunNow.su.alt : 35, ph = phase(alt), L = ph.light;
+          var warm = ph.hor.map(function (x) { return x / 255; }), lit = [0, 1, 2].map(function (i) { return (0.92 * L + 0.08) * (0.75 + 0.25 * warm[i]); });
+          var dark = [0, 1, 2].map(function (i) { return lit[i] * (0.48 + 0.12 * (i === 2 ? 1 : 0)); });
+          var lv = new Float32Array(24), nl = Math.min(12, P.pr.length); for (var i = 0; i < nl; i++) { lv[i * 2] = P.pr[i][0]; lv[i * 2 + 1] = P.pr[i][1]; }
+          var drift = t; // ride seconds: the clouds move with the wind as the ride's clock runs
+          var L2 = this.loc;
+          gl.useProgram(this.pg); gl.bindVertexArray(this.vao);
+          gl.bindBuffer(gl.ARRAY_BUFFER, this.buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STREAM_DRAW);
+          gl.enableVertexAttribArray(L2.pos); gl.vertexAttribPointer(L2.pos, 3, gl.FLOAT, false, 36, 0);
+          gl.enableVertexAttribArray(L2.w); gl.vertexAttribPointer(L2.w, 3, gl.FLOAT, false, 36, 12);
+          gl.enableVertexAttribArray(L2.s); gl.vertexAttribPointer(L2.s, 3, gl.FLOAT, false, 36, 24);
+          gl.uniformMatrix4fv(L2.u_m, false, new Float32Array(M));
+          gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_3D, this.tex); gl.uniform1i(L2.u_n, 0);
+          gl.uniform2fv(L2.u_lv, lv); gl.uniform1i(L2.u_nl, nl);
+          gl.uniform2f(L2.u_off, -P.wx * drift, -P.wy * drift);
+          gl.uniform3f(L2.u_c, cxw, cyw, 0); gl.uniform1f(L2.u_R, R);
+          gl.uniform3f(L2.u_cam, cwx, cwy, camZ);
+          gl.uniform3fv(L2.u_lit, lit); gl.uniform3fv(L2.u_dark, dark);
+          gl.uniform1f(L2.u_a, 1);
+          gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.depthMask(false); gl.disable(gl.CULL_FACE);
+          gl.drawArrays(gl.TRIANGLES, 0, v.length / 9);
+          gl.depthMask(true); gl.bindTexture(gl.TEXTURE_3D, null); gl.bindVertexArray(null); gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        }
+      };
+    }
+    function ensureCloudLayer() {
+      if (!cl3.on) { if (map.getLayer("clouds3d")) try { map.removeLayer("clouds3d"); } catch (e) {} return; }
+      cl3Fetch();
+      if (!map.getLayer("clouds3d") && map.isStyleLoaded()) try { map.addLayer(cl3.layer = cl3Layer()); } catch (e) {} // on top: drawn last, over the cards behind it
+    }
+    map.on("styledata", function () { if (cl3.on && map.isStyleLoaded()) ensureCloudLayer(); });
+    function cl3Set(v) {
+      cl3.on = v; pref("replayClouds3d", v ? "1" : "0"); tog("clouds", v);
+      if (!v) cl3Note(""); else if (cl3.note) cl3Note(cl3.note);
+      ensureCloudLayer(); map.triggerRepaint();
+    }
+    $("clouds").onclick = function () { cl3Set(!cl3.on); };
+    tog("clouds", cl3.on); if (cl3.on) ensureCloudLayer();
     /** Fade each card in and out by how far it is, in seconds of screen time, from the rider. */
     /* ---- keeping the route in view ----
        Every few frames each visible card checks, on screen, whether it covers the trail near the rider or
