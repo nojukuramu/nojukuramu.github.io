@@ -6194,7 +6194,7 @@ var qrcode = function() {
             if (!st.meta) return;
             if (st.got !== st.meta.size) { send({ t: "bad", why: "Size mismatch" }); return reset("The file didn't arrive complete. Try again."); }
             lst("Checking"); st.done = true;
-            var blob = new Blob(st.chunks);
+            var blob = new Blob(st.chunks); st.chunks = []; // the Blob has its own copy; a long ride with photos is a lot to hold twice
             blob.arrayBuffer().then(function (buf) { return crypto.subtle.digest("SHA-256", buf); }).then(function (h) {
               var hex = Array.prototype.map.call(new Uint8Array(h), function (b) { return b.toString(16).padStart(2, "0"); }).join("");
               if (hex !== String(st.meta.sha256).toLowerCase()) { st.done = false; send({ t: "bad", why: "Checksum mismatch" }); return reset("The file arrived damaged. Try again."); }
@@ -7924,7 +7924,10 @@ var qrcode = function() {
         this.loc = { pos: gl.getAttribLocation(pg, "a_pos"), uv: gl.getAttribLocation(pg, "a_uv"), m: gl.getUniformLocation(pg, "u_m"), tex: gl.getUniformLocation(pg, "u_tex"), a: gl.getUniformLocation(pg, "u_a"), tint: gl.getUniformLocation(pg, "u_tint"), solid: gl.getUniformLocation(pg, "u_solid"), ring: gl.getUniformLocation(pg, "u_ring") };
         photos.forEach(function (ph) { ph.tex = null; }); // textures belong to this GL context
       },
-      onRemove: function () { photos.forEach(function (ph) { ph.tex = null; }); },
+      /* MapLibre keeps one GL context across style changes, so a texture dropped here without deleteTexture stays in video
+         memory for good. Clean view swaps the style on the way in and out, so each Play or Render left every photo behind once
+         more, until the GPU ran out, the context was lost and the map froze with no way back but a reload. */
+      onRemove: function (m, gl) { photoTexFree(photos, gl); },
       render: function (gl, args) {
         // Upload pictures to the GPU as soon as they are ready, once, so a card appearing mid-replay costs nothing.
         photos.forEach(function (ph) {
@@ -8172,9 +8175,14 @@ var qrcode = function() {
     }
     window.__photoAlike = function () { return photos.map(function (a) { return photos.map(function (b) { return +alikeD(a, b).toFixed(2); }); }); };
     window.__photoDiff = function () { return photos.map(function (a) { return photos.map(function (b) { return +photoDiff(a, b).toFixed(2); }); }); };
+    function photoTexFree(list, gl) {
+      gl = gl || photoLayer.gl;
+      list.forEach(function (ph) { if (ph.tex && gl) try { gl.deleteTexture(ph.tex); } catch (e) {} ph.tex = null; });
+    }
     function loadPhotos() {
       if (!B.photoList) { photoNote = "Photos need the app."; return; }
       var list = []; try { list = JSON.parse(B.photoList(+ID)); } catch (e) {}
+      photoTexFree(photos); // a reload builds new cards: the old ones' pictures leave the GPU with them
       var skipped = 0; photos = []; photoAll = [];
       var seen = {};
       list.forEach(function (o) {
@@ -8776,12 +8784,22 @@ var qrcode = function() {
       x.fillStyle = "#fffc"; x.font = Math.round(11 * CTL.ovs) + "px Figtree, sans-serif";
       x.fillText(Math.round(aMax) + " m", 4, Math.round(11 * CTL.ovs)); x.fillText(Math.round(aMin) + " m", 4, PH - 4);
     }
-    var trailK = -1;
+    var trailK = -1, trailIdx = null;
     function trailSet(k) {
       if (!map.getLayer("trk")) return;
       var f = totalD ? (fD[k] || 0) / totalD : 0;
       if (Math.abs(k - trailK) < 2 && f < 1) return; trailK = k;
-      try { map.getSource("trk-prog").setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: fLon.slice(0, k + 1).map(function (lo, j) { return [lo, fLat[j]]; }).concat([atDist(fD[k] || 0)]) } }); } catch (e) {}
+      /* The line so far is re-sent every frame, so on a long ride it was every fix up to here, thousands of points, 30 times a
+         second: the map's worker re-cut a growing line per frame, never caught up, and the page bogged down late in the replay.
+         Thinned once to about 1500 points along the distance (invisible at replay zoom), with the exact head added last. */
+      if (!trailIdx) {
+        trailIdx = []; var stepD = totalD / 1500, lastD = -1e9;
+        for (var q = 0; q < fD.length; q++) if (fD[q] - lastD >= stepD) { trailIdx.push(q); lastD = fD[q]; }
+      }
+      var co = [];
+      for (var j = 0; j < trailIdx.length && trailIdx[j] <= k; j++) co.push([fLon[trailIdx[j]], fLat[trailIdx[j]]]);
+      co.push(atDist(fD[k] || 0));
+      try { map.getSource("trk-prog").setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: co } }); } catch (e) {}
     }
     function trailLayers(on) {
       ["trk", "trk-glow", "trk-case", "trk-arrows"].forEach(function (id) { if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "none" : "visible"); });
@@ -8835,7 +8853,11 @@ var qrcode = function() {
       var want = styles.filter(function (s) { return s.id === $("c-style").value; })[0];
       if (want && want.id !== cur.id) {
         wasStyle = cur; cur = want; map.setStyle(styleFor(cur));
-        map.once("idle", function () { addLayers(); go(); });
+        /* "idle" never comes while anything keeps repainting (a pin easing in, a tile that will not load), and then Play and
+           Render did nothing, for good. Same fallback as the loading screen: give it 8 s, then go once the style is in. */
+        var started = false, start = function () { if (started) return; started = true; addLayers(); go(); };
+        map.once("idle", start);
+        setTimeout(function () { if (started) return; if (map.isStyleLoaded()) start(); else map.once("style.load", start); }, 8000);
       } else go();
     }
     function cleanEnd() {
