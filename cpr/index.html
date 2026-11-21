@@ -397,6 +397,19 @@
         <button id="sun" class="tgl"><span>Real sun and moon</span><i></i></button>
         <div class="ph-head"><button id="clouds" class="tgl"><span>Volumetric clouds</span><i></i></button><button class="infobtn" data-info="clouds" aria-label="Where the clouds come from"><svg class="i"><use href="#i-info"/></svg></button></div>
         <div class="hint" id="clouds-note"></div>
+        <details class="fold" id="cl-fold"><summary><h3>Cloud settings<button class="infobtn" data-info="cloudopts" aria-label="What each cloud setting does"><svg class="i"><use href="#i-info"/></svg></button></h3></summary>
+          <label class="fld"><span>Intensity</span><input id="cl-dens" type="range" min="0.2" max="2.5" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label>
+          <label class="fld"><span>Coverage</span><input id="cl-cov" type="range" min="-0.6" max="0.6" step="0.02" value="0" data-unit="" data-def="0"><output></output></label>
+          <label class="fld"><span>Wideness</span><input id="cl-wide" type="range" min="0.4" max="3" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label>
+          <label class="fld"><span>Cloud size</span><input id="cl-size" type="range" min="0.3" max="3" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label>
+          <label class="fld"><span>Softness</span><input id="cl-soft" type="range" min="0.3" max="3" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label>
+          <label class="fld"><span>Height</span><input id="cl-lift" type="range" min="-1500" max="1500" step="50" value="0" data-unit=" m" data-def="0"><output></output></label>
+          <label class="fld"><span>Wind</span><input id="cl-wind" type="range" min="0" max="5" step="0.1" value="1" data-unit="×" data-def="1"><output></output></label>
+          <label class="fld"><span>Underside shade</span><input id="cl-under" type="range" min="0" max="1" step="0.05" value="0.5" data-unit="" data-def="0.5"><output></output></label>
+          <label class="fld"><span>Ground shadows</span><input id="cl-shadow" type="range" min="0" max="1" step="0.05" value="0.5" data-unit="" data-def="0.5"><output></output></label>
+          <label class="fld"><span>Detail</span><input id="cl-slices" type="range" min="16" max="96" step="4" value="44" data-unit=" slices" data-def="44"><output></output></label>
+          <div class="btnrow"><button id="cl-rst"><svg class="i"><use href="#i-reset"/></svg>Reset cloud settings</button></div>
+        </details>
       </div>
       <div class="grp"><h3>Route line</h3>
         <label class="fld"><span>Width</span><input id="line-w" type="range" min="2" max="14" step="0.5" value="6" data-unit=" px" data-def="6"><output></output></label>
@@ -6385,6 +6398,7 @@ var qrcode = function() {
     sun: { title: "Real sun and moon", body: "<p>The light is worked out for the minute and the place of each moment of the ride: where the sun and moon were, dawn and dusk colours, shadows from the hills, and the cloud cover the weather service recorded for that hour.</p><p>Off, the map is lit as a plain daytime map.</p>" },
     photos: { title: "Photos in the replay", body: "<p>Each photo comes up at the time it was taken, where the ride was then. Its GPS sets where the card stands, when it agrees with that moment.</p><p>A photo with no time within the ride (none, or a camera clock that was off) is not guessed from its GPS alone, since a trail can pass one spot hours apart. It waits in the list: type its ride time, choose it on the route, or pick one of the passes near its GPS. Drop pictures on the page to add them.</p><p><b>Moment</b> slows the replay at each photo and frames it. <b>Burst</b> keeps the speed and lets photos rise beside the trail as you pass.</p><p>Changes stay in this tab until <b>Save changes</b> writes a new file.</p>" },
     clouds: { title: "Volumetric clouds", body: "<p>The cloud layers over the ride, built in 3D: how much of the sky each height held, hour by hour, and where the low clouds began. They drift with the wind at about 3 km up as the ride's clock runs, and are lit by the sun of that minute. Ridges hide what is behind them, and a peak can stand out of a cloud deck.</p><p>The data comes from Open-Meteo, the weather service the light already uses. It is asked for once, for the same rounded point near the start, with no key. Rides from the last few years get the clouds by height. Older rides get low, mid and high cover at their usual heights instead; the line under the switch says which.</p><p>The shapes are made up; the amount and the heights are real. It is drawn on the graphics card, so a slow computer may play less smoothly with it on. It needs WebGL 2.</p>" },
+    cloudopts: { title: "Cloud settings", body: "<p><b>Intensity</b>: how thick each cloud is. <b>Coverage</b>: more or less sky covered than the weather service reported, only where it reported some. <b>Wideness</b>: how far around the view the clouds reach.</p><p><b>Cloud size</b>: big heaps or small puffs. <b>Softness</b>: crisp or misty edges. <b>Height</b>: every layer moved up or down. <b>Wind</b>: how fast they drift with the ride's clock; 0 holds them still.</p><p><b>Underside shade</b>: how much darker the base is than the sunlit top. <b>Ground shadows</b>: the clouds' shadows on the terrain, cast away from the sun. They show only with the sun more than 4° up: a low sun throws them kilometres away.</p><p><b>Detail</b>: how many layers each cloud is drawn with. More is smoother and costs the graphics card more.</p><p>Each setting goes back to its default with a double-click.</p>" },
     grouphow: { title: "Fast or by similarity", body: "<p><b>Fast</b> groups photos only by when and where they were taken. No picture is read, so even hundreds of photos are ready at once. Retakes of one view and different views from one stop can land in the same group.</p><p><b>Similarity</b> also compares what the photos show: their look, and the faces in them. Each photo is read once in this browser (nothing is uploaded), which takes a while the first time for many photos. The settings under Grouping fine-tune it.</p>" },
     grouping: { title: "Grouping photos", body: "<p>Photos that belong together share one spot: a deck in <b>Burst</b>, one stop in <b>Moment</b>.</p><p><b>Auto</b> groups by look in Burst and by time and place in Moment, as before. <b>Similar look</b> groups only retakes of the same view. <b>Time and place</b> groups whatever was taken at one spot. <b>Never</b> gives every photo its own turn.</p><p><b>Look tolerance</b> above 1 groups more loosely, below 1 more strictly. <b>Same place within</b> left at Auto is 250 m in Burst and 300 m in Moment. <b>Up to</b> at Auto is 7 per deck, 3 per moment.</p><p>The look of each photo is read in this tab, with MediaPipe's image embedder, the first time photos are opened. Nothing is uploaded.</p>" },
     faces: { title: "Faces", body: "<p>Two photos of the same spot can show different people. With faces on, each face is found (MediaPipe face detector), cut out and compared on its own, so a selfie of one person is not stacked with a selfie of another.</p><p><b>Normal</b> keeps photos apart when their faces differ. <b>Strict</b> also keeps a photo with a face apart from one without. <b>Loose</b> only splits clearly different faces.</p><p>Faces smaller than about a twentieth of the photo are ignored. This tells look-alikes apart, not identities: it is a guide for grouping, nothing more. It all runs in this tab.</p>" },
@@ -8581,7 +8595,7 @@ var qrcode = function() {
       else pr = (w < 0.5 ? A : B).pr; // a level went under the ground or came back: the nearer hour as it was
       return { pr: pr, wx: A.wx + (B.wx - A.wx) * w, wy: A.wy + (B.wy - A.wy) * w };
     }
-    /** The heights the slices run through: each stretch of the profile with some cloud, split into slices by how thick it is (48 at most). */
+    /** The heights the slices run through: each stretch of the profile with some cloud, split into slices by how thick it is (Detail sets how many). */
     function cl3Slices(pr) {
       var bands = [], cur = null;
       for (var k = 0; k < pr.length; k++) {
@@ -8591,7 +8605,7 @@ var qrcode = function() {
       var tot = 0; bands.forEach(function (b) { tot += b.hi - b.lo; });
       var out = [];
       bands.forEach(function (b) {
-        var n = Math.max(6, Math.min(24, Math.round(44 * (b.hi - b.lo) / Math.max(1, tot))));
+        var n = Math.max(6, Math.min(Math.max(24, CLO.slices / 2), Math.round(CLO.slices * (b.hi - b.lo) / Math.max(1, tot)))); // Detail: slices in all
         for (var i = 0; i < n; i++) out.push({ z: b.lo + (b.hi - b.lo) * (i + 0.5) / n, f: (i + 0.5) / n, n: n, hiAlt: b.lo > 6500 });
       });
       return out;
@@ -8628,27 +8642,50 @@ var qrcode = function() {
       }
       return { N: N, data: out };
     }
+    /* Cloud settings (Map tab, under the switch). Every default is the look before the settings existed. Kept as a "replay…" key,
+       so Save changes carries them. */
+    var CLO_DEF = { dens: 1, cov: 0, wide: 1, size: 1, soft: 1, lift: 0, wind: 1, under: 0.5, shadow: 0.5, slices: 44 };
+    var CLO = JSON.parse(JSON.stringify(CLO_DEF));
+    try { var cj0 = JSON.parse(pref("replayCloudOpts") || "{}"); Object.keys(CLO).forEach(function (k) { if (typeof cj0[k] === "number" && isFinite(cj0[k])) CLO[k] = cj0[k]; }); } catch (e) {}
+    /** The profile as the settings shape it: heights moved by Height, and cover pushed by Coverage where there is cloud at all. */
+    function cl3Shape(pr) { return pr.map(function (p) { return [p[0] + CLO.lift, p[1] > 0.01 ? Math.max(0, Math.min(1, p[1] + CLO.cov)) : 0]; }); }
+    // The density both passes share: the cloud itself, and its shadow on the ground. hi: 1 for the high (ice) layers; f: height in its band.
+    var CL_DENS = " uniform sampler3D u_n; uniform vec2 u_lv[12]; uniform int u_nl; uniform vec2 u_off; uniform float u_size; uniform float u_soft; uniform float u_dens;" +
+      " float cover(float z) { if (u_nl < 1) return 0.0; if (z <= u_lv[0].x) return u_lv[0].y;" +
+      "  for (int i = 1; i < 12; i++) { if (i >= u_nl) break; if (z <= u_lv[i].x) { float f = (z - u_lv[i - 1].x) / max(1.0, u_lv[i].x - u_lv[i - 1].x); return mix(u_lv[i - 1].y, u_lv[i].y, f); } }" +
+      "  return u_lv[u_nl - 1].y; }" +
+      " float noiseAt(vec3 w, float hi) {" +
+      "  vec2 sc = mix(vec2(3200.0, 1700.0), vec2(9000.0, 900.0), hi) * u_size;" + // metres per noise tile, across and up
+      "  vec3 p = vec3((w.xy + u_off) / sc.x, w.z / sc.y); if (hi > 0.5) p.x *= 0.35;" +
+      "  float n = texture(u_n, p).r * 0.7 + texture(u_n, p * 2.9 + 0.37).r * 0.3;" +
+      "  return clamp((n - 0.28) / 0.44, 0.0, 1.0); }" +                      // the noise spans about 0.28..0.72: stretched to 0..1, so cover maps to sky share
+      " float density(vec3 w, float hi, float f, out float n) {" +
+      "  n = noiseAt(w, hi); float cv = cover(w.z); if (cv <= 0.0) return 0.0;" +
+      "  float th = 1.0 - cv * mix(1.0, 0.8, hi);" +
+      "  float d = smoothstep(th, th + mix(0.16, 0.3, hi) * u_soft, n);" +
+      "  d *= smoothstep(0.0, mix(0.12, 0.4, hi), f) * (1.0 - smoothstep(mix(0.55, 0.6, hi), 1.0, f + (1.0 - n) * 0.35));" + // a flat base, lumpy tops
+      "  return d * u_dens; }";
     var CV3 = "#version 300 es\nin vec3 a_pos; in vec3 a_w; in vec3 a_s; uniform mat4 u_m; out vec3 v_w; out vec3 v_s;" +
       " void main() { gl_Position = u_m * vec4(a_pos, 1.0); v_w = a_w; v_s = a_s; }";
-    var CF3 = "#version 300 es\nprecision highp float; precision highp sampler3D;" +
-      " in vec3 v_w; in vec3 v_s; uniform sampler3D u_n; uniform vec2 u_lv[12]; uniform int u_nl; uniform vec2 u_off; uniform vec3 u_c; uniform float u_R;" +
-      " uniform vec3 u_cam; uniform vec3 u_lit; uniform vec3 u_dark; uniform float u_a; out vec4 o;" +
-      " float cover(float z) { if (u_nl < 1) return 0.0; if (z <= u_lv[0].x) return u_lv[0].y; float c = u_lv[u_nl - 1].y;" +
-      "  for (int i = 1; i < 12; i++) { if (i >= u_nl) break; if (z <= u_lv[i].x) { float f = (z - u_lv[i - 1].x) / max(1.0, u_lv[i].x - u_lv[i - 1].x); return mix(u_lv[i - 1].y, u_lv[i].y, f); } } return c; }" +
+    var CF3 = "#version 300 es\nprecision highp float; precision highp sampler3D;" + CL_DENS +
+      " in vec3 v_w; in vec3 v_s; uniform vec3 u_c; uniform float u_R; uniform vec3 u_cam; uniform vec3 u_lit; uniform vec3 u_dark; out vec4 o;" +
       " void main() {" +
-      "  float hi = v_s.y;" +                                            // 1 for the high (ice) layers: thin streaks, not heaps
-      "  vec2 sc = mix(vec2(3200.0, 1700.0), vec2(9000.0, 900.0), hi);" + // metres per noise tile, across and up
-      "  vec3 p = vec3((v_w.xy + u_off) / sc.x, v_w.z / sc.y); if (hi > 0.5) p.x *= 0.35;" +
-      "  float n = texture(u_n, p).r * 0.7 + texture(u_n, p * 2.9 + 0.37).r * 0.3;" +
-      "  n = clamp((n - 0.28) / 0.44, 0.0, 1.0);" +                        // the noise spans about 0.28..0.72: stretched to 0..1, so cover maps to sky share
-      "  float cv = cover(v_w.z); float th = 1.0 - cv * mix(1.0, 0.8, hi);" +
-      "  float dens = smoothstep(th, th + mix(0.16, 0.3, hi), n);" +
-      "  float f = v_s.x; dens *= smoothstep(0.0, mix(0.12, 0.4, hi), f) * (1.0 - smoothstep(mix(0.55, 0.6, hi), 1.0, f + (1.0 - n) * 0.35));" + // a flat base, lumpy tops
-      "  float r = length(v_w.xy - u_c.xy) / u_R; dens *= 1.0 - smoothstep(0.65, 1.0, r);" +          // no edge to the box
-      "  float dc = length(v_w - u_cam); dens *= smoothstep(60.0, 600.0, dc);" +                       // the camera inside a cloud sees through the slice at its face
-      "  float a = clamp(dens * (1.0 - pow(0.06, 1.0 / v_s.z)) * u_a * mix(1.0, 0.5, hi), 0.0, 1.0); if (a < 0.003) discard;" +
+      "  float hi = v_s.y, f = v_s.x, n; float dens = density(v_w, hi, f, n);" +
+      "  float r = length(v_w.xy - u_c.xy) / u_R; dens *= 1.0 - smoothstep(0.65, 1.0, r);" +   // no edge to the box
+      "  dens *= smoothstep(60.0, 600.0, length(v_w - u_cam));" +                              // the camera inside a cloud sees through the slice at its face
+      "  float a = clamp(dens * (1.0 - pow(0.06, 1.0 / v_s.z)) * mix(1.0, 0.5, hi), 0.0, 1.0); if (a < 0.003) discard;" + // a full band reaches ~94%
       "  vec3 col = mix(u_dark, u_lit, clamp(0.35 + 0.65 * f + (n - 0.5) * 0.4, 0.0, 1.0));" +
       "  o = vec4(col * a, a); }";
+    // Ground shadows: a mesh draped on the terrain under the clouds; each point looks up toward the sun through the cloud bands.
+    var CVG = "#version 300 es\nin vec3 a_pos; in vec3 a_w; uniform mat4 u_m; out vec3 v_w; void main() { gl_Position = u_m * vec4(a_pos, 1.0); v_w = a_w; }";
+    var CFG = "#version 300 es\nprecision highp float; precision highp sampler3D;" + CL_DENS +
+      " in vec3 v_w; uniform vec3 u_c; uniform float u_R; uniform vec2 u_sun; uniform vec4 u_bz; uniform vec4 u_bh; uniform float u_sh; out vec4 o;" +
+      " void main() {" +
+      "  float tot = 0.0, n;" +
+      "  for (int i = 0; i < 4; i++) { float zc = u_bz[i]; if (zc <= v_w.z) continue;" +   // u_bz: the middle of each band with cloud; u_bh: 1 for a high band
+      "   vec3 q = vec3(v_w.xy + u_sun * (zc - v_w.z), zc); tot = max(tot, density(q, u_bh[i], 0.5, n)); }" +
+      "  float r = length(v_w.xy - u_c.xy) / u_R; float a = clamp(tot, 0.0, 1.0) * u_sh * (1.0 - smoothstep(0.6, 1.0, r)); if (a < 0.004) discard;" +
+      "  o = vec4(0.02, 0.03, 0.06, 1.0) * a; }";
     function cl3Layer() {
       return {
         id: "clouds3d", type: "custom", renderingMode: "3d",
@@ -8656,13 +8693,18 @@ var qrcode = function() {
           this.gl = gl; this.ok = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
           if (!this.ok) { cl3Note("Volumetric clouds need WebGL 2, which this browser does not offer."); return; }
           function sh(type, src) { var o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; }
-          try {
-            var pg = gl.createProgram(); gl.attachShader(pg, sh(gl.VERTEX_SHADER, CV3)); gl.attachShader(pg, sh(gl.FRAGMENT_SHADER, CF3)); gl.linkProgram(pg);
+          function prog(vs, fs, U) {
+            var pg = gl.createProgram(); gl.attachShader(pg, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pg, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pg);
             if (!gl.getProgramParameter(pg, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pg));
+            var L = { pg: pg }; U.forEach(function (k) { L[k] = k.charAt(0) === "a" ? gl.getAttribLocation(pg, k) : gl.getUniformLocation(pg, k); }); return L;
+          }
+          var DU = ["u_m", "u_n", "u_lv", "u_nl", "u_off", "u_size", "u_soft", "u_dens", "u_c", "u_R"];
+          try {
+            this.P = prog(CV3, CF3, DU.concat(["a_pos", "a_w", "a_s", "u_cam", "u_lit", "u_dark"]));
+            this.G = prog(CVG, CFG, DU.concat(["a_pos", "a_w", "u_sun", "u_bz", "u_bh", "u_sh"]));
           } catch (e) { this.ok = false; cl3Note("The clouds could not be drawn here."); return; }
-          this.pg = pg; this.buf = gl.createBuffer(); this.vao = gl.createVertexArray(); // its own vertex array: sharing MapLibre's corrupts the map
-          this.loc = { pos: gl.getAttribLocation(pg, "a_pos"), w: gl.getAttribLocation(pg, "a_w"), s: gl.getAttribLocation(pg, "a_s") };
-          ["u_m", "u_n", "u_lv", "u_nl", "u_off", "u_c", "u_R", "u_cam", "u_lit", "u_dark", "u_a"].forEach(function (k) { this.loc[k] = gl.getUniformLocation(pg, k); }, this);
+          this.buf = gl.createBuffer(); this.gbuf = gl.createBuffer(); this.vao = gl.createVertexArray(); this.gvao = gl.createVertexArray(); // own vertex arrays: sharing MapLibre's corrupts the map
+          this.mesh = null;
           var nz = cl3.noise || (cl3.noise = cl3Noise());
           this.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_3D, this.tex);
           gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
@@ -8673,52 +8715,95 @@ var qrcode = function() {
         },
         onRemove: function (m, gl) { // one GL context for the map's life: everything made here goes back (see photoTexFree)
           if (!this.ok) return;
-          try { gl.deleteTexture(this.tex); gl.deleteBuffer(this.buf); gl.deleteVertexArray(this.vao); gl.deleteProgram(this.pg); } catch (e) {}
+          try { gl.deleteTexture(this.tex); gl.deleteBuffer(this.buf); gl.deleteBuffer(this.gbuf); gl.deleteVertexArray(this.vao); gl.deleteVertexArray(this.gvao); gl.deleteProgram(this.P.pg); gl.deleteProgram(this.G.pg); } catch (e) {}
+        },
+        /** The ground mesh under the clouds: 40 x 40 cells on the terrain, built again when the view has moved a tenth of its width,
+            changed size, or the terrain under it has loaded more (every 1.5 s at most). queryTerrainElevation is not free per point. */
+        groundMesh: function (O, u, cxw, cyw, R, ex) {
+          var m = this.mesh, now = performance.now();
+          if (m && Math.hypot(cxw - m.cx, cyw - m.cy) < R * 0.1 && Math.abs(R - m.R) < R * 0.05 && Math.abs(ex - m.ex) < 0.01 && (m.full || now - m.at < 1500)) return m;
+          var N = 40, Rg = R * 0.75, pts = [], full = true, lift = 3 * ex;
+          for (var j = 0; j <= N; j++) for (var i = 0; i <= N; i++) {
+            var x = -Rg + 2 * Rg * i / N, y = -Rg + 2 * Rg * j / N;
+            var ll = new maplibregl.MercatorCoordinate(O.x + x * u, O.y - y * u, 0).toLngLat(), g = map.queryTerrainElevation([ll.lng, ll.lat]);
+            if (g == null) { full = false; g = -1e4; } // not loaded yet: under everything, and asked again soon
+            pts.push([O.x + x * u, O.y - y * u, (g + lift) * u, cxw + x, cyw + y, g / ex]);
+          }
+          var v = [];
+          for (var j2 = 0; j2 < N; j2++) for (var i2 = 0; i2 < N; i2++) {
+            var a = pts[j2 * (N + 1) + i2], b = pts[j2 * (N + 1) + i2 + 1], c3 = pts[(j2 + 1) * (N + 1) + i2], d3 = pts[(j2 + 1) * (N + 1) + i2 + 1];
+            [a, b, d3, a, d3, c3].forEach(function (q) { v.push(q[0], q[1], q[2], q[3], q[4], q[5]); });
+          }
+          this.mesh = { cx: cxw, cy: cyw, R: R, ex: ex, at: now, full: full, n: v.length / 6 };
+          var gl = this.gl; gl.bindBuffer(gl.ARRAY_BUFFER, this.gbuf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+          return this.mesh;
         },
         render: function (gl, args) {
           if (!this.ok || !cl3.on || cl3.st !== "ready") return;
-          var P = cl3At(t); if (!P || !P.pr.length) return;
-          var sl = cl3Slices(P.pr); if (!sl.length) return;
+          var P0 = cl3At(t); if (!P0 || !P0.pr.length) return;
+          var pr = cl3Shape(P0.pr), sl = cl3Slices(pr); if (!sl.length) return;
           var M = args && args.defaultProjectionData ? args.defaultProjectionData.mainMatrix : args && args.modelViewProjectionMatrix ? args.modelViewProjectionMatrix : args;
           var ctr = map.getCenter(), O = maplibregl.MercatorCoordinate.fromLngLat(ctr, 0), u = O.meterInMercatorCoordinateUnits();
           if (!cl3.O0) cl3.O0 = maplibregl.MercatorCoordinate.fromLngLat([fLon[0], fLat[0]], 0); // the noise is fixed to the ground: the ride's start
           var cxw = (O.x - cl3.O0.x) / u, cyw = -(O.y - cl3.O0.y) / u;
           var tr = map.getTerrain && map.getTerrain(), ex = tr && tr.exaggeration != null ? tr.exaggeration : 1; // the terrain is drawn stretched: so are the heights
-          var R = Math.max(6000, Math.min(90000, 45000 * Math.pow(2, 12 - map.getZoom())));
-          // the camera, in the same metres, to order the slices and fade the one it sits in
+          var R = Math.max(6000, Math.min(150000, 45000 * Math.pow(2, 12 - map.getZoom()) * CLO.wide));
           var cam = map.getFreeCameraOptions ? map.getFreeCameraOptions() : null, cp = cam && cam.position, camZ = cp ? cp.z / u / ex : 0;
           var cwx = cp ? (cp.x - cl3.O0.x) / u : cxw, cwy = cp ? -(cp.y - cl3.O0.y) / u : cyw;
-          sl.sort(function (a, b) { return Math.abs(b.z - camZ) - Math.abs(a.z - camZ); }); // back to front: farthest height from the camera first
-          var v = [];
-          sl.forEach(function (s) {
-            var Z = s.z * ex * u, xs = [-R, R], ys = [-R, R];
-            [[0, 0], [1, 0], [1, 1], [0, 0], [1, 1], [0, 1]].forEach(function (q) {
-              var mx = xs[q[0]], my = ys[q[1]];
-              v.push(O.x + mx * u, O.y - my * u, Z, cxw + mx, cyw + my, s.z, s.f, s.hiAlt ? 1 : 0, s.n); // a_s.z: slices in its band, so a full band reaches ~94% whatever its count
-            });
-          });
-          // light: the sun of this minute, as the map is lit; overcast and night clouds go grey and dark
-          var alt = sunNow ? sunNow.su.alt : 35, ph = phase(alt), L = ph.light;
-          var warm = ph.hor.map(function (x) { return x / 255; }), lit = [0, 1, 2].map(function (i) { return (0.92 * L + 0.08) * (0.75 + 0.25 * warm[i]); });
-          var dark = [0, 1, 2].map(function (i) { return lit[i] * (0.48 + 0.12 * (i === 2 ? 1 : 0)); });
-          var lv = new Float32Array(24), nl = Math.min(12, P.pr.length); for (var i = 0; i < nl; i++) { lv[i * 2] = P.pr[i][0]; lv[i * 2 + 1] = P.pr[i][1]; }
-          var drift = t; // ride seconds: the clouds move with the wind as the ride's clock runs
-          var L2 = this.loc;
-          gl.useProgram(this.pg); gl.bindVertexArray(this.vao);
-          gl.bindBuffer(gl.ARRAY_BUFFER, this.buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STREAM_DRAW);
-          gl.enableVertexAttribArray(L2.pos); gl.vertexAttribPointer(L2.pos, 3, gl.FLOAT, false, 36, 0);
-          gl.enableVertexAttribArray(L2.w); gl.vertexAttribPointer(L2.w, 3, gl.FLOAT, false, 36, 12);
-          gl.enableVertexAttribArray(L2.s); gl.vertexAttribPointer(L2.s, 3, gl.FLOAT, false, 36, 24);
-          gl.uniformMatrix4fv(L2.u_m, false, new Float32Array(M));
-          gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_3D, this.tex); gl.uniform1i(L2.u_n, 0);
-          gl.uniform2fv(L2.u_lv, lv); gl.uniform1i(L2.u_nl, nl);
-          gl.uniform2f(L2.u_off, -P.wx * drift, -P.wy * drift);
-          gl.uniform3f(L2.u_c, cxw, cyw, 0); gl.uniform1f(L2.u_R, R);
-          gl.uniform3f(L2.u_cam, cwx, cwy, camZ);
-          gl.uniform3fv(L2.u_lit, lit); gl.uniform3fv(L2.u_dark, dark);
-          gl.uniform1f(L2.u_a, 1);
+          var lv = new Float32Array(24), nl = Math.min(12, pr.length); for (var i = 0; i < nl; i++) { lv[i * 2] = pr[i][0]; lv[i * 2 + 1] = pr[i][1]; }
+          var drift = t * CLO.wind; // ride seconds: the clouds move with the wind as the ride's clock runs
+          var self = this;
+          function shared(L) {
+            gl.uniformMatrix4fv(L.u_m, false, new Float32Array(M));
+            gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_3D, self.tex); gl.uniform1i(L.u_n, 0);
+            gl.uniform2fv(L.u_lv, lv); gl.uniform1i(L.u_nl, nl);
+            gl.uniform2f(L.u_off, -P0.wx * drift, -P0.wy * drift);
+            gl.uniform1f(L.u_size, CLO.size); gl.uniform1f(L.u_soft, CLO.soft); gl.uniform1f(L.u_dens, CLO.dens);
+            gl.uniform3f(L.u_c, cxw, cyw, 0); gl.uniform1f(L.u_R, R);
+          }
           gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
           gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.depthMask(false); gl.disable(gl.CULL_FACE);
+          // 1. their shadows on the ground, first, so the clouds are drawn over them. Only with the sun well up: a low sun throws them kilometres off.
+          var su = sunNow && sunNow.su, sunAlt = su ? su.alt : 45;
+          if (CLO.shadow > 0 && sunAlt > 4 && map.queryTerrainElevation) {
+            var bands = [], cur = null; sl.forEach(function (s) { if (!cur || Math.abs(s.z - cur.top) > 1200) { cur = { lo: s.z, top: s.z, hi: s.hiAlt }; bands.push(cur); } else cur.top = s.z; });
+            bands.sort(function (a, b) { return (a.hi ? 1 : 0) - (b.hi ? 1 : 0) || a.lo - b.lo; }); // the low ones shade most: they go first
+            var bz = new Float32Array(4), bh = new Float32Array(4); for (var k = 0; k < 4; k++) { var bb = bands[k]; bz[k] = bb ? (bb.lo + bb.top) / 2 : -1e6; bh[k] = bb && bb.hi ? 1 : 0; }
+            var az = (su ? su.az : 180) * Math.PI / 180, ct = 1 / Math.tan(Math.max(4, sunAlt) * Math.PI / 180);
+            var gm = this.groundMesh(O, u, cxw, cyw, R, ex), G = this.G;
+            gl.useProgram(G.pg); gl.bindVertexArray(this.gvao); gl.bindBuffer(gl.ARRAY_BUFFER, this.gbuf);
+            gl.enableVertexAttribArray(G.a_pos); gl.vertexAttribPointer(G.a_pos, 3, gl.FLOAT, false, 24, 0);
+            gl.enableVertexAttribArray(G.a_w); gl.vertexAttribPointer(G.a_w, 3, gl.FLOAT, false, 24, 12);
+            shared(G);
+            gl.uniform2f(G.u_sun, Math.sin(az) * ct, Math.cos(az) * ct); gl.uniform4fv(G.u_bz, bz); gl.uniform4fv(G.u_bh, bh);
+            gl.uniform1f(G.u_R, R * 0.75); // the mesh's own reach, so its edge fades too
+            gl.uniform1f(G.u_sh, CLO.shadow * Math.min(1, (sunAlt - 4) / 8)); // fades in as the sun climbs
+            gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-2, -8); // drawn on the ground: pulled toward the camera so the terrain does not cover it
+            gl.drawArrays(gl.TRIANGLES, 0, gm.n);
+            gl.disable(gl.POLYGON_OFFSET_FILL);
+          }
+          // 2. the clouds: slices back to front, the farthest height from the camera first
+          sl.sort(function (a, b) { return Math.abs(b.z - camZ) - Math.abs(a.z - camZ); });
+          var v = [];
+          sl.forEach(function (s) {
+            var Z = s.z * ex * u;
+            [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]].forEach(function (q) {
+              var mx = q[0] * R, my = q[1] * R;
+              v.push(O.x + mx * u, O.y - my * u, Z, cxw + mx, cyw + my, s.z, s.f, s.hiAlt ? 1 : 0, s.n); // a_s.z: slices in its band
+            });
+          });
+          // light: the sun of this minute, as the map is lit; Underside sets how much darker the base is than the sunlit top
+          var ph = phase(sunAlt), L0 = ph.light, warm = ph.hor.map(function (x) { return x / 255; });
+          var lit = [0, 1, 2].map(function (i) { return (0.92 * L0 + 0.08) * (0.75 + 0.25 * warm[i]); });
+          var dk = 1 - 0.9 * CLO.under, dark = [0, 1, 2].map(function (i) { return lit[i] * (dk + (i === 2 ? 0.12 * CLO.under : 0)); });
+          var P = this.P;
+          gl.useProgram(P.pg); gl.bindVertexArray(this.vao);
+          gl.bindBuffer(gl.ARRAY_BUFFER, this.buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STREAM_DRAW);
+          gl.enableVertexAttribArray(P.a_pos); gl.vertexAttribPointer(P.a_pos, 3, gl.FLOAT, false, 36, 0);
+          gl.enableVertexAttribArray(P.a_w); gl.vertexAttribPointer(P.a_w, 3, gl.FLOAT, false, 36, 12);
+          gl.enableVertexAttribArray(P.a_s); gl.vertexAttribPointer(P.a_s, 3, gl.FLOAT, false, 36, 24);
+          shared(P);
+          gl.uniform3f(P.u_cam, cwx, cwy, camZ); gl.uniform3fv(P.u_lit, lit); gl.uniform3fv(P.u_dark, dark);
           gl.drawArrays(gl.TRIANGLES, 0, v.length / 9);
           gl.depthMask(true); gl.bindTexture(gl.TEXTURE_3D, null); gl.bindVertexArray(null); gl.bindBuffer(gl.ARRAY_BUFFER, null);
         }
@@ -8731,11 +8816,24 @@ var qrcode = function() {
     }
     map.on("styledata", function () { if (cl3.on && map.isStyleLoaded()) ensureCloudLayer(); });
     function cl3Set(v) {
-      cl3.on = v; pref("replayClouds3d", v ? "1" : "0"); tog("clouds", v);
+      cl3.on = v; pref("replayClouds3d", v ? "1" : "0"); tog("clouds", v); $("cl-fold").style.display = v ? "" : "none";
       if (!v) cl3Note(""); else if (cl3.note) cl3Note(cl3.note);
       ensureCloudLayer(); map.triggerRepaint();
     }
     $("clouds").onclick = function () { cl3Set(!cl3.on); };
+    var CLO_IN = { "cl-dens": "dens", "cl-cov": "cov", "cl-wide": "wide", "cl-size": "size", "cl-soft": "soft", "cl-lift": "lift", "cl-wind": "wind", "cl-under": "under", "cl-shadow": "shadow", "cl-slices": "slices" };
+    var cloBusy = false;
+    function cloShow() {
+      cloBusy = true;
+      Object.keys(CLO_IN).forEach(function (id) { var el = $(id); el.value = CLO[CLO_IN[id]]; el.dispatchEvent(new Event("input")); });
+      cloBusy = false;
+      $("cl-fold").style.display = cl3.on ? "" : "none"; // nothing to set while they are off
+    }
+    Object.keys(CLO_IN).forEach(function (id) {
+      $(id).addEventListener("input", function () { if (cloBusy) return; CLO[CLO_IN[id]] = +this.value; pref("replayCloudOpts", JSON.stringify(CLO)); map.triggerRepaint(); });
+    });
+    $("cl-rst").onclick = function () { CLO = JSON.parse(JSON.stringify(CLO_DEF)); pref("replayCloudOpts", null); cloShow(); map.triggerRepaint(); };
+    cloShow();
     tog("clouds", cl3.on); if (cl3.on) ensureCloudLayer();
     /** Fade each card in and out by how far it is, in seconds of screen time, from the rider. */
     /* ---- keeping the route in view ----
