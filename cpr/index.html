@@ -6915,7 +6915,12 @@ var qrcode = function() {
         the far view, for every layer of the current map; then the shadow heights. */
     function preloadRoute() {
       var key = (cur && cur.id) + "@" + followZoom + "@" + (sunOn() ? 1 : 0);
-      if (preloaded[key] || !fD.length) return Promise.resolve();
+      if (preloaded[key] || !fD.length) { // the map is in; the photos may not be (a style change sends them all back)
+        if (!phGpuLeft()) return Promise.resolve();
+        $("preload").classList.add("on"); $("pl-t").textContent = "Getting the photos ready…";
+        return phGpuWarm(function (dn, tot) { $("pl-bar").style.width = Math.round(dn / tot * 100) + "%"; $("pl-s").textContent = dn + " / " + tot + " photos"; })
+          .then(function () { $("preload").classList.remove("on"); });
+      }
       var tp = preTemplates(), urls = {}, list = [];
       var pts = routePoints(250);
       tp.forEach(function (s) {
@@ -6936,7 +6941,7 @@ var qrcode = function() {
       function show() {
         var f = total ? done / total : 1;
         $("pl-bar").style.width = Math.round(f * 100) + "%";
-        $("pl-s").textContent = Math.round(f * 100) + "% · " + done + " / " + total + " map pieces";
+        $("pl-s").textContent = Math.round(f * 100) + "% · " + done + " / " + total + " map pieces and photos";
       }
       $("preload").classList.add("on"); show();
       return new Promise(function (resolve) {
@@ -6954,8 +6959,11 @@ var qrcode = function() {
           })();
         });
         var heights = shN ? shadows.warm(sh, function () { done++; show(); }) : Promise.resolve();
+        // The photos, alongside: decoded and onto the GPU while the tiles come in, so none is first drawn mid-replay.
+        total += photos.length;
+        var phDone = 0, pics = phGpuWarm(function (dn) { done += dn - phDone; phDone = dn; show(); }); // the first step comes at once, before pics is set: a plain counter
         // Then let the map draw the first view, so the replay starts on a finished picture.
-        Promise.all([tiles, heights]).then(function () {
+        Promise.all([tiles, heights, pics]).then(function () {
           $("pl-t").textContent = "Drawing the first view…";
           var to = setTimeout(finish, 6000);
           map.once("idle", function () { clearTimeout(to); finish(); });
@@ -8211,15 +8219,15 @@ var qrcode = function() {
          more, until the GPU ran out, the context was lost and the map froze with no way back but a reload. */
       onRemove: function (m, gl) { photoTexFree(photos, gl); },
       render: function (gl, args) {
-        // Upload pictures to the GPU as soon as they are ready, once, so a card appearing mid-replay costs nothing.
+        /* Upload pictures to the GPU as soon as they are ready, once, so a card appearing mid-replay costs nothing. A few per frame
+           (8 ms at most): after a style change every picture comes back at once, and two hundred in one frame was a visible stall.
+           The loading screen waits for all of them (phGpuWarm), so this is done before the replay moves. */
+        var t0u = performance.now(), left = 0;
         photos.forEach(function (ph) {
-          if (ph.img && !ph.tex) {
-            ph.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, ph.tex);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, ph.img);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-          }
+          if (!ph.img || ph.tex) return;
+          if (performance.now() - t0u < 8) phTexUp(gl, ph); else left++;
         });
+        if (left) map.triggerRepaint(); // the rest on the next frames
         var vis = photos.filter(function (ph) { return ph.a > 0.01 && ph.img; });
         if (!vis.length) return;
         // MapLibre 5: mainMatrix takes mercator coordinates (0..1, z in the same units); older: the matrix itself.
@@ -8239,12 +8247,7 @@ var qrcode = function() {
         // back to front, so the peek is drawn behind the front card and a leaving card over it
         vis.sort(function (a, b) { return (0.06 * (a.ex || 0) - 0.15 * (a.pk || 0)) - (0.06 * (b.ex || 0) - 0.15 * (b.pk || 0)); });
         vis.forEach(function (ph) {
-          if (!ph.tex) {
-            ph.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, ph.tex);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, ph.img);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-          }
+          if (!ph.tex) phTexUp(gl, ph); // on screen now and not up yet: no waiting for its turn
           /* The reveal, as the rider comes up to the spot:
                a glowing pin lands on the ground where the photo was taken,
                a line draws from it up and out to the emptier side of the trail,
@@ -8308,12 +8311,7 @@ var qrcode = function() {
           gl.depthMask(true);
           // 3. the card, unfolding outward from the line's end
           if (kCard > 0) {
-            if (!ph.tex) {
-              ph.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, ph.tex);
-              gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, ph.img);
-              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            }
+            if (!ph.tex) phTexUp(gl, ph);
             // A group: pk 1 = the peek (0.85 size, a little out, up and back), 0 = the front; ex 0..1 = leaving toward the camera; al = its alpha.
             var pk = ph.pk || 0, ex = ph.ex || 0, al = ph.al == null ? 1 : ph.al, sc = 1 - 0.15 * pk + 0.05 * ex, oW = 0.14 * wM * pk, pb = -0.15 * hM * pk + 0.06 * hM * ex;
             var zb = base + hb + 0.08 * hM * pk;
@@ -8604,6 +8602,40 @@ var qrcode = function() {
     }
     window.__photoAlike = function () { return photos.map(function (a) { return photos.map(function (b) { return +alikeD(a, b).toFixed(2); }); }); };
     window.__photoDiff = function () { return photos.map(function (a) { return photos.map(function (b) { return +photoDiff(a, b).toFixed(2); }); }); };
+    /** One picture onto the GPU, with its smaller copies (mipmaps): a card far off or seen edge-on samples a copy its size instead of
+        skipping pixels of the full one, which shimmered and went grainy in rendered video. WebGL 2 makes them for any size; WebGL 1
+        only for power-of-two pictures, so there the full one is used as before. Anisotropic filtering, where offered, keeps a card
+        seen at a slant sharp along its length. */
+    var phAniso;
+    function phTexUp(gl, ph) {
+      ph.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, ph.tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, ph.img);
+      var w = ph.img.naturalWidth || ph.img.width, h = ph.img.naturalHeight || ph.img.height, pow2 = function (v) { return v > 0 && (v & (v - 1)) === 0; };
+      var mip = (typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext) || (pow2(w) && pow2(h));
+      if (mip) { gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); }
+      else gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      if (phAniso === undefined) phAniso = gl.getExtension("EXT_texture_filter_anisotropic") || gl.getExtension("WEBKIT_EXT_texture_filter_anisotropic") || null;
+      if (phAniso && mip) gl.texParameterf(gl.TEXTURE_2D, phAniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(phAniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+    }
+    /** How many photos are not on the GPU yet: still decoding, or decoded and waiting for their upload. A failed decode does not count. */
+    function phGpuLeft() { return photos.filter(function (ph) { return !ph.tex && !ph.bad; }).length; }
+    /** For the loading screen: every photo decoded and on the GPU, at most maxMs. onStep(done, total) as they go. */
+    function phGpuWarm(onStep, maxMs) {
+      var total = photos.length; if (!total) return Promise.resolve();
+      photos.forEach(function (ph) { if (ph.ready && !ph.img && !ph.bad) ph.ready.then(function () { if (!ph.img) ph.bad = true; }); });
+      return new Promise(function (res) {
+        var t0 = performance.now();
+        ensurePhotoLayer();
+        (function tick() {
+          var left = phGpuLeft(); onStep(total - left, total);
+          if (!left || performance.now() - t0 > (maxMs || 20000)) return res();
+          map.triggerRepaint(); // uploads happen in the photo layer's draw
+          setTimeout(tick, 50);
+        })();
+      });
+    }
     function photoTexFree(list, gl) {
       gl = gl || photoLayer.gl;
       list.forEach(function (ph) { if (ph.tex && gl) try { gl.deleteTexture(ph.tex); } catch (e) {} ph.tex = null; });
