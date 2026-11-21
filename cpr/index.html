@@ -312,6 +312,7 @@
       <b>ClickPanion Replay</b><span class="muted" id="ab-file"></span>
     </div>
     <select id="ab-aspect" title="Frame shape (also under Export)" aria-label="Frame shape"></select>
+    <button id="ab-recam" class="ib" title="Reset camera: back on the rider (R)" aria-label="Reset camera"><svg class="i"><use href="#i-reset"/></svg></button>
     <button id="ab-guides" class="ib" title="Framing guides (G)" aria-label="Framing guides"><svg class="i"><use href="#i-grid"/></svg></button>
     <button id="ab-snap" class="ib" title="Save a still of this frame (S)" aria-label="Save a still"><svg class="i"><use href="#i-camera"/></svg></button>
     <span class="ab-sep ab-wide"></span>
@@ -384,7 +385,7 @@
         <label class="fld"><span>Distance</span><input id="cam-dist" type="range" min="-2" max="2" step="0.05" value="0" data-unit="" data-def="0"><output></output></label>
         <label class="fld"><span>Field of view</span><input id="cam-fov" type="range" min="15" max="75" step="1" value="37" data-unit="°" data-def="37"><output></output></label>
         <label class="fld"><span>Turn smoothing</span><input id="cam-smooth" type="range" min="0.3" max="5" step="0.1" value="1.8" data-unit=" s" data-def="1.8"><output></output></label>
-        <div class="btnrow"><button id="cam-reset"><svg class="i"><use href="#i-reset"/></svg>Reset camera</button></div>
+        <div class="btnrow"><button id="cam-recam"><svg class="i"><use href="#i-reset"/></svg>Reset camera</button><button id="cam-reset">Reset lens settings</button></div>
       </div>
     </section>
 
@@ -6429,7 +6430,7 @@ var qrcode = function() {
   /* ---------- keyboard shortcuts sheet ---------- */
   var KEYS = [["Space", "Preview, or pause it"], ["← →", "Back or forward 1 s"], ["Shift + ← →", "Back or forward 10 s"], ["Home / End", "Start or end of the ride"],
     ["[ ]", "Slower or faster"], ["C", "Clean view preview, or leave it"], ["F", "Follow the rider"], ["L", "Loop"], ["G", "Framing guides"],
-    ["S", "Save a still"], ["P", "Show or hide the panel"], ["1 – 6", "Panel tabs"], ["Shift + F", "Full screen"], ["Esc", "Leave clean view, close a sheet"], ["?", "This list"]];
+    ["S", "Save a still"], ["R", "Reset camera: back on the rider"], ["P", "Show or hide the panel"], ["1 – 6", "Panel tabs"], ["Shift + F", "Full screen"], ["Esc", "Leave clean view, close a sheet"], ["?", "This list"]];
   var keysEl = document.createElement("div"); keysEl.className = "dlg-scrim"; keysEl.hidden = true;
   keysEl.innerHTML = '<div class="dlg" role="dialog" aria-modal="true"><header><b>Keyboard shortcuts</b><button class="ib" id="keys-close" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></header><div class="body"><div class="keys">' +
     KEYS.map(function (k) { return "<div>" + k[0].split(" ").map(function (p) { return p === "+" || p === "/" || p === "–" ? p : "<kbd>" + p + "</kbd>"; }).join(" ") + "</div><div>" + k[1] + "</div>"; }).join("") + "</div></div></div>";
@@ -6662,6 +6663,22 @@ var qrcode = function() {
       tlab.innerHTML = "<b>" + a[0] + "</b> <span class=\"muted\">/ " + (a[1] || "") + " · " + m[1] + "</span>";
     }).observe(tlab, { childList: true, characterData: true, subtree: true });
 
+    /* Reset camera: Fill window, then back to the chosen frame, then the follow camera starts again from the rider. Asked for as
+       exactly that sequence: going through Fill window and back was what brought a lost camera back to the arrow. Each step waits
+       for the map to take its new size (MapLibre's own resize observer is debounced), and the map is resized by hand as well. */
+    var recamBusy = false;
+    function recam() {
+      if (recamBusy || ctl.state().rendering) return;
+      recamBusy = true;
+      var back = asp, m = window.__cpMap;
+      function settle(fn) { requestAnimationFrame(function () { try { m && m.resize(); } catch (e) {} setTimeout(fn, 120); }); }
+      aspSet("fill");
+      settle(function () {
+        aspSet(back);
+        settle(function () { recamBusy = false; try { ctl.recenter && ctl.recenter(); } catch (e) {} });
+      });
+    }
+    $("ab-recam").onclick = recam; $("cam-recam").onclick = recam;
     // size changes: refit the stage, redraw the timeline
     var ro = new ResizeObserver(function () { fit(); });
     ro.observe($("viewport"));
@@ -6687,6 +6704,7 @@ var qrcode = function() {
       else if (k === "Home") ctl.seek(0);
       else if (k === "End") ctl.seek(ctl.state().dur);
       else if (k === "[" || k === "]") { var s = $("rate"), i = s.selectedIndex + (k === "]" ? 1 : -1); if (i >= 0 && i < s.options.length) { s.selectedIndex = i; s.dispatchEvent(new Event("change")); toast("Speed " + s.options[i].textContent + (s.options[i].parentNode.label === "Whole ride in" ? " for the ride" : ""), 900); } }
+      else if (k === "r" || k === "R") recam();
       else if (k === "c" || k === "C") { if (ctl.state().clean) ctl.cleanStop(); else $("c-go").click(); }
       else if (k === "f") $("follow").click();
       else if (k === "F") fullToggle();
@@ -9903,6 +9921,7 @@ var qrcode = function() {
       state: function () { return { t: t, dur: d.dur, playing: playing, clean: cleanOn, rendering: document.body.classList.contains("rendering") }; },
       seek: function (s) { if (cleanOn && playing) return; t = Math.max(0, Math.min(d.dur, s)); u = skipOn() ? movingAt(t) : t; draw(true); ppAt(); },
       play: function () { $("play").click(); },
+      recenter: function () { camResync(false); if (!playing) draw(true); }, // Reset camera's last step: the follow camera from the rider again
       clock: clock,
       set: function (k, v) {
         if (k === "dist") { followZoom = followBase - v; userZoomed = false; if (!playing) draw(true); }
