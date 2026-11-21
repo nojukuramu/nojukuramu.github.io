@@ -6471,6 +6471,17 @@ var qrcode = function() {
   var toastT = 0;
   function toast(msg, ms) { toastEl.textContent = msg; toastEl.style.display = "block"; clearTimeout(toastT); if (ms !== 0) toastT = setTimeout(function () { toastEl.style.display = "none"; }, ms || 2200); }
 
+  /* A phone can play a replay but the editor and the baked camera want a
+     pointer and a wide screen. Said once per visit, on the existing toast, so
+     it needs no new element; sessionStorage so it comes back on a later visit
+     rather than being silenced forever by one dismissal. */
+  (function () {
+    var touch = window.matchMedia && matchMedia("(pointer: coarse) and (hover: none)").matches;
+    if (!touch && !(window.innerWidth <= 700)) return;
+    try { if (sessionStorage.getItem("replayPcHint")) return; sessionStorage.setItem("replayPcHint", "1"); } catch (e) {}
+    setTimeout(function () { toast("Best viewed on a PC", 4500); }, 600);
+  })();
+
   /* ---------- theme and full screen ---------- */
   $("ab-theme").onclick = function () {
     var dark = document.documentElement.getAttribute("data-theme") !== "dark";
