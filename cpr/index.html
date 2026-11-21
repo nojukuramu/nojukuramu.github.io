@@ -9995,7 +9995,7 @@ var qrcode = function() {
     /** What a bake depends on: when any of it changes, the bake no longer shows what a fresh one would. */
     function bkSig() {
       return JSON.stringify([+$("c-len").value || 30, stopMode(), camMode, cam, +$("tiltv").value, followZoom, CTL.smooth, photosOn ? photos.map(function (ph) { return Math.round(ph.t); }) : 0,
-        camMode === "smart" || camMode === "ordinary" ? 0 : PHO, Math.round(map.getCanvas().clientWidth / Math.max(1, map.getCanvas().clientHeight) * 100), $("c-style").value]);
+        camMode === "smart" || camMode === "ordinary" ? 0 : PHO, window.__cpAspect || "fill", $("c-style").value]); // the chosen frame shape, not the stage's pixels: those round differently in clean view
     }
     function bkPack() {
       var r6 = function (v) { return Math.round(v * 1e6) / 1e6; }, r2 = function (v) { return Math.round(v * 100) / 100; }, r3 = function (v) { return Math.round(v * 1000) / 1000; };
