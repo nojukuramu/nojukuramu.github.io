@@ -7602,6 +7602,7 @@ var qrcode = function() {
         camLog(jo, before, p);
       }
       if (cleanOn) cleanDraw(t);
+      phAtSync();
       photosTick(seeking);
       if (sunOn()) sunApply(d.t0 + t * 1000, p[1], p[0], seeking);
     }
@@ -9261,7 +9262,7 @@ var qrcode = function() {
       $("ph-act").classList.toggle("on", !!it);
       if (it) {
         $("ph-act-t").textContent = it.ph ? HOW[it.how][1] + " · " + clock(it.ph.t) + " into the ride" : it.o && it.o.t > 0 ? "Taken " + new Date(it.o.t).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + ", outside this ride. Give it a ride time." : "No time it was taken. Give it a ride time.";
-        $("ph-at").value = it.ph ? clock(it.ph.t) : ""; $("ph-at").classList.remove("warn");
+        $("ph-at").classList.remove("warn"); phAtT = null; phAtSync(); // the field follows the seek bar; the photo's own time is in the line above
         var gp = it.ph ? [] : gpsPasses(it.o || {});
         $("ph-gpsp").innerHTML = gp.length ? '<span class="muted">Near its GPS at</span>' + gp.map(function (s2) { return '<button data-at="' + s2 + '">' + clock(s2) + "</button>"; }).join("") : "";
         $("ph-spot").textContent = it.ph ? "Move it" : "Choose its spot";
@@ -9277,7 +9278,19 @@ var qrcode = function() {
     $("ph-onoff").onclick = function () { photosOn = !photosOn; pref("replayPhotosOff:" + ID, photosOn ? "0" : "1"); photosReload(); };
     /* A ride time for the selected photo: typed (h:mm:ss or m:ss), or one of the passes near its GPS. */
     function phAtSet(s2) { if (!phSel || !B.photoPlace) return; B.photoPlace(+ID, phSel, Math.round(Math.max(0, Math.min(d.dur, s2)) * 10) / 10); photosReload(); }
+    /* The Ride time field follows the seek bar: wherever the replay is (seeked, stepped, playing), Place puts the photo there, at the
+       exact time and not the second the field rounds to. Typing in it takes over until the next photo is chosen or the bar moves again. */
+    var phAtT = null, phAtTyped = false;
+    function phAtSync() {
+      var el = $("ph-at"); if (!el || !phSel || document.activeElement === el) return;
+      if (phAtTyped && phAtT === t) return; // typed over, and the bar has not moved since
+      phAtTyped = false;
+      var sv = clock(t); if (el.value !== sv) { el.value = sv; el.classList.remove("warn"); }
+      phAtT = t;
+    }
+    $("ph-at").addEventListener("input", function () { phAtTyped = true; });
     $("ph-at-go").onclick = function () {
+      if (!phAtTyped && phAtT != null && $("ph-at").value === clock(phAtT)) return phAtSet(phAtT);
       var p2 = String($("ph-at").value).trim().split(":").map(Number), s2 = p2.length && !p2.some(isNaN) ? p2.reduce(function (a, b) { return a * 60 + b; }, 0) : NaN;
       if (isNaN(s2) || s2 < 0 || s2 > d.dur + 1) { $("ph-at").classList.add("warn"); return; }
       phAtSet(s2);
