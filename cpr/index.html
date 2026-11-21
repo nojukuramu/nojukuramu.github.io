@@ -424,11 +424,14 @@
         <div class="grp"><h3>Style</h3>
           <div class="seg"><button id="pm-moment">Moment</button><button id="pm-burst">Burst</button></div>
           <div class="hint" id="pm-note"></div>
+          <h3 style="margin-top:10px">Grouping<button class="infobtn" data-info="grouphow" aria-label="Fast or by similarity"><svg class="i"><use href="#i-info"/></svg></button></h3>
+          <div class="seg"><button id="pg-fast">Fast</button><button id="pg-sim">Similarity</button></div>
+          <div class="hint" id="pg-note"></div>
         </div>
         <details class="grp fold" id="ph-fold-grp"><summary><h3>Grouping<button class="infobtn" data-info="grouping" aria-label="How photos are grouped"><svg class="i"><use href="#i-info"/></svg></button></h3></summary>
           <label class="fld"><span>Group by</span><select id="ph-grp"><option value="auto">Auto</option><option value="look">Similar look</option><option value="place">Time and place</option><option value="off">Never</option></select><span></span></label>
-          <label class="fld"><span>Faces</span><select id="ph-face"><option value="off">Ignore</option><option value="loose">Loose</option><option value="normal">Normal</option><option value="strict">Strict</option></select><button class="infobtn" data-info="faces" aria-label="How faces are compared"><svg class="i"><use href="#i-info"/></svg></button></label>
-          <label class="fld"><span>Look tolerance</span><input id="ph-sim" type="range" min="0.4" max="2" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label>
+          <label class="fld pho-s"><span>Faces</span><select id="ph-face"><option value="off">Ignore</option><option value="loose">Loose</option><option value="normal">Normal</option><option value="strict">Strict</option></select><button class="infobtn" data-info="faces" aria-label="How faces are compared"><svg class="i"><use href="#i-info"/></svg></button></label>
+          <label class="fld pho-s"><span>Look tolerance</span><input id="ph-sim" type="range" min="0.4" max="2" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label>
           <label class="fld"><span>Same place within</span><input id="ph-near" type="range" min="0" max="1000" step="10" value="0" data-unit=" m" data-def="0"><output></output></label>
           <label class="fld pho-b"><span>Look ahead</span><input id="ph-look" type="range" min="1" max="20" step="0.5" value="6" data-unit=" s" data-def="6"><output></output></label>
           <label class="fld pho-m"><span>Within</span><input id="ph-win" type="range" min="1" max="60" step="1" value="10" data-unit=" min" data-def="10"><output></output></label>
@@ -6379,6 +6382,7 @@ var qrcode = function() {
     camera: { title: "The camera", body: "<p><b>Tilt</b> is how far the camera leans toward the horizon. It is lowered on its own when a hill would come between the camera and the rider.</p><p><b>Distance</b> moves the follow camera closer or farther, in zoom steps: one step is twice as close.</p><p><b>Field of view</b> is the lens. Wide shows more and exaggerates depth; narrow flattens it, like a long lens.</p><p><b>Turn smoothing</b> is how long the camera takes to swing after the route turns. Longer is calmer; shorter keeps the road ahead centred on twisty routes.</p>" },
     sun: { title: "Real sun and moon", body: "<p>The light is worked out for the minute and the place of each moment of the ride: where the sun and moon were, dawn and dusk colours, shadows from the hills, and the cloud cover the weather service recorded for that hour.</p><p>Off, the map is lit as a plain daytime map.</p>" },
     photos: { title: "Photos in the replay", body: "<p>Each photo comes up at the time it was taken, where the ride was then. Its GPS sets where the card stands, when it agrees with that moment.</p><p>A photo with no time within the ride (none, or a camera clock that was off) is not guessed from its GPS alone, since a trail can pass one spot hours apart. It waits in the list: type its ride time, choose it on the route, or pick one of the passes near its GPS. Drop pictures on the page to add them.</p><p><b>Moment</b> slows the replay at each photo and frames it. <b>Burst</b> keeps the speed and lets photos rise beside the trail as you pass.</p><p>Changes stay in this tab until <b>Save changes</b> writes a new file.</p>" },
+    grouphow: { title: "Fast or by similarity", body: "<p><b>Fast</b> groups photos only by when and where they were taken. No picture is read, so even hundreds of photos are ready at once. Retakes of one view and different views from one stop can land in the same group.</p><p><b>Similarity</b> also compares what the photos show: their look, and the faces in them. Each photo is read once in this browser (nothing is uploaded), which takes a while the first time for many photos. The settings under Grouping fine-tune it.</p>" },
     grouping: { title: "Grouping photos", body: "<p>Photos that belong together share one spot: a deck in <b>Burst</b>, one stop in <b>Moment</b>.</p><p><b>Auto</b> groups by look in Burst and by time and place in Moment, as before. <b>Similar look</b> groups only retakes of the same view. <b>Time and place</b> groups whatever was taken at one spot. <b>Never</b> gives every photo its own turn.</p><p><b>Look tolerance</b> above 1 groups more loosely, below 1 more strictly. <b>Same place within</b> left at Auto is 250 m in Burst and 300 m in Moment. <b>Up to</b> at Auto is 7 per deck, 3 per moment.</p><p>The look of each photo is read in this tab, with MediaPipe's image embedder, the first time photos are opened. Nothing is uploaded.</p>" },
     faces: { title: "Faces", body: "<p>Two photos of the same spot can show different people. With faces on, each face is found (MediaPipe face detector), cut out and compared on its own, so a selfie of one person is not stacked with a selfie of another.</p><p><b>Normal</b> keeps photos apart when their faces differ. <b>Strict</b> also keeps a photo with a face apart from one without. <b>Loose</b> only splits clearly different faces.</p><p>Faces smaller than about a twentieth of the photo are ignored. This tells look-alikes apart, not identities: it is a guide for grouping, nothing more. It all runs in this tab.</p>" },
     frame: { title: "The frame", body: "<p>The stage is the video's frame. Pick its shape here and the preview is letterboxed to it, so what you see is what renders, overlays included.</p><p><b>Resolution</b> is the short side of the video; the long side follows the shape. The long side is capped at 4096 pixels, the most the map can draw.</p><p>Vertical shapes (9:16, 4:5) suit phone feeds; 16:9 suits a screen; 21:9 and 2.39:1 are cinema.</p>" },
@@ -8278,14 +8282,17 @@ var qrcode = function() {
     function alikeD(a, b) { return a.emb && b.emb ? embDiff(a.emb, b.emb) : a.pa && b.pa ? embDiff(a.pa.e, b.pa.e) : photoDiff(a, b); }
     function alikeMax(a, b) { return (a.emb && b.emb) || (a.pa && b.pa) ? SIMILAR_E : SIMILAR; }
     /* ---- photo settings (Photos tab): every default is the old fixed value, so an untouched tab groups and paces as before ---- */
-    var PHO = { grp: "auto", face: "normal", sim: 1, near: 0, look: 6, win: 10, max: 0, order: "sharp", size: 1, hold: 4.6, swap: 1.7, up: 3, wait: 8, shuf: 0.55 };
+    var PHO = { how: "sim", grp: "auto", face: "normal", sim: 1, near: 0, look: 6, win: 10, max: 0, order: "sharp", size: 1, hold: 4.6, swap: 1.7, up: 3, wait: 8, shuf: 0.55 };
     var PHO_DEF = JSON.parse(JSON.stringify(PHO));
     try { var pj = JSON.parse(pref("replayPhotoOpts") || "{}"); Object.keys(PHO).forEach(function (k) { if (pj[k] != null && typeof pj[k] === typeof PHO[k]) PHO[k] = pj[k]; }); } catch (e) {}
     function phoApply() {
       PHOTO_H = PHOTO_H0 * PHO.size; MOMENT = PHO.hold; SWAP = PHO.swap; B_MAX = PHO.up; B_HOLD = PHO.wait; DECK_SH = PHO.shuf;
       B_NEAR = PHO.near || 250; B_LOOK = PHO.look; B_FAN = phoGrp() === "off" ? 1 : PHO.max || 7;
     }
-    function phoGrp() { return PHO.grp === "auto" ? (burstOn() ? "look" : "place") : PHO.grp; }
+    /* PHO.how: "fast" groups by time and place only and never reads a picture (no MediaPipe, no look hash): instant, even for hundreds
+       of photos. "sim" (the default, as before) also compares what the photos show, which costs a read of every photo. */
+    function phoFast() { return PHO.how === "fast"; }
+    function phoGrp() { var g = PHO.grp === "auto" ? (burstOn() ? "look" : "place") : PHO.grp; return phoFast() && g === "look" ? "place" : g; }
     /* Faces: found and cut out by MediaPipe's face detector, each cut-out embedded on its own. On the photos this was tuned on, retakes of one
        person sat under 0.30 apart and different people over 0.50 (while their whole-photo vectors could be 0.00 apart: same spot, same light). */
     var FACE_MAX = { loose: 0.48, normal: 0.38, strict: 0.30 };
@@ -8371,7 +8378,7 @@ var qrcode = function() {
         cx.rotate(e.r * Math.PI / 2); cx.drawImage(im, -W0 / 2, -H0 / 2);
         ph.img = cv; ph.w = CW; ph.h = CH;
       }
-      try { ph.sig = photoSig(ph.img); } catch (x) { ph.sig = null; }
+      if (!phoFast()) try { ph.sig = photoSig(ph.img); } catch (x) { ph.sig = null; }
       photoTexFree([ph]); // a fresh texture is made from the edited picture on the next draw; the old one leaves the GPU now
     }
     /** The strip's thumbnail drawn as the card will be (the turn and the zoom; the pan roughly). */
@@ -8416,6 +8423,7 @@ var qrcode = function() {
     }
     /** Read every photo that has no vectors for its current edit. One at a time, yielding between them so the replay keeps running. */
     function paRun() {
+      if (phoFast()) { paNote(); return PA.done; } // Fast: nothing is read
       var need = photos.filter(function (ph) { return !ph.pa || ph.pa.k !== edKey(edOf(ph.f)); });
       if (PA.st === "run") { PA.again = true; return PA.done; } // after the current pass, once more for what changed meanwhile
       if (!need.length || PA.st === "fail") { if (PA.st !== "fail") PA.st = "ready"; paNote(); return PA.done; }
@@ -9001,8 +9009,18 @@ var qrcode = function() {
       Object.keys(PHO_SEL).forEach(function (id) { $(id).value = PHO[PHO_SEL[id]]; });
       Array.prototype.forEach.call(document.querySelectorAll(".pho-b"), function (el) { el.style.display = burstOn() ? "" : "none"; });
       Array.prototype.forEach.call(document.querySelectorAll(".pho-m"), function (el) { el.style.display = burstOn() ? "none" : ""; });
+      Array.prototype.forEach.call(document.querySelectorAll(".pho-s"), function (el) { el.style.display = phoFast() ? "none" : ""; }); // nothing to compare
+      $("pg-fast").classList.toggle("on", phoFast()); $("pg-sim").classList.toggle("on", !phoFast());
+      $("pg-note").textContent = phoFast() ? "By time and place. Pictures are not read." : "Also by what the photos show. Reads each photo once.";
       phoBusy = false;
     }
+    function phoHow(v) {
+      if (PHO.how === v) return;
+      PHO.how = v; phoShow(); phoChanged();
+      if (!phoFast()) photos.forEach(function (ph) { if (ph.img && !ph.sig) try { ph.sig = photoSig(ph.img); } catch (e) {} }); // the look hash skipped while Fast
+      paRun();
+    }
+    $("pg-fast").onclick = function () { phoHow("fast"); }; $("pg-sim").onclick = function () { phoHow("sim"); };
     var phoBusy = false;
     Object.keys(PHO_IN).forEach(function (id) { $(id).addEventListener("input", function () { if (phoBusy) return; PHO[PHO_IN[id]] = +this.value; phoChanged(); }); });
     Object.keys(PHO_SEL).forEach(function (id) { $(id).addEventListener("change", function () { PHO[PHO_SEL[id]] = this.value; phoChanged(); if (id === "ph-face" && this.value !== "off") paRun(); }); });
