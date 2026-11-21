@@ -500,7 +500,7 @@
         <button id="x-start" class="ib" title="To the start (Home)" aria-label="To the start"><svg class="i"><use href="#i-start"/></svg></button>
         <button id="x-back" class="ib" title="Back 10 s (Shift+Left)" aria-label="Back 10 seconds"><svg class="i"><use href="#i-back"/></svg></button>
         <button id="x-prev" class="ib" title="Back 1 s (Left)" aria-label="Back 1 second"><svg class="i"><use href="#i-prev"/></svg></button>
-        <button id="play" title="Play or pause (Space)" aria-label="Play"><svg class="i"><use href="#i-play"/></svg></button>
+        <button id="play" title="Preview, or pause it (Space)" aria-label="Preview"><svg class="i"><use href="#i-play"/></svg></button>
         <button id="x-next" class="ib" title="Forward 1 s (Right)" aria-label="Forward 1 second"><svg class="i"><use href="#i-next"/></svg></button>
         <button id="x-fwd" class="ib" title="Forward 10 s (Shift+Right)" aria-label="Forward 10 seconds"><svg class="i"><use href="#i-fwd"/></svg></button>
         <button id="x-end" class="ib" title="To the end (End)" aria-label="To the end"><svg class="i"><use href="#i-end"/></svg></button>
@@ -6413,7 +6413,7 @@ var qrcode = function() {
   });
 
   /* ---------- keyboard shortcuts sheet ---------- */
-  var KEYS = [["Space", "Play or pause"], ["← →", "Back or forward 1 s"], ["Shift + ← →", "Back or forward 10 s"], ["Home / End", "Start or end of the ride"],
+  var KEYS = [["Space", "Preview, or pause it"], ["← →", "Back or forward 1 s"], ["Shift + ← →", "Back or forward 10 s"], ["Home / End", "Start or end of the ride"],
     ["[ ]", "Slower or faster"], ["C", "Clean view preview, or leave it"], ["F", "Follow the rider"], ["L", "Loop"], ["G", "Framing guides"],
     ["S", "Save a still"], ["P", "Show or hide the panel"], ["1 – 6", "Panel tabs"], ["Shift + F", "Full screen"], ["Esc", "Leave clean view, close a sheet"], ["?", "This list"]];
   var keysEl = document.createElement("div"); keysEl.className = "dlg-scrim"; keysEl.hidden = true;
@@ -7090,7 +7090,7 @@ var qrcode = function() {
     /* The desktop inspector's knobs. Each default is the value the replay had before it was a setting, so an untouched
        inspector replays exactly as the app does. smooth: seconds the camera takes to turn after the route. */
     var CTL = { smooth: 1.8, loop: false, trail: "#FC5200", lineW: 6, title: "", ovs: 1 };
-    function playIcon(on) { $("play").innerHTML = '<svg class="i"><use href="#i-' + (on ? "pause" : "play") + '"/></svg>'; $("play").setAttribute("aria-label", on ? "Pause" : "Play"); }
+    function playIcon(on) { $("play").innerHTML = '<svg class="i"><use href="#i-' + (on ? "pause" : "play") + '"/></svg>'; $("play").setAttribute("aria-label", on ? "Pause" : "Preview"); }
     var follow = true, cam = pref("replayCam") || "smooth", playing = false, rate = 5, t = 0, lastFrame = 0, userAt = 0;
     $("cam").value = cam;
     function tog(id, v) { $(id).classList.toggle("on", v); }
@@ -7176,8 +7176,13 @@ var qrcode = function() {
       if (t >= d.dur) t = 0;
       camIntro().then(function () { playing = true; playIcon(true); lastFrame = 0; requestAnimationFrame(frame); });
     }
+    /* Play is Preview: the clean view, from the start, as the video will be. It held the camera on the rider better than the free
+       replay did (it starts from a fresh camera, its own map style and a full preload), so the free replay is no longer offered here.
+       Once the preview runs, Play pauses and resumes it where it is; at its end it starts it again. */
     $("play").onclick = function () {
       if (playing) { playing = false; playIcon(false); return; }
+      if (rendering) return;
+      if (!cleanOn || t >= d.dur) { cleanStart(false); return; }
       preloadRoute().then(startPlay);
     };
     $("seek").max = Math.max(1, Math.round(d.dur * 10));
