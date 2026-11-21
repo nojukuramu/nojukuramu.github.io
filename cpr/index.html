@@ -109,6 +109,11 @@
   /* Transport */
   #transport { grid-area:trans; background:var(--panel); border-top:1px solid var(--line); padding:6px 12px 8px; min-width:0; }
   #tl { position:relative; height:46px; margin:2px 0 6px; border-radius:6px; background:var(--panel-2); overflow:hidden; }
+  #bk-lane { position:relative; height:20px; margin:2px 0 0; border-radius:6px; background:var(--panel-2); cursor:pointer; touch-action:none; }
+  #bk-lane canvas { position:absolute; inset:0; width:100%; height:100%; }
+  .bk-nav { display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12px; color:var(--muted); }
+  .bk-nav span { flex:1; text-align:center; font-variant-numeric:tabular-nums; }
+  #bk-fields .fld input[type=number] { width:100%; min-width:0; }
   #tl-cv { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
   #seek { position:absolute; inset:0; width:100%; height:100%; margin:0; background:transparent; -webkit-appearance:none; appearance:none; cursor:pointer; }
   #seek::-webkit-slider-runnable-track { height:46px; background:transparent; }
@@ -303,6 +308,8 @@
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></symbol>
   <symbol id="i-loop" viewBox="0 0 24 24"><path d="M17 3.5l3 3-3 3M4 11.5v-1a4 4 0 0 1 4-4h12M7 20.5l-3-3 3-3M20 12.5v1a4 4 0 0 1-4 4H4"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><path d="M12 4.5 19.5 12 12 19.5 4.5 12z"/></symbol>
+  <symbol id="i-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></symbol>
   <symbol id="i-laptop" viewBox="0 0 24 24"><rect x="4.5" y="5" width="15" height="10" rx="1.5"/><path d="M2.5 19h19"/></symbol>
 </svg>
 
@@ -380,7 +387,9 @@
     <section class="pane" data-pane="cam">
       <div class="grp"><h3>Follow</h3>
         <button id="follow" class="tgl on"><span>Follow the rider</span><i></i></button>
-        <div class="ph-head"><button id="cam-smart" class="tgl"><span>Smart camera on hills</span><i></i></button><button class="infobtn" data-info="smartcam" aria-label="What the smart camera does"><svg class="i"><use href="#i-info"/></svg></button></div>
+        <h3 style="margin-top:10px">Mode<button class="infobtn" data-info="cammode" aria-label="The three camera modes"><svg class="i"><use href="#i-info"/></svg></button></h3>
+        <div class="seg" id="cm-seg"><button id="cm-ordinary">Ordinary</button><button id="cm-smart">Smart</button><button id="cm-moment">Photo moment</button></div>
+        <div class="hint" id="cm-note"></div>
         <label class="fld"><span>Direction</span><select id="cam"><option value="smooth">Smooth direction</option><option value="heading">Locked to compass</option><option value="north">North up</option></select><span></span></label>
       </div>
       <div class="grp"><h3>Lens<button class="infobtn" data-info="camera" aria-label="What the camera settings do"><svg class="i"><use href="#i-info"/></svg></button></h3>
@@ -389,6 +398,26 @@
         <label class="fld"><span>Field of view</span><input id="cam-fov" type="range" min="15" max="75" step="1" value="37" data-unit="°" data-def="37"><output></output></label>
         <label class="fld"><span>Turn smoothing</span><input id="cam-smooth" type="range" min="0.3" max="5" step="0.1" value="1.8" data-unit=" s" data-def="1.8"><output></output></label>
         <div class="btnrow"><button id="cam-behind"><svg class="i"><use href="#i-rider"/></svg>Behind the arrow</button><button id="cam-recam"><svg class="i"><use href="#i-reset"/></svg>Reset camera</button><button id="cam-reset">Reset lens settings</button></div>
+      </div>
+      <div class="grp" id="bk-grp"><h3>Baked camera<button class="infobtn" data-info="bake" aria-label="What baking the camera does"><svg class="i"><use href="#i-info"/></svg></button></h3>
+        <div class="btnrow" style="margin-top:0"><button id="bk-go"><svg class="i"><use href="#i-rec"/></svg><span>Bake</span></button><button id="bk-clear" hidden><svg class="i"><use href="#i-trash"/></svg>Clear</button></div>
+        <button id="bk-use" class="tgl" hidden style="margin-top:8px"><span>Use the baked camera</span><i></i></button>
+        <div class="hint" id="bk-st"></div>
+        <div id="bk-ed" hidden>
+          <div class="bk-nav"><button class="ib" id="bk-prev" title="Previous key (,)" aria-label="Previous key"><svg class="i"><use href="#i-prev"/></svg></button><span id="bk-at"></span><button class="ib" id="bk-next" title="Next key (.)" aria-label="Next key"><svg class="i"><use href="#i-next"/></svg></button></div>
+          <div class="btnrow"><button id="bk-key" class="on" title="Insert a key here, or update this one, from what the camera shows (I)"><svg class="i"><use href="#i-key"/></svg>Key the view</button><button id="bk-del" title="Delete this key (X)"><svg class="i"><use href="#i-trash"/></svg>Delete</button><button id="bk-rev" title="Back to the transform it was baked with">Revert</button></div>
+          <div id="bk-fields">
+            <label class="fld"><span>Aim</span><select id="bk-aim"><option value="0">Free</option><option value="1">Look at rider</option></select><span></span></label>
+            <label class="fld"><span>East</span><input type="number" id="bk-e" step="5" data-k="e"><span class="muted">m</span></label>
+            <label class="fld"><span>North</span><input type="number" id="bk-n" step="5" data-k="n"><span class="muted">m</span></label>
+            <label class="fld"><span>Up</span><input type="number" id="bk-u" step="5" data-k="u"><span class="muted">m</span></label>
+            <label class="fld bk-rot"><span>Yaw</span><input type="number" id="bk-b" step="1" data-k="b"><span class="muted">°</span></label>
+            <label class="fld bk-rot"><span>Pitch</span><input type="number" id="bk-p" step="1" min="0" max="89" data-k="p"><span class="muted">°</span></label>
+            <label class="fld"><span>Roll</span><input type="number" id="bk-r" step="1" min="-180" max="180" data-k="r"><span class="muted">°</span></label>
+            <label class="fld"><span>Field of view</span><input type="number" id="bk-f" step="1" min="15" max="75" data-k="f"><span class="muted">°</span></label>
+            <p class="hint" id="bk-note"></p>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -441,7 +470,6 @@
           <div id="ph-act"><div class="muted" id="ph-act-t"></div><div class="bar"><button id="ph-spot" class="on">Choose its spot</button><button id="ph-auto"><svg class="i"><use href="#i-reset"/></svg>Auto</button><button id="ph-del"><svg class="i"><use href="#i-trash"/></svg>Remove</button></div><label class="fld" id="ph-when"><span>Ride time</span><div class="pair"><input type="text" id="ph-at" placeholder="h:mm:ss" style="width:100%"></div><button id="ph-at-go">Place</button></label><div class="bar" id="ph-gpsp"></div><div id="ph-edit"><div class="bar"><button id="ph-rotl" title="Rotate left" aria-label="Rotate left"><svg class="i"><use href="#i-rotl"/></svg></button><button id="ph-rotr" title="Rotate right" aria-label="Rotate right"><svg class="i"><use href="#i-rotr"/></svg></button><button id="ph-ed-rst"><svg class="i"><use href="#i-reset"/></svg>Original</button></div><label class="fld"><span>Straighten</span><input id="ph-ang" type="range" min="-45" max="45" step="0.5" value="0" data-unit="°" data-def="0"><output></output></label><label class="fld"><span>Crop</span><select id="ph-crop"><option value="">Original shape</option><option value="1:1">Square 1:1</option><option value="4:3">4:3</option><option value="3:4">3:4</option><option value="3:2">3:2</option><option value="2:3">2:3</option><option value="16:9">16:9</option><option value="9:16">9:16</option></select><span></span></label><label class="fld"><span>Zoom</span><input id="ph-zoom" type="range" min="1" max="4" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label><label class="fld ph-pan"><span>Pan across</span><input id="ph-panx" type="range" min="-1" max="1" step="0.02" value="0" data-unit="" data-def="0"><output></output></label><label class="fld ph-pan"><span>Pan up / down</span><input id="ph-pany" type="range" min="-1" max="1" step="0.02" value="0" data-unit="" data-def="0"><output></output></label><label class="fld"><span>Card size</span><input id="ph-psz" type="range" min="0.5" max="2" step="0.05" value="1" data-unit="×" data-def="1"><output></output></label></div></div>
         </div>
         <div class="grp"><h3>Style</h3>
-          <div class="seg"><button id="pm-moment">Moment</button><button id="pm-burst">Burst</button></div>
           <div class="hint" id="pm-note"></div>
           <h3 style="margin-top:10px">Grouping<button class="infobtn" data-info="grouphow" aria-label="Fast or by similarity"><svg class="i"><use href="#i-info"/></svg></button></h3>
           <div class="seg"><button id="pg-fast">Fast</button><button id="pg-sim">Similarity</button></div>
@@ -511,6 +539,7 @@
   </aside>
 
   <footer id="transport">
+    <div id="bk-lane" hidden><canvas id="bk-cv" aria-label="Baked camera keys, in video time"></canvas></div>
     <div id="tl"><canvas id="tl-cv"></canvas><input id="seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Position in the ride"><div id="tl-hover"></div></div>
     <div class="row2">
       <div class="xport">
@@ -6401,7 +6430,9 @@ var qrcode = function() {
     camera: { title: "The camera", body: "<p><b>Tilt</b> is how far the camera leans toward the horizon. It is lowered on its own when a hill would come between the camera and the rider.</p><p><b>Distance</b> moves the follow camera closer or farther, in zoom steps: one step is twice as close.</p><p><b>Field of view</b> is the lens. Wide shows more and exaggerates depth; narrow flattens it, like a long lens.</p><p><b>Turn smoothing</b> is how long the camera takes to swing after the route turns. Longer is calmer; shorter keeps the road ahead centred on twisty routes.</p>" },
     sun: { title: "Real sun and moon", body: "<p>The light is worked out for the minute and the place of each moment of the ride: where the sun and moon were, dawn and dusk colours, shadows from the hills, and the cloud cover the weather service recorded for that hour.</p><p>Off, the map is lit as a plain daytime map.</p>" },
     photos: { title: "Photos in the replay", body: "<p>Each photo comes up at the time it was taken, where the ride was then. Its GPS sets where the card stands, when it agrees with that moment.</p><p>A photo with no time within the ride (none, or a camera clock that was off) is not guessed from its GPS alone, since a trail can pass one spot hours apart. It waits in the list: type its ride time, choose it on the route, or pick one of the passes near its GPS. Drop pictures on the page to add them.</p><p><b>Moment</b> slows the replay at each photo and frames it. <b>Burst</b> keeps the speed and lets photos rise beside the trail as you pass.</p><p>Changes stay in this tab until <b>Save changes</b> writes a new file.</p>" },
-    smartcam: { title: "Smart camera on hills", body: "<p>On hilly ground a fixed follow view keeps losing the arrow behind a ridge, or the route over the next crest. With this on, the camera looks a few times a second at the poses around your chosen view: tilted further down, turned up to 40° to one side, or stepped back a little. It checks what each one can really see over the terrain: the arrow, the route ahead and just behind, and the photos coming up. It takes the one closest to your settings that sees them, and glides there: down quickly when the arrow would be hidden, back up slowly once the view is clear.</p><p>On flat ground it changes nothing. Off, the camera only tilts down when a hill blocks the line back to the camera, as before. It is used in the preview and in rendered videos too. With North up, it never turns the view.</p>" },
+    smartcam: { title: "Smart camera on hills", body: "<p>On hilly ground a fixed follow view keeps losing the arrow behind a ridge, or the route over the next crest. With this on, the camera looks a few times a second at the poses around your chosen view: tilted further down, turned up to 40° to one side, or stepped back a little. It checks what each one can really see over the terrain: the arrow, the route ahead and just behind, and the photos coming up. It takes the one closest to your settings that sees them, and glides there: down quickly when the arrow would be hidden, back up slowly once the view is clear.</p><p>On flat ground it changes nothing. In the other two modes the camera only tilts down when a hill blocks the line back to the camera. It is used in the preview and in rendered videos too. With North up, it never turns the view.</p>" },
+    bake: { title: "Baked camera", body: "<p><b>Bake</b> plays the replay once the way the video is made, frame by frame, and records where the camera was and where it looked. The motion is then kept as keys, like a 3D program's camera: a key only where the camera changed its course.</p><p>With <b>Use the baked camera</b> on, the preview, the clean view and the video follow the keys exactly, and the camera mode, the hill guard and the photo director stay out of it. The ride's clock comes from the bake too, so the photo moments keep the timing they were baked with.</p><p><b>Editing</b>: pick a key on the lane over the timeline, or step with the arrows beside it. Move the map to the view you want and press <b>Key the view</b>: a new key there, or that key updated. Touching the map while it plays pauses it right there. The numbers change the key you are on: East, North and Up move it from where it was baked; Yaw, Pitch and Roll turn it; Field of view is the lens. <b>Revert</b> puts it back as baked.</p><p><b>Look at rider</b> keeps the camera pointed at the rider whatever its place, so only its position needs setting. Between a free key and a rider key the aim blends across.</p><p>The keys are kept with this ride and travel with Save changes. Changing the length, stops, photos, frame or camera settings afterwards does not change the bake; it says so, and <b>Bake again</b> makes a new one (your edits are replaced, so it asks first).</p>" },
+    cammode: { title: "Camera modes", body: "<p>One mode drives the camera at a time, so two of them never pull the view different ways.</p><p><b>Ordinary</b> follows the rider at your tilt and distance. When a hill comes between the camera and the rider it backs off and tilts down, then comes back in.</p><p><b>Smart</b> follows too, and steers around hills by what the view can really see over the terrain (<a href=\"#\" data-info=\"smartcam\">how it decides</a>).</p><p><b>Photo moment</b> follows like Ordinary between photos. At each photo the replay slows, the camera glides to a planned view of the rider and the photo, holds, and glides back.</p><p>In Ordinary and Smart, photos rise beside the trail as the ride passes them and the replay keeps its speed (Burst). A baked camera replaces all three while it is on.</p>" },
     clouds: { title: "Volumetric clouds", body: "<p>The cloud layers over the ride, built in 3D: how much of the sky each height held, hour by hour, and where the low clouds began. They drift with the wind at about 3 km up as the ride's clock runs, and are lit by the sun of that minute. Ridges hide what is behind them, and a peak can stand out of a cloud deck.</p><p>The data comes from Open-Meteo, the weather service the light already uses. It is asked for once, for the same rounded point near the start, with no key. Rides from the last few years get the clouds by height. Older rides get low, mid and high cover at their usual heights instead; the line under the switch says which.</p><p>The shapes are made up; the amount and the heights are real. It is drawn on the graphics card, so a slow computer may play less smoothly with it on. It needs WebGL 2.</p>" },
     cloudopts: { title: "Cloud settings", body: "<p><b>Intensity</b>: how thick each cloud is. <b>Coverage</b>: more or less sky covered than the weather service reported, only where it reported some. <b>Wideness</b>: how far around the view the clouds reach.</p><p><b>Cloud size</b>: big heaps or small puffs. <b>Softness</b>: crisp or misty edges. <b>Height</b>: every layer moved up or down. <b>Wind</b>: how fast they drift with the ride's clock; 0 holds them still.</p><p><b>Underside shade</b>: how much darker the base is than the sunlit top. <b>Ground shadows</b>: the clouds' shadows on the terrain, cast away from the sun. They show only with the sun more than 4° up: a low sun throws them kilometres away.</p><p><b>Detail</b>: how many layers each cloud is drawn with. More is smoother and costs the graphics card more.</p><p>Each setting goes back to its default with a double-click.</p>" },
     grouphow: { title: "Fast or by similarity", body: "<p><b>Fast</b> groups photos only by when and where they were taken. No picture is read, so even hundreds of photos are ready at once. Retakes of one view and different views from one stop can land in the same group.</p><p><b>Similarity</b> also compares what the photos show: their look, and the faces in them. Each photo is read once in this browser (nothing is uploaded), which takes a while the first time for many photos. The settings under Grouping fine-tune it.</p>" },
@@ -6434,7 +6465,7 @@ var qrcode = function() {
   /* ---------- keyboard shortcuts sheet ---------- */
   var KEYS = [["Space", "Preview, or pause it"], ["← →", "Back or forward 1 s"], ["Shift + ← →", "Back or forward 10 s"], ["Home / End", "Start or end of the ride"],
     ["[ ]", "Slower or faster"], ["C", "Clean view preview, or leave it"], ["F", "Follow the rider"], ["L", "Loop"], ["G", "Framing guides"],
-    ["S", "Save a still"], ["R", "Reset camera: back on the rider"], ["B", "Camera behind the arrow, facing its way"], ["P", "Show or hide the panel"], ["1 – 6", "Panel tabs"], ["Shift + F", "Full screen"], ["Esc", "Leave clean view, close a sheet"], ["?", "This list"]];
+    ["S", "Save a still"], ["R", "Reset camera: back on the rider"], ["B", "Camera behind the arrow, facing its way"], ["M", "Next camera mode"], ["I", "Baked camera: key the view"], ["X", "Baked camera: delete the key here"], [", .", "Baked camera: previous or next key"], ["P", "Show or hide the panel"], ["1 – 6", "Panel tabs"], ["Shift + F", "Full screen"], ["Esc", "Leave clean view, close a sheet"], ["?", "This list"]];
   var keysEl = document.createElement("div"); keysEl.className = "dlg-scrim"; keysEl.hidden = true;
   keysEl.innerHTML = '<div class="dlg" role="dialog" aria-modal="true"><header><b>Keyboard shortcuts</b><button class="ib" id="keys-close" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></header><div class="body"><div class="keys">' +
     KEYS.map(function (k) { return "<div>" + k[0].split(" ").map(function (p) { return p === "+" || p === "/" || p === "–" ? p : "<kbd>" + p + "</kbd>"; }).join(" ") + "</div><div>" + k[1] + "</div>"; }).join("") + "</div></div></div>";
@@ -6646,7 +6677,7 @@ var qrcode = function() {
     guides(pref("cprGuides") === "1");
     $("ab-guides").onclick = function () { guides(!body.classList.contains("guides")); };
     // transport
-    function nudge(ds) { var s = ctl.state(); ctl.seek(s.t + ds); }
+    function nudge(ds) { var s = ctl.state(); if (s.baked) ctl.seekV(ds); else ctl.seek(s.t + ds); } // baked: in video time, the bake's own clock
     $("x-start").onclick = function () { ctl.seek(0); };
     $("x-end").onclick = function () { ctl.seek(ctl.state().dur); };
     $("x-prev").onclick = function () { nudge(-1); }; $("x-next").onclick = function () { nudge(1); };
@@ -6711,6 +6742,10 @@ var qrcode = function() {
       else if (k === "[" || k === "]") { var s = $("rate"), i = s.selectedIndex + (k === "]" ? 1 : -1); if (i >= 0 && i < s.options.length) { s.selectedIndex = i; s.dispatchEvent(new Event("change")); toast("Speed " + s.options[i].textContent + (s.options[i].parentNode.label === "Whole ride in" ? " for the ride" : ""), 900); } }
       else if (k === "r" || k === "R") recam();
       else if (k === "b" || k === "B") { if (ctl.behind) ctl.behind(); }
+      else if (k === "m" || k === "M") { var cm = ctl.camModeNext(); toast("Camera: " + (cm === "moment" ? "Photo moment" : cm === "smart" ? "Smart" : "Ordinary")); }
+      else if ((k === "i" || k === "I") && ctl.state().baked) ctl.bakeKey();
+      else if ((k === "x" || k === "X") && ctl.state().baked) ctl.bakeDel();
+      else if ((k === "," || k === ".") && ctl.state().baked) ctl.bakeStep(k === "." ? 1 : -1);
       else if (k === "c" || k === "C") { if (ctl.state().clean) ctl.cleanStop(); else $("c-go").click(); }
       else if (k === "f") $("follow").click();
       else if (k === "F") fullToggle();
@@ -7141,7 +7176,6 @@ var qrcode = function() {
     $("cam").value = cam;
     function tog(id, v) { $(id).classList.toggle("on", v); }
     $("follow").onclick = function () { follow = !follow; tog("follow", follow); };
-    $("cam-smart").onclick = function () { SMART = !SMART; pref("replayCamSmart", SMART ? "1" : "0"); tog("cam-smart", SMART); smartReset(); if (!playing) draw(true); };
     $("cam").onchange = function () { cam = $("cam").value; pref("replayCam", cam); if (cam === "north") map.easeTo({ bearing: 0 }); };
     $("tiltv").oninput = function () { map.setPitch(+$("tiltv").value); };
     // A number is a speed; "f30" means the whole ride in 30 seconds.
@@ -7203,6 +7237,7 @@ var qrcode = function() {
     function camIntro() {
       return new Promise(function (res) {
         var p = fixAt(t); if (!p) return res();
+        if (bakeLive()) { started = true; bkApply(bkPose(vt)); return res(); } // the bake begins where its recording began
         if (SHOT && shot && lastPose) { // paused mid-shot: the camera is already in the shot pose; set it again exactly (with its elevation), no ease
           started = true; follow = true; tog("follow", true); userAt = 0;
           try { map.jumpTo(lastPose); } catch (e) {}
@@ -7236,8 +7271,10 @@ var qrcode = function() {
     $("seek").oninput = function () { t = +$("seek").value / 10; draw(true); };
     /* Any hand on the map (drag, wheel or pinch zoom, rotate, tilt) holds the follow camera off for 4 s from the last touch. Only
        dragstart used to: a wheel zoom or a rotate was fought every frame, and a drag longer than 4 s was taken back mid-drag. */
-    function userTook(e) { if (e && e.originalEvent) { userAt = Date.now(); userHeld = true; if (SHOT && shot) shotEnd(); } }
-    map.on("dragstart", function () { userAt = Date.now(); userHeld = true; if (SHOT && shot) shotEnd(); });
+    function userTook(e) { if (e && e.originalEvent) { userAt = Date.now(); userHeld = true; if (SHOT && shot) shotEnd(); bkPause(); } }
+    map.on("dragstart", function () { userAt = Date.now(); userHeld = true; if (SHOT && shot) shotEnd(); bkPause(); });
+    /** With the baked camera, a hand on the map pauses the replay right there, so the view can be moved and keyed. */
+    function bkPause() { if (bakeLive() && playing && !rendering) { playing = false; playIcon(false); bkShow(); } }
     ["move", "zoomstart", "rotatestart", "pitchstart"].forEach(function (ev) { map.on(ev, userTook); });
     var userHeld = false;
     /* Hand the camera back to the rider. The view the user left behind is not a starting point: MapLibre may still be easing the
@@ -7570,6 +7607,7 @@ var qrcode = function() {
     function draw(seeking, dtWall) {
       shotGuard();
       t = Math.max(0, Math.min(d.dur, t));
+      if (bakeLive() && !vtFromClock) vt = bkVt(t); // t was set by a seek in ride time: the bake shows it from its first frame
       var i = idxAt(t);
       G.forEach(function (g) { $("g-" + g[0]).textContent = fmt(g[0] === "roll_deg" ? Math.abs(c[g[0]][i]) : c[g[0]][i], g[2]); });
       $("tlabel").textContent = clock(t) + " / " + clock(d.dur) + "  ·  " + new Date(c.t_ms[i]).toLocaleTimeString();
@@ -7602,8 +7640,9 @@ var qrcode = function() {
       riderLast = [p[0], p[1], (smooth ? arrowB : smoothB) || 0];
       riderSet(riderLast[0], riderLast[1], riderLast[2]);
       if (SHOT && shot && (seeking || !follow || Date.now() - userAt <= 4000)) shotEnd(); // a seek, a drag or follow off cancels the shot
-      if (follow && Date.now() - userAt > 4000 && userHeld) camResync(false); // the hands came off: start again from the rider
-      if (follow && Date.now() - userAt > 4000) {
+      if (bakeLive()) { bkApply(bkPose(vt)); if (playing) bkLaneDraw(); else bkShow(); } // the baked camera: nothing below runs, so nothing else moves it
+      else if (follow && Date.now() - userAt > 4000 && userHeld) camResync(false); // the hands came off: start again from the rider
+      if (!bakeLive() && follow && Date.now() - userAt > 4000) {
         // The follow camera runs on its own state; during a photo moment it is blended with the shot (see below).
         var tx = p[0], ty = p[1];
         if (seeking || !camPos) camPos = [tx, ty];
@@ -7617,7 +7656,7 @@ var qrcode = function() {
         // A close follow view: about a kilometre ahead on foot, a few for a bike or car.
         // Come back in (about 0.8 zoom a second) once the hill has been clear for half a second.
         if (zOff < 0 && performance.now() - lastBlockAt > 500) zOff = Math.min(0, zOff + 0.8 * dw);
-        var smartNow = SMART && !(SHOT && shot);
+        var smartNow = SMART; // the modes are exclusive: Smart never has a shot (its photos are Burst), Photo moment never has the smart camera
         if (smartNow) zOff = 0; // the smart camera does its own stepping back (sm.z), eased
         var fz = followZoom - (SHOT ? 0 : 0.3 * momentWeight()) + (smartNow ? sm.z : zOff);
         // With SHOT the follow view keeps its own zoom and tilt (vZoom, vPitch); with no shot running they are read back from the map each frame, so pinch, tilt and unclip work as before.
@@ -7711,7 +7750,7 @@ var qrcode = function() {
     }
     var pitchCap = 90, capAt = 0, cleanPitch = 62;
     // Hand-made moves too (pinch, tilt, the camera intro): never leave the camera inside a hill.
-    map.on("moveend", function () { if (!playing && !shot) unclip(); });
+    map.on("moveend", function () { if (!playing && !shot && !bakeLive()) unclip(); });
     var followZoom = d.category === "HIKE" ? 15.2 : d.category === "CYCLE" ? 14.6 : 14.2, followBase = followZoom, userZoomed = false; // a higher default view (0.6 zoom out from before)
     map.on("zoomstart", function (e) { if (e && e.originalEvent) userZoomed = true; });
     /** The steepest pitch, up to want, at which the line from the rider back to the camera clears
@@ -7749,10 +7788,23 @@ var qrcode = function() {
        frame. The pose closest to the chosen view that sees them wins; a small cost for leaving the current plan keeps it from
        flickering between two near-equals. The frame then eases toward it: down quickly when the arrow would be hidden, back up
        slowly once it is clear. A pose that already sees everything ends the search, so on flat ground it costs almost nothing. */
-    var SMART = pref("replayCamSmart") !== "0";
+    /* One camera mode at a time (Camera tab): Ordinary, Smart, Photo moment. Smart and the photo director used to run together, and
+       the director switched the smart camera off the moment a shot was planned, at the start of the brake while the screen still
+       showed the follow view: the smart camera's turn (up to 40°) and step back vanished in one frame, then came back stale once the
+       shot ended. Now each mode owns the camera alone: Smart has no shot (its photos are Burst, which never moves the camera), and
+       Photo moment follows like Ordinary between photos. camModeSet does the one handover. Read once from the two old switches. */
+    var CAM_MODES = ["ordinary", "smart", "moment"];
+    var camMode = (function () {
+      var m = pref("replayCamMode"); if (CAM_MODES.indexOf(m) >= 0) return m;
+      var pm = pref("replayPhotoMode");
+      if (pm === "burst") return pref("replayCamSmart") === "0" ? "ordinary" : "smart";
+      if (pm === "moment") return "moment";
+      var any = false; try { any = JSON.parse(B.photoList(+ID) || "[]").length > 0; } catch (e) {}
+      return any ? "moment" : "smart"; // a ride with photos opens on its photo moments, one without on the hill-aware camera
+    })();
+    var SMART = camMode === "smart";
     var sm = { p: null, b: 0, z: 0, T: null, at: 0 };
     function smartReset() { sm.p = null; sm.b = 0; sm.z = 0; sm.T = null; sm.at = 0; }
-    tog("cam-smart", SMART);
     function camSmart(rp, want, bear, zBase, northUp) {
       if (!map.queryTerrainElevation || !map.getTerrain || !map.getTerrain() || !fD.length) return null;
       var R = Math.PI / 180, cv = map.getCanvas(), W = cv.clientWidth, H = cv.clientHeight; if (!W || !H) return null;
@@ -7805,10 +7857,11 @@ var qrcode = function() {
     function frame(ts) {
       if (!playing) return;
       var dw = lastFrame ? Math.min(0.25, (ts - lastFrame) / 1000) : 0, adv = dw * (cleanOn ? cleanRate : rate) * slow;
-      if (skipOn()) { u = Math.min(stops().total, movingAt(t) + adv); t = u >= stops().total ? d.dur : realAt(u); }
+      if (bakeLive()) { vt = Math.min(BAKE.len, vt + dw); t = bkT(vt); } // the bake's own clock: video time, and the ride time it recorded for it
+      else if (skipOn()) { u = Math.min(stops().total, movingAt(t) + adv); t = u >= stops().total ? d.dur : realAt(u); }
       else t += adv;
       lastFrame = ts;
-      draw(false, dw);
+      vtFromClock = true; draw(false, dw); vtFromClock = false;
       if (t >= d.dur) {
         // Loop: round again from the start, except in clean view, whose ending is the finale.
         if (CTL.loop && !cleanOn) { t = 0; u = 0; photosReset(); draw(true); lastFrame = 0; requestAnimationFrame(frame); return; }
@@ -8004,7 +8057,7 @@ var qrcode = function() {
        screen time ahead, for the view the follow camera will have as the rider passes: ray casts from that camera keep the arrow and the route
        clear, the corners clear of hills, and other cards apart. Photos close together share one spot: the front one, and up to two peeking behind.
        At most three spots are up at once. ---- */
-    var pmode = pref("replayPhotoMode") === "burst" ? "burst" : "moment";
+    var pmode = camMode === "moment" ? "moment" : "burst"; // the photo style follows the camera mode (see CAM_MODES)
     function burstOn() { return pmode === "burst"; }
     var B_PLAN = 2.0, B_STACK = 0.6, B_LOOK = 6, B_FAN = 7, B_NEAR = 250, B_MAX = 3, bSpots = [], burstErrs = []; window.__burstErr = burstErrs;
     /* Pacing: photos taken at one place (a stop) can come much faster than they can be shown, above all with stops skipped or shortened
@@ -9043,9 +9096,9 @@ var qrcode = function() {
        shotEnd always puts it back, and shotGuard (every frame and every render) puts it back if a shot is gone for any reason. */
     var clampOff = false;
     function clampSet(on) { try { if (map.setCenterClampedToGround) map.setCenterClampedToGround(on); clampOff = !on; } catch (e) {} }
-    function shotEnd() { try { shot = null; photos.forEach(function (ph) { ph.own = false; }); } finally { if (clampOff) clampSet(true); } }
+    function shotEnd() { try { shot = null; photos.forEach(function (ph) { ph.own = false; }); } finally { if (clampOff && !bkHold) clampSet(true); } }
     function shotGuard() {
-      if (!shot && (clampOff || (map.getCenterClampedToGround && !map.getCenterClampedToGround()))) clampSet(true);
+      if (!shot && !bkHold && (clampOff || (map.getCenterClampedToGround && !map.getCenterClampedToGround()))) clampSet(true);
       if (shot && !follow) shotEnd();
     }
     map.on("render", shotGuard);
@@ -9495,9 +9548,25 @@ var qrcode = function() {
     });
     /* Photo mode: Moment (the replay slows and the camera frames the photo in 3D) or Burst (the ride keeps its speed; photos slide in at the side). Saved; clean view and the video use it too. */
     function pmodeShow() {
-      $("pm-moment").classList.toggle("on", !burstOn()); $("pm-burst").classList.toggle("on", burstOn());
-      $("pm-note").textContent = burstOn() ? "Burst: the replay keeps its speed and the camera does not change. Each photo stands beside the trail in 3D, rises as you come near, and folds away once you pass. Photos close together share one spot." : "Moment: the replay slows to a stop at each photo and the camera frames it in 3D.";
+      $("pm-note").textContent = burstOn() ? "Burst: beside the trail, at ride speed. Set by the camera mode." : "Moment: the replay slows and frames each photo. Set by the camera mode.";
+      camModeShow();
     }
+    function camModeShow() {
+      CAM_MODES.forEach(function (m) { $("cm-" + m).classList.toggle("on", m === camMode); });
+      $("cm-note").textContent = camMode === "smart" ? "Steers around hills. Photos rise beside the trail." : camMode === "moment" ? "Slows at each photo and frames it." : "Follows the rider. Photos rise beside the trail.";
+    }
+    /** The one handover between camera modes: whatever the old mode held (a shot, a brake, the smart camera's turn) is let go,
+        and the follow camera starts again from the rider. */
+    function camModeSet(m) {
+      if (CAM_MODES.indexOf(m) < 0 || m === camMode) return;
+      camMode = m; pref("replayCamMode", m);
+      SMART = m === "smart";
+      pmodeTo(m === "moment" ? "moment" : "burst");
+      camResync(false);
+      pmodeShow();
+      if (!playing) draw(true);
+    }
+    CAM_MODES.forEach(function (m) { $("cm-" + m).onclick = function () { if (!rendering) camModeSet(m); }; });
     function pmodeSet(m) {
       if (m === pmode) return;
       pmode = m; pref("replayPhotoMode", m); pmodeShow();
@@ -9507,7 +9576,6 @@ var qrcode = function() {
       burstReset(); map.triggerRepaint();
     }
     function pmodeTo(m) { pmodeSet(m); phoShow(); phoApply(); if (!moment) momentGroups(); try { estimate(); } catch (e) {} }
-    $("pm-moment").onclick = function () { pmodeTo("moment"); }; $("pm-burst").onclick = function () { pmodeTo("burst"); };
     /* Edit the selected photo: turn it, zoom into it. Applied to the card at once; its look and faces are read again. */
     function edShow() {
       var e = edOf(phSel), set = function (id, v) { var el = $(id); el.value = v; el.dispatchEvent(new Event("input")); };
@@ -9605,7 +9673,7 @@ var qrcode = function() {
     /** A rough time to make the video, from frames × the cost of each frame at that setting. */
     function endLen() { return Math.max(4, Math.min(15, +($("v-endlen") && $("v-endlen").value) || 5)); }
     function estimate() {
-      var fps = +$("v-fps").value, n = Math.round((+$("c-len").value || 30) * fps + ($("v-end").checked ? endLen() * fps : 0) + photos.length * MOMENT * fps);
+      var fps = +$("v-fps").value, n = Math.round((bakeLive() ? BAKE.len * fps : (+$("c-len").value || 30) * fps + photos.length * MOMENT * fps) + ($("v-end").checked ? endLen() * fps : 0)); // baked: its own length, photo moments included
       var o = outSize(), per = ({ best: 1.1, bal: 0.55, fast: 0.22 }[$("v-q").value] || 0.55) * Math.max(0.5, Math.sqrt(o.W * o.H / (1920 * 1080)));
       var m = Math.round(n * per / 60);
       if ($("out-dims")) $("out-dims").textContent = o.W + " × " + o.H + (o.capped ? " (capped at 4096)" : "");
@@ -9721,12 +9789,12 @@ var qrcode = function() {
         trailK = -1; trailLayers(!!chosen.trail);
         follow = true; tog("follow", true); userAt = 0; smoothB = null; arrowB = null;
         if (!chosen.sun) sunReset();
-        t = 0; draw(true); map.setPitch(Math.max(55, +$("tiltv").value));
+        t = 0; vt = 0; draw(true); if (!bakeLive()) map.setPitch(Math.max(55, +$("tiltv").value));
         preloadRoute().then(function () {
-          t = 0;
+          t = 0; vt = 0;
           return camIntro();
         }).then(function () {
-          if (rendering) return renderVideo();
+          if (rendering) return render === "bake" ? bakeRun() : renderVideo();
           setTimeout(function () { if (!cleanOn) return; playing = true; playIcon(true); lastFrame = 0; requestAnimationFrame(frame); }, 500);
         });
       };
@@ -9741,6 +9809,7 @@ var qrcode = function() {
       } else go();
     }
     function cleanEnd() {
+      bkRelease();
       var k = fD.length - 1, items = [["Distance", km(totalD) + " km"], ["Time", clock(d.dur)]];
       if (hasAlt) items.push(["Elevation gain", Math.round(fGain[k] || 0) + " m"], ["Highest", Math.round(aMax) + " m"]);
       if (!isNaN(steps0)) items.push(["Steps", Math.round(c.steps[n - 1] - steps0).toLocaleString()]);
@@ -9774,6 +9843,358 @@ var qrcode = function() {
       trailLayers(false);
       if (wasStyle) { cur = wasStyle; wasStyle = null; $("style").value = cur.id; map.setStyle(styleFor(cur)); map.once("style.load", addLayers); }
     }
+    /* ---------- BAKE CAMERA MOVEMENT (Camera tab, Baked camera) ----------
+       Blender's bake, for the replay's camera. The live camera is decided frame by frame from state that depends on which terrain
+       tiles happen to be in, so the same settings can move it differently from one run to the next, and nothing in it can be moved
+       by hand. A bake runs the replay exactly as the video render does (clean view, 30 frames a second, the camera mode that is
+       chosen, tiles waited for as in Fast), records the camera's transform and the ride time of every frame, and reduces them to
+       keys: a key is kept only where the curve through the others would miss a recorded frame. With the baked camera on, the
+       preview, the clean view and the video take both the camera and the ride's clock from the bake, and none of the live camera
+       code runs, so nothing else can move it.
+       Keys are in video time, not ride time: during a photo hold the ride clock nearly stops while the camera keeps moving.
+       A key's transform: the camera's position (lng, lat, z = metres up, the exaggerated metres the map draws), yaw (the bearing),
+       pitch (from straight down, as MapLibre counts it), roll, field of view, and d, the distance to the point it looks at, which
+       only sets MapLibre's centre (the pivot for a hand on the map). aim 1 = look at the rider (Blender's Track To): yaw, pitch and
+       d are worked out each frame from where the camera is to where the rider is. o: the transform it was baked with (Revert).
+       Nothing new applies a pose: optsFromTo (MapLibre's own calculateCameraOptionsFromTo) turns it into a jumpTo with the look-at
+       point's elevation, with centerClampedToGround off, as the photo director does. bkHold says the bake holds the clamp off. */
+    var BK_FPS = 30, BK_KEY = "replayCamBake:" + ID, BK_USE = "replayCamBakeOn:" + ID;
+    var BAKE = null, bkUse = false, baking = false, vt = 0, vtFromClock = false, bkSpl = null, bkHold = false, bkSaveT = 0;
+    var BK_CH = ["x", "y", "z", "b", "p", "r", "f", "d"];
+    var BK_TOL = { x: 1, y: 1, z: 1, b: 0.2, p: 0.2, r: 0.2, f: 0.1, d: 0.01 }; // how far a reduced curve may miss a baked frame (m, °, ° and log distance)
+    function bakeLive() { return !!(BAKE && bkUse && !baking); }
+    /*PURE-BEGIN (bake): no page, map or DOM in here */
+    /** Monotone cubic through the keys (Fritsch-Carlson): smooth, but it never overshoots, so a hold stays a hold. */
+    function bkPrep(ks, fr) {
+      var n = ks.length, T = ks.map(function (k) { return k.at; }), S = { T: T, V: {}, M: {}, A: ks.map(function (k) { return k.aim ? 1 : 0; }) };
+      BK_CH.forEach(function (ch) {
+        var V = ks.map(function (k) { return ch === "x" ? fr.x(k.lng) : ch === "y" ? fr.y(k.lat) : ch === "d" ? Math.log(Math.max(1, k.d)) : k[ch]; });
+        var del = [], M = new Array(n), i;
+        for (i = 0; i < n - 1; i++) del.push((V[i + 1] - V[i]) / Math.max(1e-6, T[i + 1] - T[i]));
+        for (i = 0; i < n; i++) {
+          if (n < 2) M[i] = 0;
+          else if (i === 0) M[i] = del[0];
+          else if (i === n - 1) M[i] = del[n - 2];
+          else if (del[i - 1] * del[i] <= 0) M[i] = 0;
+          else {
+            var h0 = T[i] - T[i - 1], h1 = T[i + 1] - T[i], lim = 3 * Math.min(Math.abs(del[i - 1]), Math.abs(del[i]));
+            M[i] = (h1 * del[i - 1] + h0 * del[i]) / (h0 + h1); if (Math.abs(M[i]) > lim) M[i] = lim * (M[i] < 0 ? -1 : 1);
+          }
+        }
+        S.V[ch] = V; S.M[ch] = M;
+      });
+      return S;
+    }
+    /** The curves at video time at: {x, y, z, b, p, r, f, d (metres), aim (0..1)}. */
+    function bkEval(S, at) {
+      var T = S.T, n = T.length, o = {}, k = 0, lo = 0, hi = n - 1;
+      while (lo < hi) { var m = (lo + hi + 1) >> 1; if (T[m] <= at) lo = m; else hi = m - 1; }
+      k = Math.min(lo, Math.max(0, n - 2));
+      if (n < 2 || at <= T[0] || at >= T[n - 1]) {
+        var e = n < 2 || at <= T[0] ? 0 : n - 1;
+        BK_CH.forEach(function (ch) { o[ch] = ch === "d" ? Math.exp(S.V[ch][e]) : S.V[ch][e]; }); o.aim = S.A[e]; return o;
+      }
+      var h = T[k + 1] - T[k], s = Math.max(0, Math.min(1, (at - T[k]) / h)), s2 = s * s, s3 = s2 * s;
+      var h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
+      BK_CH.forEach(function (ch) {
+        var V = S.V[ch], M = S.M[ch], v = h00 * V[k] + h10 * h * M[k] + h01 * V[k + 1] + h11 * h * M[k + 1];
+        o[ch] = ch === "d" ? Math.exp(v) : v;
+      });
+      o.aim = S.A[k] + (S.A[k + 1] - S.A[k]) * s * s * (3 - 2 * s);
+      return o;
+    }
+    function bkErr(a, smp, fr) {
+      var e = Math.max(Math.abs(a.x - fr.x(smp.lng)) / BK_TOL.x, Math.abs(a.y - fr.y(smp.lat)) / BK_TOL.y, Math.abs(a.z - smp.z) / BK_TOL.z, Math.abs(Math.log(a.d / smp.d)) / BK_TOL.d);
+      ["b", "p", "r", "f"].forEach(function (ch) { e = Math.max(e, Math.abs(a[ch] - smp[ch]) / BK_TOL[ch]); });
+      return e;
+    }
+    /** Every recorded frame down to keys: start from the first and last, then, round by round, add the worst-missed frame of
+        every stretch that misses one by more than the tolerance. The curve through what is kept passes within it of every frame. */
+    function bkReduce(S, fr) {
+      var N = S.length; if (N < 3) return S.slice();
+      var on = new Uint8Array(N); on[0] = on[N - 1] = 1;
+      for (var round = 0; round < 80; round++) {
+        var idx = []; for (var i = 0; i < N; i++) if (on[i]) idx.push(i);
+        var P = bkPrep(idx.map(function (q) { return S[q]; }), fr), added = 0;
+        for (var g = 0; g < idx.length - 1; g++) {
+          var worst = 1, wi = -1;
+          for (var j = idx[g] + 1; j < idx[g + 1]; j++) { var e = bkErr(bkEval(P, S[j].at), S[j], fr); if (e > worst) { worst = e; wi = j; } }
+          if (wi >= 0) { on[wi] = 1; added++; }
+        }
+        if (!added) break;
+      }
+      var out = []; for (var q = 0; q < N; q++) if (on[q]) out.push(S[q]);
+      return out;
+    }
+    /** The ride clock (video time -> ride time), straight lines within tol seconds of every frame. */
+    function bkReduceT(V, R, tol) {
+      var N = V.length; if (N < 3) return { v: V.slice(), t: R.slice() };
+      var on = new Uint8Array(N); on[0] = on[N - 1] = 1;
+      for (var round = 0; round < 80; round++) {
+        var idx = []; for (var i = 0; i < N; i++) if (on[i]) idx.push(i);
+        var added = 0;
+        for (var g = 0; g < idx.length - 1; g++) {
+          var a = idx[g], b = idx[g + 1], worst = tol, wi = -1;
+          for (var j = a + 1; j < b; j++) { var e = Math.abs(R[a] + (R[b] - R[a]) * (V[j] - V[a]) / (V[b] - V[a]) - R[j]); if (e > worst) { worst = e; wi = j; } }
+          if (wi >= 0) { on[wi] = 1; added++; }
+        }
+        if (!added) break;
+      }
+      var v = [], t = []; for (var q = 0; q < N; q++) if (on[q]) { v.push(V[q]); t.push(R[q]); }
+      return { v: v, t: t };
+    }
+    function bkLin(X, Y, x) { // piecewise linear Y(x), X ascending; held at the ends
+      var n = X.length; if (!n) return 0; if (x <= X[0]) return Y[0]; if (x >= X[n - 1]) return Y[n - 1];
+      var lo = 0, hi = n - 1; while (lo < hi) { var m = (lo + hi + 1) >> 1; if (X[m] <= x) lo = m; else hi = m - 1; }
+      var k = Math.min(lo, n - 2), dx = X[k + 1] - X[k]; return dx > 0 ? Y[k] + (Y[k + 1] - Y[k]) * (x - X[k]) / dx : Y[k + 1];
+    }
+    /** Ride time -> the first video time that shows it (in a hold, its start). */
+    function bkInv(V, R, t) {
+      var n = R.length; if (!n) return 0; if (t <= R[0]) return V[0]; if (t >= R[n - 1]) { var j = n - 1; while (j > 0 && R[j - 1] >= R[n - 1]) j--; return V[j]; }
+      var lo = 0, hi = n - 1; while (lo < hi) { var m = (lo + hi) >> 1; if (R[m] >= t) hi = m; else lo = m + 1; }
+      var a = lo - 1, dt = R[lo] - R[a]; return dt > 0 ? V[a] + (V[lo] - V[a]) * (t - R[a]) / dt : V[lo];
+    }
+    /*PURE-END (bake) */
+    function bkT(at) { return at >= BAKE.len ? d.dur : bkLin(BAKE.tv, BAKE.tt, at); }
+    function bkVt(tt) { return bkInv(BAKE.tv, BAKE.tt, tt); }
+    function bkRebuild() { BAKE.keys.sort(function (a, b) { return a.at - b.at; }); bkSpl = bkPrep(BAKE.keys, BAKE.fr); }
+    /** The camera's transform at video time at, the rider aim applied: {lng, lat, z, b, p, r, f, d}. */
+    function bkPose(at) {
+      var o = bkEval(bkSpl, at), fr = BAKE.fr, q = { lng: fr.lng(o.x), lat: fr.lat(o.y), z: o.z, b: o.b, p: o.p, r: o.r, f: o.f, d: o.d };
+      if (o.aim > 0.001) {
+        var rp = fixAt(bkT(at)), ge = null;
+        if (rp) {
+          try { ge = map.queryTerrainElevation ? map.queryTerrainElevation([rp[0], rp[1]]) : 0; } catch (e) {}
+          if (ge == null) ge = q.z - q.d * Math.cos(q.p * Math.PI / 180); // no height there yet: where the free aim would have looked
+          var lf = mkFrame(q.lng, q.lat), dx = lf.x(rp[0]), dy = lf.y(rp[1]), dz = ge + 2 - q.z, hd = Math.hypot(dx, dy);
+          var bR = Math.atan2(dx, dy) * 180 / Math.PI, pR = Math.max(0, Math.min(89, Math.atan2(hd, -dz) * 180 / Math.PI)), dR = Math.max(20, Math.hypot(hd, dz));
+          q.b += angD(q.b, bR) * o.aim; q.p += (pR - q.p) * o.aim; q.d = Math.exp(Math.log(q.d) + (Math.log(dR) - Math.log(q.d)) * o.aim);
+        }
+      }
+      return q;
+    }
+    /** Put the map's camera exactly at transform q. */
+    function bkApply(q) {
+      try { if (map.getVerticalFieldOfView && Math.abs(map.getVerticalFieldOfView() - q.f) > 1e-3) map.setVerticalFieldOfView(q.f); } catch (e) {}
+      var TR = map.transform, CT = TR.cameraToCenterDistance, TS = TR.tileSize || 512, Bs = camBasis(q.b, Math.max(0.5, q.p)), lf = mkFrame(q.lng, q.lat);
+      var tx = Bs.f[0] * q.d, ty = Bs.f[1] * q.d, tz = q.z + Bs.f[2] * q.d;
+      var o = optsFromTo([q.lng, q.lat], q.z, [lf.lng(tx), lf.lat(ty)], tz, CT, TS); if (!o) return;
+      bkHold = true; if (!clampOff) clampSet(false);
+      try { map.jumpTo({ center: o.center, zoom: o.zoom, pitch: o.pitch, bearing: o.bearing, elevation: o.elevation, roll: q.r || 0 }); } catch (e) {}
+    }
+    /** Let the clamp go back: the bake is off, or the finale takes the camera. */
+    function bkRelease() { if (!bkHold) return; bkHold = false; if (!shot) clampSet(true); }
+    /** What the map's camera shows now, as a transform (the yaw kept near ref so the curve never spins the long way round). */
+    function bkRead(at, ref) {
+      var c = camNow(); if (!c) return null;
+      var TR = map.transform, CT = TR.cameraToCenterDistance, TS = TR.tileSize || 512, ce = map.getCenter(), b = map.getBearing();
+      if (ref != null) b = ref + angD(ref, b);
+      return { at: at, lng: c.lng, lat: c.lat, z: c.alt, b: b, p: map.getPitch(), r: map.getRoll ? map.getRoll() || 0 : 0,
+        f: map.getVerticalFieldOfView ? map.getVerticalFieldOfView() : 36.87, d: zoomDist(map.getZoom(), CT, TS, ce.lat), aim: 0 };
+    }
+    /** What a bake depends on: when any of it changes, the bake no longer shows what a fresh one would. */
+    function bkSig() {
+      return JSON.stringify([+$("c-len").value || 30, stopMode(), camMode, cam, +$("tiltv").value, followZoom, CTL.smooth, photosOn ? photos.map(function (ph) { return Math.round(ph.t); }) : 0,
+        camMode === "smart" || camMode === "ordinary" ? 0 : PHO, Math.round(map.getCanvas().clientWidth / Math.max(1, map.getCanvas().clientHeight) * 100), $("c-style").value]);
+    }
+    function bkPack() {
+      var r6 = function (v) { return Math.round(v * 1e6) / 1e6; }, r2 = function (v) { return Math.round(v * 100) / 100; }, r3 = function (v) { return Math.round(v * 1000) / 1000; };
+      return JSON.stringify({ v: 1, len: r3(BAKE.len), sig: BAKE.sig, edited: BAKE.edited ? 1 : 0, dur: d.dur, t0: d.t0,
+        tk: BAKE.tv.map(function (x, i) { return [r3(x), r3(BAKE.tt[i])]; }),
+        keys: BAKE.keys.map(function (k) { return [r3(k.at), r6(k.lng), r6(k.lat), r2(k.z), r2(k.b), r2(k.p), r2(k.r), r2(k.f), r2(k.d), k.aim ? 1 : 0, k.o.map(function (x, i) { return i < 2 ? r6(x) : r2(x); })]; }) });
+    }
+    function bkUnpack(js) {
+      var o = JSON.parse(js); if (!o || o.v !== 1 || !o.keys || !o.keys.length || o.t0 !== d.t0) return null;
+      var keys = o.keys.map(function (a) { return { at: a[0], lng: a[1], lat: a[2], z: a[3], b: a[4], p: a[5], r: a[6], f: a[7], d: a[8], aim: a[9], o: a[10] }; });
+      return { len: o.len, sig: o.sig, edited: !!o.edited, keys: keys, tv: o.tk.map(function (x) { return x[0]; }), tt: o.tk.map(function (x) { return x[1]; }), fr: mkFrame(keys[0].lng, keys[0].lat) };
+    }
+    function bkSave() {
+      clearTimeout(bkSaveT);
+      bkSaveT = setTimeout(function () {
+        try { if (BAKE) localStorage.setItem(BK_KEY, bkPack()); else localStorage.removeItem(BK_KEY); localStorage.setItem(BK_USE, bkUse ? "1" : "0"); }
+        catch (e) { toastC("The bake is too big to keep. It works until the page is closed."); }
+      }, 300);
+    }
+    function toastC(m) { try { $("bk-st").textContent = m; } catch (e) {} }
+    try { var bj = localStorage.getItem(BK_KEY); if (bj) { BAKE = bkUnpack(bj); if (BAKE) { bkRebuild(); bkUse = localStorage.getItem(BK_USE) !== "0"; } } } catch (e) { BAKE = null; }
+
+    /** Bake: the clean view runs the replay as the render does, without the picture; every frame's camera and ride time recorded. */
+    function bakeRun() {
+      rendCancel = false;
+      $("rd-btns").innerHTML = '<button id="rd-cancel">Cancel</button>'; $("rd-cancel").onclick = function () { rendCancel = true; };
+      $("rend").classList.remove("done");
+      var lockEl = $("replay"), lockCss = lockEl.style.cssText, lr = lockEl.getBoundingClientRect();
+      lockEl.style.right = "auto"; lockEl.style.bottom = "auto"; lockEl.style.width = lr.width + "px"; lockEl.style.height = lr.height + "px";
+      document.body.classList.add("rendering");
+      var fadesBack = fadesOff(), sig = bkSig(), S = [], V = [], R = [], i = 0, playU = 0, t0w = Date.now();
+      var nEst = Math.max(1, Math.round((+$("c-len").value || 30) * BK_FPS + (burstOn() ? burstHoldEst() : photosOn ? photos.length * (MOMENT + 2.1) : 0) * BK_FPS));
+      var restore = function () { playing = false; shotEnd(); fadesBack(); document.body.classList.remove("rendering"); lockEl.style.cssText = lockCss; try { map.resize(); } catch (e) {} baking = false; };
+      playing = true; moment = null; slow = 1; brake = null; shotEnd(); photos.forEach(function (ph) { ph.done = false; ph.fade = 0; }); burstReset();
+      function step() {
+        if (rendCancel) throw new Error("cancelled");
+        playU += cleanRate * slow / BK_FPS;
+        t = skipOn() ? (playU >= stops().total ? d.dur : realAt(playU)) : Math.min(d.dur, playU);
+        var last = t >= d.dur;
+        sunAt = Date.now(); capAt = 0; // the light does not move the camera: leave it
+        draw(false, 1 / BK_FPS);
+        return waitTiles(700).then(function () {
+          var at = i / BK_FPS, smp = bkRead(at, S.length ? S[S.length - 1].b : null);
+          if (smp) { S.push(smp); V.push(at); R.push(t); }
+          i++;
+          if (i % 5 === 0) { var el = (Date.now() - t0w) / 1000, nn = Math.max(nEst, i + 1); rendUi("Baking the camera… " + Math.min(99, Math.round(i / nn * 100)) + "%", i / nn, "Frame " + i + " · about " + Math.max(1, Math.round(el / i * (nn - i))) + " s left"); }
+          return last ? null : step();
+        });
+      }
+      rendUi("Baking the camera…", 0, "Getting ready");
+      return photosReady(20000).then(function () { if (rendCancel) throw new Error("cancelled"); return step(); }).then(function () {
+        if (S.length < 2) throw new Error("Nothing was recorded.");
+        window.__bakeRaw = { S: S, V: V, R: R }; // every recorded frame, for checking over DevTools (the keys are what is kept)
+        var fr = mkFrame(S[0].lng, S[0].lat), keys = bkReduce(S, fr), tk = bkReduceT(V, R, 0.02);
+        keys.forEach(function (k) { k.o = [k.lng, k.lat, k.z, k.b, k.p, k.r, k.f, k.d, 0]; });
+        BAKE = { len: V[V.length - 1] + 1 / BK_FPS, sig: sig, edited: false, keys: keys, tv: tk.v, tt: tk.t, fr: fr };
+        bkRebuild(); bkUse = true; bkSave();
+        restore();
+        $("rend").classList.add("done");
+        rendUi("Camera baked", 1, keys.length + " keys from " + S.length + " frames · " + clockV(BAKE.len) + " of video");
+        $("rd-btns").innerHTML = '<button id="rd-close" class="on">Edit the keys</button>';
+        $("rd-close").onclick = function () { $("rend").classList.remove("on", "done"); cleanStop(); t = 0; vt = 0; draw(true); bkShow(); };
+      }).catch(function (e) {
+        restore();
+        $("rend").classList.add("done");
+        rendUi(String(e && e.message) === "cancelled" ? "Bake cancelled" : "Bake failed", 0, String(e && e.message || e).slice(0, 140));
+        $("rd-btns").innerHTML = '<button id="rd-close">Close</button>';
+        $("rd-close").onclick = function () { $("rend").classList.remove("on", "done"); cleanStop(); bkShow(); };
+      });
+    }
+    window.__cpBake = { get: function () { return BAKE; }, vt: function () { return vt; }, pose: function (at) { return bkPose(at); }, apply: function (q) { bkApply(q); }, read: function () { return bkRead(vt, null); } }; // for DevTools
+    function clockV(s) { var m = Math.floor(s / 60), x = s - m * 60; return m + ":" + (x < 10 ? "0" : "") + x.toFixed(1); }
+
+    /* ---- editing the keys ---- */
+    var BK_EPS = 0.5 / BK_FPS; // a key "is here" within half a frame
+    function bkHere() { if (!BAKE) return -1; for (var i = 0; i < BAKE.keys.length; i++) if (Math.abs(BAKE.keys[i].at - vt) < BK_EPS) return i; return -1; }
+    function bkSeekV(at) {
+      if (!BAKE) return;
+      if (playing) { playing = false; playIcon(false); }
+      vt = Math.max(0, Math.min(BAKE.len, at)); t = bkT(vt);
+      vtFromClock = true; draw(true); vtFromClock = false;
+      bkShow();
+    }
+    function bkEdited() { BAKE.edited = true; bkRebuild(); bkSave(); vtFromClock = true; draw(true); vtFromClock = false; bkShow(); }
+    /** Key the view: a key here from what the camera shows (a new one, or this one updated). With Look at rider, only its place is taken. */
+    function bkKeyView() {
+      if (!BAKE) return;
+      var i = bkHere(), ref = bkEval(bkSpl, vt).b, q = bkRead(i >= 0 ? BAKE.keys[i].at : vt, ref); if (!q) return;
+      if (i >= 0) { var k = BAKE.keys[i]; ["lng", "lat", "z", "b", "p", "r", "f", "d"].forEach(function (ch) { k[ch] = q[ch]; }); }
+      else { q.aim = 0; q.o = [q.lng, q.lat, q.z, q.b, q.p, q.r, q.f, q.d, 0]; BAKE.keys.push(q); }
+      bkEdited();
+    }
+    function bkDelete() {
+      var i = bkHere(); if (i < 0 || !BAKE) return;
+      if (BAKE.keys.length <= 2) { toastC("A bake keeps at least two keys."); return; }
+      BAKE.keys.splice(i, 1); bkEdited();
+    }
+    function bkRevert() {
+      var i = bkHere(); if (i < 0) return; var k = BAKE.keys[i], o = k.o;
+      k.lng = o[0]; k.lat = o[1]; k.z = o[2]; k.b = k.b + angD(k.b, o[3]); k.p = o[4]; k.r = o[5]; k.f = o[6]; k.d = o[7]; k.aim = o[8];
+      bkEdited();
+    }
+    function bkStep(dir) {
+      if (!BAKE) return; var ks = BAKE.keys, at = null;
+      for (var i = 0; i < ks.length; i++) { var k = ks[dir > 0 ? i : ks.length - 1 - i]; if (dir > 0 ? k.at > vt + BK_EPS : k.at < vt - BK_EPS) { at = k.at; break; } }
+      if (at != null) bkSeekV(at);
+    }
+    /** A field of the key here was typed into. East, North and Up move it from where it was baked; the angles are absolute. */
+    function bkField(el) {
+      var i = bkHere(); if (i < 0) return; var k = BAKE.keys[i], v = +el.value; if (el.value === "" || isNaN(v)) return;
+      var key = el.getAttribute("data-k"), of = mkFrame(k.o[0], k.o[1]);
+      if (key === "e") k.lng = of.lng(v); else if (key === "n") k.lat = of.lat(v);
+      else if (key === "u") k.z = k.o[2] + v;
+      else if (key === "b") k.b = k.b + angD(k.b, v);
+      else if (key === "p") k.p = Math.max(0, Math.min(89, v));
+      else if (key === "r") k.r = Math.max(-180, Math.min(180, v));
+      else if (key === "f") k.f = Math.max(15, Math.min(75, v));
+      bkEdited();
+    }
+    Array.prototype.forEach.call(document.querySelectorAll("#bk-fields input[data-k]"), function (el) { el.addEventListener("change", function () { bkField(el); }); });
+    $("bk-aim").onchange = function () { var i = bkHere(); if (i < 0) return; BAKE.keys[i].aim = +this.value; bkEdited(); };
+    $("bk-key").onclick = bkKeyView; $("bk-del").onclick = bkDelete; $("bk-rev").onclick = bkRevert;
+    $("bk-prev").onclick = function () { bkStep(-1); }; $("bk-next").onclick = function () { bkStep(1); };
+    $("bk-use").onclick = function () {
+      if (!BAKE || rendering) return;
+      bkUse = !bkUse; bkSave();
+      if (bkUse) { if (playing) { playing = false; playIcon(false); } vt = bkVt(t); vtFromClock = true; draw(true); vtFromClock = false; }
+      else { bkRelease(); camResync(false); if (!playing) draw(true); }
+      bkShow();
+    };
+    $("bk-clear").onclick = function () {
+      if (!BAKE || rendering) return;
+      if (BAKE.edited && !confirm("Clear the baked camera and your key edits?")) return;
+      BAKE = null; bkSpl = null; bkUse = false; bkSave(); bkRelease(); camResync(false); if (!playing) draw(true); bkShow();
+    };
+    $("bk-go").onclick = function () {
+      if (rendering || ctlBusy()) return;
+      if (BAKE && BAKE.edited && !confirm("Baking again replaces the keys you edited. Bake again?")) return;
+      baking = true; bkRelease(); cleanStart("bake");
+    };
+    function ctlBusy() { return document.body.classList.contains("rendering"); }
+    /** The Camera tab's Baked camera group and the key lane over the timeline. */
+    function bkShow() {
+      var has = !!BAKE, live = bakeLive();
+      $("bk-go").querySelector("span").textContent = has ? "Bake again" : "Bake";
+      $("bk-clear").hidden = !has; $("bk-use").hidden = !has; $("bk-use").classList.toggle("on", has && bkUse);
+      $("bk-ed").hidden = !live; $("bk-lane").hidden = !has;
+      var st = !has ? "Records the camera so its keys can be edited." : !bkUse ? "Off: the camera mode drives the camera." :
+        BAKE.sig !== bkSig() ? "Settings changed since the bake. Bake again to use them." : BAKE.keys.length + " keys · " + clockV(BAKE.len) + " of video" + (BAKE.edited ? " · edited" : "");
+      $("bk-st").textContent = st;
+      document.body.classList.toggle("baked", live);
+      if (live) {
+        var i = bkHere(), k = i >= 0 ? BAKE.keys[i] : null;
+        $("bk-at").textContent = (k ? "Key " + (i + 1) + " of " + BAKE.keys.length : "Between keys") + " · " + clockV(vt);
+        $("bk-fields").hidden = !k; $("bk-del").disabled = $("bk-rev").disabled = !k;
+        if (k) {
+          var of = mkFrame(k.o[0], k.o[1]), put = function (id, v, dp) { var el = $(id); if (document.activeElement !== el) el.value = (+v.toFixed(dp)).toString(); };
+          put("bk-e", of.x(k.lng), 1); put("bk-n", of.y(k.lat), 1); put("bk-u", k.z - k.o[2], 1);
+          put("bk-b", (k.b % 360 + 360) % 360, 1); put("bk-p", k.p, 1); put("bk-r", k.r, 1); put("bk-f", k.f, 1);
+          $("bk-aim").value = k.aim ? "1" : "0";
+          Array.prototype.forEach.call(document.querySelectorAll("#bk-fields .bk-rot"), function (el) { el.style.opacity = k.aim ? "0.45" : ""; });
+          Array.prototype.forEach.call(document.querySelectorAll("#bk-fields .bk-rot input"), function (el) { el.disabled = !!k.aim; });
+          $("bk-note").textContent = k.aim ? "Aimed at the rider: move it, and it keeps looking." : "Move the map, then Key the view.";
+        }
+      }
+      bkLaneDraw();
+    }
+    /** The key lane: video time left to right, a diamond per key, the playhead. Click to go there; a diamond picks its key. */
+    function bkLaneDraw() {
+      var cv = $("bk-cv"); if (!cv || !BAKE || $("bk-lane").hidden) return;
+      var r = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
+      if (cv.width !== Math.round(w * r) || cv.height !== Math.round(h * r)) { cv.width = Math.round(w * r); cv.height = Math.round(h * r); }
+      var x = cv.getContext("2d"); x.setTransform(r, 0, 0, r, 0, 0); x.clearRect(0, 0, w, h);
+      var acc = css("--accent") || "#E8962E", ink = css("--ink") || "#ddd", L = Math.max(1e-6, BAKE.len), here = bkHere();
+      x.globalAlpha = bkUse ? 1 : 0.4;
+      BAKE.keys.forEach(function (k, i) {
+        var px = k.at / L * w, s = i === here ? 5.5 : 3.8;
+        x.beginPath(); x.moveTo(px, h / 2 - s); x.lineTo(px + s, h / 2); x.lineTo(px, h / 2 + s); x.lineTo(px - s, h / 2); x.closePath();
+        x.fillStyle = i === here ? acc : k.aim ? "#4FA3E0" : ink; x.fill();
+      });
+      x.globalAlpha = 1;
+      if (bkUse) { x.fillStyle = acc; x.fillRect(Math.round(vt / L * w) - 1, 0, 2, h); }
+    }
+    (function () {
+      var lane = $("bk-lane"), down = false;
+      function at(e) { var r = lane.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (BAKE ? BAKE.len : 0); }
+      function pick(e) {
+        if (!BAKE || !bkUse || ctlBusy()) return;
+        var a = at(e), w = lane.getBoundingClientRect().width, best = -1, bd = 7 / w * BAKE.len; // within 7 px of a diamond: that key
+        BAKE.keys.forEach(function (k, i) { var dd = Math.abs(k.at - a); if (dd < bd) { bd = dd; best = i; } });
+        bkSeekV(best >= 0 ? BAKE.keys[best].at : a);
+      }
+      lane.addEventListener("pointerdown", function (e) { down = true; try { lane.setPointerCapture(e.pointerId); } catch (x) {} pick(e); });
+      lane.addEventListener("pointermove", function (e) { if (down) pick(e); });
+      lane.addEventListener("pointerup", function () { down = false; });
+      new ResizeObserver(bkLaneDraw).observe(lane);
+    })();
+    $("panel").addEventListener("change", function () { if (BAKE) setTimeout(bkShow, 0); });
+    try { bkShow(); } catch (e) {}
     /* ---------- RENDER THIS REPLAY: frame by frame, every frame fully drawn, into an MP4 ----------
        The replay is stepped at a fixed 30 frames a second of video. For each frame the camera, light,
        shadows and stats are set exactly as the live replay would set them, then the renderer waits until
@@ -9899,11 +10320,11 @@ var qrcode = function() {
       var ctx = cv.getContext("2d");
       // Fast mode updates the light and shadows every few frames: the sun barely moves between them.
       var sunEvery = Q === "fast" ? 4 : Q === "bal" ? 2 : 1;
-      var len = +$("c-len").value || 30, nRide = Math.round(len * FPS), nEnd = $("v-end").checked ? Math.round(endLen() * FPS) : 0, t0 = Date.now();
+      var len = bakeLive() ? BAKE.len : +$("c-len").value || 30, nRide = Math.round(len * FPS), nEnd = $("v-end").checked ? Math.round(endLen() * FPS) : 0, t0 = Date.now();
       // Photo moments add screen time; the total is an estimate until the ride's end is reached.
       // (with SHOT each moment also has the brake, about 1.2 s, and the speed-up after it, about 0.9 s, in screen time)
       var nGrp = photos.reduce(function (m, ph) { return Math.max(m, ph.group || 0); }, 0);
-      var N = nRide + Math.round((burstOn() ? burstHoldEst() : SHOT ? nGrp * (MOMENT + 2.1) + (photos.length - nGrp) * SWAP : photos.length * MOMENT) * FPS) + nEnd, rideEndI = -1, playU = 0;
+      var N = bakeLive() ? nRide + nEnd : nRide + Math.round((burstOn() ? burstHoldEst() : SHOT ? nGrp * (MOMENT + 2.1) + (photos.length - nGrp) * SWAP : photos.length * MOMENT) * FPS) + nEnd, rideEndI = -1, playU = 0;
       /* Hold the replay at its size for the whole render: the window can be made a small floating window (or turned) while it runs,
          and the video must keep the frame it started with, with the panels where they were. */
       var lockEl = $("replay"), lockCss = lockEl.style.cssText, lr = lockEl.getBoundingClientRect();
@@ -9923,17 +10344,21 @@ var qrcode = function() {
         var i = 0, b0 = null, co = null, start = null;
         function frameAt() {
           if (rideEndI < 0) {
-            playU += cleanRate * slow / FPS;
-            t = skipOn() ? (playU >= stops().total ? d.dur : realAt(playU)) : Math.min(d.dur, playU);
+            if (bakeLive()) { vt = Math.min(BAKE.len, i / FPS); t = bkT(vt); } // the baked clock: frame i is video time i / FPS at any frame rate
+            else {
+              playU += cleanRate * slow / FPS;
+              t = skipOn() ? (playU >= stops().total ? d.dur : realAt(playU)) : Math.min(d.dur, playU);
+            }
             if (t >= d.dur) { rideEndI = i + 1; N = rideEndI + nEnd; }
             if (i % sunEvery === 0) sunAt = 0; else sunAt = Date.now();
             capAt = 0;
-            draw(false, 1 / FPS);
+            vtFromClock = true; draw(false, 1 / FPS); vtFromClock = false;
             return Promise.resolve();
           }
           // The finale: pull back to the whole route and circle it; the summary fades in.
           var j = i - rideEndI;
           if (j === 0) {
+            bkRelease(); // the finale is not baked: it starts from the last baked pose
             if (map.getLayer("trk-ghost")) map.setLayoutProperty("trk-ghost", "visibility", "none");
             var bb = new maplibregl.LngLatBounds(); fLon.forEach(function (lo, q) { bb.extend([lo, fLat[q]]); });
             b0 = map.getBearing(); start = { c: map.getCenter(), z: map.getZoom(), p: map.getPitch() };
@@ -10020,6 +10445,7 @@ var qrcode = function() {
     /* The timeline behind the seek bar: speed as a filled band, altitude as a line, stops shaded, photos as ticks.
        Drawn once per size; the playhead is the seek bar's own thumb. */
     function timelineDraw() {
+      try { bkShow(); } catch (e) {}
       var cv = $("tl-cv"); if (!cv) return;
       var r = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
       cv.width = Math.round(w * r); cv.height = Math.round(h * r);
@@ -10058,11 +10484,16 @@ var qrcode = function() {
     var exagWant = null;
     map.on("style.load", function () { if (exagWant != null) setTimeout(function () { exagSet(exagWant); }, 0); });
     window.__cpCtl = {
-      state: function () { return { t: t, dur: d.dur, playing: playing, clean: cleanOn, rendering: document.body.classList.contains("rendering") }; },
+      state: function () { return { t: t, dur: d.dur, playing: playing, clean: cleanOn, rendering: document.body.classList.contains("rendering"), baked: bakeLive(), vt: vt, camMode: camMode }; },
       seek: function (s) { if (cleanOn && playing) return; t = Math.max(0, Math.min(d.dur, s)); u = skipOn() ? movingAt(t) : t; draw(true); ppAt(); },
       play: function () { $("play").click(); },
-      recenter: function () { camResync(false); if (!playing) draw(true); }, // Reset camera's last step: the follow camera from the rider again
-      behind: function () { camBehind(); },
+      recenter: function () { if (bakeLive()) { vtFromClock = true; draw(true); vtFromClock = false; return; } camResync(false); if (!playing) draw(true); }, // Reset camera's last step: the follow camera from the rider again (baked: back on the bake)
+      behind: function () { if (bakeLive()) return; camBehind(); },
+      camModeNext: function () { camModeSet(CAM_MODES[(CAM_MODES.indexOf(camMode) + 1) % CAM_MODES.length]); return camMode; },
+      bakeKey: function () { if (bakeLive()) bkKeyView(); },
+      bakeDel: function () { if (bakeLive()) bkDelete(); },
+      bakeStep: function (dir) { if (bakeLive()) bkStep(dir); },
+      seekV: function (dv) { if (bakeLive()) bkSeekV(vt + dv); },
       clock: clock,
       set: function (k, v) {
         if (k === "dist") { followZoom = followBase - v; userZoomed = false; if (!playing) draw(true); }
