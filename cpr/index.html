@@ -338,7 +338,7 @@
       <div id="guides"><i style="left:33.333%;top:0;bottom:0;width:1px"></i><i style="left:66.667%;top:0;bottom:0;width:1px"></i><i style="top:33.333%;left:0;right:0;height:1px"></i><i style="top:66.667%;left:0;right:0;height:1px"></i><div class="safe"></div><div class="act"></div></div>
       <div class="hud" id="ph-pick">
         <img id="pp-img" alt="">
-        <div style="flex:1;min-width:0"><b>Choose the spot</b><div class="muted">Drag the timeline until the arrow is where this photo belongs.</div><div id="pp-at"></div></div>
+        <div style="flex:1;min-width:0"><b>Choose the spot</b><div class="muted">Double-click the route, or drag the timeline, until the arrow is where this photo belongs.</div><div id="pp-at"></div></div>
         <div class="pp-btns"><button id="pp-ok" class="on"><svg class="i"><use href="#i-pin"/></svg>Place here</button><button id="pp-cancel">Cancel</button></div>
       </div>
       <div id="rend"><div class="pl-box"><b id="rd-t">Rendering the replay…</b><div class="pl-bar"><i id="rd-bar"></i></div><div class="muted" id="rd-s"></div><div class="bar" id="rd-btns"><button id="rd-cancel">Cancel</button></div></div></div>
@@ -9314,6 +9314,27 @@ var qrcode = function() {
     function ppEnd() { phPick = null; document.body.classList.remove("picking"); $("ph-pick").classList.remove("on"); $("ph-sheet").style.display = "block"; phSheetShow(); }
     $("pp-ok").onclick = function () { var f = phPick; if (!f) return; B.photoPlace(+ID, f, Math.round(t * 10) / 10); phSel = f; photosReload(); ppEnd(); };
     $("pp-cancel").onclick = ppEnd;
+    /* Double-click the route while choosing a spot: the arrow goes to the nearest point of the route, and that is where Place here
+       pins the photo. A trail passing the same place twice (out and back) is ambiguous on the map: of the passes within 15 m of the
+       nearest, the one nearest in time to where the arrow already is wins, so a second double-click near it keeps the pass. */
+    map.on("dblclick", function (e) {
+      if (!phPick || !fLon.length) return;
+      e.preventDefault(); // no zoom in: the double-click is taken
+      var lo = e.lngLat.lng, la = e.lngLat.lat, kx = 111320 * Math.cos(la * Math.PI / 180), best = 1e18, dq = new Float64Array(fLon.length);
+      for (var q = 0; q < fLon.length; q++) { var dx = (fLon[q] - lo) * kx, dy = (fLat[q] - la) * 111320; dq[q] = Math.sqrt(dx * dx + dy * dy); if (dq[q] < best) best = dq[q]; }
+      var mpp = 78271.517 * Math.cos(la * Math.PI / 180) / Math.pow(2, map.getZoom()); // metres per screen pixel, about
+      if (best > Math.max(40, 60 * mpp)) { $("pp-at").textContent = "Double-click on the route itself. " + clock(t) + " of " + clock(d.dur); return; }
+      // each pass near the spot gives its own nearest point; then the pass nearest in time to the arrow
+      var passes = [], cur = null;
+      for (var q2 = 0; q2 < fLon.length; q2++) {
+        if (dq[q2] <= best + 15) { if (!cur) { cur = { k: q2 }; passes.push(cur); } else if (dq[q2] < dq[cur.k]) cur.k = q2; }
+        else cur = null;
+      }
+      var k = -1, bt = 1e18;
+      passes.forEach(function (ps) { var dt2 = Math.abs(fT[ps.k] - t); if (dt2 < bt) { bt = dt2; k = ps.k; } });
+      if (k < 0) return;
+      t = fT[k]; $("seek").value = Math.round(t * 10); draw(true); ppAt();
+    });
     /* Photo mode: Moment (the replay slows and the camera frames the photo in 3D) or Burst (the ride keeps its speed; photos slide in at the side). Saved; clean view and the video use it too. */
     function pmodeShow() {
       $("pm-moment").classList.toggle("on", !burstOn()); $("pm-burst").classList.toggle("on", burstOn());
