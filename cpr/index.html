@@ -5904,12 +5904,16 @@ var qrcode = function() {
     <div class="pl-bar" id="pc-bar" hidden><i id="pc-barf"></i></div>
   </div>
   <div class="muted">Made in the app: Clean view, then Export for PC.<button class="infobtn" data-info="open" aria-label="What a replay file holds" style="vertical-align:-4px;margin-left:4px"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></div>
+  <button id="pc-reopen" class="on" hidden></button>
+  <div class="pc-keep-row"><button id="pc-keep" class="tgl" role="switch" type="button"><span>Keep the open ride through a reload</span><i></i></button><button class="infobtn" data-info="keep" aria-label="What is kept, and where"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></svg></button></div>
   <div class="muted" id="pc-err" style="color:var(--bad)"></div>
 </div></div>
 <style>
   #pc-open { position:fixed; inset:0; z-index:50; display:grid; place-items:center; background:radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent), var(--bg); padding:16px; }
   .pc-card { width:min(460px, 100%); background:var(--card); border:1px solid var(--line); border-radius:16px; padding:22px; display:grid; gap:14px; box-shadow:0 12px 50px #0005; }
   .pc-brand { display:flex; gap:12px; align-items:center; }
+  .pc-keep-row { display:flex; align-items:center; gap:6px; }
+  #pc-reopen { width:100%; padding:10px 12px; border-radius:10px; }
   .pc-brand svg { width:40px; height:40px; flex:none; }
   .pc-brand b { font-size:19px; }
   #pc-drop { display:grid; gap:4px; justify-items:center; width:100%; padding:26px 12px; border:2px dashed var(--line); border-radius:12px; cursor:pointer; text-align:center; }
@@ -6029,15 +6033,72 @@ var qrcode = function() {
     });
   }
   function fail(e) { $("pc-err").textContent = (e && e.message) || String(e); }
+
+  /* ---------- Keep the open ride through a reload: the file as it was opened, plus the photo list as changed here, in IndexedDB.
+     Shape from task-notes/static/js/db.js (one database, a kv store, persist() asked once). localStorage was not enough: a ride
+     with photos is tens of MB, and settings and photo edits already live there under "replay…" keys. ---------- */
+  var keep = (function () {
+    var dbp = null, asked = false;
+    function open() {
+      if (dbp) return dbp;
+      dbp = new Promise(function (res, rej) {
+        if (!window.indexedDB) return rej(new Error("no IndexedDB"));
+        var r = indexedDB.open("cpr-keep", 1);
+        r.onupgradeneeded = function () { if (!r.result.objectStoreNames.contains("kv")) r.result.createObjectStore("kv"); };
+        r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; r.onblocked = function () { rej(new Error("IndexedDB blocked")); };
+      });
+      dbp.catch(function () { dbp = null; });
+      return dbp;
+    }
+    function tx(mode, fn) {
+      return open().then(function (db) { return new Promise(function (res, rej) {
+        var t = db.transaction("kv", mode), rq = null;
+        t.oncomplete = function () { res(rq ? rq.result : undefined); }; t.onerror = function () { rej(t.error); }; t.onabort = function () { rej(t.error || new Error("aborted")); };
+        try { rq = fn(t.objectStore("kv")); } catch (e) { try { t.abort(); } catch (x) {} rej(e); }
+      }); });
+    }
+    function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+    function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+    return {
+      on: function () { return lsGet("cprKeep") !== "0"; }, // on unless turned off: the reload it guards against is never planned
+      setOn: function (v) { lsSet("cprKeep", v ? "1" : "0"); if (!v) this.clear(); },
+      get: function (k) { return tx("readonly", function (st) { return st.get(k); }); },
+      set: function (k, v) {
+        if (!asked && navigator.storage && navigator.storage.persist) { asked = true; navigator.storage.persist().catch(function () {}); } // else the browser may evict it under disk pressure
+        return tx("readwrite", function (st) { st.put(v, k); });
+      },
+      clear: function () { return tx("readwrite", function (st) { st.clear(); }).catch(function () {}); }
+    };
+  })();
+  /* A ride that froze the page while opening must not reopen itself on every reload: the flag stays set until the replay has run a while. */
+  var OPENING = "cprOpening";
+  function opening(v) { try { if (v) sessionStorage.setItem(OPENING, "1"); else sessionStorage.removeItem(OPENING); } catch (e) {} }
+  function wasOpening() { try { return sessionStorage.getItem(OPENING) === "1"; } catch (e) { return false; } }
+
   var loaded = false, diagRun = false;
-  function go(file) {
+  function go(file, kept) {
     if (!file) return;
     if (loaded) return;
     $("pc-err").textContent = ""; $("pc-drop").querySelector("span").textContent = "Opening " + file.name + "…";
     file.text().then(JSON.parse).then(function (x) {
       if (!x || x.kind !== "clickpanion-replay") throw new Error("That is not a ClickPanion replay export.");
-      var urls = {}, jpgs = {}, meta = [], status = "";
-      (x.photos || []).forEach(function (p) { urls[p.meta.f] = URL.createObjectURL(new Blob([bytes(p.jpg)], { type: "image/jpeg" })); jpgs[p.meta.f] = p.jpg; meta.push(p.meta); });
+      var urls = {}, jpgs = {}, meta = [], status = "", inFile = {};
+      (x.photos || []).forEach(function (p) { urls[p.meta.f] = URL.createObjectURL(new Blob([bytes(p.jpg)], { type: "image/jpeg" })); jpgs[p.meta.f] = p.jpg; meta.push(p.meta); inFile[p.meta.f] = 1; });
+      // Kept from before a reload: the photo list as it was changed here, and the pictures added here (the file's own are in the file).
+      if (kept && kept.photos && kept.photos.made === x.made && kept.photos.id === x.id) {
+        Object.keys(kept.photos.added || {}).forEach(function (f) { jpgs[f] = kept.photos.added[f]; urls[f] = URL.createObjectURL(new Blob([bytes(jpgs[f])], { type: "image/jpeg" })); });
+        meta = kept.photos.meta.filter(function (o) { return jpgs[o.f]; });
+      }
+      var keepT = 0;
+      function keepSoon() { // after any change to the list; one write per burst of changes
+        if (!keep.on()) return;
+        clearTimeout(keepT);
+        keepT = setTimeout(function () {
+          var added = {}; meta.forEach(function (o) { if (!inFile[o.f]) added[o.f] = jpgs[o.f]; });
+          keep.set("photos", { id: x.id, made: x.made, meta: meta, added: added }).catch(function () {});
+        }, 1500);
+      }
+      if (keep.on() && !kept) keep.set("ride", { file: file, name: file.name, at: Date.now() }).then(function () { return keep.set("photos", null); }).catch(function () {});
       var data = x.type === "bin" ? bytes(x.data).buffer : x.data;
       try { Object.keys(x.prefs || {}).forEach(function (k) { localStorage.setItem(k, x.prefs[k]); }); } catch (e) {}
       var of = window.fetch.bind(window);
@@ -6052,7 +6113,7 @@ var qrcode = function() {
       window.CPRides = {
         pc: true,
         list: function () { return JSON.stringify(x.ride ? [x.ride] : []); },
-        close: function () { location.reload(); },
+        close: function () { clearTimeout(keepT); keep.clear().then(function () { location.reload(); }); }, // closing is on purpose: forget the kept ride
         /* Charts and back, without losing the opened file: the charts page is this same script in "diag" mode, run once. */
         open: function (p) {
           var to = String(p).split("/")[0];
@@ -6066,10 +6127,10 @@ var qrcode = function() {
         },
         photoUrl: function (f) { return urls[f] || ""; },
         photoList: function () { return JSON.stringify(meta); },
-        photoPlace: function (r, f, at) { meta.forEach(function (o) { if (o.f === f) { if (at >= 0) o.at = at; else delete o.at; } }); },
-        photoRemove: function (r, f) { meta = meta.filter(function (o) { return o.f !== f; }); },
-        photoClear: function () { meta = []; },
-        photoAnno: function (f, pa) { meta.forEach(function (o) { if (o.f === f) o.pa = pa; }); },
+        photoPlace: function (r, f, at) { meta.forEach(function (o) { if (o.f === f) { if (at >= 0) o.at = at; else delete o.at; } }); keepSoon(); },
+        photoRemove: function (r, f) { meta = meta.filter(function (o) { return o.f !== f; }); keepSoon(); },
+        photoClear: function () { meta = []; keepSoon(); },
+        photoAnno: function (f, pa) { meta.forEach(function (o) { if (o.f === f) o.pa = pa; }); keepSoon(); },
         saveBlob: function (b, name, mime) {
           var u = URL.createObjectURL(new Blob([b], { type: mime })), a = document.createElement("a");
           a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); return u;
@@ -6083,7 +6144,7 @@ var qrcode = function() {
           inp.onchange = function () {
             picked = true; var files = Array.prototype.slice.call(inp.files), added = 0, failed = 0;
             files.reduce(function (pr, f) { return pr.then(function () { return addOne(f).then(function (o) { meta.push(o); added++; }, function () { failed++; }); }); }, Promise.resolve())
-              .then(function () { status = "done:" + added + ":" + failed; });
+              .then(function () { status = "done:" + added + ":" + failed; keepSoon(); });
           };
           window.addEventListener("focus", function back() { window.removeEventListener("focus", back); setTimeout(function () { if (!picked) status = "done:0:0"; }, 800); }); // the picker was closed without a choice
           inp.click();
@@ -6128,18 +6189,34 @@ var qrcode = function() {
       window.__cprAddPhotos = function (files) {
         var added = 0, failed = 0;
         return files.reduce(function (pr, f) { return pr.then(function () { return addOne(f).then(function (o) { meta.push(o); added++; }, function () { failed++; }); }); }, Promise.resolve())
-          .then(function () { return { added: added, failed: failed }; });
+          .then(function () { keepSoon(); return { added: added, failed: failed }; });
       };
       if (window.__cprBeforeMain) window.__cprBeforeMain();
       var sc = document.createElement("script"); sc.textContent = $("cp-main").textContent; document.body.appendChild(sc);
       $("pc-open").style.display = "none";
+      opening(true); setTimeout(function () { opening(false); }, 20000); // it ran 20 s without the tab dying: safe to reopen on its own
       // Straight to Clean view, where the video is rendered, once the ride and its photos are in.
       var tries = 0, iv = setInterval(function () {
         if (++tries > 600) return clearInterval(iv);
         if (window.__photos && $("clean-open")) { clearInterval(iv); $("clean-open").click(); }
       }, 100);
-    }).catch(function (e) { $("pc-drop").querySelector("span").textContent = "Choose the .cpreplay.json"; fail(e); });
+    }).catch(function (e) { $("pc-drop").querySelector("span").textContent = "Choose the .cpreplay.json"; fail(e); if (kept) keep.clear(); });
   }
+  /* The switch, and a kept ride: opened on its own after a reload, or offered on a button if the page stopped while opening it last time. */
+  (function () {
+    var sw = $("pc-keep"); sw.classList.toggle("on", keep.on()); sw.setAttribute("aria-checked", String(keep.on()));
+    sw.onclick = function () { var v = !keep.on(); keep.setOn(v); sw.classList.toggle("on", v); sw.setAttribute("aria-checked", String(v)); if (!v) $("pc-reopen").hidden = true; };
+    if (!keep.on()) return;
+    var stuck = wasOpening(); opening(false);
+    Promise.all([keep.get("ride"), keep.get("photos")]).then(function (r) {
+      var ride = r[0]; if (!ride || !ride.file || loaded) return;
+      var kept = { photos: r[1] || null };
+      if (!stuck) return go(ride.file, kept);
+      var b = $("pc-reopen"); b.hidden = false;
+      b.textContent = "Reopen " + String(ride.name || "the last ride").replace(/\.cpreplay\.json$/, "") + " (the page stopped while opening it)";
+      b.onclick = function () { b.hidden = true; go(ride.file, kept); };
+    }).catch(function () {});
+  })();
   $("pc-file").onchange = function () { go(this.files[0]); };
   var dz = $("pc-drop");
   // Before a ride is open, a drop opens it; after, dropped pictures are added to the replay.
@@ -6282,6 +6359,7 @@ var qrcode = function() {
 
   /* ---------- the (i) sheet (shape and behaviour from routecast/static/js/info.js) ---------- */
   var TOPICS = {
+    keep: { title: "Keep the open ride", body: "<p>On, the ride you open is also kept in this browser (IndexedDB, on this computer only), with the photos you add, move or remove here. Reload the tab by accident and the ride opens again where it was kept.</p><p>Settings and photo edits are kept anyway, as before.</p><p><b>Close</b> forgets the kept ride. If the page stopped while opening it, it is not opened again on its own: a button offers it instead, so a ride that cannot open never traps the tab.</p><p>Off, nothing is kept and the kept ride is removed.</p>" },
     open: { title: "A replay file", body: "<p>The app writes one <b>.cpreplay.json</b> per ride: the recorded ride, its photos and the replay settings it was using.</p><p>Nothing is uploaded. The file is read in this tab, and the video is made by this browser, on this computer. Chrome or Edge make videos; others may only play the replay.</p>" },
     stops: { title: "Stops", body: "<p><b>Keep</b> plays every second as it was recorded, stops included.</p><p><b>Shorten</b> keeps a stop up to 20 s as it was; past that, only a little more counts, never more than 90 s. A one-hour rest becomes a short, visible pause.</p><p><b>Skip</b> runs the clock only while the rider moves, so the line keeps flowing. The time shown is still the real time.</p><p>Clean view and the video use the same setting.</p>" },
     camera: { title: "The camera", body: "<p><b>Tilt</b> is how far the camera leans toward the horizon. It is lowered on its own when a hill would come between the camera and the rider.</p><p><b>Distance</b> moves the follow camera closer or farther, in zoom steps: one step is twice as close.</p><p><b>Field of view</b> is the lens. Wide shows more and exaggerates depth; narrow flattens it, like a long lens.</p><p><b>Turn smoothing</b> is how long the camera takes to swing after the route turns. Longer is calmer; shorter keeps the road ahead centred on twisty routes.</p>" },
