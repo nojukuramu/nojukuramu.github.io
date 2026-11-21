@@ -297,6 +297,7 @@
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5"/></symbol>
   <symbol id="i-rotl" viewBox="0 0 24 24"><path d="M7 4.5 3.5 8 7 11.5M3.5 8H14a6.5 6.5 0 0 1 0 13h-3"/></symbol>
   <symbol id="i-rotr" viewBox="0 0 24 24"><path d="M17 4.5 20.5 8 17 11.5M20.5 8H10a6.5 6.5 0 0 0 0 13h3"/></symbol>
+  <symbol id="i-rider" viewBox="0 0 24 24"><path d="M12 4.5 18 19l-6-3.3L6 19z"/></symbol>
   <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v4h4"/></symbol>
   <symbol id="i-save" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M4.5 19.5h15"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
@@ -312,6 +313,7 @@
       <b>ClickPanion Replay</b><span class="muted" id="ab-file"></span>
     </div>
     <select id="ab-aspect" title="Frame shape (also under Export)" aria-label="Frame shape"></select>
+    <button id="ab-behind" class="ib" title="Behind the arrow, facing its way (B)" aria-label="Camera behind the arrow"><svg class="i"><use href="#i-rider"/></svg></button>
     <button id="ab-recam" class="ib" title="Reset camera: back on the rider (R)" aria-label="Reset camera"><svg class="i"><use href="#i-reset"/></svg></button>
     <button id="ab-guides" class="ib" title="Framing guides (G)" aria-label="Framing guides"><svg class="i"><use href="#i-grid"/></svg></button>
     <button id="ab-snap" class="ib" title="Save a still of this frame (S)" aria-label="Save a still"><svg class="i"><use href="#i-camera"/></svg></button>
@@ -386,7 +388,7 @@
         <label class="fld"><span>Distance</span><input id="cam-dist" type="range" min="-2" max="2" step="0.05" value="0" data-unit="" data-def="0"><output></output></label>
         <label class="fld"><span>Field of view</span><input id="cam-fov" type="range" min="15" max="75" step="1" value="37" data-unit="°" data-def="37"><output></output></label>
         <label class="fld"><span>Turn smoothing</span><input id="cam-smooth" type="range" min="0.3" max="5" step="0.1" value="1.8" data-unit=" s" data-def="1.8"><output></output></label>
-        <div class="btnrow"><button id="cam-recam"><svg class="i"><use href="#i-reset"/></svg>Reset camera</button><button id="cam-reset">Reset lens settings</button></div>
+        <div class="btnrow"><button id="cam-behind"><svg class="i"><use href="#i-rider"/></svg>Behind the arrow</button><button id="cam-recam"><svg class="i"><use href="#i-reset"/></svg>Reset camera</button><button id="cam-reset">Reset lens settings</button></div>
       </div>
     </section>
 
@@ -6432,7 +6434,7 @@ var qrcode = function() {
   /* ---------- keyboard shortcuts sheet ---------- */
   var KEYS = [["Space", "Preview, or pause it"], ["← →", "Back or forward 1 s"], ["Shift + ← →", "Back or forward 10 s"], ["Home / End", "Start or end of the ride"],
     ["[ ]", "Slower or faster"], ["C", "Clean view preview, or leave it"], ["F", "Follow the rider"], ["L", "Loop"], ["G", "Framing guides"],
-    ["S", "Save a still"], ["R", "Reset camera: back on the rider"], ["P", "Show or hide the panel"], ["1 – 6", "Panel tabs"], ["Shift + F", "Full screen"], ["Esc", "Leave clean view, close a sheet"], ["?", "This list"]];
+    ["S", "Save a still"], ["R", "Reset camera: back on the rider"], ["B", "Camera behind the arrow, facing its way"], ["P", "Show or hide the panel"], ["1 – 6", "Panel tabs"], ["Shift + F", "Full screen"], ["Esc", "Leave clean view, close a sheet"], ["?", "This list"]];
   var keysEl = document.createElement("div"); keysEl.className = "dlg-scrim"; keysEl.hidden = true;
   keysEl.innerHTML = '<div class="dlg" role="dialog" aria-modal="true"><header><b>Keyboard shortcuts</b><button class="ib" id="keys-close" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></header><div class="body"><div class="keys">' +
     KEYS.map(function (k) { return "<div>" + k[0].split(" ").map(function (p) { return p === "+" || p === "/" || p === "–" ? p : "<kbd>" + p + "</kbd>"; }).join(" ") + "</div><div>" + k[1] + "</div>"; }).join("") + "</div></div></div>";
@@ -6681,6 +6683,7 @@ var qrcode = function() {
       });
     }
     $("ab-recam").onclick = recam; $("cam-recam").onclick = recam;
+    $("ab-behind").onclick = $("cam-behind").onclick = function () { if (!ctl.state().rendering && ctl.behind) ctl.behind(); };
     // size changes: refit the stage, redraw the timeline
     var ro = new ResizeObserver(function () { fit(); });
     ro.observe($("viewport"));
@@ -6707,6 +6710,7 @@ var qrcode = function() {
       else if (k === "End") ctl.seek(ctl.state().dur);
       else if (k === "[" || k === "]") { var s = $("rate"), i = s.selectedIndex + (k === "]" ? 1 : -1); if (i >= 0 && i < s.options.length) { s.selectedIndex = i; s.dispatchEvent(new Event("change")); toast("Speed " + s.options[i].textContent + (s.options[i].parentNode.label === "Whole ride in" ? " for the ride" : ""), 900); } }
       else if (k === "r" || k === "R") recam();
+      else if (k === "b" || k === "B") { if (ctl.behind) ctl.behind(); }
       else if (k === "c" || k === "C") { if (ctl.state().clean) ctl.cleanStop(); else $("c-go").click(); }
       else if (k === "f") $("follow").click();
       else if (k === "F") fullToggle();
@@ -7240,6 +7244,20 @@ var qrcode = function() {
        drag's inertia with the ground height frozen at the spot dragged to, the follow position is from before, and the hill
        guard may have pulled the zoom and tilt back for that other view. So: stop what is running, start the follow position at
        the rider, let the guard look again from here. full (Play, Preview): the follow distance comes back too. */
+    /** Behind the arrow: the camera on the rider, facing the way the arrow points, at the follow distance and tilt, following again.
+        Paused, it glides there; playing, the follow camera simply starts again from that pose on the next frame. */
+    function camBehind() {
+      var p = fixAt(t); if (!p) return;
+      if (SHOT && shot) shotEnd();
+      follow = true; tog("follow", true); userAt = 0; camResync(true);
+      var b = cam === "north" ? 0 : arrowB != null ? arrowB : (travelBearing(t, 30) != null ? travelBearing(t, 30) : smoothB || 0);
+      smoothB = b; arrowB = arrowB != null ? arrowB : b;
+      var want = cleanOn ? cleanPitch : +$("tiltv").value;
+      capAt = 0; pitchCap = clearPitch([p[0], p[1]], want, b);
+      if (SHOT) { vZoom = followZoom; vPitch = Math.min(want, pitchCap); }
+      if (playing) return;
+      map.easeTo({ center: [p[0], p[1]], zoom: followZoom, pitch: Math.min(want, pitchCap), bearing: b, duration: 700, easing: function (x) { return 1 - Math.pow(1 - x, 3); } });
+    }
     function camResync(full) {
       try { map.stop(); } catch (e) {}
       camPos = null; zOff = 0; lastBlockAt = 0; capAt = 0; pitchCap = 90; userHeld = false; smartReset();
@@ -10044,6 +10062,7 @@ var qrcode = function() {
       seek: function (s) { if (cleanOn && playing) return; t = Math.max(0, Math.min(d.dur, s)); u = skipOn() ? movingAt(t) : t; draw(true); ppAt(); },
       play: function () { $("play").click(); },
       recenter: function () { camResync(false); if (!playing) draw(true); }, // Reset camera's last step: the follow camera from the rider again
+      behind: function () { camBehind(); },
       clock: clock,
       set: function (k, v) {
         if (k === "dist") { followZoom = followBase - v; userZoomed = false; if (!playing) draw(true); }
